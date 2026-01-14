@@ -89,8 +89,9 @@ export async function POST(request: NextRequest) {
       // Salesperson creating lead - auto-assign to themselves
       mappedLeadData.sales_owner_user_id = user.id
       mappedLeadData.claimed_at = new Date().toISOString()
-      mappedLeadData.triage_status = 'Qualified' // Skip triage, go straight to sales
+      mappedLeadData.triage_status = 'Handed Over' // Skip triage, go straight to sales
       mappedLeadData.qualified_at = new Date().toISOString()
+      mappedLeadData.claim_status = 'claimed'
     } else {
       // Marketing creating lead - set marketing owner
       mappedLeadData.marketing_owner_user_id = user.id
@@ -105,6 +106,67 @@ export async function POST(request: NextRequest) {
 
     if (leadError) {
       return NextResponse.json({ error: leadError.message }, { status: 500 })
+    }
+
+    // If salesperson created the lead, auto-create Account and Pipeline
+    if (isSalesUser && leadResult) {
+      const { createAdminClient } = await import('@/lib/supabase/admin')
+      const adminClient = createAdminClient()
+
+      // Create Account
+      const accountData = {
+        company_name: leadData.company_name,
+        pic_name: leadData.pic_name || null,
+        pic_email: leadData.pic_email || null,
+        pic_phone: leadData.pic_phone || null,
+        owner_user_id: user.id,
+        created_by: user.id,
+        account_status: 'calon_account',
+        lead_id: leadResult.lead_id,
+      }
+
+      const { data: newAccount, error: accountError } = await (adminClient as any)
+        .from('accounts')
+        .insert(accountData)
+        .select('account_id')
+        .single()
+
+      let accountId: string | null = null
+      if (!accountError && newAccount) {
+        accountId = newAccount.account_id
+      }
+
+      // Create Pipeline (Opportunity)
+      if (accountId) {
+        const opportunityData = {
+          name: `Pipeline - ${leadData.company_name}`,
+          account_id: accountId,
+          lead_id: leadResult.lead_id,
+          stage: 'Prospecting',
+          estimated_value: leadData.potential_revenue || 0,
+          currency: 'IDR',
+          probability: 10,
+          owner_user_id: user.id,
+          created_by: user.id,
+        }
+
+        const { data: newOpportunity } = await (adminClient as any)
+          .from('opportunities')
+          .insert(opportunityData)
+          .select('opportunity_id')
+          .single()
+
+        // Update lead with account_id and opportunity_id
+        if (newOpportunity) {
+          await (adminClient as any)
+            .from('leads')
+            .update({
+              account_id: accountId,
+              opportunity_id: newOpportunity.opportunity_id,
+            })
+            .eq('lead_id', leadResult.lead_id)
+        }
+      }
     }
 
     // Create shipment details if provided

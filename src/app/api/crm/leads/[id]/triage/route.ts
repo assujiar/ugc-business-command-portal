@@ -12,7 +12,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 export const dynamic = 'force-dynamic'
 
 // Valid triage statuses
-const VALID_STATUSES = ['New', 'In Review', 'Qualified', 'Nurture', 'Disqualified', 'Handed Over'] as const
+const VALID_STATUSES = ['New', 'In Review', 'Qualified', 'Nurture', 'Disqualified', 'Assigned to Sales', 'Handed Over'] as const
 
 // POST /api/crm/leads/[id]/triage - Triage lead
 export async function POST(
@@ -30,7 +30,7 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { new_status, notes } = body
+    const { new_status, notes, potential_revenue } = body
 
     if (!new_status) {
       return NextResponse.json({ error: 'new_status is required' }, { status: 400 })
@@ -52,8 +52,8 @@ export async function POST(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((lead as any).triage_status === 'Handed Over') {
-      return NextResponse.json({ error: 'Cannot change status of handed over lead' }, { status: 400 })
+    if ((lead as any).triage_status === 'Handed Over' || (lead as any).triage_status === 'Assigned to Sales') {
+      return NextResponse.json({ error: 'Cannot change status of handed over or assigned lead' }, { status: 400 })
     }
 
     // Build update data
@@ -71,6 +71,17 @@ export async function POST(
       }
     }
 
+    // Handle Assigned to Sales (HO to Sales) - requires potential_revenue
+    if (new_status === 'Assigned to Sales') {
+      if (!potential_revenue || potential_revenue <= 0) {
+        return NextResponse.json({ error: 'potential_revenue is required for Assigned to Sales status' }, { status: 400 })
+      }
+      updateData.potential_revenue = potential_revenue
+      updateData.claim_status = 'unclaimed'
+      updateData.qualified_at = new Date().toISOString()
+      updateData.handover_eligible = true
+    }
+
     // Use admin client to bypass RLS for the update
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: updateError } = await (adminClient as any)
@@ -83,7 +94,29 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    // If qualified, create handover pool entry and update to Handed Over
+    // If Assigned to Sales, create handover pool entry
+    if (new_status === 'Assigned to Sales') {
+      // Create handover pool entry using admin client
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: poolError } = await (adminClient as any)
+        .from('lead_handover_pool')
+        .insert({
+          lead_id: id,
+          handed_over_by: user.id,
+          handover_notes: notes || null,
+          priority: 1,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+        })
+
+      if (poolError) {
+        // If duplicate key error, lead already in pool - that's ok
+        if (!poolError.message.includes('duplicate')) {
+          console.error('Error creating handover pool entry:', poolError)
+        }
+      }
+    }
+
+    // Legacy: If qualified (without going through Assigned to Sales), create handover pool entry
     if (new_status === 'Qualified') {
       // Create handover pool entry using admin client
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
