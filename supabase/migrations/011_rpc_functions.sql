@@ -84,12 +84,12 @@ BEGIN
 
   -- Store idempotency result
   IF p_idempotency_key IS NOT NULL THEN
-    PERFORM store_idempotency(p_idempotency_key, v_result);
+    PERFORM store_idempotency(p_idempotency_key, 'triage-' || p_lead_id, v_result);
   END IF;
 
   -- Audit log
-  INSERT INTO audit_logs (entity_type, entity_id, action, actor_user_id, details)
-  VALUES ('lead', p_lead_id, 'triage', auth.uid(), v_result);
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('leads', 'triage', 'lead', p_lead_id, auth.uid(), v_result);
 
   RETURN v_result;
 END;
@@ -161,11 +161,11 @@ BEGIN
   );
 
   IF p_idempotency_key IS NOT NULL THEN
-    PERFORM store_idempotency(p_idempotency_key, v_result);
+    PERFORM store_idempotency(p_idempotency_key, 'handover-' || p_lead_id, v_result);
   END IF;
 
-  INSERT INTO audit_logs (entity_type, entity_id, action, actor_user_id, details)
-  VALUES ('lead', p_lead_id, 'handover', auth.uid(), v_result);
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('leads', 'handover', 'lead', p_lead_id, auth.uid(), v_result);
 
   RETURN v_result;
 END;
@@ -295,11 +295,11 @@ BEGIN
   );
 
   IF p_idempotency_key IS NOT NULL THEN
-    PERFORM store_idempotency(p_idempotency_key, v_result);
+    PERFORM store_idempotency(p_idempotency_key, 'claim-' || v_pool.lead_id, v_result);
   END IF;
 
-  INSERT INTO audit_logs (entity_type, entity_id, action, actor_user_id, details)
-  VALUES ('lead', v_pool.lead_id, 'claim', auth.uid(), v_result);
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('leads', 'claim', 'lead', v_pool.lead_id, auth.uid(), v_result);
 
   RETURN v_result;
 END;
@@ -408,11 +408,11 @@ BEGIN
   );
 
   IF p_idempotency_key IS NOT NULL THEN
-    PERFORM store_idempotency(p_idempotency_key, v_result);
+    PERFORM store_idempotency(p_idempotency_key, 'convert-' || p_lead_id, v_result);
   END IF;
 
-  INSERT INTO audit_logs (entity_type, entity_id, action, actor_user_id, details)
-  VALUES ('lead', p_lead_id, 'convert', auth.uid(), v_result);
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('leads', 'convert', 'lead', p_lead_id, auth.uid(), v_result);
 
   RETURN v_result;
 END;
@@ -472,11 +472,11 @@ BEGIN
   );
 
   IF p_idempotency_key IS NOT NULL THEN
-    PERFORM store_idempotency(p_idempotency_key, v_result);
+    PERFORM store_idempotency(p_idempotency_key, 'stage_change-' || p_opportunity_id, v_result);
   END IF;
 
-  INSERT INTO audit_logs (entity_type, entity_id, action, actor_user_id, details)
-  VALUES ('opportunity', p_opportunity_id, 'stage_change', auth.uid(), v_result);
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('opportunities', 'stage_change', 'opportunity', p_opportunity_id, auth.uid(), v_result);
 
   RETURN v_result;
 END;
@@ -583,11 +583,11 @@ BEGIN
   );
 
   IF p_idempotency_key IS NOT NULL THEN
-    PERFORM store_idempotency(p_idempotency_key, v_result);
+    PERFORM store_idempotency(p_idempotency_key, 'convert-' || p_target_id, v_result);
   END IF;
 
-  INSERT INTO audit_logs (entity_type, entity_id, action, actor_user_id, details)
-  VALUES ('target', p_target_id, 'convert', auth.uid(), v_result);
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('targets', 'convert', 'target', p_target_id, auth.uid(), v_result);
 
   RETURN v_result;
 END;
@@ -680,11 +680,11 @@ BEGIN
   );
 
   IF p_idempotency_key IS NOT NULL THEN
-    PERFORM store_idempotency(p_idempotency_key, v_result);
+    PERFORM store_idempotency(p_idempotency_key, 'complete-' || p_activity_id, v_result);
   END IF;
 
-  INSERT INTO audit_logs (entity_type, entity_id, action, actor_user_id, details)
-  VALUES ('activity', p_activity_id, 'complete', auth.uid(), v_result);
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('activities', 'complete', 'activity', p_activity_id, auth.uid(), v_result);
 
   RETURN v_result;
 END;
@@ -791,7 +791,7 @@ BEGIN
   END IF;
 
   IF p_idempotency_key IS NOT NULL THEN
-    PERFORM store_idempotency(p_idempotency_key, v_result);
+    PERFORM store_idempotency(p_idempotency_key, 'cadence-advance-' || p_enrollment_id, v_result);
   END IF;
 
   RETURN v_result;
