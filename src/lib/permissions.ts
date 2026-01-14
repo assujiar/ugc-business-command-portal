@@ -66,3 +66,33 @@ export function canImportData(role: UserRole | null | undefined): boolean {
 export function canViewAuditLogs(role: UserRole | null | undefined): boolean {
   return isAdmin(role)
 }
+
+// Manager roles that can edit any lead
+const MANAGER_ROLES: UserRole[] = ['Director', 'super admin', 'Marketing Manager', 'sales manager']
+
+// Check if user can edit a specific lead
+export function canEditLead(
+  role: UserRole | null | undefined,
+  userId: string,
+  lead: {
+    created_by: string | null
+    marketing_owner_user_id: string | null
+    sales_owner_user_id: string | null
+  }
+): boolean {
+  if (!role) return false
+
+  // Admin and managers can always edit
+  if (MANAGER_ROLES.includes(role)) return true
+
+  // Creator can edit their own lead
+  if (lead.created_by === userId) return true
+
+  // Marketing owner can edit
+  if (lead.marketing_owner_user_id === userId) return true
+
+  // Sales owner can edit
+  if (lead.sales_owner_user_id === userId) return true
+
+  return false
+}

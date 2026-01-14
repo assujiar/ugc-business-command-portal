@@ -80,6 +80,7 @@ export default async function LeadManagementPage() {
         statusCounts={statusCounts}
         isManager={isManager}
         currentUserId={profile.user_id}
+        userRole={profile.role}
       />
     </div>
   )

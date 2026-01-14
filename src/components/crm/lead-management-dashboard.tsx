@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -33,7 +33,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { LEAD_STATUS_ACTIONS } from '@/lib/constants'
-import type { LeadTriageStatus } from '@/types/database'
+import type { LeadTriageStatus, UserRole, LeadSource } from '@/types/database'
+import { LeadDetailDialog } from '@/components/crm/lead-detail-dialog'
 import {
   MoreVertical,
   Inbox,
@@ -44,6 +45,7 @@ import {
   ArrowRight,
   Users,
   Clock,
+  Eye,
 } from 'lucide-react'
 
 interface Lead {
@@ -51,15 +53,21 @@ interface Lead {
   company_name: string
   contact_name: string | null
   contact_email: string | null
+  contact_phone: string | null
+  industry: string | null
   triage_status: LeadTriageStatus
-  source: string | null
+  source: LeadSource
+  source_detail: string | null
   priority: number
+  notes: string | null
   potential_revenue: number | null
   claim_status: string | null
   claimed_by_name: string | null
   created_at: string
+  updated_at: string
   marketing_owner_user_id: string | null
   sales_owner_user_id: string | null
+  created_by: string | null
   disqualified_at: string | null
   disqualified_reason: string | null
 }
@@ -79,6 +87,7 @@ interface LeadManagementDashboardProps {
   statusCounts: StatusCounts
   isManager: boolean
   currentUserId: string
+  userRole: UserRole | null
 }
 
 type StatusFilter = 'all' | LeadTriageStatus
@@ -98,6 +107,7 @@ export function LeadManagementDashboard({
   statusCounts,
   isManager,
   currentUserId,
+  userRole,
 }: LeadManagementDashboardProps) {
   const router = useRouter()
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter>('all')
@@ -109,6 +119,41 @@ export function LeadManagementDashboard({
   }>({ open: false, lead: null, targetStatus: null })
   const [potentialRevenue, setPotentialRevenue] = useState('')
   const [notes, setNotes] = useState('')
+
+  // State for lead detail dialog
+  const [detailDialog, setDetailDialog] = useState<{
+    open: boolean
+    lead: Lead | null
+  }>({ open: false, lead: null })
+
+  // Listen for viewLeadDetail event from add-lead-dialog
+  useEffect(() => {
+    const handleViewLeadDetail = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ leadId: string }>
+      const { leadId } = customEvent.detail
+      // Find the lead in the current list or fetch it
+      const lead = leads.find(l => l.lead_id === leadId)
+      if (lead) {
+        setDetailDialog({ open: true, lead })
+      } else {
+        // Fetch the lead if not in the current list
+        try {
+          const response = await fetch(`/api/crm/leads/${leadId}`)
+          if (response.ok) {
+            const { data } = await response.json()
+            setDetailDialog({ open: true, lead: data })
+          }
+        } catch (error) {
+          console.error('Error fetching lead:', error)
+        }
+      }
+    }
+
+    window.addEventListener('viewLeadDetail', handleViewLeadDetail)
+    return () => {
+      window.removeEventListener('viewLeadDetail', handleViewLeadDetail)
+    }
+  }, [leads])
 
   // Filter leads based on selected status
   const filteredLeads = selectedStatus === 'all'
@@ -300,42 +345,52 @@ export function LeadManagementDashboard({
                       )}
                       <TableCell>{formatDate(lead.created_at)}</TableCell>
                       <TableCell>
-                        {actions.length > 0 && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                disabled={isLoading === lead.lead_id}
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {actions.map((action) => (
-                                <DropdownMenuItem
-                                  key={action}
-                                  onClick={() => {
-                                    setActionDialog({
-                                      open: true,
-                                      lead,
-                                      targetStatus: action,
-                                    })
-                                  }}
-                                >
-                                  <ArrowRight className="h-4 w-4 mr-2" />
-                                  {action === 'Assigned to Sales' ? 'HO to Sales' : action}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                        {actions.length === 0 && lead.triage_status === 'Assigned to Sales' && (
-                          <span className="text-xs text-muted-foreground">
-                            {lead.claim_status === 'claimed' ? 'Claimed' : 'Waiting'}
-                          </span>
-                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              disabled={isLoading === lead.lead_id}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {/* View Detail Action - Always Available */}
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setDetailDialog({
+                                  open: true,
+                                  lead,
+                                })
+                              }}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Detail
+                            </DropdownMenuItem>
+                            {actions.length > 0 && (
+                              <>
+                                <DropdownMenuSeparator />
+                                {actions.map((action) => (
+                                  <DropdownMenuItem
+                                    key={action}
+                                    onClick={() => {
+                                      setActionDialog({
+                                        open: true,
+                                        lead,
+                                        targetStatus: action,
+                                      })
+                                    }}
+                                  >
+                                    <ArrowRight className="h-4 w-4 mr-2" />
+                                    {action === 'Assigned to Sales' ? 'HO to Sales' : action}
+                                  </DropdownMenuItem>
+                                ))}
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   )
@@ -443,6 +498,19 @@ export function LeadManagementDashboard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lead Detail Dialog */}
+      <LeadDetailDialog
+        lead={detailDialog.lead}
+        open={detailDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailDialog({ open: false, lead: null })
+          }
+        }}
+        currentUserId={currentUserId}
+        userRole={userRole}
+      />
     </div>
   )
 }
