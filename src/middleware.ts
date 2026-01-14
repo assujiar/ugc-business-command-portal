@@ -39,9 +39,22 @@ export async function middleware(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Try getUser first (validates token with Supabase server)
+  // Fall back to getSession if getUser fails (reads from cookie only)
+  let user = null
+
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+
+  if (userData?.user) {
+    user = userData.user
+  } else if (userError) {
+    // If getUser fails, try getSession as fallback
+    // This can happen if there's a network issue or token refresh is needed
+    const { data: sessionData } = await supabase.auth.getSession()
+    if (sessionData?.session?.user) {
+      user = sessionData.session.user
+    }
+  }
 
   // Redirect unauthenticated users trying to access protected routes
   if (
