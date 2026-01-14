@@ -5,9 +5,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import type { UserRole } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
+
+// Roles that can edit any lead
+const MANAGER_ROLES: UserRole[] = ['Director', 'super admin', 'Marketing Manager', 'sales manager']
 
 // GET /api/crm/leads/[id] - Get single lead
 export async function GET(
@@ -41,6 +45,7 @@ export async function GET(
 }
 
 // PATCH /api/crm/leads/[id] - Update lead
+// Permission: Manager, Admin, or the creator/owner of the lead
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -54,7 +59,46 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get user profile to check role
+    const { data: profile } = await (supabase as any)
+      .from('profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single() as { data: { role: UserRole } | null }
+
+    const userRole = profile?.role
+
+    // Get the existing lead to check ownership
+    const { data: existingLead, error: fetchError } = await (supabase as any)
+      .from('leads')
+      .select('created_by, marketing_owner_user_id, sales_owner_user_id')
+      .eq('lead_id', id)
+      .single()
+
+    if (fetchError) {
+      return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+    }
+
+    // Check permission: Manager/Admin can always edit, otherwise check ownership
+    const isManager = userRole && MANAGER_ROLES.includes(userRole)
+    const isCreator = existingLead.created_by === user.id
+    const isMarketingOwner = existingLead.marketing_owner_user_id === user.id
+    const isSalesOwner = existingLead.sales_owner_user_id === user.id
+
+    if (!isManager && !isCreator && !isMarketingOwner && !isSalesOwner) {
+      return NextResponse.json(
+        { error: 'You do not have permission to edit this lead' },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json()
+
+    // Prevent updating certain fields unless admin/manager
+    const restrictedFields = ['created_by', 'created_at', 'lead_id']
+    for (const field of restrictedFields) {
+      delete body[field]
+    }
 
     const { data, error } = await (supabase as any)
       .from('leads')

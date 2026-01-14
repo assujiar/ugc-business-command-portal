@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Loader2, Upload, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Loader2, Upload, X, ChevronDown, ChevronUp, CheckCircle, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -45,6 +45,16 @@ import {
   ADDITIONAL_SERVICES,
   COUNTRIES,
 } from '@/lib/constants'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 interface AddLeadDialogProps {
   trigger?: React.ReactNode
@@ -75,6 +85,11 @@ interface ShipmentData {
   additional_services: string[]
 }
 
+interface CreatedLead {
+  lead_id: string
+  company_name: string
+}
+
 export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
@@ -83,6 +98,8 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
   const [showShipmentDetails, setShowShipmentDetails] = React.useState(false)
   const [attachments, setAttachments] = React.useState<File[]>([])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [successDialogOpen, setSuccessDialogOpen] = React.useState(false)
+  const [createdLead, setCreatedLead] = React.useState<CreatedLead | null>(null)
 
   const [formData, setFormData] = React.useState({
     company_name: '',
@@ -250,7 +267,13 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
         })
       }
 
-      // Reset form and close dialog
+      // Store created lead info for success dialog
+      setCreatedLead({
+        lead_id: result.data.lead_id,
+        company_name: formData.company_name,
+      })
+
+      // Reset form
       setFormData({
         company_name: '',
         pic_name: '',
@@ -290,6 +313,9 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
       setAttachments([])
       setShowShipmentDetails(false)
       setOpen(false)
+
+      // Show success dialog
+      setSuccessDialogOpen(true)
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -310,6 +336,7 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
   )
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
@@ -1091,5 +1118,46 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* Success Dialog */}
+    <AlertDialog open={successDialogOpen} onOpenChange={setSuccessDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-500" />
+            Lead Berhasil Dibuat
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Lead <span className="font-medium">{createdLead?.company_name}</span> telah berhasil dibuat dan masuk ke Lead Inbox untuk ditriage.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            onClick={() => {
+              setSuccessDialogOpen(false)
+              setCreatedLead(null)
+            }}
+          >
+            Tutup
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              setSuccessDialogOpen(false)
+              // Emit event to trigger view detail dialog
+              if (createdLead?.lead_id) {
+                window.dispatchEvent(new CustomEvent('viewLeadDetail', {
+                  detail: { leadId: createdLead.lead_id }
+                }))
+              }
+              setCreatedLead(null)
+            }}
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            Lihat Detail
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }

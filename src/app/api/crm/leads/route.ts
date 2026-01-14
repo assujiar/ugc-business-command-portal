@@ -82,6 +82,8 @@ export async function POST(request: NextRequest) {
       source: leadData.source,
       source_detail: leadData.source_detail || null,
       notes: leadData.inquiry_text || null,
+      priority: leadData.priority ?? 2, // Default to Medium if not specified
+      industry: leadData.industry || null,
       created_by: user.id,
     }
 
