@@ -30,7 +30,7 @@ interface SidebarProps {
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: 'all' },
+  { name: 'Overview', href: '/dashboard', icon: LayoutDashboard, roles: 'all' },
   // Marketing routes
   { name: 'Lead Management', href: '/lead-management', icon: ClipboardList, permission: 'leadInbox' },
   // Sales routes
