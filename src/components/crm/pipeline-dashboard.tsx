@@ -216,57 +216,59 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
   }
 
   return (
-    <div className="space-y-6">
-      {/* Stage Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-        {STAGE_CONFIG.map(({ stage, label, icon: Icon, color }) => {
-          const count = stageCounts[stage] || 0
-          const isActive = selectedStage === stage
+    <div className="space-y-4 lg:space-y-6">
+      {/* Stage Cards - Horizontal scroll on mobile */}
+      <div className="overflow-x-auto -mx-4 px-4 lg:mx-0 lg:px-0">
+        <div className="flex lg:grid lg:grid-cols-7 gap-3 min-w-max lg:min-w-0">
+          {STAGE_CONFIG.map(({ stage, label, icon: Icon, color }) => {
+            const count = stageCounts[stage] || 0
+            const isActive = selectedStage === stage
 
-          return (
-            <Card
-              key={stage}
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                isActive ? 'ring-2 ring-brand' : ''
-              }`}
-              onClick={() => setSelectedStage(selectedStage === stage ? 'all' : stage)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className={`p-2 rounded-lg ${color}`}>
-                    <Icon className="h-4 w-4 text-white" />
+            return (
+              <Card
+                key={stage}
+                className={`cursor-pointer transition-all hover:shadow-md flex-shrink-0 w-[100px] lg:w-auto ${
+                  isActive ? 'ring-2 ring-brand' : ''
+                }`}
+                onClick={() => setSelectedStage(selectedStage === stage ? 'all' : stage)}
+              >
+                <CardContent className="p-3 lg:p-4">
+                  <div className="flex items-center justify-between">
+                    <div className={`p-1.5 lg:p-2 rounded-lg ${color}`}>
+                      <Icon className="h-3 w-3 lg:h-4 lg:w-4 text-white" />
+                    </div>
+                    <span className="text-xl lg:text-2xl font-bold">{count}</span>
                   </div>
-                  <span className="text-2xl font-bold">{count}</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2 truncate">{label}</p>
-              </CardContent>
-            </Card>
-          )
-        })}
+                  <p className="text-[10px] lg:text-xs text-muted-foreground mt-2 truncate">{label}</p>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
       </div>
 
       {/* Pipeline List */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">
+        <CardHeader className="pb-3 lg:pb-6">
+          <CardTitle className="text-base lg:text-lg">
             {selectedStage === 'all' ? 'All Pipeline' : `${selectedStage}`}
             {' '}({filteredOpportunities.length})
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 lg:px-6">
           {filteredOpportunities.length > 0 ? (
-            <div className="space-y-4">
+            <div className="space-y-3 lg:space-y-4">
               {filteredOpportunities.map((opp) => {
                 const nextStages = getAvailableNextStages(opp.stage)
                 const stageConfig = STAGE_CONFIG.find(s => s.stage === opp.stage)
 
                 return (
                   <Card key={opp.opportunity_id} className="bg-muted/50">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold">{opp.name}</h3>
+                    <CardContent className="p-3 lg:p-4">
+                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-semibold text-sm lg:text-base truncate">{opp.name}</h3>
                             {opp.is_overdue && (
                               <Badge variant="destructive" className="text-xs">
                                 <AlertCircle className="h-3 w-3 mr-1" />
@@ -274,24 +276,24 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground">{opp.account_name}</p>
+                          <p className="text-xs lg:text-sm text-muted-foreground truncate">{opp.account_name}</p>
 
-                          <div className="flex items-center gap-4 mt-2">
-                            <Badge variant="outline" className={stageConfig?.color.replace('bg-', 'border-')}>
+                          <div className="flex flex-wrap items-center gap-2 lg:gap-4 mt-2">
+                            <Badge variant="outline" className={`text-xs ${stageConfig?.color.replace('bg-', 'border-')}`}>
                               {opp.stage}
                             </Badge>
-                            <span className="text-sm font-medium text-brand">
+                            <span className="text-xs lg:text-sm font-medium text-brand">
                               {formatCurrency(opp.estimated_value)}
                             </span>
                             {opp.probability && (
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-[10px] lg:text-xs text-muted-foreground">
                                 {opp.probability}% probability
                               </span>
                             )}
                           </div>
 
                           {opp.next_step && (
-                            <p className="text-sm mt-2">
+                            <p className="text-xs lg:text-sm mt-2">
                               <span className="text-muted-foreground">Next Step:</span> {opp.next_step}
                               {opp.next_step_due_date && (
                                 <span className="text-muted-foreground ml-2">
@@ -302,7 +304,7 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
                           )}
 
                           {opp.owner_name && (
-                            <p className="text-xs text-muted-foreground mt-1">
+                            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">
                               Owner: {opp.owner_name}
                             </p>
                           )}
@@ -314,6 +316,7 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
                             size="sm"
                             onClick={() => openUpdateDialog(opp)}
                             disabled={isLoading === opp.opportunity_id}
+                            className="w-full lg:w-auto flex-shrink-0"
                           >
                             Update Status
                           </Button>
@@ -325,7 +328,7 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
               })}
             </div>
           ) : (
-            <div className="text-center py-12">
+            <div className="text-center py-12 px-4">
               <p className="text-muted-foreground">No opportunities found</p>
               <p className="text-sm text-muted-foreground mt-2">
                 {selectedStage === 'all'
@@ -347,15 +350,15 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
           }
         }}
       >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Update Pipeline</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="text-base lg:text-lg">Update Pipeline</DialogTitle>
+            <DialogDescription className="text-xs lg:text-sm truncate">
               {updateDialog.opportunity?.name} - {updateDialog.opportunity?.account_name}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+          <div className="space-y-4 py-4 flex-1 overflow-y-auto">
             {/* Current Status */}
             <div className="p-3 bg-muted rounded-lg">
               <p className="text-sm text-muted-foreground">Current Status</p>

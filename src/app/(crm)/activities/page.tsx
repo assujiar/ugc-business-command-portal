@@ -33,10 +33,10 @@ export default async function ActivitiesPage() {
     : { data: null }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 lg:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Activities</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-xl lg:text-2xl font-bold">Activities</h1>
+        <p className="text-sm text-muted-foreground">
           Manage your tasks, calls, and meetings
         </p>
       </div>

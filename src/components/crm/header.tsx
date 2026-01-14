@@ -1,11 +1,12 @@
 // =====================================================
 // CRM Header
 // SOURCE: PDF - App Structure
+// Mobile-responsive with hamburger menu trigger
 // =====================================================
 
 'use client'
 
-import { LogOut, User, Settings } from 'lucide-react'
+import { LogOut, User, Settings, Menu } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Button } from '@/components/ui/button'
 import {
@@ -24,9 +25,10 @@ type Profile = Database['public']['Tables']['profiles']['Row']
 
 interface HeaderProps {
   profile: Profile
+  onMenuClick?: () => void
 }
 
-export function Header({ profile }: HeaderProps) {
+export function Header({ profile, onMenuClick }: HeaderProps) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -37,9 +39,23 @@ export function Header({ profile }: HeaderProps) {
   }
 
   return (
-    <header className="h-14 border-b bg-card flex items-center justify-between px-6">
-      <div>
-        <h2 className="text-lg font-semibold">CRM Dashboard</h2>
+    <header className="h-14 border-b bg-card flex items-center justify-between px-4 lg:px-6">
+      <div className="flex items-center gap-3">
+        {/* Mobile menu button */}
+        {onMenuClick && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden"
+            onClick={onMenuClick}
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        )}
+        <div className="min-w-0">
+          <h2 className="text-base lg:text-lg font-semibold truncate">CRM Dashboard</h2>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
@@ -56,8 +72,8 @@ export function Header({ profile }: HeaderProps) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div>
-                <p className="font-medium">{profile.name}</p>
-                <p className="text-xs text-muted-foreground">{profile.email}</p>
+                <p className="font-medium truncate">{profile.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

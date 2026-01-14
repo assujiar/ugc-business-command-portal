@@ -346,10 +346,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-[800px] max-h-[90vh] overflow-y-auto p-4 lg:p-6">
         <DialogHeader>
-          <DialogTitle>Add New Lead</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-base lg:text-lg">Add New Lead</DialogTitle>
+          <DialogDescription className="text-xs lg:text-sm">
             Create a new lead for marketing triage. The lead will appear in the
             Lead Inbox.
           </DialogDescription>
@@ -1101,16 +1101,17 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => setOpen(false)}
               disabled={loading}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} className="w-full sm:w-auto">
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create Lead
             </Button>

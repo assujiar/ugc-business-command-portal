@@ -58,21 +58,26 @@ export default async function LeadManagementPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Lead Management</h1>
-          <p className="text-muted-foreground">
+    <div className="space-y-4 lg:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl lg:text-2xl font-bold">Lead Management</h1>
+          <p className="text-sm text-muted-foreground truncate">
             {isManager || isMACXUser
               ? 'Manage all leads from marketing department'
               : 'Manage leads you have created'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button variant="outline" size="sm" asChild className="hidden sm:flex">
             <Link href="/imports">
               <FileSpreadsheet className="h-4 w-4 mr-2" />
               Import CSV
+            </Link>
+          </Button>
+          <Button variant="outline" size="icon" asChild className="sm:hidden">
+            <Link href="/imports">
+              <FileSpreadsheet className="h-4 w-4" />
             </Link>
           </Button>
           <AddLeadDialog />

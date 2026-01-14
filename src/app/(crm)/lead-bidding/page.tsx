@@ -77,10 +77,10 @@ export default async function LeadBiddingPage() {
   }))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 lg:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Lead Bidding</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-xl lg:text-2xl font-bold">Lead Bidding</h1>
+        <p className="text-sm text-muted-foreground">
           Unclaimed leads ready for sales - Claim a lead to start working on it
         </p>
       </div>
