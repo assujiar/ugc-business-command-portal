@@ -59,34 +59,34 @@ ON CONFLICT (contact_id) DO NOTHING;
 -- =====================================================
 -- LEADS (Various triage statuses)
 -- =====================================================
-INSERT INTO leads (lead_id, company_name, pic_name, pic_email, pic_phone, industry, source, triage_status, priority, inquiry_text, marketing_owner_user_id, created_by) VALUES
+INSERT INTO leads (lead_id, company_name, contact_name, contact_email, contact_phone, source, triage_status, notes, marketing_owner_user_id, created_by) VALUES
 -- New leads for triage
-('LEAD20240101A1B2C3', 'PT Baru Mandiri', 'Ahmad Fauzi', 'ahmad@barumandiri.co.id', '+6281234500001', 'Manufacturing', 'Website Form', 'New', 3, 'Interested in freight forwarding services for export', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
-('LEAD20240102D4E5F6', 'CV Cemerlang Jaya', 'Putri Ayu', 'putri@cermelangjaya.co.id', '+6281234500002', 'Retail', 'Email Inquiry', 'New', 2, 'Need quote for domestic shipping', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95'),
-('LEAD20240103G7H8I9', 'PT Digital Indonesia', 'Reza Pratama', 'reza@digitalindonesia.co.id', '+6281234500003', 'Technology', 'Referral', 'New', 4, 'Urgent: Need air freight for electronics', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
+('LEAD20240101A1B2C3', 'PT Baru Mandiri', 'Ahmad Fauzi', 'ahmad@barumandiri.co.id', '+6281234500001', 'Website Form', 'New', 'Interested in freight forwarding services for export', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
+('LEAD20240102D4E5F6', 'CV Cemerlang Jaya', 'Putri Ayu', 'putri@cermelangjaya.co.id', '+6281234500002', 'Email Inquiry', 'New', 'Need quote for domestic shipping', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95'),
+('LEAD20240103G7H8I9', 'PT Digital Indonesia', 'Reza Pratama', 'reza@digitalindonesia.co.id', '+6281234500003', 'Referral', 'New', 'Urgent: Need air freight for electronics', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
 
 -- In Review leads
-('LEAD20240104J1K2L3', 'PT Sentosa Abadi', 'Linda Wijaya', 'linda@sentosaabadi.co.id', '+6281234500004', 'Food & Beverage', 'Event', 'In Review', 3, 'Interested in cold chain logistics', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
-('LEAD20240105M4N5O6', 'CV Prima Karya', 'Bambang Susilo', 'bambang@primakarya.co.id', '+6281234500005', 'Construction', 'Social Media', 'In Review', 2, 'Heavy equipment transport inquiry', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95'),
+('LEAD20240104J1K2L3', 'PT Sentosa Abadi', 'Linda Wijaya', 'linda@sentosaabadi.co.id', '+6281234500004', 'Event', 'In Review', 'Interested in cold chain logistics', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
+('LEAD20240105M4N5O6', 'CV Prima Karya', 'Bambang Susilo', 'bambang@primakarya.co.id', '+6281234500005', 'Social Media', 'In Review', 'Heavy equipment transport inquiry', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95'),
 
 -- Nurture leads
-('LEAD20240106P7Q8R9', 'PT Indah Permai', 'Sri Wahyuni', 'sri@indahpermai.co.id', '+6281234500006', 'Real Estate', 'WhatsApp', 'Nurture', 1, 'Long term project, not ready yet', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
+('LEAD20240106P7Q8R9', 'PT Indah Permai', 'Sri Wahyuni', 'sri@indahpermai.co.id', '+6281234500006', 'WhatsApp', 'Nurture', 'Long term project, not ready yet', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
 
 -- Disqualified leads
-('LEAD20240107S1T2U3', 'CV Kecil Usaha', 'Joko Widodo', 'joko@kecil.co.id', '+6281234500007', 'Other', 'Cold Outbound', 'Disqualified', 1, 'Too small for our services', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8')
+('LEAD20240107S1T2U3', 'CV Kecil Usaha', 'Joko Widodo', 'joko@kecil.co.id', '+6281234500007', 'Cold Outbound', 'Disqualified', 'Too small for our services', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8')
 ON CONFLICT (lead_id) DO NOTHING;
 
 -- Update disqualified lead with reason
-UPDATE leads SET disqualification_reason = 'Company too small for minimum order quantity', disqualified_at = NOW() WHERE lead_id = 'LEAD20240107S1T2U3';
+UPDATE leads SET disqualified_reason = 'Company too small for minimum order quantity', disqualified_at = NOW() WHERE lead_id = 'LEAD20240107S1T2U3';
 
 -- =====================================================
 -- LEAD HANDOVER POOL (Leads ready for sales)
 -- =====================================================
 
 -- First, create some qualified leads that were handed over
-INSERT INTO leads (lead_id, company_name, pic_name, pic_email, pic_phone, industry, source, triage_status, priority, inquiry_text, handover_eligible, marketing_owner_user_id, created_by) VALUES
-('LEAD20240108V4W5X6', 'PT Export Prima', 'Dian Kusuma', 'dian@exportprima.co.id', '+6281234500008', 'Manufacturing', 'Website Form', 'Handed Over', 3, 'Regular export shipments needed', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
-('LEAD20240109Y7Z8A9', 'PT Import Sejahtera', 'Ferry Gunawan', 'ferry@importsejahtera.co.id', '+6281234500009', 'Retail', 'Referral', 'Handed Over', 4, 'High volume imports from China', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8')
+INSERT INTO leads (lead_id, company_name, contact_name, contact_email, contact_phone, source, triage_status, notes, handover_eligible, marketing_owner_user_id, created_by) VALUES
+('LEAD20240108V4W5X6', 'PT Export Prima', 'Dian Kusuma', 'dian@exportprima.co.id', '+6281234500008', 'Website Form', 'Handed Over', 'Regular export shipments needed', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
+('LEAD20240109Y7Z8A9', 'PT Import Sejahtera', 'Ferry Gunawan', 'ferry@importsejahtera.co.id', '+6281234500009', 'Referral', 'Handed Over', 'High volume imports from China', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8')
 ON CONFLICT (lead_id) DO NOTHING;
 
 -- Add to handover pool
@@ -98,11 +98,11 @@ ON CONFLICT DO NOTHING;
 -- =====================================================
 -- OPPORTUNITIES
 -- =====================================================
-INSERT INTO opportunities (opportunity_id, name, account_id, stage, estimated_value, currency, probability, expected_close_date, next_step, next_step_due_date, owner_user_id, created_by) VALUES
-('OPP20240101A1B2C3', 'Maju Bersama Export Contract', 'ACC20240101A1B2C3', 'Negotiation', 150000000, 'IDR', 70, '2024-03-31', 'Final price negotiation meeting', '2024-02-15', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
-('OPP20240102D4E5F6', 'Sukses Selalu Distribution Deal', 'ACC20240102D4E5F6', 'Quote Sent', 75000000, 'IDR', 50, '2024-04-15', 'Follow up on quote', '2024-02-20', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
-('OPP20240103G7H8I9', 'Global Logistics Partnership', 'ACC20240103G7H8I9', 'Discovery', 200000000, 'IDR', 30, '2024-05-01', 'Site visit scheduled', '2024-02-10', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
-('OPP20240104J1K2L3', 'Tech Nusantara Express Service', 'ACC20240104J1K2L3', 'Prospecting', 50000000, 'IDR', 20, '2024-06-01', 'Initial call', '2024-02-18', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d')
+INSERT INTO opportunities (opportunity_id, name, account_id, stage, estimated_value, currency, probability, next_step, next_step_due_date, owner_user_id, created_by) VALUES
+('OPP20240101A1B2C3', 'Maju Bersama Export Contract', 'ACC20240101A1B2C3', 'Negotiation', 150000000, 'IDR', 70, 'Final price negotiation meeting', '2024-02-15', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('OPP20240102D4E5F6', 'Sukses Selalu Distribution Deal', 'ACC20240102D4E5F6', 'Quote Sent', 75000000, 'IDR', 50, 'Follow up on quote', '2024-02-20', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('OPP20240103G7H8I9', 'Global Logistics Partnership', 'ACC20240103G7H8I9', 'Discovery', 200000000, 'IDR', 30, 'Site visit scheduled', '2024-02-10', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('OPP20240104J1K2L3', 'Tech Nusantara Express Service', 'ACC20240104J1K2L3', 'Prospecting', 50000000, 'IDR', 20, 'Initial call', '2024-02-18', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d')
 ON CONFLICT (opportunity_id) DO NOTHING;
 
 -- =====================================================
@@ -122,11 +122,11 @@ UPDATE activities SET completed_at = NOW(), outcome = 'Positive response, intere
 -- =====================================================
 -- PROSPECTING TARGETS
 -- =====================================================
-INSERT INTO prospecting_targets (target_id, company_name, pic_name, pic_email, pic_phone, industry, source, status, notes, owner_user_id, created_by) VALUES
-('TGT20240101A1B2C3', 'PT Mega Industries', 'Hendra Lim', 'hendra@megaind.co.id', '+6281234600001', 'Manufacturing', 'LinkedIn', 'researching', 'Large manufacturer, potential for regular exports', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
-('TGT20240102D4E5F6', 'CV Fashion Forward', 'Jessica Tan', 'jessica@fashionfw.co.id', '+6281234600002', 'Retail', 'Industry Event', 'outreach_planned', 'Expanding to international markets', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+INSERT INTO prospecting_targets (target_id, company_name, contact_name, contact_email, contact_phone, industry, source, status, notes, owner_user_id, created_by) VALUES
+('TGT20240101A1B2C3', 'PT Mega Industries', 'Hendra Lim', 'hendra@megaind.co.id', '+6281234600001', 'Manufacturing', 'LinkedIn', 'new_target', 'Large manufacturer, potential for regular exports', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('TGT20240102D4E5F6', 'CV Fashion Forward', 'Jessica Tan', 'jessica@fashionfw.co.id', '+6281234600002', 'Retail', 'Industry Event', 'new_target', 'Expanding to international markets', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
 ('TGT20240103G7H8I9', 'PT Pharma Plus', 'Dr. Agus Santoso', 'agus@pharmaplus.co.id', '+6281234600003', 'Healthcare', 'Referral', 'contacted', 'Need cold chain logistics for pharmaceuticals', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
-('TGT20240104J1K2L3', 'PT Agro Lestari', 'Wawan Kurniawan', 'wawan@agrolestari.co.id', '+6281234600004', 'Agriculture', 'Cold Call', 'meeting_scheduled', 'Agricultural exports to Middle East', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0')
+('TGT20240104J1K2L3', 'PT Agro Lestari', 'Wawan Kurniawan', 'wawan@agrolestari.co.id', '+6281234600004', 'Agriculture', 'Cold Call', 'engaged', 'Agricultural exports to Middle East', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0')
 ON CONFLICT (target_id) DO NOTHING;
 
 -- =====================================================
@@ -169,10 +169,10 @@ END $$;
 -- =====================================================
 -- AUDIT LOGS (Sample entries)
 -- =====================================================
-INSERT INTO audit_logs (entity_type, entity_id, action, actor_user_id, details) VALUES
-('lead', 'LEAD20240108V4W5X6', 'handover', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '{"from_status": "Qualified", "to_status": "Handed Over"}'),
-('opportunity', 'OPP20240101A1B2C3', 'stage_change', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '{"from_stage": "Quote Sent", "to_stage": "Negotiation"}'),
-('account', 'ACC20240101A1B2C3', 'create', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '{"company_name": "PT Maju Bersama"}')
+INSERT INTO audit_logs (user_id, module, action, record_id, record_type, after_data) VALUES
+('6ce3f3e0-3e22-4a12-97c2-abd7152057f8', 'leads', 'handover', 'LEAD20240108V4W5X6', 'lead', '{"from_status": "Qualified", "to_status": "Handed Over"}'),
+('3a673e5b-c28f-45fd-98f5-adf04a1dacc0', 'opportunities', 'stage_change', 'OPP20240101A1B2C3', 'opportunity', '{"from_stage": "Quote Sent", "to_stage": "Negotiation"}'),
+('3a673e5b-c28f-45fd-98f5-adf04a1dacc0', 'crm', 'create', 'ACC20240101A1B2C3', 'account', '{"company_name": "PT Maju Bersama"}')
 ON CONFLICT DO NOTHING;
 
 -- Success message
