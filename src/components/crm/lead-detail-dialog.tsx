@@ -6,7 +6,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Eye, Pencil, X, Check } from 'lucide-react'
+import { Loader2, Eye, Pencil, X, Check, FileText, Download, Paperclip } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -61,6 +61,16 @@ interface Lead {
   creator_is_marketing?: boolean | null
 }
 
+interface Attachment {
+  attachment_id: string
+  file_name: string
+  file_path: string
+  file_size: number | null
+  file_type: string | null
+  url: string | null
+  created_at: string
+}
+
 interface LeadDetailDialogProps {
   lead: Lead | null
   open: boolean
@@ -93,6 +103,8 @@ export function LeadDetailDialog({
   const [isEditing, setIsEditing] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [attachments, setAttachments] = React.useState<Attachment[]>([])
+  const [loadingAttachments, setLoadingAttachments] = React.useState(false)
 
   const [editData, setEditData] = React.useState({
     company_name: '',
@@ -148,6 +160,36 @@ export function LeadDetailDialog({
     setIsEditing(false)
     setError(null)
   }, [lead])
+
+  // Fetch attachments when dialog opens
+  React.useEffect(() => {
+    const fetchAttachments = async () => {
+      if (!lead || !open) return
+
+      setLoadingAttachments(true)
+      try {
+        const response = await fetch(`/api/crm/leads/attachments?lead_id=${lead.lead_id}`)
+        if (response.ok) {
+          const { data } = await response.json()
+          setAttachments(data || [])
+        }
+      } catch (err) {
+        console.error('Error fetching attachments:', err)
+      } finally {
+        setLoadingAttachments(false)
+      }
+    }
+
+    fetchAttachments()
+  }, [lead, open])
+
+  // Format file size
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return '-'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
 
   const handleSave = async () => {
     if (!lead) return
@@ -494,6 +536,57 @@ export function LeadDetailDialog({
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Attachments */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-medium text-muted-foreground border-b pb-2 flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              Attachments
+            </h4>
+            {loadingAttachments ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Loading attachments...</span>
+              </div>
+            ) : attachments.length > 0 ? (
+              <div className="space-y-2">
+                {attachments.map((attachment) => (
+                  <div
+                    key={attachment.attachment_id}
+                    className="flex items-center justify-between p-3 border rounded-md bg-muted/30"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{attachment.file_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatFileSize(attachment.file_size)}
+                          {attachment.file_type && ` • ${attachment.file_type.split('/')[1]?.toUpperCase() || attachment.file_type}`}
+                        </p>
+                      </div>
+                    </div>
+                    {attachment.url && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                        className="flex-shrink-0"
+                      >
+                        <a href={attachment.url} target="_blank" rel="noopener noreferrer" download>
+                          <Download className="h-4 w-4 mr-1" />
+                          Download
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No attachments
+              </p>
+            )}
           </div>
 
           {/* Metadata */}
