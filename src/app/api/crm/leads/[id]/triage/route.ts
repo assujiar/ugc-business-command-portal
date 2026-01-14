@@ -6,12 +6,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import type { Database, LeadTriageStatus } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
 
-type LeadUpdate = Database['public']['Tables']['leads']['Update']
+// Valid triage statuses
+const VALID_STATUSES = ['New', 'In Review', 'Qualified', 'Nurture', 'Disqualified', 'Handed Over'] as const
 
 // POST /api/crm/leads/[id]/triage - Triage lead
 export async function POST(
@@ -34,10 +34,8 @@ export async function POST(
       return NextResponse.json({ error: 'new_status is required' }, { status: 400 })
     }
 
-    // Valid triage statuses
-    const validStatuses: LeadTriageStatus[] = ['New', 'In Review', 'Qualified', 'Nurture', 'Disqualified', 'Handed Over']
-    if (!validStatuses.includes(new_status)) {
-      return NextResponse.json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 })
+    if (!VALID_STATUSES.includes(new_status)) {
+      return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` }, { status: 400 })
     }
 
     // First, get current lead to validate transition
@@ -51,13 +49,15 @@ export async function POST(
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
     }
 
-    if ((lead as { triage_status: LeadTriageStatus }).triage_status === 'Handed Over') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((lead as any).triage_status === 'Handed Over') {
       return NextResponse.json({ error: 'Cannot change status of handed over lead' }, { status: 400 })
     }
 
-    // Update lead status
-    const updateData: LeadUpdate = {
-      triage_status: new_status as LeadTriageStatus,
+    // Build update data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: any = {
+      triage_status: new_status,
       updated_at: new Date().toISOString(),
     }
 
@@ -100,14 +100,13 @@ export async function POST(
       }
 
       // Update lead to Handed Over
-      const handoverUpdate: LeadUpdate = {
-        triage_status: 'Handed Over',
-        handover_eligible: true,
-        updated_at: new Date().toISOString(),
-      }
       await supabase
         .from('leads')
-        .update(handoverUpdate)
+        .update({
+          triage_status: 'Handed Over',
+          handover_eligible: true,
+          updated_at: new Date().toISOString(),
+        })
         .eq('lead_id', id)
     }
 
