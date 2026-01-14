@@ -6,6 +6,10 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { LeadInboxTable } from '@/components/crm/lead-inbox-table'
+import { AddLeadDialog } from '@/components/crm/add-lead-dialog'
+import { Button } from '@/components/ui/button'
+import { FileSpreadsheet } from 'lucide-react'
+import Link from 'next/link'
 
 export default async function LeadInboxPage() {
   const supabase = await createClient()
@@ -17,11 +21,22 @@ export default async function LeadInboxPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Lead Inbox</h1>
-        <p className="text-muted-foreground">
-          Marketing lead queue - New and In Review leads for triage
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Lead Inbox</h1>
+          <p className="text-muted-foreground">
+            Marketing lead queue - New and In Review leads for triage
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/imports">
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Import CSV
+            </Link>
+          </Button>
+          <AddLeadDialog />
+        </div>
       </div>
 
       <LeadInboxTable leads={leads || []} />
