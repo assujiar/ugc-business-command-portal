@@ -48,6 +48,35 @@ import {
   Eye,
 } from 'lucide-react'
 
+interface ShipmentDetails {
+  shipment_detail_id: string
+  lead_id: string
+  service_type_code: string | null
+  department: string | null
+  fleet_type: string | null
+  fleet_quantity: number | null
+  incoterm: string | null
+  cargo_category: string | null
+  cargo_description: string | null
+  origin_address: string | null
+  origin_city: string | null
+  origin_country: string | null
+  destination_address: string | null
+  destination_city: string | null
+  destination_country: string | null
+  quantity: number | null
+  unit_of_measure: string | null
+  weight_per_unit_kg: number | null
+  weight_total_kg: number | null
+  length_cm: number | null
+  width_cm: number | null
+  height_cm: number | null
+  volume_total_cbm: number | null
+  scope_of_work: string | null
+  additional_services: string[] | null
+  created_at: string
+}
+
 interface Lead {
   lead_id: string
   company_name: string
@@ -75,6 +104,8 @@ interface Lead {
   creator_department?: string | null
   creator_role?: UserRole | null
   creator_is_marketing?: boolean | null
+  // Shipment details (fetched separately)
+  shipment_details?: ShipmentDetails | null
 }
 
 interface StatusCounts {
@@ -129,36 +160,40 @@ export function LeadManagementDashboard({
   const [detailDialog, setDetailDialog] = useState<{
     open: boolean
     lead: Lead | null
-  }>({ open: false, lead: null })
+    loading: boolean
+  }>({ open: false, lead: null, loading: false })
+
+  // Function to fetch full lead details including shipment
+  const fetchLeadDetails = async (leadId: string) => {
+    setDetailDialog({ open: true, lead: null, loading: true })
+    try {
+      const response = await fetch(`/api/crm/leads/${leadId}`)
+      if (response.ok) {
+        const { data } = await response.json()
+        setDetailDialog({ open: true, lead: data, loading: false })
+      } else {
+        setDetailDialog({ open: false, lead: null, loading: false })
+      }
+    } catch (error) {
+      console.error('Error fetching lead:', error)
+      setDetailDialog({ open: false, lead: null, loading: false })
+    }
+  }
 
   // Listen for viewLeadDetail event from add-lead-dialog
   useEffect(() => {
-    const handleViewLeadDetail = async (event: Event) => {
+    const handleViewLeadDetail = (event: Event) => {
       const customEvent = event as CustomEvent<{ leadId: string }>
       const { leadId } = customEvent.detail
-      // Find the lead in the current list or fetch it
-      const lead = leads.find(l => l.lead_id === leadId)
-      if (lead) {
-        setDetailDialog({ open: true, lead })
-      } else {
-        // Fetch the lead if not in the current list
-        try {
-          const response = await fetch(`/api/crm/leads/${leadId}`)
-          if (response.ok) {
-            const { data } = await response.json()
-            setDetailDialog({ open: true, lead: data })
-          }
-        } catch (error) {
-          console.error('Error fetching lead:', error)
-        }
-      }
+      // Always fetch full lead details including shipment
+      fetchLeadDetails(leadId)
     }
 
     window.addEventListener('viewLeadDetail', handleViewLeadDetail)
     return () => {
       window.removeEventListener('viewLeadDetail', handleViewLeadDetail)
     }
-  }, [leads])
+  }, [])
 
   // Filter leads based on selected status
   const filteredLeads = selectedStatus === 'all'
@@ -365,10 +400,8 @@ export function LeadManagementDashboard({
                             {/* View Detail Action - Always Available */}
                             <DropdownMenuItem
                               onClick={() => {
-                                setDetailDialog({
-                                  open: true,
-                                  lead,
-                                })
+                                // Fetch full lead details including shipment
+                                fetchLeadDetails(lead.lead_id)
                               }}
                             >
                               <Eye className="h-4 w-4 mr-2" />
@@ -510,7 +543,7 @@ export function LeadManagementDashboard({
         open={detailDialog.open}
         onOpenChange={(open) => {
           if (!open) {
-            setDetailDialog({ open: false, lead: null })
+            setDetailDialog({ open: false, lead: null, loading: false })
           }
         }}
         currentUserId={currentUserId}
