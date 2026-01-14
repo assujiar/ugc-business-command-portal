@@ -152,7 +152,7 @@ FROM leads l
 LEFT JOIN profiles pm ON l.marketing_owner_user_id = pm.user_id
 LEFT JOIN profiles ps ON l.sales_owner_user_id = ps.user_id;
 
--- Update v_lead_management to include industry
+-- Update v_lead_management to include industry (without account_status)
 DROP VIEW IF EXISTS v_lead_management CASCADE;
 CREATE VIEW v_lead_management AS
 SELECT
@@ -185,8 +185,7 @@ SELECT
   pm.email AS marketing_owner_email,
   pm.department AS marketing_department,
   ps.name AS sales_owner_name,
-  a.company_name AS account_company_name,
-  a.account_status
+  a.company_name AS account_company_name
 FROM leads l
 LEFT JOIN profiles pm ON l.marketing_owner_user_id = pm.user_id
 LEFT JOIN profiles ps ON l.sales_owner_user_id = ps.user_id
@@ -220,7 +219,7 @@ LEFT JOIN profiles pm ON hp.handed_over_by = pm.user_id
 WHERE l.triage_status = 'Assigned to Sales'
   AND (l.claim_status = 'unclaimed' OR l.claim_status IS NULL);
 
--- Update v_my_leads to include industry
+-- Update v_my_leads to include industry (without account_status)
 DROP VIEW IF EXISTS v_my_leads CASCADE;
 CREATE VIEW v_my_leads AS
 SELECT
@@ -241,7 +240,6 @@ SELECT
   l.account_id,
   l.opportunity_id,
   a.company_name AS account_name,
-  a.account_status,
   o.stage AS opportunity_stage,
   o.estimated_value,
   o.name AS opportunity_name
@@ -250,6 +248,3 @@ LEFT JOIN accounts a ON l.account_id = a.account_id
 LEFT JOIN opportunities o ON l.opportunity_id = o.opportunity_id
 WHERE l.sales_owner_user_id IS NOT NULL
   OR l.claim_status = 'claimed';
-
--- Index for priority filtering
-CREATE INDEX IF NOT EXISTS idx_leads_priority ON leads(priority);
