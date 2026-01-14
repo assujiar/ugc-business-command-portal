@@ -1,7 +1,7 @@
 // =====================================================
 // Lead Bidding Page - Unclaimed Leads for Sales
 // Renamed from Sales Inbox
-// Shows leads with status 'Assigned to Sales' that are unclaimed
+// Shows leads with status 'Assign to Sales' that are unclaimed
 // =====================================================
 
 import { createClient } from '@/lib/supabase/server'
@@ -53,7 +53,7 @@ export default async function LeadBiddingPage() {
         )
       )
     `)
-    .eq('triage_status', 'Assigned to Sales')
+    .eq('triage_status', 'Assign to Sales')
     .or('claim_status.eq.unclaimed,claim_status.is.null')
     .order('priority', { ascending: false })
 

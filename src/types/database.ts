@@ -12,7 +12,8 @@ export type Json =
   | Json[]
 
 // Enums from 001_enums.sql
-export type LeadTriageStatus = 'New' | 'In Review' | 'Qualified' | 'Nurture' | 'Disqualified' | 'Assigned to Sales' | 'Handed Over'
+// Valid lead statuses: New, In Review, Qualified, Assign to Sales, Disqualified, Nurture
+export type LeadTriageStatus = 'New' | 'In Review' | 'Qualified' | 'Nurture' | 'Disqualified' | 'Assign to Sales'
 export type LeadSource = 'Webform (SEM)' | 'Webform (Organic)' | 'Instagram' | 'TikTok' | 'Facebook' | 'Event' | 'Referral' | 'Outbound' | 'Lainnya'
 export type OpportunityStage = 'Prospecting' | 'Discovery' | 'Quote Sent' | 'Negotiation' | 'Closed Won' | 'Closed Lost' | 'On Hold'
 export type ActivityStatus = 'Planned' | 'Done' | 'Cancelled' | 'Completed'

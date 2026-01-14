@@ -159,7 +159,7 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
                       )}
                       <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Qualified')}>
                         <Send className="mr-2 h-4 w-4 text-green-500" />
-                        Qualify & Handover
+                        Mark Qualified
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Nurture')}>
                         <Leaf className="mr-2 h-4 w-4 text-purple-500" />

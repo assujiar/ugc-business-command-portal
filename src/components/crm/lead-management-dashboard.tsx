@@ -133,7 +133,7 @@ const STATUS_CARDS: { key: keyof StatusCounts; status: StatusFilter; label: stri
   { key: 'new', status: 'New', label: 'New Lead', icon: Clock, color: 'bg-slate-500' },
   { key: 'in_review', status: 'In Review', label: 'In Review', icon: Search, color: 'bg-yellow-500' },
   { key: 'qualified', status: 'Qualified', label: 'Qualified', icon: CheckCircle, color: 'bg-green-500' },
-  { key: 'assigned_to_sales', status: 'Assigned to Sales', label: 'Assigned to Sales', icon: Users, color: 'bg-purple-500' },
+  { key: 'assigned_to_sales', status: 'Assign to Sales', label: 'Assign to Sales', icon: Users, color: 'bg-purple-500' },
   { key: 'nurture', status: 'Nurture', label: 'Nurture', icon: Leaf, color: 'bg-teal-500' },
   { key: 'disqualified', status: 'Disqualified', label: 'Disqualified', icon: XCircle, color: 'bg-red-500' },
 ]
@@ -211,10 +211,10 @@ export function LeadManagementDashboard({
         notes: notes || undefined,
       }
 
-      // If changing to Assigned to Sales, require potential revenue
-      if (actionDialog.targetStatus === 'Assigned to Sales') {
+      // If changing to Assign to Sales, require potential revenue
+      if (actionDialog.targetStatus === 'Assign to Sales') {
         if (!potentialRevenue || parseFloat(potentialRevenue) <= 0) {
-          alert('Potential Revenue wajib diisi untuk status Assigned to Sales')
+          alert('Potential Revenue wajib diisi untuk status Assign to Sales')
           setIsLoading(null)
           return
         }
@@ -256,7 +256,7 @@ export function LeadManagementDashboard({
         return 'outline'
       case 'Qualified':
         return 'default'
-      case 'Assigned to Sales':
+      case 'Assign to Sales':
         return 'default'
       case 'Nurture':
         return 'secondary'
@@ -339,7 +339,7 @@ export function LeadManagementDashboard({
                       <TableHead>Source</TableHead>
                       <TableHead>Priority</TableHead>
                       <TableHead>Potential Revenue</TableHead>
-                      {selectedStatus === 'Assigned to Sales' && (
+                      {selectedStatus === 'Assign to Sales' && (
                         <>
                           <TableHead>Claim Status</TableHead>
                           <TableHead>Claimed By</TableHead>
@@ -376,7 +376,7 @@ export function LeadManagementDashboard({
                               ? formatCurrency(lead.potential_revenue)
                               : '-'}
                           </TableCell>
-                          {selectedStatus === 'Assigned to Sales' && (
+                          {selectedStatus === 'Assign to Sales' && (
                             <>
                               <TableCell>
                                 <Badge
@@ -427,7 +427,7 @@ export function LeadManagementDashboard({
                                         }}
                                       >
                                         <ArrowRight className="h-4 w-4 mr-2" />
-                                        {action === 'Assigned to Sales' ? 'HO to Sales' : action}
+                                        {action}
                                       </DropdownMenuItem>
                                     ))}
                                   </>
@@ -490,7 +490,7 @@ export function LeadManagementDashboard({
                                       }}
                                     >
                                       <ArrowRight className="h-4 w-4 mr-2" />
-                                      {action === 'Assigned to Sales' ? 'HO to Sales' : action}
+                                      {action}
                                     </DropdownMenuItem>
                                   ))}
                                 </>
@@ -554,7 +554,7 @@ export function LeadManagementDashboard({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Update Status to {actionDialog.targetStatus === 'Assigned to Sales' ? 'HO to Sales' : actionDialog.targetStatus}
+              Update Status to {actionDialog.targetStatus}
             </DialogTitle>
             <DialogDescription>
               Lead: {actionDialog.lead?.company_name}
@@ -562,7 +562,7 @@ export function LeadManagementDashboard({
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {actionDialog.targetStatus === 'Assigned to Sales' && (
+            {actionDialog.targetStatus === 'Assign to Sales' && (
               <div className="space-y-2">
                 <Label htmlFor="potential_revenue">
                   Potential Revenue <span className="text-red-500">*</span>
@@ -575,7 +575,7 @@ export function LeadManagementDashboard({
                   onChange={(e) => setPotentialRevenue(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Wajib diisi untuk handover ke Sales
+                  Wajib diisi untuk Assign to Sales
                 </p>
               </div>
             )}
@@ -592,7 +592,7 @@ export function LeadManagementDashboard({
               </div>
             )}
 
-            {actionDialog.targetStatus !== 'Disqualified' && actionDialog.targetStatus !== 'Assigned to Sales' && (
+            {actionDialog.targetStatus !== 'Disqualified' && actionDialog.targetStatus !== 'Assign to Sales' && (
               <div className="space-y-2">
                 <Label htmlFor="notes">Notes (optional)</Label>
                 <Textarea
@@ -620,7 +620,7 @@ export function LeadManagementDashboard({
               onClick={handleStatusChange}
               disabled={
                 isLoading === actionDialog.lead?.lead_id ||
-                (actionDialog.targetStatus === 'Assigned to Sales' && !potentialRevenue)
+                (actionDialog.targetStatus === 'Assign to Sales' && !potentialRevenue)
               }
             >
               {isLoading === actionDialog.lead?.lead_id ? 'Updating...' : 'Update Status'}

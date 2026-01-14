@@ -11,8 +11,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
 
-// Valid triage statuses
-const VALID_STATUSES = ['New', 'In Review', 'Qualified', 'Nurture', 'Disqualified', 'Assigned to Sales', 'Handed Over'] as const
+// Valid triage statuses - no Handed Over, use 'Assign to Sales'
+const VALID_STATUSES = ['New', 'In Review', 'Qualified', 'Nurture', 'Disqualified', 'Assign to Sales'] as const
 
 // POST /api/crm/leads/[id]/triage - Triage lead
 export async function POST(
@@ -52,8 +52,8 @@ export async function POST(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((lead as any).triage_status === 'Handed Over' || (lead as any).triage_status === 'Assigned to Sales') {
-      return NextResponse.json({ error: 'Cannot change status of handed over or assigned lead' }, { status: 400 })
+    if ((lead as any).triage_status === 'Assign to Sales') {
+      return NextResponse.json({ error: 'Cannot change status of lead already assigned to sales' }, { status: 400 })
     }
 
     // Build update data
@@ -71,10 +71,11 @@ export async function POST(
       }
     }
 
-    // Handle Assigned to Sales (HO to Sales) - requires potential_revenue
-    if (new_status === 'Assigned to Sales') {
+    // Handle Assign to Sales - requires potential_revenue
+    // This creates entry in lead_handover_pool for sales to claim
+    if (new_status === 'Assign to Sales') {
       if (!potential_revenue || potential_revenue <= 0) {
-        return NextResponse.json({ error: 'potential_revenue is required for Assigned to Sales status' }, { status: 400 })
+        return NextResponse.json({ error: 'potential_revenue is required for Assign to Sales status' }, { status: 400 })
       }
       updateData.potential_revenue = potential_revenue
       updateData.claim_status = 'unclaimed'
@@ -94,8 +95,8 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    // If Assigned to Sales, create handover pool entry
-    if (new_status === 'Assigned to Sales') {
+    // If Assign to Sales, create handover pool entry for sales inbox/lead bidding
+    if (new_status === 'Assign to Sales') {
       // Create handover pool entry using admin client
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: poolError } = await (adminClient as any)
@@ -116,44 +117,14 @@ export async function POST(
       }
     }
 
-    // Legacy: If qualified (without going through Assigned to Sales), create handover pool entry
-    if (new_status === 'Qualified') {
-      // Create handover pool entry using admin client
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: poolError } = await (adminClient as any)
-        .from('lead_handover_pool')
-        .insert({
-          lead_id: id,
-          handed_over_by: user.id,
-          handover_notes: notes || null,
-          priority: 1,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
-        })
-
-      if (poolError) {
-        // If duplicate key error, lead already in pool - that's ok
-        if (!poolError.message.includes('duplicate')) {
-          console.error('Error creating handover pool entry:', poolError)
-        }
-      }
-
-      // Update lead to Handed Over using admin client
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (adminClient as any)
-        .from('leads')
-        .update({
-          triage_status: 'Handed Over',
-          handover_eligible: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('lead_id', id)
-    }
+    // Note: Qualified status stays as Qualified - NO auto-transition
+    // Assign to Sales is done manually via separate button action
 
     return NextResponse.json({
       data: {
         success: true,
         lead_id: id,
-        new_status: new_status === 'Qualified' ? 'Handed Over' : new_status,
+        new_status: new_status,
       }
     })
   } catch (error) {
