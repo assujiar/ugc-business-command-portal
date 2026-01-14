@@ -11,18 +11,30 @@
 -- Note: You need to create these users in Supabase Auth first
 -- Then use their UUIDs here
 
--- Example profiles (replace UUIDs with actual auth.users IDs)
+-- All 15 roles (replace UUIDs with actual auth.users IDs)
 INSERT INTO profiles (user_id, email, name, role, department, is_active) VALUES
+-- Executive
 ('00000000-0000-0000-0000-000000000001', 'director@ugc.com', 'John Director', 'Director', 'Executive', true),
+-- IT/Admin
 ('00000000-0000-0000-0000-000000000002', 'admin@ugc.com', 'Admin Super', 'super admin', 'IT', true),
+-- Marketing Team (5 roles)
 ('00000000-0000-0000-0000-000000000003', 'marketing.mgr@ugc.com', 'Maria Marketing', 'Marketing Manager', 'Marketing', true),
 ('00000000-0000-0000-0000-000000000004', 'marcomm@ugc.com', 'Mike Marcomm', 'Marcomm', 'Marketing', true),
 ('00000000-0000-0000-0000-000000000005', 'dgo@ugc.com', 'Diana DGO', 'DGO', 'Marketing', true),
+('00000000-0000-0000-0000-000000000011', 'macx@ugc.com', 'Max MACX', 'MACX', 'Marketing', true),
+('00000000-0000-0000-0000-000000000012', 'vsdo@ugc.com', 'Victor VSDO', 'VSDO', 'Marketing', true),
+-- Sales Team (4 roles)
 ('00000000-0000-0000-0000-000000000006', 'sales.mgr@ugc.com', 'Steve Sales', 'sales manager', 'Sales', true),
 ('00000000-0000-0000-0000-000000000007', 'salesperson1@ugc.com', 'Sam Salesperson', 'salesperson', 'Sales', true),
 ('00000000-0000-0000-0000-000000000008', 'salesperson2@ugc.com', 'Sally Salesperson', 'salesperson', 'Sales', true),
 ('00000000-0000-0000-0000-000000000009', 'sales.support@ugc.com', 'Support Sarah', 'sales support', 'Sales', true),
-('00000000-0000-0000-0000-000000000010', 'exim@ugc.com', 'Eric EXIM', 'EXIM Ops', 'Operations', true)
+-- Operations Team (4 roles)
+('00000000-0000-0000-0000-000000000010', 'exim@ugc.com', 'Eric EXIM', 'EXIM Ops', 'Operations', true),
+('00000000-0000-0000-0000-000000000013', 'domestics@ugc.com', 'Donna Domestics', 'domestics Ops', 'Operations', true),
+('00000000-0000-0000-0000-000000000014', 'import.dtd@ugc.com', 'Ivan Import', 'Import DTD Ops', 'Operations', true),
+('00000000-0000-0000-0000-000000000015', 'warehouse@ugc.com', 'Willy Warehouse', 'traffic & warehous', 'Operations', true),
+-- Finance
+('00000000-0000-0000-0000-000000000016', 'finance@ugc.com', 'Fiona Finance', 'finance', 'Finance', true)
 ON CONFLICT (user_id) DO NOTHING;
 
 -- =====================================================
@@ -168,10 +180,27 @@ ON CONFLICT DO NOTHING;
 DO $$
 BEGIN
     RAISE NOTICE 'Seed data inserted successfully!';
-    RAISE NOTICE 'Test users created (password: Test123!):';
+    RAISE NOTICE 'Test users created (password: Test123!) - All 15 roles:';
+    RAISE NOTICE '-- Executive --';
     RAISE NOTICE '- director@ugc.com (Director)';
+    RAISE NOTICE '-- IT/Admin --';
     RAISE NOTICE '- admin@ugc.com (super admin)';
+    RAISE NOTICE '-- Marketing Team --';
     RAISE NOTICE '- marketing.mgr@ugc.com (Marketing Manager)';
+    RAISE NOTICE '- marcomm@ugc.com (Marcomm)';
+    RAISE NOTICE '- dgo@ugc.com (DGO)';
+    RAISE NOTICE '- macx@ugc.com (MACX)';
+    RAISE NOTICE '- vsdo@ugc.com (VSDO)';
+    RAISE NOTICE '-- Sales Team --';
     RAISE NOTICE '- sales.mgr@ugc.com (sales manager)';
     RAISE NOTICE '- salesperson1@ugc.com (salesperson)';
+    RAISE NOTICE '- salesperson2@ugc.com (salesperson)';
+    RAISE NOTICE '- sales.support@ugc.com (sales support)';
+    RAISE NOTICE '-- Operations Team --';
+    RAISE NOTICE '- exim@ugc.com (EXIM Ops)';
+    RAISE NOTICE '- domestics@ugc.com (domestics Ops)';
+    RAISE NOTICE '- import.dtd@ugc.com (Import DTD Ops)';
+    RAISE NOTICE '- warehouse@ugc.com (traffic & warehous)';
+    RAISE NOTICE '-- Finance --';
+    RAISE NOTICE '- finance@ugc.com (finance)';
 END $$;
