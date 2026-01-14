@@ -59,13 +59,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's profile to check role
-    const { data: profile } = await supabase
+    const { data: profile } = await (supabase as any)
       .from('profiles')
       .select('role')
       .eq('user_id', user.id)
-      .single()
+      .single() as { data: { role: string } | null }
 
-    const userRole = profile?.role
+    const userRole = profile?.role as string | undefined
     const isSalesUser = isSales(userRole)
 
     const body = await request.json()
