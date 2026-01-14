@@ -13,7 +13,7 @@ export type Json =
 
 // Enums from 001_enums.sql
 export type LeadTriageStatus = 'New' | 'In Review' | 'Qualified' | 'Nurture' | 'Disqualified' | 'Handed Over'
-export type LeadSource = 'Website Form' | 'WhatsApp' | 'Email Inquiry' | 'Referral' | 'Event' | 'Social Media' | 'Import' | 'Manual' | 'Cold Outbound' | 'Partner'
+export type LeadSource = 'Webform (SEM)' | 'Webform (Organic)' | 'Instagram' | 'TikTok' | 'Facebook' | 'Event' | 'Referral' | 'Outbound' | 'Lainnya'
 export type OpportunityStage = 'Prospecting' | 'Discovery' | 'Quote Sent' | 'Negotiation' | 'Closed Won' | 'Closed Lost' | 'On Hold'
 export type ActivityStatus = 'Planned' | 'Done' | 'Cancelled'
 export type ActivityTypeV2 = 'Call' | 'Email' | 'Meeting' | 'Site Visit' | 'WhatsApp' | 'Task' | 'Proposal' | 'Contract Review'

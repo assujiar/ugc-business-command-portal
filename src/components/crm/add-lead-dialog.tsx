@@ -46,8 +46,9 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
     pic_email: '',
     pic_phone: '',
     industry: '',
-    source: 'Manual' as string,
+    source: 'Webform (SEM)' as string,
     source_detail: '',
+    custom_source: '',
     priority: 2,
     inquiry_text: '',
   })
@@ -58,16 +59,23 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
     setError(null)
 
     try {
+      // If source is "Lainnya", use custom_source as source_detail
+      const submitData = {
+        ...formData,
+        industry: formData.industry || null,
+        source_detail: formData.source === 'Lainnya'
+          ? formData.custom_source || null
+          : formData.source_detail || null,
+      }
+      // Remove custom_source from submission (it's stored in source_detail)
+      const { custom_source: _, ...dataToSubmit } = submitData
+
       const response = await fetch('/api/crm/leads', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...formData,
-          industry: formData.industry || null,
-          source_detail: formData.source_detail || null,
-        }),
+        body: JSON.stringify(dataToSubmit),
       })
 
       if (!response.ok) {
@@ -82,8 +90,9 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
         pic_email: '',
         pic_phone: '',
         industry: '',
-        source: 'Manual',
+        source: 'Webform (SEM)',
         source_detail: '',
+        custom_source: '',
         priority: 2,
         inquiry_text: '',
       })
@@ -197,14 +206,14 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
           <div className="space-y-4">
             <h4 className="text-sm font-medium text-muted-foreground">Lead Details</h4>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="source">
                   Source <span className="text-destructive">*</span>
                 </Label>
                 <Select
                   value={formData.source}
-                  onValueChange={(value) => setFormData({ ...formData, source: value })}
+                  onValueChange={(value) => setFormData({ ...formData, source: value, custom_source: '' })}
                 >
                   <SelectTrigger id="source">
                     <SelectValue placeholder="Select source" />
@@ -217,16 +226,6 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="source_detail">Source Detail</Label>
-                <Input
-                  id="source_detail"
-                  value={formData.source_detail}
-                  onChange={(e) => setFormData({ ...formData, source_detail: e.target.value })}
-                  placeholder="e.g., Trade Show 2024"
-                />
               </div>
 
               <div className="space-y-2">
@@ -247,6 +246,33 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                   </SelectContent>
                 </Select>
               </div>
+
+              {formData.source === 'Lainnya' && (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="custom_source">
+                    Sumber Lainnya <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="custom_source"
+                    value={formData.custom_source}
+                    onChange={(e) => setFormData({ ...formData, custom_source: e.target.value })}
+                    placeholder="Masukkan sumber lead..."
+                    required
+                  />
+                </div>
+              )}
+
+              {formData.source !== 'Lainnya' && (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="source_detail">Source Detail</Label>
+                  <Input
+                    id="source_detail"
+                    value={formData.source_detail}
+                    onChange={(e) => setFormData({ ...formData, source_detail: e.target.value })}
+                    placeholder="e.g., Trade Show 2024"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

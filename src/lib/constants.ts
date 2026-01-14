@@ -78,16 +78,15 @@ export const TARGET_STATUSES: ProspectingTargetStatus[] = [
 
 // Lead sources
 export const LEAD_SOURCES = [
-  'Website Form',
-  'WhatsApp',
-  'Email Inquiry',
-  'Referral',
+  'Webform (SEM)',
+  'Webform (Organic)',
+  'Instagram',
+  'TikTok',
+  'Facebook',
   'Event',
-  'Social Media',
-  'Import',
-  'Manual',
-  'Cold Outbound',
-  'Partner',
+  'Referral',
+  'Outbound',
+  'Lainnya',
 ] as const
 
 // Industry options

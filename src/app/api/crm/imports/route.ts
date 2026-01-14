@@ -12,16 +12,15 @@ export const dynamic = 'force-dynamic'
 
 // Valid lead sources for validation
 const VALID_LEAD_SOURCES: LeadSource[] = [
-  'Website Form',
-  'WhatsApp',
-  'Email Inquiry',
-  'Referral',
+  'Webform (SEM)',
+  'Webform (Organic)',
+  'Instagram',
+  'TikTok',
+  'Facebook',
   'Event',
-  'Social Media',
-  'Import',
-  'Manual',
-  'Cold Outbound',
-  'Partner',
+  'Referral',
+  'Outbound',
+  'Lainnya',
 ]
 
 interface ImportRow {
@@ -161,7 +160,7 @@ async function importLead(supabase: Awaited<ReturnType<typeof createClient>>, ro
   }
 
   // Validate and normalize source
-  let source: LeadSource = 'Import'
+  let source: LeadSource = 'Lainnya'
   if (row.source && typeof row.source === 'string') {
     const normalizedSource = row.source.trim()
     if (VALID_LEAD_SOURCES.includes(normalizedSource as LeadSource)) {
