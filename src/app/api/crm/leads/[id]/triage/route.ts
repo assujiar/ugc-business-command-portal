@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import type { LeadTriageStatus } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -32,7 +33,7 @@ export async function POST(
     }
 
     // Valid triage statuses
-    const validStatuses = ['New', 'In Review', 'Qualified', 'Nurture', 'Disqualified', 'Handed Over']
+    const validStatuses: LeadTriageStatus[] = ['New', 'In Review', 'Qualified', 'Nurture', 'Disqualified', 'Handed Over']
     if (!validStatuses.includes(new_status)) {
       return NextResponse.json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 })
     }
@@ -48,7 +49,7 @@ export async function POST(
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
     }
 
-    if (lead.triage_status === 'Handed Over') {
+    if ((lead as { triage_status: LeadTriageStatus }).triage_status === 'Handed Over') {
       return NextResponse.json({ error: 'Cannot change status of handed over lead' }, { status: 400 })
     }
 
