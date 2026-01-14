@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isSales } from '@/lib/permissions'
+import type { UserRole } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
       .eq('user_id', user.id)
       .single() as { data: { role: string } | null }
 
-    const userRole = profile?.role as string | undefined
+    const userRole = profile?.role as UserRole | undefined
     const isSalesUser = isSales(userRole)
 
     const body = await request.json()
