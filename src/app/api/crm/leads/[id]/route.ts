@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 // Roles that can edit any lead
 const MANAGER_ROLES: UserRole[] = ['Director', 'super admin', 'Marketing Manager', 'sales manager']
 
-// GET /api/crm/leads/[id] - Get single lead
+// GET /api/crm/leads/[id] - Get single lead with shipment details
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -27,6 +27,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Fetch lead data
     const { data, error } = await (supabase as any)
       .from('leads')
       .select('*')
@@ -37,7 +38,20 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
 
-    return NextResponse.json({ data })
+    // Fetch shipment details for this lead
+    const { data: shipmentDetails } = await (supabase as any)
+      .from('shipment_details')
+      .select('*')
+      .eq('lead_id', id)
+      .single()
+
+    // Return lead with shipment details
+    return NextResponse.json({
+      data: {
+        ...data,
+        shipment_details: shipmentDetails || null
+      }
+    })
   } catch (error) {
     console.error('Error fetching lead:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
