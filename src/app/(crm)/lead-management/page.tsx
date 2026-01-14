@@ -1,0 +1,86 @@
+// =====================================================
+// Lead Management Page - Consolidated Marketing Lead View
+// Combines: Lead Inbox, Nurture Leads, Disqualified
+// =====================================================
+
+import { createClient } from '@/lib/supabase/server'
+import { LeadManagementDashboard } from '@/components/crm/lead-management-dashboard'
+import { AddLeadDialog } from '@/components/crm/add-lead-dialog'
+import { Button } from '@/components/ui/button'
+import { FileSpreadsheet } from 'lucide-react'
+import Link from 'next/link'
+import { getSessionAndProfile } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { canAccessLeadInbox } from '@/lib/permissions'
+
+export default async function LeadManagementPage() {
+  const supabase = await createClient()
+  const { profile } = await getSessionAndProfile()
+
+  if (!profile) {
+    redirect('/login')
+  }
+
+  // Check if user has access to lead inbox
+  if (!canAccessLeadInbox(profile.role)) {
+    redirect('/dashboard')
+  }
+
+  // Determine if user is manager level (can see department leads)
+  const isManager = ['Director', 'super admin', 'Marketing Manager'].includes(profile.role)
+
+  // Fetch leads based on role
+  let query = (supabase as any).from('leads').select('*')
+
+  if (isManager) {
+    // Manager can see all leads in their department
+    query = query.or(`marketing_owner_user_id.is.null,marketing_owner_user_id.not.is.null`)
+  } else {
+    // Staff can only see leads they created
+    query = query.eq('created_by', profile.user_id)
+  }
+
+  const { data: leads } = await query.order('created_at', { ascending: false }) as { data: any[] | null }
+
+  // Get status counts
+  const statusCounts = {
+    total: leads?.length || 0,
+    new: leads?.filter((l: any) => l.triage_status === 'New').length || 0,
+    in_review: leads?.filter((l: any) => l.triage_status === 'In Review').length || 0,
+    qualified: leads?.filter((l: any) => l.triage_status === 'Qualified').length || 0,
+    assigned_to_sales: leads?.filter((l: any) => l.triage_status === 'Assigned to Sales').length || 0,
+    nurture: leads?.filter((l: any) => l.triage_status === 'Nurture').length || 0,
+    disqualified: leads?.filter((l: any) => l.triage_status === 'Disqualified').length || 0,
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Lead Management</h1>
+          <p className="text-muted-foreground">
+            {isManager
+              ? 'Manage all leads across your department'
+              : 'Manage leads you have created'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/imports">
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Import CSV
+            </Link>
+          </Button>
+          <AddLeadDialog />
+        </div>
+      </div>
+
+      <LeadManagementDashboard
+        leads={leads || []}
+        statusCounts={statusCounts}
+        isManager={isManager}
+        currentUserId={profile.user_id}
+      />
+    </div>
+  )
+}

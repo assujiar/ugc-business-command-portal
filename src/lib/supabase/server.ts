@@ -34,8 +34,13 @@ export async function createClient() {
   )
 }
 
+type Profile = Database['public']['Tables']['profiles']['Row']
+
 // Get current user session and profile
-export async function getSessionAndProfile() {
+export async function getSessionAndProfile(): Promise<{
+  user: { id: string; email?: string } | null
+  profile: Profile | null
+}> {
   const supabase = await createClient()
 
   const { data: { user }, error: userError } = await supabase.auth.getUser()

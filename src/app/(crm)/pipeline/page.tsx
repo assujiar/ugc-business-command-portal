@@ -1,29 +1,103 @@
 // =====================================================
-// Pipeline Page - Active Opportunities
-// SOURCE: PDF Section 5, Page 17
+// Pipeline Page - Sales Pipeline with Card View
+// Shows opportunities grouped by stage with update dialog
 // =====================================================
 
 import { createClient } from '@/lib/supabase/server'
-import { PipelineBoard } from '@/components/crm/pipeline-board'
+import { PipelineDashboard } from '@/components/crm/pipeline-dashboard'
+import { getSessionAndProfile } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { canAccessPipeline } from '@/lib/permissions'
 
 export default async function PipelinePage() {
   const supabase = await createClient()
+  const { profile } = await getSessionAndProfile()
 
+  if (!profile) {
+    redirect('/login')
+  }
+
+  // Check if user has access
+  if (!canAccessPipeline(profile.role)) {
+    redirect('/dashboard')
+  }
+
+  // Fetch opportunities
   const { data: opportunities } = await supabase
-    .from('v_pipeline_active')
-    .select('*')
-    .order('next_step_due_date', { ascending: true })
+    .from('opportunities')
+    .select(`
+      opportunity_id,
+      name,
+      stage,
+      estimated_value,
+      currency,
+      probability,
+      expected_close_date,
+      next_step,
+      next_step_due_date,
+      close_reason,
+      lost_reason,
+      competitor_price,
+      customer_budget,
+      closed_at,
+      notes,
+      owner_user_id,
+      account_id,
+      lead_id,
+      created_at,
+      updated_at,
+      accounts (
+        account_id,
+        company_name,
+        account_status
+      ),
+      profiles:owner_user_id (
+        name
+      )
+    `)
+    .order('created_at', { ascending: false })
+
+  // Transform data
+  const transformedOpportunities = (opportunities || []).map((opp: any) => ({
+    opportunity_id: opp.opportunity_id,
+    name: opp.name,
+    stage: opp.stage,
+    estimated_value: opp.estimated_value,
+    currency: opp.currency,
+    probability: opp.probability,
+    expected_close_date: opp.expected_close_date,
+    next_step: opp.next_step,
+    next_step_due_date: opp.next_step_due_date,
+    close_reason: opp.close_reason,
+    lost_reason: opp.lost_reason,
+    competitor_price: opp.competitor_price,
+    customer_budget: opp.customer_budget,
+    closed_at: opp.closed_at,
+    notes: opp.notes,
+    owner_user_id: opp.owner_user_id,
+    account_id: opp.account_id,
+    lead_id: opp.lead_id,
+    created_at: opp.created_at,
+    updated_at: opp.updated_at,
+    account_name: opp.accounts?.company_name || null,
+    account_status: opp.accounts?.account_status || null,
+    owner_name: opp.profiles?.name || null,
+    is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() && !['Closed Won', 'Closed Lost'].includes(opp.stage),
+  }))
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Pipeline</h1>
         <p className="text-muted-foreground">
-          Active opportunities across all stages
+          Manage your sales pipeline and opportunities
         </p>
       </div>
 
-      <PipelineBoard opportunities={opportunities || []} />
+      <PipelineDashboard
+        opportunities={transformedOpportunities}
+        currentUserId={profile.user_id}
+      />
     </div>
   )
 }

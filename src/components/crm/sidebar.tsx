@@ -1,6 +1,6 @@
 // =====================================================
 // CRM Sidebar Navigation
-// SOURCE: PDF Section 5 - Page Routes
+// Updated for consolidated lead management
 // =====================================================
 
 'use client'
@@ -15,9 +15,9 @@ import {
   TrendingUp,
   Calendar,
   Upload,
-  Leaf,
-  XCircle,
   LayoutDashboard,
+  ClipboardList,
+  Gavel,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData } from '@/lib/permissions'
@@ -31,15 +31,15 @@ interface SidebarProps {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: 'all' },
-  { name: 'Lead Inbox', href: '/lead-inbox', icon: Inbox, permission: 'leadInbox' },
-  { name: 'Sales Inbox', href: '/sales-inbox', icon: Inbox, permission: 'salesInbox' },
+  // Marketing routes
+  { name: 'Lead Management', href: '/lead-management', icon: ClipboardList, permission: 'leadInbox' },
+  // Sales routes
+  { name: 'Lead Bidding', href: '/lead-bidding', icon: Gavel, permission: 'salesInbox' },
   { name: 'My Leads', href: '/my-leads', icon: Users, permission: 'salesInbox' },
   { name: 'Pipeline', href: '/pipeline', icon: TrendingUp, permission: 'pipeline' },
   { name: 'Accounts', href: '/accounts', icon: Building2, permission: 'pipeline' },
   { name: 'Activities', href: '/activities', icon: Calendar, roles: 'all' },
   { name: 'Targets', href: '/targets', icon: Target, permission: 'salesInbox' },
-  { name: 'Nurture Leads', href: '/nurture-leads', icon: Leaf, permission: 'leadInbox' },
-  { name: 'Disqualified', href: '/disqualified-leads', icon: XCircle, permission: 'leadInbox' },
   { name: 'Imports', href: '/imports', icon: Upload, permission: 'import' },
 ]
 

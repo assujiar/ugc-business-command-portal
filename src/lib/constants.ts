@@ -3,7 +3,7 @@
 // SOURCE: PDF Section 6 - Role Definitions
 // =====================================================
 
-import type { UserRole, LeadTriageStatus, OpportunityStage, ActivityTypeV2, ProspectingTargetStatus } from '@/types/database'
+import type { UserRole, LeadTriageStatus, OpportunityStage, ActivityTypeV2, ProspectingTargetStatus, AccountStatus, LostReason, ApproachMethod } from '@/types/database'
 
 // All 15 fixed roles from PDF
 export const USER_ROLES: UserRole[] = [
@@ -36,11 +36,30 @@ export const LEAD_TRIAGE_STATUSES: LeadTriageStatus[] = [
   'Qualified',
   'Nurture',
   'Disqualified',
+  'Assigned to Sales',
   'Handed Over',
 ]
 
-// Marketing visible statuses
-export const MARKETING_VISIBLE_STATUSES: LeadTriageStatus[] = ['New', 'In Review', 'Nurture', 'Disqualified']
+// Marketing visible statuses (for Lead Management page)
+export const MARKETING_VISIBLE_STATUSES: LeadTriageStatus[] = [
+  'New',
+  'In Review',
+  'Qualified',
+  'Assigned to Sales',
+  'Nurture',
+  'Disqualified',
+]
+
+// Status actions mapping - which actions are available for each status
+export const LEAD_STATUS_ACTIONS: Record<LeadTriageStatus, LeadTriageStatus[]> = {
+  'New': ['In Review', 'Qualified', 'Nurture', 'Disqualified'],
+  'In Review': ['Qualified', 'Nurture', 'Disqualified'],
+  'Qualified': ['Assigned to Sales'],
+  'Nurture': ['In Review'],
+  'Disqualified': [],
+  'Assigned to Sales': [],
+  'Handed Over': [],
+}
 
 // Opportunity stages
 export const OPPORTUNITY_STAGES: OpportunityStage[] = [
@@ -259,4 +278,48 @@ export const COUNTRIES = [
   'Netherlands',
   'United Kingdom',
   'Other',
+] as const
+
+// =====================================================
+// LEAD MANAGEMENT ENHANCEMENT CONSTANTS
+// =====================================================
+
+// Account Statuses
+export const ACCOUNT_STATUSES: { value: AccountStatus; label: string; description: string }[] = [
+  { value: 'calon_account', label: 'Calon Account', description: 'Pipeline belum closed' },
+  { value: 'new_account', label: 'New Account', description: 'Pipeline closed win, berlaku 3 bulan' },
+  { value: 'failed_account', label: 'Failed Account', description: 'Pipeline closed lost' },
+  { value: 'active_account', label: 'Active Account', description: 'Aktif bertransaksi mulai bulan ke-4' },
+  { value: 'passive_account', label: 'Passive Account', description: 'Tidak ada transaksi >1 bulan' },
+  { value: 'lost_account', label: 'Lost Account', description: 'Tidak ada transaksi >3 bulan' },
+]
+
+// Lost Reasons for Pipeline
+export const LOST_REASONS: { value: LostReason; label: string; requiresPrice: boolean }[] = [
+  { value: 'harga_tidak_masuk', label: 'Harga Tidak Masuk', requiresPrice: true },
+  { value: 'kompetitor_lebih_murah', label: 'Kompetitor Lebih Murah', requiresPrice: true },
+  { value: 'budget_tidak_cukup', label: 'Budget Tidak Cukup', requiresPrice: true },
+  { value: 'timing_tidak_tepat', label: 'Timing Tidak Tepat', requiresPrice: false },
+  { value: 'tidak_ada_kebutuhan', label: 'Tidak Ada Kebutuhan', requiresPrice: false },
+  { value: 'kompetitor_lebih_baik', label: 'Kompetitor Service Lebih Baik', requiresPrice: false },
+  { value: 'service_tidak_sesuai', label: 'Service Tidak Sesuai Kebutuhan', requiresPrice: false },
+  { value: 'lokasi_tidak_terjangkau', label: 'Lokasi Tidak Terjangkau', requiresPrice: false },
+  { value: 'lainnya', label: 'Lainnya', requiresPrice: false },
+]
+
+// Approach Methods for Pipeline Updates
+export const APPROACH_METHODS: { value: ApproachMethod; label: string; icon: string }[] = [
+  { value: 'Call', label: 'Phone Call', icon: 'phone' },
+  { value: 'Email', label: 'Email', icon: 'mail' },
+  { value: 'Meeting', label: 'Meeting', icon: 'users' },
+  { value: 'Site Visit', label: 'Site Visit', icon: 'map-pin' },
+  { value: 'WhatsApp', label: 'WhatsApp', icon: 'message-circle' },
+  { value: 'Proposal', label: 'Proposal', icon: 'file-text' },
+  { value: 'Contract Review', label: 'Contract Review', icon: 'file-check' },
+]
+
+// Lead Claim Statuses
+export const LEAD_CLAIM_STATUSES = [
+  { value: 'unclaimed', label: 'Unclaimed' },
+  { value: 'claimed', label: 'Claimed' },
 ] as const

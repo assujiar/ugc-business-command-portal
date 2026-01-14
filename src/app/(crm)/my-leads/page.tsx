@@ -1,47 +1,88 @@
 // =====================================================
-// My Leads Page - Claimed Leads by User
-// SOURCE: PDF Section 5, Page 17
+// My Leads Page - Sales Department
+// Shows leads claimed and created by salesperson
 // =====================================================
 
 import { createClient } from '@/lib/supabase/server'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { formatDate } from '@/lib/utils'
-import Link from 'next/link'
-import { ArrowRight } from 'lucide-react'
+import { MyLeadsDashboard } from '@/components/crm/my-leads-dashboard'
 import { AddLeadDialog } from '@/components/crm/add-lead-dialog'
-
-interface MyLead {
-  lead_id: string
-  company_name: string
-  sales_owner_user_id: string
-  account_name: string | null
-  linked_opportunity_id: string | null
-  opportunity_stage: string | null
-  claimed_at: string | null
-}
+import { getSessionAndProfile } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { canAccessSalesInbox } from '@/lib/permissions'
 
 export default async function MyLeadsPage() {
   const supabase = await createClient()
+  const { profile } = await getSessionAndProfile()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  if (!profile) {
+    redirect('/login')
+  }
 
-  const { data: leads } = user
-    ? await supabase
-        .from('v_my_leads')
-        .select('*')
-        .eq('sales_owner_user_id', user.id)
-        .order('claimed_at', { ascending: false }) as { data: MyLead[] | null }
-    : { data: null }
+  // Check if user has access
+  if (!canAccessSalesInbox(profile.role)) {
+    redirect('/dashboard')
+  }
+
+  // Fetch leads owned by the sales person or created by them
+  const { data: leads } = await supabase
+    .from('leads')
+    .select(`
+      lead_id,
+      company_name,
+      contact_name,
+      contact_email,
+      contact_phone,
+      triage_status,
+      source,
+      priority,
+      potential_revenue,
+      claim_status,
+      claimed_by_name,
+      claimed_at,
+      created_at,
+      created_by,
+      sales_owner_user_id,
+      account_id,
+      opportunity_id,
+      accounts (
+        account_id,
+        company_name,
+        account_status
+      ),
+      opportunities (
+        opportunity_id,
+        name,
+        stage,
+        estimated_value
+      )
+    `)
+    .or(`sales_owner_user_id.eq.${profile.user_id},created_by.eq.${profile.user_id}`)
+    .order('created_at', { ascending: false })
+
+  // Transform data
+  const transformedLeads = (leads || []).map((lead: any) => ({
+    lead_id: lead.lead_id,
+    company_name: lead.company_name,
+    pic_name: lead.contact_name,
+    pic_email: lead.contact_email,
+    pic_phone: lead.contact_phone,
+    triage_status: lead.triage_status,
+    source: lead.source,
+    priority: lead.priority,
+    potential_revenue: lead.potential_revenue,
+    claim_status: lead.claim_status,
+    claimed_by_name: lead.claimed_by_name,
+    claimed_at: lead.claimed_at,
+    created_at: lead.created_at,
+    is_own_lead: lead.created_by === profile.user_id,
+    account_id: lead.account_id,
+    account_name: lead.accounts?.company_name || null,
+    account_status: lead.accounts?.account_status || null,
+    opportunity_id: lead.opportunity_id,
+    opportunity_name: lead.opportunities?.name || null,
+    opportunity_stage: lead.opportunities?.stage || null,
+    opportunity_value: lead.opportunities?.estimated_value || null,
+  }))
 
   return (
     <div className="space-y-6">
@@ -49,80 +90,13 @@ export default async function MyLeadsPage() {
         <div>
           <h1 className="text-2xl font-bold">My Leads</h1>
           <p className="text-muted-foreground">
-            Leads you have claimed and are working on
+            Leads you have claimed and created
           </p>
         </div>
         <AddLeadDialog />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Claimed Leads ({leads?.length || 0})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {leads && leads.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Opportunity</TableHead>
-                  <TableHead>Stage</TableHead>
-                  <TableHead>Claimed At</TableHead>
-                  <TableHead className="w-[100px]">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leads.map((lead) => (
-                  <TableRow key={lead.lead_id}>
-                    <TableCell className="font-medium">{lead.company_name}</TableCell>
-                    <TableCell>{lead.account_name || '-'}</TableCell>
-                    <TableCell>
-                      {lead.linked_opportunity_id ? (
-                        <Link
-                          href={`/pipeline?opp=${lead.linked_opportunity_id}`}
-                          className="text-brand hover:underline"
-                        >
-                          View Opportunity
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground">Not converted</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {lead.opportunity_stage ? (
-                        <Badge variant="outline">{lead.opportunity_stage}</Badge>
-                      ) : (
-                        '-'
-                      )}
-                    </TableCell>
-                    <TableCell>{formatDate(lead.claimed_at)}</TableCell>
-                    <TableCell>
-                      {!lead.linked_opportunity_id && (
-                        <Button size="sm" variant="outline">
-                          Convert
-                          <ArrowRight className="h-4 w-4 ml-1" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">No claimed leads yet</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Create a new lead using the button above, or go to{' '}
-                <Link href="/sales-inbox" className="text-brand hover:underline">
-                  Sales Inbox
-                </Link>{' '}
-                to claim leads from marketing
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <MyLeadsDashboard leads={transformedLeads} currentUserId={profile.user_id} />
     </div>
   )
 }

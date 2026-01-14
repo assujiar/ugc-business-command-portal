@@ -12,13 +12,37 @@ export type Json =
   | Json[]
 
 // Enums from 001_enums.sql
-export type LeadTriageStatus = 'New' | 'In Review' | 'Qualified' | 'Nurture' | 'Disqualified' | 'Handed Over'
+export type LeadTriageStatus = 'New' | 'In Review' | 'Qualified' | 'Nurture' | 'Disqualified' | 'Assigned to Sales' | 'Handed Over'
 export type LeadSource = 'Webform (SEM)' | 'Webform (Organic)' | 'Instagram' | 'TikTok' | 'Facebook' | 'Event' | 'Referral' | 'Outbound' | 'Lainnya'
 export type OpportunityStage = 'Prospecting' | 'Discovery' | 'Quote Sent' | 'Negotiation' | 'Closed Won' | 'Closed Lost' | 'On Hold'
-export type ActivityStatus = 'Planned' | 'Done' | 'Cancelled'
+export type ActivityStatus = 'Planned' | 'Done' | 'Cancelled' | 'Completed'
 export type ActivityTypeV2 = 'Call' | 'Email' | 'Meeting' | 'Site Visit' | 'WhatsApp' | 'Task' | 'Proposal' | 'Contract Review'
 export type CadenceEnrollmentStatus = 'Active' | 'Paused' | 'Completed' | 'Stopped'
 export type ProspectingTargetStatus = 'new' | 'researching' | 'outreach_planned' | 'contacted' | 'meeting_scheduled' | 'converted' | 'dropped'
+
+// New Enums for Lead Management Enhancement
+export type LeadClaimStatus = 'unclaimed' | 'claimed'
+
+export type AccountStatus =
+  | 'calon_account'      // Pipeline belum closed
+  | 'new_account'        // Pipeline closed win, berlaku 3 bulan sejak transaksi pertama
+  | 'failed_account'     // Pipeline closed lost
+  | 'active_account'     // Aktif bertransaksi mulai bulan keempat
+  | 'passive_account'    // Tidak ada transaksi >1 bulan sejak transaksi terakhir
+  | 'lost_account'       // Tidak ada transaksi >3 bulan sejak transaksi terakhir
+
+export type LostReason =
+  | 'harga_tidak_masuk'
+  | 'kompetitor_lebih_murah'
+  | 'budget_tidak_cukup'
+  | 'timing_tidak_tepat'
+  | 'tidak_ada_kebutuhan'
+  | 'kompetitor_lebih_baik'
+  | 'service_tidak_sesuai'
+  | 'lokasi_tidak_terjangkau'
+  | 'lainnya'
+
+export type ApproachMethod = 'Call' | 'Email' | 'Meeting' | 'Site Visit' | 'WhatsApp' | 'Proposal' | 'Contract Review'
 export type UserRole =
   | 'Director'
   | 'super admin'
@@ -96,6 +120,11 @@ export interface Database {
           created_at: string
           updated_at: string
           dedupe_key: string | null
+          // New fields for account status management
+          account_status: AccountStatus | null
+          first_transaction_date: string | null
+          last_transaction_date: string | null
+          lead_id: string | null
         }
         Insert: {
           account_id?: string
@@ -118,6 +147,10 @@ export interface Database {
           created_at?: string
           updated_at?: string
           dedupe_key?: string | null
+          account_status?: AccountStatus | null
+          first_transaction_date?: string | null
+          last_transaction_date?: string | null
+          lead_id?: string | null
         }
         Update: {
           account_id?: string
@@ -140,6 +173,10 @@ export interface Database {
           created_at?: string
           updated_at?: string
           dedupe_key?: string | null
+          account_status?: AccountStatus | null
+          first_transaction_date?: string | null
+          last_transaction_date?: string | null
+          lead_id?: string | null
         }
       }
       contacts: {
@@ -217,6 +254,11 @@ export interface Database {
           created_at: string
           updated_at: string
           dedupe_key: string | null
+          // New fields for lead management enhancement
+          potential_revenue: number | null
+          claim_status: LeadClaimStatus | null
+          claimed_by_name: string | null
+          account_id: string | null
         }
         Insert: {
           lead_id?: string
@@ -242,6 +284,10 @@ export interface Database {
           created_at?: string
           updated_at?: string
           dedupe_key?: string | null
+          potential_revenue?: number | null
+          claim_status?: LeadClaimStatus | null
+          claimed_by_name?: string | null
+          account_id?: string | null
         }
         Update: {
           lead_id?: string
@@ -267,6 +313,10 @@ export interface Database {
           created_at?: string
           updated_at?: string
           dedupe_key?: string | null
+          potential_revenue?: number | null
+          claim_status?: LeadClaimStatus | null
+          claimed_by_name?: string | null
+          account_id?: string | null
         }
       }
       lead_handover_pool: {
@@ -324,6 +374,10 @@ export interface Database {
           created_by: string | null
           created_at: string
           updated_at: string
+          // New fields for lost tracking
+          lost_reason: LostReason | null
+          competitor_price: number | null
+          customer_budget: number | null
         }
         Insert: {
           opportunity_id?: string
@@ -344,6 +398,9 @@ export interface Database {
           created_by?: string | null
           created_at?: string
           updated_at?: string
+          lost_reason?: LostReason | null
+          competitor_price?: number | null
+          customer_budget?: number | null
         }
         Update: {
           opportunity_id?: string
@@ -364,6 +421,59 @@ export interface Database {
           created_by?: string | null
           created_at?: string
           updated_at?: string
+          lost_reason?: LostReason | null
+          competitor_price?: number | null
+          customer_budget?: number | null
+        }
+      }
+      pipeline_updates: {
+        Row: {
+          update_id: string
+          opportunity_id: string
+          updated_at: string
+          notes: string | null
+          approach_method: ApproachMethod
+          evidence_url: string | null
+          evidence_file_name: string | null
+          location_lat: number | null
+          location_lng: number | null
+          location_address: string | null
+          old_stage: OpportunityStage | null
+          new_stage: OpportunityStage
+          updated_by: string | null
+          created_at: string
+        }
+        Insert: {
+          update_id?: string
+          opportunity_id: string
+          updated_at?: string
+          notes?: string | null
+          approach_method: ApproachMethod
+          evidence_url?: string | null
+          evidence_file_name?: string | null
+          location_lat?: number | null
+          location_lng?: number | null
+          location_address?: string | null
+          old_stage?: OpportunityStage | null
+          new_stage: OpportunityStage
+          updated_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          update_id?: string
+          opportunity_id?: string
+          updated_at?: string
+          notes?: string | null
+          approach_method?: ApproachMethod
+          evidence_url?: string | null
+          evidence_file_name?: string | null
+          location_lat?: number | null
+          location_lng?: number | null
+          location_address?: string | null
+          old_stage?: OpportunityStage | null
+          new_stage?: OpportunityStage
+          updated_by?: string | null
+          created_at?: string
         }
       }
       opportunity_stage_history: {
