@@ -18,6 +18,7 @@ import {
 import { formatDate } from '@/lib/utils'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
+import { AddLeadDialog } from '@/components/crm/add-lead-dialog'
 
 interface MyLead {
   lead_id: string
@@ -44,11 +45,14 @@ export default async function MyLeadsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">My Leads</h1>
-        <p className="text-muted-foreground">
-          Leads you have claimed and are working on
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">My Leads</h1>
+          <p className="text-muted-foreground">
+            Leads you have claimed and are working on
+          </p>
+        </div>
+        <AddLeadDialog />
       </div>
 
       <Card>
@@ -108,12 +112,12 @@ export default async function MyLeadsPage() {
           ) : (
             <div className="text-center py-12">
               <p className="text-muted-foreground">No claimed leads yet</p>
-              <p className="text-sm text-muted-foreground">
-                Go to{' '}
+              <p className="text-sm text-muted-foreground mt-2">
+                Create a new lead using the button above, or go to{' '}
                 <Link href="/sales-inbox" className="text-brand hover:underline">
                   Sales Inbox
                 </Link>{' '}
-                to claim leads
+                to claim leads from marketing
               </p>
             </div>
           )}
