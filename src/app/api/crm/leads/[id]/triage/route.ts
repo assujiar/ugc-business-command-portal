@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,7 @@ export async function POST(
   try {
     const { id } = await params
     const supabase = await createClient()
+    const adminClient = createAdminClient()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -38,8 +40,8 @@ export async function POST(
       return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` }, { status: 400 })
     }
 
-    // First, get current lead to validate transition
-    const { data: lead, error: fetchError } = await supabase
+    // First, get current lead to validate transition (use admin client to bypass RLS)
+    const { data: lead, error: fetchError } = await adminClient
       .from('leads')
       .select('lead_id, triage_status')
       .eq('lead_id', id)
@@ -69,8 +71,9 @@ export async function POST(
       }
     }
 
+    // Use admin client to bypass RLS for the update
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: updateError } = await (supabase as any)
+    const { error: updateError } = await (adminClient as any)
       .from('leads')
       .update(updateData)
       .eq('lead_id', id)
@@ -82,9 +85,9 @@ export async function POST(
 
     // If qualified, create handover pool entry and update to Handed Over
     if (new_status === 'Qualified') {
-      // Create handover pool entry
+      // Create handover pool entry using admin client
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: poolError } = await (supabase as any)
+      const { error: poolError } = await (adminClient as any)
         .from('lead_handover_pool')
         .insert({
           lead_id: id,
@@ -101,9 +104,9 @@ export async function POST(
         }
       }
 
-      // Update lead to Handed Over
+      // Update lead to Handed Over using admin client
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      await (adminClient as any)
         .from('leads')
         .update({
           triage_status: 'Handed Over',
