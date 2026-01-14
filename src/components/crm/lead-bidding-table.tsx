@@ -123,7 +123,7 @@ export function LeadBiddingTable({ leads, currentUserId }: LeadBiddingTableProps
             <span>Available Leads ({leads.length})</span>
             <div className="flex items-center gap-2 text-xs lg:text-sm font-normal text-muted-foreground">
               <Clock className="h-3 w-3 lg:h-4 lg:w-4" />
-              <span>Leads expire 7 days after handover</span>
+              <span>Leads expire 7 days after assignment</span>
             </div>
           </CardTitle>
         </CardHeader>
@@ -140,8 +140,8 @@ export function LeadBiddingTable({ leads, currentUserId }: LeadBiddingTableProps
                       <TableHead>Source</TableHead>
                       <TableHead>Priority</TableHead>
                       <TableHead>Potential Revenue</TableHead>
-                      <TableHead>Handed Over By</TableHead>
-                      <TableHead>Handed Over At</TableHead>
+                      <TableHead>Assigned By</TableHead>
+                      <TableHead>Assigned At</TableHead>
                       <TableHead>Expires</TableHead>
                       <TableHead className="w-[120px]">Action</TableHead>
                     </TableRow>
@@ -327,7 +327,7 @@ export function LeadBiddingTable({ leads, currentUserId }: LeadBiddingTableProps
 
               {claimDialog.lead.handover_notes && (
                 <div>
-                  <p className="text-xs lg:text-sm text-muted-foreground">Handover Notes</p>
+                  <p className="text-xs lg:text-sm text-muted-foreground">Assignment Notes</p>
                   <p className="text-xs lg:text-sm mt-1 p-2 bg-muted rounded">
                     {claimDialog.lead.handover_notes}
                   </p>

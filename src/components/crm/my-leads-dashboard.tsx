@@ -66,7 +66,7 @@ export function MyLeadsDashboard({ leads, currentUserId }: MyLeadsDashboardProps
   const getStatusBadgeVariant = (status: string | null) => {
     switch (status) {
       case 'Qualified':
-      case 'Handed Over':
+      case 'Assign to Sales':
         return 'default'
       case 'Prospecting':
         return 'outline'

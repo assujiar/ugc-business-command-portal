@@ -290,9 +290,7 @@ export function LeadDetailDialog({
         return 'outline'
       case 'Qualified':
         return 'default'
-      case 'Assigned to Sales':
-        return 'default'
-      case 'Handed Over':
+      case 'Assign to Sales':
         return 'default'
       case 'Nurture':
         return 'secondary'

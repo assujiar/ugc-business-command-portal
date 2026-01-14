@@ -1,7 +1,7 @@
 // =====================================================
-// Sales Inbox Page - Handover Pool
+// Sales Inbox Page - Assigned to Sales Pool
 // SOURCE: PDF Section 5, Page 16
-// "leads handed over but not yet claimed"
+// Shows leads assigned to sales but not yet claimed
 // =====================================================
 
 import { createClient } from '@/lib/supabase/server'
@@ -20,7 +20,7 @@ export default async function SalesInboxPage() {
       <div>
         <h1 className="text-2xl font-bold">Sales Inbox</h1>
         <p className="text-muted-foreground">
-          Handover pool - Unclaimed leads ready for sales follow-up
+          Unclaimed leads assigned to sales, ready for follow-up
         </p>
       </div>
 

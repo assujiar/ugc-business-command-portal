@@ -87,8 +87,8 @@ export function SalesInboxTable({ leads }: SalesInboxTableProps) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
-          <p className="text-muted-foreground">No leads in handover pool</p>
-          <p className="text-sm text-muted-foreground">Leads will appear here after marketing handover</p>
+          <p className="text-muted-foreground">No leads available</p>
+          <p className="text-sm text-muted-foreground">Leads will appear here after marketing assigns them to sales</p>
         </CardContent>
       </Card>
     )
@@ -106,8 +106,8 @@ export function SalesInboxTable({ leads }: SalesInboxTableProps) {
               <TableHead>Company</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead>Priority</TableHead>
-              <TableHead>Handed Over By</TableHead>
-              <TableHead>Handed Over At</TableHead>
+              <TableHead>Assigned By</TableHead>
+              <TableHead>Assigned At</TableHead>
               <TableHead>Expires</TableHead>
               <TableHead>Notes</TableHead>
               <TableHead className="w-[100px]">Action</TableHead>

@@ -89,9 +89,10 @@ export async function POST(request: NextRequest) {
 
     if (isSalesUser) {
       // Salesperson creating lead - auto-assign to themselves
+      // Use 'Assign to Sales' with claim_status 'claimed' (skips triage, auto-claimed)
       mappedLeadData.sales_owner_user_id = user.id
       mappedLeadData.claimed_at = new Date().toISOString()
-      mappedLeadData.triage_status = 'Handed Over' // Skip triage, go straight to sales
+      mappedLeadData.triage_status = 'Assign to Sales'
       mappedLeadData.qualified_at = new Date().toISOString()
       mappedLeadData.claim_status = 'claimed'
     } else {

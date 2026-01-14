@@ -69,7 +69,7 @@ export default async function DashboardPage() {
               <Users className="h-4 w-4 lg:h-5 lg:w-5 text-brand flex-shrink-0" />
               <div className="min-w-0">
                 <p className="font-medium text-sm lg:text-base">Lead Bidding</p>
-                <p className="text-xs lg:text-sm text-muted-foreground truncate">Claim leads from handover pool</p>
+                <p className="text-xs lg:text-sm text-muted-foreground truncate">Claim leads assigned to sales</p>
               </div>
             </a>
             <a href="/pipeline" className="flex items-center gap-2 lg:gap-3 p-2 lg:p-3 rounded-lg hover:bg-muted transition-colors">

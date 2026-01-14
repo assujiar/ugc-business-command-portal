@@ -155,13 +155,13 @@ export async function POST(request: NextRequest) {
       console.error('Error updating pool entry:', updatePoolError)
     }
 
-    // 4. Update lead
+    // 4. Update lead - status stays as 'Assign to Sales', only claim_status changes
+    // Lead remains in 'Assign to Sales' status but with claim_status = 'claimed'
     const leadUpdateData: Record<string, unknown> = {
       claim_status: 'claimed',
       claimed_by_name: profile.name,
       claimed_at: new Date().toISOString(),
       sales_owner_user_id: user.id,
-      triage_status: 'Handed Over',
       updated_at: new Date().toISOString(),
     }
 

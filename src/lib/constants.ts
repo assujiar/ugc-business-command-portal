@@ -29,15 +29,15 @@ export const ADMIN_ROLES: UserRole[] = ['Director', 'super admin']
 export const MARKETING_ROLES: UserRole[] = ['Director', 'super admin', 'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
 export const SALES_ROLES: UserRole[] = ['Director', 'super admin', 'sales manager', 'salesperson', 'sales support']
 
-// Lead triage statuses
+// Lead triage statuses - valid statuses only
+// Flow: New -> In Review -> Qualified -> Assign to Sales (manual) -> Claimed by Sales
 export const LEAD_TRIAGE_STATUSES: LeadTriageStatus[] = [
   'New',
   'In Review',
   'Qualified',
+  'Assign to Sales',
   'Nurture',
   'Disqualified',
-  'Assigned to Sales',
-  'Handed Over',
 ]
 
 // Marketing visible statuses (for Lead Management page)
@@ -45,20 +45,20 @@ export const MARKETING_VISIBLE_STATUSES: LeadTriageStatus[] = [
   'New',
   'In Review',
   'Qualified',
-  'Assigned to Sales',
+  'Assign to Sales',
   'Nurture',
   'Disqualified',
 ]
 
 // Status actions mapping - which actions are available for each status
+// Flow: New -> In Review -> Qualified -> Assign to Sales (manual) -> Claimed by Sales
 export const LEAD_STATUS_ACTIONS: Record<LeadTriageStatus, LeadTriageStatus[]> = {
   'New': ['In Review', 'Qualified', 'Nurture', 'Disqualified'],
   'In Review': ['Qualified', 'Nurture', 'Disqualified'],
-  'Qualified': ['Assigned to Sales'],
-  'Nurture': ['In Review'],
+  'Qualified': ['Assign to Sales', 'Nurture', 'Disqualified'], // Manual assign to sales action
+  'Nurture': ['In Review', 'Qualified', 'Disqualified'],
   'Disqualified': [],
-  'Assigned to Sales': [],
-  'Handed Over': [],
+  'Assign to Sales': [], // Final status before sales claim - no further actions
 }
 
 // Opportunity stages

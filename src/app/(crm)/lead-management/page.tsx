@@ -52,7 +52,7 @@ export default async function LeadManagementPage() {
     new: leads?.filter((l: any) => l.triage_status === 'New').length || 0,
     in_review: leads?.filter((l: any) => l.triage_status === 'In Review').length || 0,
     qualified: leads?.filter((l: any) => l.triage_status === 'Qualified').length || 0,
-    assigned_to_sales: leads?.filter((l: any) => l.triage_status === 'Assigned to Sales').length || 0,
+    assigned_to_sales: leads?.filter((l: any) => l.triage_status === 'Assign to Sales').length || 0,
     nurture: leads?.filter((l: any) => l.triage_status === 'Nurture').length || 0,
     disqualified: leads?.filter((l: any) => l.triage_status === 'Disqualified').length || 0,
   }
