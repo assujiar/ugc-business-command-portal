@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { isSales } from '@/lib/permissions'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -57,11 +58,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get user's profile to check role
+    const { data: profile } = await (supabase as any)
+      .from('profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single() as { data: { role: string } | null }
+
+    const userRole = profile?.role as string | undefined
+    const isSalesUser = isSales(userRole)
+
     const body = await request.json()
     const { shipment_details, ...leadData } = body
 
     // Map form fields to database columns
-    const mappedLeadData = {
+    // If salesperson creates lead, auto-assign to them and mark as claimed
+    const mappedLeadData: Record<string, any> = {
       company_name: leadData.company_name,
       contact_name: leadData.pic_name || null,
       contact_email: leadData.pic_email || null,
@@ -69,8 +81,18 @@ export async function POST(request: NextRequest) {
       source: leadData.source,
       source_detail: leadData.source_detail || null,
       notes: leadData.inquiry_text || null,
-      marketing_owner_user_id: user.id,
       created_by: user.id,
+    }
+
+    if (isSalesUser) {
+      // Salesperson creating lead - auto-assign to themselves
+      mappedLeadData.sales_owner_user_id = user.id
+      mappedLeadData.claimed_at = new Date().toISOString()
+      mappedLeadData.triage_status = 'Qualified' // Skip triage, go straight to sales
+      mappedLeadData.qualified_at = new Date().toISOString()
+    } else {
+      // Marketing creating lead - set marketing owner
+      mappedLeadData.marketing_owner_user_id = user.id
     }
 
     // Create lead
