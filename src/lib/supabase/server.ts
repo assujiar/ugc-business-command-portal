@@ -1,7 +1,7 @@
 // =====================================================
 // Supabase Server Client
 // SOURCE: PDF Section 2 - Supabase SSR Pattern
-// No middleware gating - protect via server layout + SSR session check
+// Session sync handled by middleware.ts
 // =====================================================
 
 import { createServerClient } from '@supabase/ssr'
