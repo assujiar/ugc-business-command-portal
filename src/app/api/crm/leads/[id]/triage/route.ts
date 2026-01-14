@@ -20,7 +20,8 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = await createClient() as any
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -49,24 +50,16 @@ export async function POST(
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((lead as any).triage_status === 'Handed Over') {
+    if (lead.triage_status === 'Handed Over') {
       return NextResponse.json({ error: 'Cannot change status of handed over lead' }, { status: 400 })
     }
 
     // Build update data
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateData: any = {
+    const updateData = {
       triage_status: new_status,
       updated_at: new Date().toISOString(),
-    }
-
-    // Handle disqualification
-    if (new_status === 'Disqualified') {
-      updateData.disqualified_at = new Date().toISOString()
-      if (notes) {
-        updateData.disqualification_reason = notes
-      }
+      disqualified_at: new_status === 'Disqualified' ? new Date().toISOString() : undefined,
+      disqualification_reason: new_status === 'Disqualified' && notes ? notes : undefined,
     }
 
     const { error: updateError } = await supabase
