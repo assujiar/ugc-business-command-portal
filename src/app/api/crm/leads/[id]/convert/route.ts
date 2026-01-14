@@ -6,6 +6,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+
+// Force dynamic rendering (uses cookies)
+export const dynamic = 'force-dynamic'
 import { generateIdempotencyKey } from '@/lib/utils'
 
 // POST /api/crm/leads/[id]/convert - Convert lead to opportunity
