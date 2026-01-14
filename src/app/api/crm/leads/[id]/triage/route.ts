@@ -6,10 +6,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import type { LeadTriageStatus } from '@/types/database'
+import type { Database, LeadTriageStatus } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
+
+type LeadUpdate = Database['public']['Tables']['leads']['Update']
 
 // POST /api/crm/leads/[id]/triage - Triage lead
 export async function POST(
@@ -54,8 +56,8 @@ export async function POST(
     }
 
     // Update lead status
-    const updateData: Record<string, unknown> = {
-      triage_status: new_status,
+    const updateData: LeadUpdate = {
+      triage_status: new_status as LeadTriageStatus,
       updated_at: new Date().toISOString(),
     }
 
@@ -63,7 +65,7 @@ export async function POST(
     if (new_status === 'Disqualified') {
       updateData.disqualified_at = new Date().toISOString()
       if (notes) {
-        updateData.disqualified_reason = notes
+        updateData.disqualification_reason = notes
       }
     }
 
@@ -98,13 +100,14 @@ export async function POST(
       }
 
       // Update lead to Handed Over
+      const handoverUpdate: LeadUpdate = {
+        triage_status: 'Handed Over',
+        handover_eligible: true,
+        updated_at: new Date().toISOString(),
+      }
       await supabase
         .from('leads')
-        .update({
-          triage_status: 'Handed Over',
-          handover_eligible: true,
-          updated_at: new Date().toISOString(),
-        })
+        .update(handoverUpdate)
         .eq('lead_id', id)
     }
 
