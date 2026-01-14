@@ -11,7 +11,7 @@ import { FileSpreadsheet } from 'lucide-react'
 import Link from 'next/link'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { canAccessLeadInbox } from '@/lib/permissions'
+import { canAccessLeadInbox, isMACX } from '@/lib/permissions'
 
 export default async function LeadManagementPage() {
   const supabase = await createClient()
@@ -29,11 +29,15 @@ export default async function LeadManagementPage() {
   // Determine if user is manager level (can see department leads)
   const isManager = ['Director', 'super admin', 'Marketing Manager'].includes(profile.role)
 
-  // Fetch leads based on role
-  let query = (supabase as any).from('leads').select('*')
+  // MACX can see all leads from marketing department (handled by RLS)
+  const isMACXUser = isMACX(profile.role)
 
-  if (isManager) {
-    // Manager can see all leads in their department
+  // Fetch leads using v_lead_management view to get creator info
+  // RLS will automatically filter based on user role
+  let query = (supabase as any).from('v_lead_management').select('*')
+
+  if (isManager || isMACXUser) {
+    // Manager and MACX can see leads based on RLS (all marketing dept leads)
     query = query.or(`marketing_owner_user_id.is.null,marketing_owner_user_id.not.is.null`)
   } else {
     // Staff can only see leads they created
@@ -59,8 +63,8 @@ export default async function LeadManagementPage() {
         <div>
           <h1 className="text-2xl font-bold">Lead Management</h1>
           <p className="text-muted-foreground">
-            {isManager
-              ? 'Manage all leads across your department'
+            {isManager || isMACXUser
+              ? 'Manage all leads from marketing department'
               : 'Manage leads you have created'}
           </p>
         </div>
@@ -78,7 +82,7 @@ export default async function LeadManagementPage() {
       <LeadManagementDashboard
         leads={leads || []}
         statusCounts={statusCounts}
-        isManager={isManager}
+        isManager={isManager || isMACXUser}
         currentUserId={profile.user_id}
         userRole={profile.role}
       />

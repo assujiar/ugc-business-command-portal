@@ -70,6 +70,11 @@ interface Lead {
   created_by: string | null
   disqualified_at: string | null
   disqualified_reason: string | null
+  // Creator info for MACX access check (from v_lead_management view)
+  creator_name?: string | null
+  creator_department?: string | null
+  creator_role?: UserRole | null
+  creator_is_marketing?: boolean | null
 }
 
 interface StatusCounts {
