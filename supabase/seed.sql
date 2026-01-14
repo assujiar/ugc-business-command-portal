@@ -11,50 +11,49 @@
 -- Note: You need to create these users in Supabase Auth first
 -- Then use their UUIDs here
 
--- All 15 roles (replace UUIDs with actual auth.users IDs)
+-- All 15 roles (using actual auth.users IDs from Supabase)
 INSERT INTO profiles (user_id, email, name, role, department, is_active) VALUES
 -- Executive
-('00000000-0000-0000-0000-000000000001', 'director@ugc.com', 'John Director', 'Director', 'Executive', true),
+('e05690c2-0144-4f61-bcee-d95dcc19412d', 'director@example.com', 'John Director', 'Director', 'Executive', true),
 -- IT/Admin
-('00000000-0000-0000-0000-000000000002', 'admin@ugc.com', 'Admin Super', 'super admin', 'IT', true),
+('3846e6dc-807a-4179-afb5-92c5c63d26dd', 'admin@example.com', 'Admin Super', 'super admin', 'IT', true),
 -- Marketing Team (5 roles)
-('00000000-0000-0000-0000-000000000003', 'marketing.mgr@ugc.com', 'Maria Marketing', 'Marketing Manager', 'Marketing', true),
-('00000000-0000-0000-0000-000000000004', 'marcomm@ugc.com', 'Mike Marcomm', 'Marcomm', 'Marketing', true),
-('00000000-0000-0000-0000-000000000005', 'dgo@ugc.com', 'Diana DGO', 'DGO', 'Marketing', true),
-('00000000-0000-0000-0000-000000000011', 'macx@ugc.com', 'Max MACX', 'MACX', 'Marketing', true),
-('00000000-0000-0000-0000-000000000012', 'vsdo@ugc.com', 'Victor VSDO', 'VSDO', 'Marketing', true),
+('6ce3f3e0-3e22-4a12-97c2-abd7152057f8', 'marketing.manager@example.com', 'Maria Marketing', 'Marketing Manager', 'Marketing', true),
+('a49378cf-775d-48a6-ad5b-fea2f4b56a95', 'marcomm@example.com', 'Mike Marcomm', 'Marcomm', 'Marketing', true),
+('79d7c2d9-e542-4ad5-87a1-483c380c75c4', 'dgo@example.com', 'Diana DGO', 'DGO', 'Marketing', true),
+('44587e03-8582-464f-a088-8efcb0079533', 'macx@example.com', 'Max MACX', 'MACX', 'Marketing', true),
+('0ab48580-fd10-4ee3-823f-b05e2592dcb7', 'vsdo@example.com', 'Victor VSDO', 'VSDO', 'Marketing', true),
 -- Sales Team (4 roles)
-('00000000-0000-0000-0000-000000000006', 'sales.mgr@ugc.com', 'Steve Sales', 'sales manager', 'Sales', true),
-('00000000-0000-0000-0000-000000000007', 'salesperson1@ugc.com', 'Sam Salesperson', 'salesperson', 'Sales', true),
-('00000000-0000-0000-0000-000000000008', 'salesperson2@ugc.com', 'Sally Salesperson', 'salesperson', 'Sales', true),
-('00000000-0000-0000-0000-000000000009', 'sales.support@ugc.com', 'Support Sarah', 'sales support', 'Sales', true),
+('f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'sales.manager@example.com', 'Steve Sales', 'sales manager', 'Sales', true),
+('3a673e5b-c28f-45fd-98f5-adf04a1dacc0', 'sales.person@example.com', 'Sam Salesperson', 'salesperson', 'Sales', true),
+('ce9ec41f-b018-438f-b9e5-e8c51331a101', 'sales.support@example.com', 'Support Sarah', 'sales support', 'Sales', true),
 -- Operations Team (4 roles)
-('00000000-0000-0000-0000-000000000010', 'exim@ugc.com', 'Eric EXIM', 'EXIM Ops', 'Operations', true),
-('00000000-0000-0000-0000-000000000013', 'domestics@ugc.com', 'Donna Domestics', 'domestics Ops', 'Operations', true),
-('00000000-0000-0000-0000-000000000014', 'import.dtd@ugc.com', 'Ivan Import', 'Import DTD Ops', 'Operations', true),
-('00000000-0000-0000-0000-000000000015', 'warehouse@ugc.com', 'Willy Warehouse', 'traffic & warehous', 'Operations', true),
+('6fd5d685-6c36-4dc8-90d1-b354eb080f5b', 'exim.ops@example.com', 'Eric EXIM', 'EXIM Ops', 'Operations', true),
+('70b938e0-a30a-4127-9f66-83279ace9853', 'dom.ops@example.com', 'Donna Domestics', 'domestics Ops', 'Operations', true),
+('bcad5f3d-8717-4bfb-abc4-09bf1dce2a23', 'import.ops@example.com', 'Ivan Import', 'Import DTD Ops', 'Operations', true),
+('7350b50c-6e9c-4be9-b32b-79e6174115ab', 'warehouse@example.com', 'Willy Warehouse', 'traffic & warehous', 'Operations', true),
 -- Finance
-('00000000-0000-0000-0000-000000000016', 'finance@ugc.com', 'Fiona Finance', 'finance', 'Finance', true)
+('23cd4061-0072-4d30-8cbb-5c387ebf1492', 'finance@example.com', 'Fiona Finance', 'finance', 'Finance', true)
 ON CONFLICT (user_id) DO NOTHING;
 
 -- =====================================================
 -- ACCOUNTS
 -- =====================================================
 INSERT INTO accounts (account_id, company_name, pic_name, pic_email, pic_phone, industry, city, country, owner_user_id, created_by) VALUES
-('ACC20240101A1B2C3', 'PT Maju Bersama', 'Budi Santoso', 'budi@majubersama.co.id', '+6281234567890', 'Manufacturing', 'Jakarta', 'Indonesia', '00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000007'),
-('ACC20240102D4E5F6', 'CV Sukses Selalu', 'Dewi Lestari', 'dewi@suksesselalu.co.id', '+6281234567891', 'Retail', 'Surabaya', 'Indonesia', '00000000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000008'),
-('ACC20240103G7H8I9', 'PT Global Logistics', 'Andi Wijaya', 'andi@globallog.co.id', '+6281234567892', 'Logistics', 'Bandung', 'Indonesia', '00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000007'),
-('ACC20240104J1K2L3', 'PT Tech Nusantara', 'Rina Maharani', 'rina@technusantara.co.id', '+6281234567893', 'Technology', 'Jakarta', 'Indonesia', '00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000006')
+('ACC20240101A1B2C3', 'PT Maju Bersama', 'Budi Santoso', 'budi@majubersama.co.id', '+6281234567890', 'Manufacturing', 'Jakarta', 'Indonesia', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('ACC20240102D4E5F6', 'CV Sukses Selalu', 'Dewi Lestari', 'dewi@suksesselalu.co.id', '+6281234567891', 'Retail', 'Surabaya', 'Indonesia', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('ACC20240103G7H8I9', 'PT Global Logistics', 'Andi Wijaya', 'andi@globallog.co.id', '+6281234567892', 'Logistics', 'Bandung', 'Indonesia', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('ACC20240104J1K2L3', 'PT Tech Nusantara', 'Rina Maharani', 'rina@technusantara.co.id', '+6281234567893', 'Technology', 'Jakarta', 'Indonesia', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d')
 ON CONFLICT (account_id) DO NOTHING;
 
 -- =====================================================
 -- CONTACTS
 -- =====================================================
 INSERT INTO contacts (contact_id, account_id, first_name, last_name, email, phone, job_title, is_primary, created_by) VALUES
-('CON20240101A1B2C3', 'ACC20240101A1B2C3', 'Budi', 'Santoso', 'budi@majubersama.co.id', '+6281234567890', 'Director', true, '00000000-0000-0000-0000-000000000007'),
-('CON20240101D4E5F6', 'ACC20240101A1B2C3', 'Siti', 'Rahayu', 'siti@majubersama.co.id', '+6281234567894', 'Procurement Manager', false, '00000000-0000-0000-0000-000000000007'),
-('CON20240102G7H8I9', 'ACC20240102D4E5F6', 'Dewi', 'Lestari', 'dewi@suksesselalu.co.id', '+6281234567891', 'Owner', true, '00000000-0000-0000-0000-000000000008'),
-('CON20240103J1K2L3', 'ACC20240103G7H8I9', 'Andi', 'Wijaya', 'andi@globallog.co.id', '+6281234567892', 'CEO', true, '00000000-0000-0000-0000-000000000007')
+('CON20240101A1B2C3', 'ACC20240101A1B2C3', 'Budi', 'Santoso', 'budi@majubersama.co.id', '+6281234567890', 'Director', true, '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('CON20240101D4E5F6', 'ACC20240101A1B2C3', 'Siti', 'Rahayu', 'siti@majubersama.co.id', '+6281234567894', 'Procurement Manager', false, '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('CON20240102G7H8I9', 'ACC20240102D4E5F6', 'Dewi', 'Lestari', 'dewi@suksesselalu.co.id', '+6281234567891', 'Owner', true, '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('CON20240103J1K2L3', 'ACC20240103G7H8I9', 'Andi', 'Wijaya', 'andi@globallog.co.id', '+6281234567892', 'CEO', true, '3a673e5b-c28f-45fd-98f5-adf04a1dacc0')
 ON CONFLICT (contact_id) DO NOTHING;
 
 -- =====================================================
@@ -62,19 +61,19 @@ ON CONFLICT (contact_id) DO NOTHING;
 -- =====================================================
 INSERT INTO leads (lead_id, company_name, pic_name, pic_email, pic_phone, industry, source, triage_status, priority, inquiry_text, marketing_owner_user_id, created_by) VALUES
 -- New leads for triage
-('LEAD20240101A1B2C3', 'PT Baru Mandiri', 'Ahmad Fauzi', 'ahmad@barumandiri.co.id', '+6281234500001', 'Manufacturing', 'Website Form', 'New', 3, 'Interested in freight forwarding services for export', '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000003'),
-('LEAD20240102D4E5F6', 'CV Cemerlang Jaya', 'Putri Ayu', 'putri@cermelangjaya.co.id', '+6281234500002', 'Retail', 'Email Inquiry', 'New', 2, 'Need quote for domestic shipping', '00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000004'),
-('LEAD20240103G7H8I9', 'PT Digital Indonesia', 'Reza Pratama', 'reza@digitalindonesia.co.id', '+6281234500003', 'Technology', 'Referral', 'New', 4, 'Urgent: Need air freight for electronics', '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000003'),
+('LEAD20240101A1B2C3', 'PT Baru Mandiri', 'Ahmad Fauzi', 'ahmad@barumandiri.co.id', '+6281234500001', 'Manufacturing', 'Website Form', 'New', 3, 'Interested in freight forwarding services for export', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
+('LEAD20240102D4E5F6', 'CV Cemerlang Jaya', 'Putri Ayu', 'putri@cermelangjaya.co.id', '+6281234500002', 'Retail', 'Email Inquiry', 'New', 2, 'Need quote for domestic shipping', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95'),
+('LEAD20240103G7H8I9', 'PT Digital Indonesia', 'Reza Pratama', 'reza@digitalindonesia.co.id', '+6281234500003', 'Technology', 'Referral', 'New', 4, 'Urgent: Need air freight for electronics', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
 
 -- In Review leads
-('LEAD20240104J1K2L3', 'PT Sentosa Abadi', 'Linda Wijaya', 'linda@sentosaabadi.co.id', '+6281234500004', 'Food & Beverage', 'Event', 'In Review', 3, 'Interested in cold chain logistics', '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000003'),
-('LEAD20240105M4N5O6', 'CV Prima Karya', 'Bambang Susilo', 'bambang@primakarya.co.id', '+6281234500005', 'Construction', 'Social Media', 'In Review', 2, 'Heavy equipment transport inquiry', '00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000004'),
+('LEAD20240104J1K2L3', 'PT Sentosa Abadi', 'Linda Wijaya', 'linda@sentosaabadi.co.id', '+6281234500004', 'Food & Beverage', 'Event', 'In Review', 3, 'Interested in cold chain logistics', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
+('LEAD20240105M4N5O6', 'CV Prima Karya', 'Bambang Susilo', 'bambang@primakarya.co.id', '+6281234500005', 'Construction', 'Social Media', 'In Review', 2, 'Heavy equipment transport inquiry', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95', 'a49378cf-775d-48a6-ad5b-fea2f4b56a95'),
 
 -- Nurture leads
-('LEAD20240106P7Q8R9', 'PT Indah Permai', 'Sri Wahyuni', 'sri@indahpermai.co.id', '+6281234500006', 'Real Estate', 'WhatsApp', 'Nurture', 1, 'Long term project, not ready yet', '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000003'),
+('LEAD20240106P7Q8R9', 'PT Indah Permai', 'Sri Wahyuni', 'sri@indahpermai.co.id', '+6281234500006', 'Real Estate', 'WhatsApp', 'Nurture', 1, 'Long term project, not ready yet', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
 
 -- Disqualified leads
-('LEAD20240107S1T2U3', 'CV Kecil Usaha', 'Joko Widodo', 'joko@kecil.co.id', '+6281234500007', 'Other', 'Cold Outbound', 'Disqualified', 1, 'Too small for our services', '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000003')
+('LEAD20240107S1T2U3', 'CV Kecil Usaha', 'Joko Widodo', 'joko@kecil.co.id', '+6281234500007', 'Other', 'Cold Outbound', 'Disqualified', 1, 'Too small for our services', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8')
 ON CONFLICT (lead_id) DO NOTHING;
 
 -- Update disqualified lead with reason
@@ -86,35 +85,35 @@ UPDATE leads SET disqualification_reason = 'Company too small for minimum order 
 
 -- First, create some qualified leads that were handed over
 INSERT INTO leads (lead_id, company_name, pic_name, pic_email, pic_phone, industry, source, triage_status, priority, inquiry_text, handover_eligible, marketing_owner_user_id, created_by) VALUES
-('LEAD20240108V4W5X6', 'PT Export Prima', 'Dian Kusuma', 'dian@exportprima.co.id', '+6281234500008', 'Manufacturing', 'Website Form', 'Handed Over', 3, 'Regular export shipments needed', true, '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000003'),
-('LEAD20240109Y7Z8A9', 'PT Import Sejahtera', 'Ferry Gunawan', 'ferry@importsejahtera.co.id', '+6281234500009', 'Retail', 'Referral', 'Handed Over', 4, 'High volume imports from China', true, '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000003')
+('LEAD20240108V4W5X6', 'PT Export Prima', 'Dian Kusuma', 'dian@exportprima.co.id', '+6281234500008', 'Manufacturing', 'Website Form', 'Handed Over', 3, 'Regular export shipments needed', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
+('LEAD20240109Y7Z8A9', 'PT Import Sejahtera', 'Ferry Gunawan', 'ferry@importsejahtera.co.id', '+6281234500009', 'Retail', 'Referral', 'Handed Over', 4, 'High volume imports from China', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8')
 ON CONFLICT (lead_id) DO NOTHING;
 
 -- Add to handover pool
 INSERT INTO lead_handover_pool (lead_id, handed_over_by, handover_notes, priority, expires_at) VALUES
-('LEAD20240108V4W5X6', '00000000-0000-0000-0000-000000000003', 'Hot lead - they need quote within 3 days', 3, NOW() + INTERVAL '7 days'),
-('LEAD20240109Y7Z8A9', '00000000-0000-0000-0000-000000000003', 'High value potential - CEO directly interested', 4, NOW() + INTERVAL '5 days')
+('LEAD20240108V4W5X6', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', 'Hot lead - they need quote within 3 days', 3, NOW() + INTERVAL '7 days'),
+('LEAD20240109Y7Z8A9', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', 'High value potential - CEO directly interested', 4, NOW() + INTERVAL '5 days')
 ON CONFLICT DO NOTHING;
 
 -- =====================================================
 -- OPPORTUNITIES
 -- =====================================================
 INSERT INTO opportunities (opportunity_id, name, account_id, stage, estimated_value, currency, probability, expected_close_date, next_step, next_step_due_date, owner_user_id, created_by) VALUES
-('OPP20240101A1B2C3', 'Maju Bersama Export Contract', 'ACC20240101A1B2C3', 'Negotiation', 150000000, 'IDR', 70, '2024-03-31', 'Final price negotiation meeting', '2024-02-15', '00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000007'),
-('OPP20240102D4E5F6', 'Sukses Selalu Distribution Deal', 'ACC20240102D4E5F6', 'Quote Sent', 75000000, 'IDR', 50, '2024-04-15', 'Follow up on quote', '2024-02-20', '00000000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000008'),
-('OPP20240103G7H8I9', 'Global Logistics Partnership', 'ACC20240103G7H8I9', 'Discovery', 200000000, 'IDR', 30, '2024-05-01', 'Site visit scheduled', '2024-02-10', '00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000007'),
-('OPP20240104J1K2L3', 'Tech Nusantara Express Service', 'ACC20240104J1K2L3', 'Prospecting', 50000000, 'IDR', 20, '2024-06-01', 'Initial call', '2024-02-18', '00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000006')
+('OPP20240101A1B2C3', 'Maju Bersama Export Contract', 'ACC20240101A1B2C3', 'Negotiation', 150000000, 'IDR', 70, '2024-03-31', 'Final price negotiation meeting', '2024-02-15', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('OPP20240102D4E5F6', 'Sukses Selalu Distribution Deal', 'ACC20240102D4E5F6', 'Quote Sent', 75000000, 'IDR', 50, '2024-04-15', 'Follow up on quote', '2024-02-20', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('OPP20240103G7H8I9', 'Global Logistics Partnership', 'ACC20240103G7H8I9', 'Discovery', 200000000, 'IDR', 30, '2024-05-01', 'Site visit scheduled', '2024-02-10', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('OPP20240104J1K2L3', 'Tech Nusantara Express Service', 'ACC20240104J1K2L3', 'Prospecting', 50000000, 'IDR', 20, '2024-06-01', 'Initial call', '2024-02-18', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d')
 ON CONFLICT (opportunity_id) DO NOTHING;
 
 -- =====================================================
 -- ACTIVITIES
 -- =====================================================
 INSERT INTO activities (activity_id, activity_type, subject, description, status, due_date, related_account_id, related_opportunity_id, owner_user_id, created_by) VALUES
-('ACT20240101A1B2C3', 'Meeting', 'Final negotiation with Maju Bersama', 'Discuss final pricing and contract terms', 'Planned', '2024-02-15', 'ACC20240101A1B2C3', 'OPP20240101A1B2C3', '00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000007'),
-('ACT20240102D4E5F6', 'Call', 'Quote follow-up call', 'Check if they received the quote and answer questions', 'Planned', '2024-02-20', 'ACC20240102D4E5F6', 'OPP20240102D4E5F6', '00000000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000008'),
-('ACT20240103G7H8I9', 'Site Visit', 'Visit Global Logistics facility', 'Understand their operations and requirements', 'Planned', '2024-02-10', 'ACC20240103G7H8I9', 'OPP20240103G7H8I9', '00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000007'),
-('ACT20240104J1K2L3', 'Call', 'Initial discovery call with Tech Nusantara', 'Introduce services and understand needs', 'Done', '2024-02-05', 'ACC20240104J1K2L3', 'OPP20240104J1K2L3', '00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000006'),
-('ACT20240105M4N5O6', 'Email', 'Send company profile to Tech Nusantara', 'Follow up from call with company presentation', 'Done', '2024-02-06', 'ACC20240104J1K2L3', 'OPP20240104J1K2L3', '00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000006')
+('ACT20240101A1B2C3', 'Meeting', 'Final negotiation with Maju Bersama', 'Discuss final pricing and contract terms', 'Planned', '2024-02-15', 'ACC20240101A1B2C3', 'OPP20240101A1B2C3', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('ACT20240102D4E5F6', 'Call', 'Quote follow-up call', 'Check if they received the quote and answer questions', 'Planned', '2024-02-20', 'ACC20240102D4E5F6', 'OPP20240102D4E5F6', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('ACT20240103G7H8I9', 'Site Visit', 'Visit Global Logistics facility', 'Understand their operations and requirements', 'Planned', '2024-02-10', 'ACC20240103G7H8I9', 'OPP20240103G7H8I9', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('ACT20240104J1K2L3', 'Call', 'Initial discovery call with Tech Nusantara', 'Introduce services and understand needs', 'Done', '2024-02-05', 'ACC20240104J1K2L3', 'OPP20240104J1K2L3', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d'),
+('ACT20240105M4N5O6', 'Email', 'Send company profile to Tech Nusantara', 'Follow up from call with company presentation', 'Done', '2024-02-06', 'ACC20240104J1K2L3', 'OPP20240104J1K2L3', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d')
 ON CONFLICT (activity_id) DO NOTHING;
 
 -- Update completed activities
@@ -124,19 +123,19 @@ UPDATE activities SET completed_at = NOW(), outcome = 'Positive response, intere
 -- PROSPECTING TARGETS
 -- =====================================================
 INSERT INTO prospecting_targets (target_id, company_name, pic_name, pic_email, pic_phone, industry, source, status, notes, owner_user_id, created_by) VALUES
-('TGT20240101A1B2C3', 'PT Mega Industries', 'Hendra Lim', 'hendra@megaind.co.id', '+6281234600001', 'Manufacturing', 'LinkedIn', 'researching', 'Large manufacturer, potential for regular exports', '00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000007'),
-('TGT20240102D4E5F6', 'CV Fashion Forward', 'Jessica Tan', 'jessica@fashionfw.co.id', '+6281234600002', 'Retail', 'Industry Event', 'outreach_planned', 'Expanding to international markets', '00000000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000008'),
-('TGT20240103G7H8I9', 'PT Pharma Plus', 'Dr. Agus Santoso', 'agus@pharmaplus.co.id', '+6281234600003', 'Healthcare', 'Referral', 'contacted', 'Need cold chain logistics for pharmaceuticals', '00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000007'),
-('TGT20240104J1K2L3', 'PT Agro Lestari', 'Wawan Kurniawan', 'wawan@agrolestari.co.id', '+6281234600004', 'Agriculture', 'Cold Call', 'meeting_scheduled', 'Agricultural exports to Middle East', '00000000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000008')
+('TGT20240101A1B2C3', 'PT Mega Industries', 'Hendra Lim', 'hendra@megaind.co.id', '+6281234600001', 'Manufacturing', 'LinkedIn', 'researching', 'Large manufacturer, potential for regular exports', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('TGT20240102D4E5F6', 'CV Fashion Forward', 'Jessica Tan', 'jessica@fashionfw.co.id', '+6281234600002', 'Retail', 'Industry Event', 'outreach_planned', 'Expanding to international markets', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('TGT20240103G7H8I9', 'PT Pharma Plus', 'Dr. Agus Santoso', 'agus@pharmaplus.co.id', '+6281234600003', 'Healthcare', 'Referral', 'contacted', 'Need cold chain logistics for pharmaceuticals', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'),
+('TGT20240104J1K2L3', 'PT Agro Lestari', 'Wawan Kurniawan', 'wawan@agrolestari.co.id', '+6281234600004', 'Agriculture', 'Cold Call', 'meeting_scheduled', 'Agricultural exports to Middle East', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0')
 ON CONFLICT (target_id) DO NOTHING;
 
 -- =====================================================
 -- CADENCES (Automation Templates)
 -- =====================================================
 INSERT INTO cadences (name, description, is_active, owner_user_id, created_by) VALUES
-('New Lead Follow-up', 'Standard follow-up sequence for new leads', true, '00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000006'),
-('Quote Follow-up', 'Sequence after sending quote', true, '00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000006'),
-('Post-Meeting Nurture', 'Long-term nurture after initial meeting', true, '00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000006')
+('New Lead Follow-up', 'Standard follow-up sequence for new leads', true, 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d'),
+('Quote Follow-up', 'Sequence after sending quote', true, 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d'),
+('Post-Meeting Nurture', 'Long-term nurture after initial meeting', true, 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'f46cfab2-4b61-4204-ab29-efcb2b3e5c5d')
 ON CONFLICT DO NOTHING;
 
 -- Get cadence IDs and insert steps
@@ -171,36 +170,35 @@ END $$;
 -- AUDIT LOGS (Sample entries)
 -- =====================================================
 INSERT INTO audit_logs (entity_type, entity_id, action, actor_user_id, details) VALUES
-('lead', 'LEAD20240108V4W5X6', 'handover', '00000000-0000-0000-0000-000000000003', '{"from_status": "Qualified", "to_status": "Handed Over"}'),
-('opportunity', 'OPP20240101A1B2C3', 'stage_change', '00000000-0000-0000-0000-000000000007', '{"from_stage": "Quote Sent", "to_stage": "Negotiation"}'),
-('account', 'ACC20240101A1B2C3', 'create', '00000000-0000-0000-0000-000000000007', '{"company_name": "PT Maju Bersama"}')
+('lead', 'LEAD20240108V4W5X6', 'handover', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '{"from_status": "Qualified", "to_status": "Handed Over"}'),
+('opportunity', 'OPP20240101A1B2C3', 'stage_change', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '{"from_stage": "Quote Sent", "to_stage": "Negotiation"}'),
+('account', 'ACC20240101A1B2C3', 'create', '3a673e5b-c28f-45fd-98f5-adf04a1dacc0', '{"company_name": "PT Maju Bersama"}')
 ON CONFLICT DO NOTHING;
 
 -- Success message
 DO $$
 BEGIN
     RAISE NOTICE 'Seed data inserted successfully!';
-    RAISE NOTICE 'Test users created (password: Test123!) - All 15 roles:';
+    RAISE NOTICE 'Test users (15 roles):';
     RAISE NOTICE '-- Executive --';
-    RAISE NOTICE '- director@ugc.com (Director)';
+    RAISE NOTICE '- director@example.com (Director)';
     RAISE NOTICE '-- IT/Admin --';
-    RAISE NOTICE '- admin@ugc.com (super admin)';
+    RAISE NOTICE '- admin@example.com (super admin)';
     RAISE NOTICE '-- Marketing Team --';
-    RAISE NOTICE '- marketing.mgr@ugc.com (Marketing Manager)';
-    RAISE NOTICE '- marcomm@ugc.com (Marcomm)';
-    RAISE NOTICE '- dgo@ugc.com (DGO)';
-    RAISE NOTICE '- macx@ugc.com (MACX)';
-    RAISE NOTICE '- vsdo@ugc.com (VSDO)';
+    RAISE NOTICE '- marketing.manager@example.com (Marketing Manager)';
+    RAISE NOTICE '- marcomm@example.com (Marcomm)';
+    RAISE NOTICE '- dgo@example.com (DGO)';
+    RAISE NOTICE '- macx@example.com (MACX)';
+    RAISE NOTICE '- vsdo@example.com (VSDO)';
     RAISE NOTICE '-- Sales Team --';
-    RAISE NOTICE '- sales.mgr@ugc.com (sales manager)';
-    RAISE NOTICE '- salesperson1@ugc.com (salesperson)';
-    RAISE NOTICE '- salesperson2@ugc.com (salesperson)';
-    RAISE NOTICE '- sales.support@ugc.com (sales support)';
+    RAISE NOTICE '- sales.manager@example.com (sales manager)';
+    RAISE NOTICE '- sales.person@example.com (salesperson)';
+    RAISE NOTICE '- sales.support@example.com (sales support)';
     RAISE NOTICE '-- Operations Team --';
-    RAISE NOTICE '- exim@ugc.com (EXIM Ops)';
-    RAISE NOTICE '- domestics@ugc.com (domestics Ops)';
-    RAISE NOTICE '- import.dtd@ugc.com (Import DTD Ops)';
-    RAISE NOTICE '- warehouse@ugc.com (traffic & warehous)';
+    RAISE NOTICE '- exim.ops@example.com (EXIM Ops)';
+    RAISE NOTICE '- dom.ops@example.com (domestics Ops)';
+    RAISE NOTICE '- import.ops@example.com (Import DTD Ops)';
+    RAISE NOTICE '- warehouse@example.com (traffic & warehous)';
     RAISE NOTICE '-- Finance --';
-    RAISE NOTICE '- finance@ugc.com (finance)';
+    RAISE NOTICE '- finance@example.com (finance)';
 END $$;
