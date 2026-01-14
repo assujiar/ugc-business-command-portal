@@ -69,7 +69,8 @@ export async function POST(
       }
     }
 
-    const { error: updateError } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: updateError } = await (supabase as any)
       .from('leads')
       .update(updateData)
       .eq('lead_id', id)
@@ -82,7 +83,8 @@ export async function POST(
     // If qualified, create handover pool entry and update to Handed Over
     if (new_status === 'Qualified') {
       // Create handover pool entry
-      const { error: poolError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: poolError } = await (supabase as any)
         .from('lead_handover_pool')
         .insert({
           lead_id: id,
@@ -100,7 +102,8 @@ export async function POST(
       }
 
       // Update lead to Handed Over
-      await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
         .from('leads')
         .update({
           triage_status: 'Handed Over',
