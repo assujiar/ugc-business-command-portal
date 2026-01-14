@@ -39,7 +39,7 @@ const navigation = [
   { name: 'Pipeline', href: '/pipeline', icon: TrendingUp, permission: 'pipeline' },
   { name: 'Accounts', href: '/accounts', icon: Building2, permission: 'pipeline' },
   { name: 'Activities', href: '/activities', icon: Calendar, roles: 'all' },
-  { name: 'Targets', href: '/targets', icon: Target, permission: 'salesInbox' },
+  { name: 'Sales Plan', href: '/targets', icon: Target, permission: 'salesInbox' },
   { name: 'Imports', href: '/imports', icon: Upload, permission: 'import' },
 ]
 
