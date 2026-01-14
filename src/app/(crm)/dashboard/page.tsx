@@ -1,6 +1,7 @@
 // =====================================================
 // Dashboard Page
 // SOURCE: PDF Section 5 - Dashboard Overview
+// Mobile-responsive design
 // =====================================================
 
 import { createClient } from '@/lib/supabase/server'
@@ -31,21 +32,21 @@ export default async function DashboardPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 lg:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome to UGC Business Command Portal CRM</p>
+        <h1 className="text-xl lg:text-2xl font-bold">Dashboard</h1>
+        <p className="text-sm text-muted-foreground">Welcome to UGC Business Command Portal CRM</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.name}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.name}</CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium truncate">{stat.name}</CardTitle>
+              <stat.icon className={`h-3 w-3 lg:h-4 lg:w-4 ${stat.color} flex-shrink-0`} />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
+            <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
+              <div className="text-xl lg:text-2xl font-bold">{stat.value}</div>
             </CardContent>
           </Card>
         ))}
@@ -53,47 +54,47 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Quick Actions</CardTitle>
+          <CardHeader className="pb-3 lg:pb-6">
+            <CardTitle className="text-base lg:text-lg">Quick Actions</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <a href="/lead-inbox" className="flex items-center gap-2 p-3 rounded-lg hover:bg-muted transition-colors">
-              <Inbox className="h-5 w-5 text-brand" />
-              <div>
-                <p className="font-medium">Lead Inbox</p>
-                <p className="text-sm text-muted-foreground">Review and triage new leads</p>
+          <CardContent className="space-y-1 lg:space-y-2">
+            <a href="/lead-management" className="flex items-center gap-2 lg:gap-3 p-2 lg:p-3 rounded-lg hover:bg-muted transition-colors">
+              <Inbox className="h-4 w-4 lg:h-5 lg:w-5 text-brand flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="font-medium text-sm lg:text-base">Lead Management</p>
+                <p className="text-xs lg:text-sm text-muted-foreground truncate">Review and triage new leads</p>
               </div>
             </a>
-            <a href="/sales-inbox" className="flex items-center gap-2 p-3 rounded-lg hover:bg-muted transition-colors">
-              <Users className="h-5 w-5 text-brand" />
-              <div>
-                <p className="font-medium">Sales Inbox</p>
-                <p className="text-sm text-muted-foreground">Claim leads from handover pool</p>
+            <a href="/lead-bidding" className="flex items-center gap-2 lg:gap-3 p-2 lg:p-3 rounded-lg hover:bg-muted transition-colors">
+              <Users className="h-4 w-4 lg:h-5 lg:w-5 text-brand flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="font-medium text-sm lg:text-base">Lead Bidding</p>
+                <p className="text-xs lg:text-sm text-muted-foreground truncate">Claim leads from handover pool</p>
               </div>
             </a>
-            <a href="/pipeline" className="flex items-center gap-2 p-3 rounded-lg hover:bg-muted transition-colors">
-              <TrendingUp className="h-5 w-5 text-brand" />
-              <div>
-                <p className="font-medium">Pipeline</p>
-                <p className="text-sm text-muted-foreground">View active opportunities</p>
+            <a href="/pipeline" className="flex items-center gap-2 lg:gap-3 p-2 lg:p-3 rounded-lg hover:bg-muted transition-colors">
+              <TrendingUp className="h-4 w-4 lg:h-5 lg:w-5 text-brand flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="font-medium text-sm lg:text-base">Pipeline</p>
+                <p className="text-xs lg:text-sm text-muted-foreground truncate">View active opportunities</p>
               </div>
             </a>
-            <a href="/targets" className="flex items-center gap-2 p-3 rounded-lg hover:bg-muted transition-colors">
-              <Target className="h-5 w-5 text-brand" />
-              <div>
-                <p className="font-medium">Prospecting Targets</p>
-                <p className="text-sm text-muted-foreground">Manage prospect research</p>
+            <a href="/targets" className="flex items-center gap-2 lg:gap-3 p-2 lg:p-3 rounded-lg hover:bg-muted transition-colors">
+              <Target className="h-4 w-4 lg:h-5 lg:w-5 text-brand flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="font-medium text-sm lg:text-base">Sales Plan</p>
+                <p className="text-xs lg:text-sm text-muted-foreground truncate">Manage prospect research</p>
               </div>
             </a>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Recent Activity</CardTitle>
+          <CardHeader className="pb-3 lg:pb-6">
+            <CardTitle className="text-base lg:text-lg">Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-xs lg:text-sm">
               Activity feed will be displayed here showing recent CRM actions.
             </p>
           </CardContent>

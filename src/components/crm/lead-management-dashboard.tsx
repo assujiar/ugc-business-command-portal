@@ -283,160 +283,252 @@ export function LeadManagementDashboard({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Status Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-        {STATUS_CARDS.map((card) => {
-          const Icon = card.icon
-          const count = statusCounts[card.key]
-          const isActive = selectedStatus === card.status
+    <div className="space-y-4 lg:space-y-6">
+      {/* Status Cards - Horizontal scroll on mobile */}
+      <div className="overflow-x-auto -mx-4 px-4 lg:mx-0 lg:px-0">
+        <div className="flex lg:grid lg:grid-cols-7 gap-3 min-w-max lg:min-w-0">
+          {STATUS_CARDS.map((card) => {
+            const Icon = card.icon
+            const count = statusCounts[card.key]
+            const isActive = selectedStatus === card.status
 
-          return (
-            <Card
-              key={card.key}
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                isActive ? 'ring-2 ring-brand' : ''
-              }`}
-              onClick={() => setSelectedStatus(card.status)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className={`p-2 rounded-lg ${card.color}`}>
-                    <Icon className="h-4 w-4 text-white" />
+            return (
+              <Card
+                key={card.key}
+                className={`cursor-pointer transition-all hover:shadow-md flex-shrink-0 w-[120px] lg:w-auto ${
+                  isActive ? 'ring-2 ring-brand' : ''
+                }`}
+                onClick={() => setSelectedStatus(card.status)}
+              >
+                <CardContent className="p-3 lg:p-4">
+                  <div className="flex items-center justify-between">
+                    <div className={`p-1.5 lg:p-2 rounded-lg ${card.color}`}>
+                      <Icon className="h-3 w-3 lg:h-4 lg:w-4 text-white" />
+                    </div>
+                    <span className="text-xl lg:text-2xl font-bold">{count}</span>
                   </div>
-                  <span className="text-2xl font-bold">{count}</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2 truncate">{card.label}</p>
-              </CardContent>
-            </Card>
-          )
-        })}
+                  <p className="text-[10px] lg:text-xs text-muted-foreground mt-2 truncate">{card.label}</p>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
       </div>
 
       {/* Leads Table */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center justify-between">
+        <CardHeader className="pb-3 lg:pb-6">
+          <CardTitle className="text-base lg:text-lg flex items-center justify-between">
             <span>
               {selectedStatus === 'all' ? 'All Leads' : `${selectedStatus} Leads`}
               {' '}({filteredLeads.length})
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0 lg:px-6">
           {filteredLeads.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Potential Revenue</TableHead>
-                  {selectedStatus === 'Assigned to Sales' && (
-                    <>
-                      <TableHead>Claim Status</TableHead>
-                      <TableHead>Claimed By</TableHead>
-                    </>
-                  )}
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-[80px]">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Potential Revenue</TableHead>
+                      {selectedStatus === 'Assigned to Sales' && (
+                        <>
+                          <TableHead>Claim Status</TableHead>
+                          <TableHead>Claimed By</TableHead>
+                        </>
+                      )}
+                      <TableHead>Created</TableHead>
+                      <TableHead className="w-[80px]">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredLeads.map((lead) => {
+                      const actions = getAvailableActions(lead.triage_status)
+
+                      return (
+                        <TableRow key={lead.lead_id}>
+                          <TableCell className="font-medium">{lead.company_name}</TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="text-sm">{lead.contact_name || '-'}</p>
+                              <p className="text-xs text-muted-foreground">{lead.contact_email || '-'}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusBadgeVariant(lead.triage_status)}>
+                              {lead.triage_status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{lead.source || '-'}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{getPriorityLabel(lead.priority)}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {lead.potential_revenue
+                              ? formatCurrency(lead.potential_revenue)
+                              : '-'}
+                          </TableCell>
+                          {selectedStatus === 'Assigned to Sales' && (
+                            <>
+                              <TableCell>
+                                <Badge
+                                  variant={lead.claim_status === 'claimed' ? 'default' : 'secondary'}
+                                >
+                                  {lead.claim_status || 'unclaimed'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>{lead.claimed_by_name || '-'}</TableCell>
+                            </>
+                          )}
+                          <TableCell>{formatDate(lead.created_at)}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  disabled={isLoading === lead.lead_id}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {/* View Detail Action - Always Available */}
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    // Fetch full lead details including shipment
+                                    fetchLeadDetails(lead.lead_id)
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Detail
+                                </DropdownMenuItem>
+                                {actions.length > 0 && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    {actions.map((action) => (
+                                      <DropdownMenuItem
+                                        key={action}
+                                        onClick={() => {
+                                          setActionDialog({
+                                            open: true,
+                                            lead,
+                                            targetStatus: action,
+                                          })
+                                        }}
+                                      >
+                                        <ArrowRight className="h-4 w-4 mr-2" />
+                                        {action === 'Assigned to Sales' ? 'HO to Sales' : action}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 px-4">
                 {filteredLeads.map((lead) => {
                   const actions = getAvailableActions(lead.triage_status)
 
                   return (
-                    <TableRow key={lead.lead_id}>
-                      <TableCell className="font-medium">{lead.company_name}</TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="text-sm">{lead.contact_name || '-'}</p>
-                          <p className="text-xs text-muted-foreground">{lead.contact_email || '-'}</p>
+                    <Card key={lead.lead_id} className="bg-muted/30">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-medium text-sm truncate">{lead.company_name}</h4>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {lead.contact_name || 'No contact'}
+                            </p>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 flex-shrink-0"
+                                disabled={isLoading === lead.lead_id}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => fetchLeadDetails(lead.lead_id)}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Detail
+                              </DropdownMenuItem>
+                              {actions.length > 0 && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  {actions.map((action) => (
+                                    <DropdownMenuItem
+                                      key={action}
+                                      onClick={() => {
+                                        setActionDialog({
+                                          open: true,
+                                          lead,
+                                          targetStatus: action,
+                                        })
+                                      }}
+                                    >
+                                      <ArrowRight className="h-4 w-4 mr-2" />
+                                      {action === 'Assigned to Sales' ? 'HO to Sales' : action}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusBadgeVariant(lead.triage_status)}>
-                          {lead.triage_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{lead.source || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{getPriorityLabel(lead.priority)}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {lead.potential_revenue
-                          ? formatCurrency(lead.potential_revenue)
-                          : '-'}
-                      </TableCell>
-                      {selectedStatus === 'Assigned to Sales' && (
-                        <>
-                          <TableCell>
-                            <Badge
-                              variant={lead.claim_status === 'claimed' ? 'default' : 'secondary'}
-                            >
-                              {lead.claim_status || 'unclaimed'}
+
+                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                          <Badge variant={getStatusBadgeVariant(lead.triage_status)} className="text-xs">
+                            {lead.triage_status}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {getPriorityLabel(lead.priority)}
+                          </Badge>
+                          {lead.source && (
+                            <Badge variant="secondary" className="text-xs">
+                              {lead.source}
                             </Badge>
-                          </TableCell>
-                          <TableCell>{lead.claimed_by_name || '-'}</TableCell>
-                        </>
-                      )}
-                      <TableCell>{formatDate(lead.created_at)}</TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              disabled={isLoading === lead.lead_id}
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {/* View Detail Action - Always Available */}
-                            <DropdownMenuItem
-                              onClick={() => {
-                                // Fetch full lead details including shipment
-                                fetchLeadDetails(lead.lead_id)
-                              }}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Detail
-                            </DropdownMenuItem>
-                            {actions.length > 0 && (
-                              <>
-                                <DropdownMenuSeparator />
-                                {actions.map((action) => (
-                                  <DropdownMenuItem
-                                    key={action}
-                                    onClick={() => {
-                                      setActionDialog({
-                                        open: true,
-                                        lead,
-                                        targetStatus: action,
-                                      })
-                                    }}
-                                  >
-                                    <ArrowRight className="h-4 w-4 mr-2" />
-                                    {action === 'Assigned to Sales' ? 'HO to Sales' : action}
-                                  </DropdownMenuItem>
-                                ))}
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+                          <span>{formatDate(lead.created_at)}</span>
+                          {lead.potential_revenue && (
+                            <span className="font-medium text-foreground">
+                              {formatCurrency(lead.potential_revenue)}
+                            </span>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
                   )
                 })}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           ) : (
-            <div className="text-center py-12">
+            <div className="text-center py-12 px-4">
               <p className="text-muted-foreground">No leads found</p>
               <p className="text-sm text-muted-foreground mt-2">
                 {selectedStatus === 'all'

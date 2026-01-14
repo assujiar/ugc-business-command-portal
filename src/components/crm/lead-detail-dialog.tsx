@@ -307,11 +307,11 @@ export function LeadDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="h-5 w-5" />
+      <DialogContent className="w-[95vw] max-w-[600px] max-h-[90vh] overflow-y-auto p-4 lg:p-6">
+        <DialogHeader className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <DialogTitle className="flex items-center gap-2 text-base lg:text-lg">
+              <Eye className="h-4 w-4 lg:h-5 lg:w-5" />
               Lead Detail
             </DialogTitle>
             {canEdit && !isEditing && (
@@ -319,14 +319,14 @@ export function LeadDetailDialog({
                 variant="outline"
                 size="sm"
                 onClick={() => setIsEditing(true)}
-                className="mr-8"
+                className="mr-6 lg:mr-8"
               >
-                <Pencil className="h-4 w-4 mr-2" />
-                Edit
+                <Pencil className="h-4 w-4 lg:mr-2" />
+                <span className="hidden lg:inline">Edit</span>
               </Button>
             )}
           </div>
-          <DialogDescription>
+          <DialogDescription className="text-xs lg:text-sm">
             {isEditing ? 'Edit lead information' : 'View lead information'}
           </DialogDescription>
         </DialogHeader>
@@ -809,7 +809,7 @@ export function LeadDetailDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
           {isEditing ? (
             <>
               <Button
@@ -835,11 +835,12 @@ export function LeadDetailDialog({
                   setError(null)
                 }}
                 disabled={loading}
+                className="w-full sm:w-auto"
               >
                 <X className="h-4 w-4 mr-2" />
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={loading}>
+              <Button onClick={handleSave} disabled={loading} className="w-full sm:w-auto">
                 {loading ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
@@ -849,7 +850,7 @@ export function LeadDetailDialog({
               </Button>
             </>
           ) : (
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
               Close
             </Button>
           )}

@@ -1,6 +1,7 @@
 // =====================================================
 // CRM Sidebar Navigation
 // Updated for consolidated lead management
+// Mobile-responsive with off-canvas support
 // =====================================================
 
 'use client'
@@ -18,6 +19,7 @@ import {
   LayoutDashboard,
   ClipboardList,
   Gavel,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData } from '@/lib/permissions'
@@ -27,6 +29,8 @@ type Profile = Database['public']['Tables']['profiles']['Row']
 
 interface SidebarProps {
   profile: Profile
+  isOpen?: boolean
+  onClose?: () => void
 }
 
 const navigation = [
@@ -43,7 +47,7 @@ const navigation = [
   { name: 'Imports', href: '/imports', icon: Upload, permission: 'import' },
 ]
 
-export function Sidebar({ profile }: SidebarProps) {
+export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
 
   const filteredNavigation = navigation.filter((item) => {
@@ -55,10 +59,17 @@ export function Sidebar({ profile }: SidebarProps) {
     return true
   })
 
-  return (
-    <aside className="w-64 bg-card border-r flex flex-col">
-      <div className="p-4 border-b">
-        <Link href="/dashboard" className="flex items-center gap-2">
+  const handleNavClick = () => {
+    // Close mobile menu when navigating
+    if (onClose) {
+      onClose()
+    }
+  }
+
+  const sidebarContent = (
+    <>
+      <div className="p-4 border-b flex items-center justify-between">
+        <Link href="/dashboard" className="flex items-center gap-2" onClick={handleNavClick}>
           <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">UGC</span>
           </div>
@@ -67,24 +78,35 @@ export function Sidebar({ profile }: SidebarProps) {
             <p className="text-xs text-muted-foreground">CRM Module</p>
           </div>
         </Link>
+        {/* Mobile close button */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden p-2 rounded-md hover:bg-accent"
+            aria-label="Close menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {filteredNavigation.map((item) => {
           const isActive = pathname === item.href
           return (
             <Link
               key={item.name}
               href={item.href}
+              onClick={handleNavClick}
               className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors',
                 isActive
                   ? 'bg-brand text-white'
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               )}
             >
-              <item.icon className="h-4 w-4" />
-              {item.name}
+              <item.icon className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">{item.name}</span>
             </Link>
           )
         })}
@@ -97,6 +119,31 @@ export function Sidebar({ profile }: SidebarProps) {
           <p className="text-brand">{profile.role}</p>
         </div>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex w-64 bg-card border-r flex-col flex-shrink-0">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Sidebar Overlay */}
+      {isOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={onClose}
+            aria-hidden="true"
+          />
+          {/* Sidebar panel */}
+          <aside className="relative w-72 max-w-[85vw] bg-card flex flex-col shadow-xl animate-in slide-in-from-left duration-300">
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+    </>
   )
 }
