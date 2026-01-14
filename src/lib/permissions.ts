@@ -21,6 +21,31 @@ export function isSales(role: UserRole | null | undefined): boolean {
   return SALES_ROLES.includes(role)
 }
 
+// Check if user has MACX role
+export function isMACX(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return role === 'MACX'
+}
+
+// Marketing roles for department check (excluding admin roles)
+const MARKETING_DEPARTMENT_ROLES: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+
+// Check if a creator is in marketing department (by role or department field)
+export function isCreatorInMarketingDepartment(
+  creatorRole: UserRole | null | undefined,
+  creatorDepartment: string | null | undefined
+): boolean {
+  // Check by department field (case insensitive)
+  if (creatorDepartment && creatorDepartment.toLowerCase().includes('marketing')) {
+    return true
+  }
+  // Check by marketing role
+  if (creatorRole && MARKETING_DEPARTMENT_ROLES.includes(creatorRole)) {
+    return true
+  }
+  return false
+}
+
 // Can user access lead inbox (marketing queue)?
 export function canAccessLeadInbox(role: UserRole | null | undefined): boolean {
   return isAdmin(role) || isMarketing(role)
@@ -78,6 +103,10 @@ export function canEditLead(
     created_by: string | null
     marketing_owner_user_id: string | null
     sales_owner_user_id: string | null
+    // Optional creator info for MACX access check
+    creator_role?: UserRole | null
+    creator_department?: string | null
+    creator_is_marketing?: boolean | null
   }
 ): boolean {
   if (!role) return false
@@ -94,5 +123,31 @@ export function canEditLead(
   // Sales owner can edit
   if (lead.sales_owner_user_id === userId) return true
 
+  // MACX can edit leads created by marketing department users
+  if (isMACX(role)) {
+    // If creator_is_marketing flag is available (from view), use it
+    if (lead.creator_is_marketing === true) return true
+    // Otherwise, check using creator_role and creator_department
+    if (isCreatorInMarketingDepartment(lead.creator_role, lead.creator_department)) return true
+  }
+
   return false
+}
+
+// Check if MACX user can access lead (view/edit) based on creator info
+export function canMACXAccessLead(
+  role: UserRole | null | undefined,
+  lead: {
+    creator_role?: UserRole | null
+    creator_department?: string | null
+    creator_is_marketing?: boolean | null
+  }
+): boolean {
+  if (!isMACX(role)) return false
+
+  // If creator_is_marketing flag is available (from view), use it
+  if (lead.creator_is_marketing === true) return true
+
+  // Otherwise, check using creator_role and creator_department
+  return isCreatorInMarketingDepartment(lead.creator_role, lead.creator_department)
 }

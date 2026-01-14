@@ -55,6 +55,10 @@ interface Lead {
   created_by: string | null
   created_at: string
   updated_at: string
+  // Creator info for MACX access check
+  creator_role?: UserRole | null
+  creator_department?: string | null
+  creator_is_marketing?: boolean | null
 }
 
 interface LeadDetailDialogProps {
@@ -66,6 +70,17 @@ interface LeadDetailDialogProps {
 }
 
 const MANAGER_ROLES: UserRole[] = ['Director', 'super admin', 'Marketing Manager', 'sales manager']
+
+// Check if user is MACX role
+const isMACXRole = (role: UserRole | null): boolean => role === 'MACX'
+
+// Check if creator is in marketing department
+const isCreatorMarketingDept = (lead: Lead): boolean => {
+  if (lead.creator_is_marketing === true) return true
+  if (lead.creator_department && lead.creator_department.toLowerCase().includes('marketing')) return true
+  if (lead.creator_role && ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'].includes(lead.creator_role)) return true
+  return false
+}
 
 export function LeadDetailDialog({
   lead,
@@ -107,6 +122,9 @@ export function LeadDetailDialog({
 
     // Sales owner can edit
     if (lead.sales_owner_user_id === currentUserId) return true
+
+    // MACX can edit leads created by marketing department users
+    if (isMACXRole(userRole) && isCreatorMarketingDept(lead)) return true
 
     return false
   }, [lead, userRole, currentUserId])
