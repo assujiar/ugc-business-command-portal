@@ -1,7 +1,32 @@
 -- =====================================================
--- Migration 016: Add Priority and Industry columns to Leads
+-- Migration 016: Add Missing Columns to Leads Table
 -- Fix for missing columns that are used in the application
 -- =====================================================
+
+-- =====================================================
+-- ADD ENUM VALUE FOR TRIAGE STATUS
+-- =====================================================
+-- Add 'Assigned to Sales' to lead_triage_status if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum
+    WHERE enumlabel = 'Assigned to Sales'
+    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'lead_triage_status')
+  ) THEN
+    ALTER TYPE lead_triage_status ADD VALUE 'Assigned to Sales' AFTER 'Disqualified';
+  END IF;
+END$$;
+
+-- =====================================================
+-- CREATE LEAD CLAIM STATUS ENUM IF NOT EXISTS
+-- =====================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'lead_claim_status') THEN
+    CREATE TYPE lead_claim_status AS ENUM ('unclaimed', 'claimed');
+  END IF;
+END$$;
 
 -- =====================================================
 -- ADD PRIORITY COLUMN
@@ -10,11 +35,16 @@
 ALTER TABLE leads
   ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 2;
 
--- Add check constraint for valid priority values (1-4)
-ALTER TABLE leads
-  ADD CONSTRAINT leads_priority_check CHECK (priority >= 1 AND priority <= 4);
+-- Add check constraint for valid priority values (1-4) if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'leads_priority_check'
+  ) THEN
+    ALTER TABLE leads ADD CONSTRAINT leads_priority_check CHECK (priority >= 1 AND priority <= 4);
+  END IF;
+END$$;
 
--- Comment for priority
 COMMENT ON COLUMN leads.priority IS 'Lead priority level: 1=Low, 2=Medium, 3=High, 4=Critical';
 
 -- =====================================================
@@ -23,8 +53,68 @@ COMMENT ON COLUMN leads.priority IS 'Lead priority level: 1=Low, 2=Medium, 3=Hig
 ALTER TABLE leads
   ADD COLUMN IF NOT EXISTS industry TEXT;
 
--- Comment for industry
 COMMENT ON COLUMN leads.industry IS 'Industry type of the lead company';
+
+-- =====================================================
+-- ADD POTENTIAL REVENUE COLUMN
+-- =====================================================
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS potential_revenue DECIMAL(15,2);
+
+COMMENT ON COLUMN leads.potential_revenue IS 'Estimated revenue potential when handing over to sales';
+
+-- =====================================================
+-- ADD CLAIM STATUS COLUMN
+-- =====================================================
+-- First check if the column exists as text, if so drop it
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'leads' AND column_name = 'claim_status' AND data_type = 'text'
+  ) THEN
+    ALTER TABLE leads DROP COLUMN claim_status;
+  END IF;
+END$$;
+
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS claim_status lead_claim_status DEFAULT 'unclaimed';
+
+COMMENT ON COLUMN leads.claim_status IS 'Whether the lead has been claimed by sales';
+
+-- =====================================================
+-- ADD CLAIMED BY NAME COLUMN
+-- =====================================================
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS claimed_by_name TEXT;
+
+COMMENT ON COLUMN leads.claimed_by_name IS 'Name of the salesperson who claimed the lead';
+
+-- =====================================================
+-- ADD ACCOUNT ID COLUMN
+-- =====================================================
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS account_id TEXT;
+
+-- Add foreign key constraint if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'leads_account_id_fkey'
+  ) THEN
+    ALTER TABLE leads ADD CONSTRAINT leads_account_id_fkey
+      FOREIGN KEY (account_id) REFERENCES accounts(account_id);
+  END IF;
+END$$;
+
+COMMENT ON COLUMN leads.account_id IS 'Reference to the account created from this lead';
+
+-- =====================================================
+-- CREATE INDEXES FOR NEW COLUMNS
+-- =====================================================
+CREATE INDEX IF NOT EXISTS idx_leads_priority ON leads(priority);
+CREATE INDEX IF NOT EXISTS idx_leads_claim_status ON leads(claim_status);
+CREATE INDEX IF NOT EXISTS idx_leads_account_id ON leads(account_id);
 
 -- =====================================================
 -- UPDATE EXISTING VIEWS TO INCLUDE NEW COLUMNS
