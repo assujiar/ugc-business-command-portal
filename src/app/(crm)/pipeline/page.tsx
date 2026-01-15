@@ -22,8 +22,8 @@ export default async function PipelinePage() {
     redirect('/dashboard')
   }
 
-  // Fetch opportunities
-  const { data: opportunities } = await supabase
+  // Fetch opportunities with related account and owner data
+  const { data: opportunities, error: oppError } = await supabase
     .from('opportunities')
     .select(`
       opportunity_id,
@@ -32,32 +32,33 @@ export default async function PipelinePage() {
       estimated_value,
       currency,
       probability,
-      expected_close_date,
       next_step,
       next_step_due_date,
-      close_reason,
       lost_reason,
       competitor_price,
       customer_budget,
       closed_at,
-      notes,
+      outcome,
       owner_user_id,
       account_id,
-      lead_id,
+      source_lead_id,
       created_at,
       updated_at,
       accounts (
-        account_id,
         company_name,
         account_status
       ),
-      profiles:owner_user_id (
+      profiles!opportunities_owner_user_id_fkey (
         name
       )
     `)
     .order('created_at', { ascending: false })
 
-  // Transform data
+  if (oppError) {
+    console.error('Error fetching opportunities:', oppError)
+  }
+
+  // Transform data - add all fields required by Opportunity interface
   const transformedOpportunities = (opportunities || []).map((opp: any) => ({
     opportunity_id: opp.opportunity_id,
     name: opp.name,
@@ -65,18 +66,18 @@ export default async function PipelinePage() {
     estimated_value: opp.estimated_value,
     currency: opp.currency,
     probability: opp.probability,
-    expected_close_date: opp.expected_close_date,
+    expected_close_date: null,
     next_step: opp.next_step,
     next_step_due_date: opp.next_step_due_date,
-    close_reason: opp.close_reason,
+    close_reason: null,
     lost_reason: opp.lost_reason,
     competitor_price: opp.competitor_price,
     customer_budget: opp.customer_budget,
     closed_at: opp.closed_at,
-    notes: opp.notes,
+    notes: null,
     owner_user_id: opp.owner_user_id,
     account_id: opp.account_id,
-    lead_id: opp.lead_id,
+    lead_id: opp.source_lead_id,
     created_at: opp.created_at,
     updated_at: opp.updated_at,
     account_name: opp.accounts?.company_name || null,
