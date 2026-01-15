@@ -43,18 +43,7 @@ export default async function MyLeadsPage() {
       created_by,
       sales_owner_user_id,
       account_id,
-      opportunity_id,
-      accounts (
-        account_id,
-        company_name,
-        account_status
-      ),
-      opportunities (
-        opportunity_id,
-        name,
-        stage,
-        estimated_value
-      )
+      opportunity_id
     `)
     .or(`sales_owner_user_id.eq.${profile.user_id},created_by.eq.${profile.user_id}`)
     .order('created_at', { ascending: false })
@@ -76,12 +65,7 @@ export default async function MyLeadsPage() {
     created_at: lead.created_at,
     is_own_lead: lead.created_by === profile.user_id,
     account_id: lead.account_id,
-    account_name: lead.accounts?.company_name || null,
-    account_status: lead.accounts?.account_status || null,
     opportunity_id: lead.opportunity_id,
-    opportunity_name: lead.opportunities?.name || null,
-    opportunity_stage: lead.opportunities?.stage || null,
-    opportunity_value: lead.opportunities?.estimated_value || null,
   }))
 
   return (

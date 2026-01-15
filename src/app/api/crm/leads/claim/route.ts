@@ -166,16 +166,22 @@ export async function POST(request: NextRequest) {
 
     // 2. Create Opportunity (Pipeline) if requested and account was created
     if (create_opportunity && accountId) {
+      // Calculate next step due date (7 days from now)
+      const nextStepDueDate = new Date()
+      nextStepDueDate.setDate(nextStepDueDate.getDate() + 7)
+
       const opportunityData = {
         name: `Pipeline - ${lead.company_name}`,
         account_id: accountId,
-        lead_id: lead.lead_id,
+        source_lead_id: lead.lead_id,
         stage: 'Prospecting',
         estimated_value: lead.potential_revenue || 0,
         currency: 'IDR',
         probability: 10,
         owner_user_id: user.id,
         created_by: user.id,
+        next_step: 'Initial Contact',
+        next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
       }
 
       const { data: newOpportunity, error: oppError } = await (adminClient as any)
