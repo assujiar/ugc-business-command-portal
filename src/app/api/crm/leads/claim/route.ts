@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Create Account if requested
     if (create_account) {
-      const accountData = {
+      const accountData: Record<string, unknown> = {
         company_name: lead.company_name,
         pic_name: lead.contact_name,
         pic_email: lead.contact_email,
@@ -142,8 +142,6 @@ export async function POST(request: NextRequest) {
         industry: lead.industry,
         owner_user_id: user.id,
         created_by: user.id,
-        account_status: 'calon_account',
-        lead_id: lead.lead_id,
       }
 
       const { data: newAccount, error: accountError } = await (adminClient as any)
