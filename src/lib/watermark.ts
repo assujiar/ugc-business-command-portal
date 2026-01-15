@@ -1,9 +1,9 @@
 // =====================================================
 // Image Watermark Utility
 // Adds watermark with pipeline update information to evidence photos
+// Uses dynamic import for Sharp to handle serverless environments
 // =====================================================
 
-import sharp from 'sharp'
 import { formatDateTimeFull } from '@/lib/utils'
 
 export interface WatermarkData {
@@ -18,6 +18,29 @@ export interface WatermarkData {
   }
 }
 
+// Dynamic import for Sharp with caching
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let sharpInstance: any = null
+let sharpLoadAttempted = false
+
+async function getSharp(): Promise<any> {
+  if (sharpLoadAttempted) {
+    return sharpInstance
+  }
+
+  sharpLoadAttempted = true
+
+  try {
+    const sharp = await import('sharp')
+    sharpInstance = sharp.default || sharp
+    console.log('[Watermark] Sharp module loaded successfully')
+    return sharpInstance
+  } catch (error) {
+    console.error('[Watermark] Failed to load Sharp module:', error)
+    return null
+  }
+}
+
 /**
  * Add watermark to an image with pipeline update information
  * Watermark includes: date/time, company name, stage, sales name, geolocation
@@ -27,6 +50,14 @@ export async function addWatermark(
   imageBuffer: Buffer | Uint8Array,
   watermarkData: WatermarkData
 ): Promise<Uint8Array> {
+  // Get Sharp module dynamically
+  const sharp = await getSharp()
+
+  if (!sharp) {
+    console.warn('[Watermark] Sharp not available, returning original image')
+    return imageBuffer instanceof Uint8Array ? imageBuffer : new Uint8Array(imageBuffer)
+  }
+
   try {
     // Convert to Buffer if needed for sharp
     const inputBuffer = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer)
@@ -105,10 +136,11 @@ export async function addWatermark(
       .jpeg({ quality: 90 })
       .toBuffer()
 
+    console.log('[Watermark] Successfully added watermark to image')
     // Return as Uint8Array for storage compatibility
     return new Uint8Array(watermarkedBuffer)
   } catch (error) {
-    console.error('Error adding watermark:', error)
+    console.error('[Watermark] Error adding watermark:', error)
     // Return original image if watermarking fails
     return imageBuffer instanceof Uint8Array ? imageBuffer : new Uint8Array(imageBuffer)
   }
