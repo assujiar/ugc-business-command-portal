@@ -48,7 +48,8 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Get opportunity with account and lead info
+    // Get opportunity with account info
+    // Note: opportunities.source_lead_id is the FK to leads, not lead_id
     const { data: opportunity, error: oppError } = await (adminClient as any)
       .from('opportunities')
       .select(`
@@ -63,23 +64,33 @@ export async function GET(
           pic_phone,
           address,
           city
-        ),
-        leads(
+        )
+      `)
+      .eq('opportunity_id', opportunityId)
+      .single()
+
+    // Get lead info separately using source_lead_id
+    let leadInfo: any = null
+    if (opportunity?.source_lead_id) {
+      const { data: leadData } = await (adminClient as any)
+        .from('leads')
+        .select(`
           lead_id,
           company_name,
-          pic_name,
-          pic_email,
-          pic_phone,
+          contact_name,
+          contact_email,
+          contact_phone,
           industry,
           source,
           potential_revenue,
           created_by,
           marketing_owner_user_id,
           sales_owner_user_id
-        )
-      `)
-      .eq('opportunity_id', opportunityId)
-      .single()
+        `)
+        .eq('lead_id', opportunity.source_lead_id)
+        .single()
+      leadInfo = leadData
+    }
 
     if (oppError || !opportunity) {
       return NextResponse.json({ error: 'Pipeline not found' }, { status: 404 })
@@ -88,9 +99,9 @@ export async function GET(
     // Check if user can view this pipeline based on role-based access
     const canView = canViewPipeline(profile.role, user.id, {
       owner_user_id: opportunity.owner_user_id,
-      lead_created_by: opportunity.leads?.created_by,
-      lead_marketing_owner: opportunity.leads?.marketing_owner_user_id,
-      lead_sales_owner: opportunity.leads?.sales_owner_user_id,
+      lead_created_by: leadInfo?.created_by,
+      lead_marketing_owner: leadInfo?.marketing_owner_user_id,
+      lead_sales_owner: leadInfo?.sales_owner_user_id,
     })
 
     if (!canView) {
@@ -110,11 +121,11 @@ export async function GET(
 
     // Get lead creator profile (for lead source info)
     let creatorInfo: { name: string; department?: string } | null = null
-    if (opportunity.leads?.created_by) {
+    if (leadInfo?.created_by) {
       const { data: creatorData } = await supabase
         .from('profiles')
         .select('name, department')
-        .eq('user_id', opportunity.leads.created_by)
+        .eq('user_id', leadInfo.created_by)
         .single()
       creatorInfo = creatorData as { name: string; department?: string } | null
     }
@@ -184,35 +195,35 @@ export async function GET(
       estimated_value: opportunity.estimated_value,
       currency: opportunity.currency,
       probability: opportunity.probability,
-      expected_close_date: opportunity.expected_close_date,
+      expected_close_date: opportunity.next_step_due_date, // No expected_close_date column
       next_step: opportunity.next_step,
       next_step_due_date: opportunity.next_step_due_date,
-      close_reason: opportunity.close_reason,
+      close_reason: opportunity.outcome, // Column is "outcome" not "close_reason"
       lost_reason: opportunity.lost_reason,
       competitor_price: opportunity.competitor_price,
       customer_budget: opportunity.customer_budget,
       closed_at: opportunity.closed_at,
-      notes: opportunity.notes,
+      notes: opportunity.description, // Column is "description" not "notes"
       created_at: opportunity.created_at,
       updated_at: opportunity.updated_at,
 
       // Account info
       account_id: opportunity.account_id,
-      company_name: opportunity.accounts?.company_name || opportunity.leads?.company_name || null,
-      industry: opportunity.accounts?.industry || opportunity.leads?.industry || null,
+      company_name: opportunity.accounts?.company_name || leadInfo?.company_name || null,
+      industry: opportunity.accounts?.industry || leadInfo?.industry || null,
       address: opportunity.accounts?.address || null,
       city: opportunity.accounts?.city || null,
       account_status: opportunity.accounts?.account_status || null,
 
       // PIC info (from account or lead)
-      pic_name: opportunity.accounts?.pic_name || opportunity.leads?.pic_name || null,
-      pic_email: opportunity.accounts?.pic_email || opportunity.leads?.pic_email || null,
-      pic_phone: opportunity.accounts?.pic_phone || opportunity.leads?.pic_phone || null,
+      pic_name: opportunity.accounts?.pic_name || leadInfo?.contact_name || null,
+      pic_email: opportunity.accounts?.pic_email || leadInfo?.contact_email || null,
+      pic_phone: opportunity.accounts?.pic_phone || leadInfo?.contact_phone || null,
 
       // Lead info
-      lead_id: opportunity.lead_id,
-      potential_revenue: opportunity.leads?.potential_revenue || opportunity.estimated_value || null,
-      lead_source: opportunity.leads?.source || null,
+      lead_id: opportunity.source_lead_id,
+      potential_revenue: leadInfo?.potential_revenue || opportunity.estimated_value || null,
+      lead_source: leadInfo?.source || null,
 
       // Creator/Source info
       lead_creator_name: creatorInfo?.name || null,
@@ -231,8 +242,8 @@ export async function GET(
       // Permissions
       can_update: canUpdatePipeline(profile.role, user.id, {
         owner_user_id: opportunity.owner_user_id,
-        lead_created_by: opportunity.leads?.created_by,
-        lead_sales_owner: opportunity.leads?.sales_owner_user_id,
+        lead_created_by: leadInfo?.created_by,
+        lead_sales_owner: leadInfo?.sales_owner_user_id,
       }),
     }
 

@@ -279,6 +279,12 @@ export function PipelineDetailDialog({
 }: PipelineDetailDialogProps) {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<PipelineDetailData | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  // Prevent hydration mismatch - only render dynamic content after mount
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (open && opportunityId) {
@@ -423,7 +429,8 @@ export function PipelineDetailDialog({
     }
   }
 
-  const timeline = data ? buildTimeline(data, data.stage) : []
+  // Only build timeline after mount to avoid hydration mismatch (new Date() differs server vs client)
+  const timeline = mounted && data ? buildTimeline(data, data.stage) : []
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
