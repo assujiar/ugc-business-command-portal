@@ -151,3 +151,115 @@ export function canMACXAccessLead(
   // Otherwise, check using creator_role and creator_department
   return isCreatorInMarketingDepartment(lead.creator_role, lead.creator_department)
 }
+
+// =====================================================
+// Pipeline Permissions
+// =====================================================
+
+// Pipeline View Access Rules:
+// - Salesperson: Pipeline from leads they created or claimed
+// - Sales Manager: Pipeline from leads created/claimed by sales department users
+// - Marketing (Marcomm, VSDO, DGO): Pipeline from leads they created
+// - Marketing Manager, MACX: Pipeline from leads created by marketing department
+// - Director, Admin: All pipelines
+
+// Sales Manager role for viewing sales department pipelines
+const SALES_MANAGER_ROLE: UserRole = 'sales manager'
+const MARKETING_MANAGER_ROLE: UserRole = 'Marketing Manager'
+
+// Check if user can view a specific pipeline
+export function canViewPipeline(
+  role: UserRole | null | undefined,
+  userId: string,
+  pipeline: {
+    owner_user_id?: string | null
+    lead_created_by?: string | null
+    lead_marketing_owner?: string | null
+    lead_sales_owner?: string | null
+  }
+): boolean {
+  if (!role) return false
+
+  // Admin and Director can see all pipelines
+  if (isAdmin(role)) return true
+
+  // Salesperson: Can view pipelines from leads they created or claimed
+  if (role === 'salesperson') {
+    // Created the lead
+    if (pipeline.lead_created_by === userId) return true
+    // Claimed the lead (sales owner)
+    if (pipeline.lead_sales_owner === userId) return true
+    // Owner of the opportunity
+    if (pipeline.owner_user_id === userId) return true
+    return false
+  }
+
+  // Sales Manager: Can view pipelines from all sales department leads
+  if (role === SALES_MANAGER_ROLE) {
+    return true // Will be filtered at query level for sales department
+  }
+
+  // Sales Support: Same as salesperson but also can view team pipelines
+  if (role === 'sales support') {
+    if (pipeline.lead_created_by === userId) return true
+    if (pipeline.lead_sales_owner === userId) return true
+    if (pipeline.owner_user_id === userId) return true
+    return true // Allow viewing but not updating
+  }
+
+  // Marketing roles (Marcomm, VSDO, DGO): Can view pipelines from leads they created
+  if (role === 'Marcomm' || role === 'VSDO' || role === 'DGO') {
+    if (pipeline.lead_created_by === userId) return true
+    if (pipeline.lead_marketing_owner === userId) return true
+    return false
+  }
+
+  // Marketing Manager, MACX: Can view pipelines from marketing department leads
+  if (role === MARKETING_MANAGER_ROLE || role === 'MACX') {
+    return true // Will be filtered at query level for marketing department
+  }
+
+  return false
+}
+
+// Check if user can update a specific pipeline
+export function canUpdatePipeline(
+  role: UserRole | null | undefined,
+  userId: string,
+  pipeline: {
+    owner_user_id?: string | null
+    lead_created_by?: string | null
+    lead_sales_owner?: string | null
+  }
+): boolean {
+  if (!role) return false
+
+  // Admin and Director can update all pipelines
+  if (isAdmin(role)) return true
+
+  // Salesperson: Can update pipelines from leads they created or claimed
+  if (role === 'salesperson') {
+    // Created the lead
+    if (pipeline.lead_created_by === userId) return true
+    // Claimed the lead (sales owner)
+    if (pipeline.lead_sales_owner === userId) return true
+    // Owner of the opportunity
+    if (pipeline.owner_user_id === userId) return true
+    return false
+  }
+
+  // Other roles cannot update pipelines (view-only)
+  return false
+}
+
+// Check if the user is a sales role that can have pipelines
+export function isSalesPipelineUser(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return role === 'salesperson' || role === 'sales manager' || role === 'sales support'
+}
+
+// Check if the user is a marketing role that can view pipelines
+export function isMarketingPipelineViewer(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return role === 'Marketing Manager' || role === 'Marcomm' || role === 'DGO' || role === 'MACX' || role === 'VSDO'
+}

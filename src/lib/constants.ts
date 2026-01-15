@@ -82,6 +82,9 @@ export const ACTIVITY_TYPES: ActivityTypeV2[] = [
   'Task',
   'Proposal',
   'Contract Review',
+  'Online Meeting',
+  'Phone Call',
+  'Texting',
 ]
 
 // Target statuses
@@ -308,14 +311,12 @@ export const LOST_REASONS: { value: LostReason; label: string; requiresPrice: bo
 ]
 
 // Approach Methods for Pipeline Updates
-export const APPROACH_METHODS: { value: ApproachMethod; label: string; icon: string }[] = [
-  { value: 'Call', label: 'Phone Call', icon: 'phone' },
-  { value: 'Email', label: 'Email', icon: 'mail' },
-  { value: 'Meeting', label: 'Meeting', icon: 'users' },
-  { value: 'Site Visit', label: 'Site Visit', icon: 'map-pin' },
-  { value: 'WhatsApp', label: 'WhatsApp', icon: 'message-circle' },
-  { value: 'Proposal', label: 'Proposal', icon: 'file-text' },
-  { value: 'Contract Review', label: 'Contract Review', icon: 'file-check' },
+export const APPROACH_METHODS: { value: ApproachMethod; label: string; icon: string; requiresCamera: boolean }[] = [
+  { value: 'Site Visit', label: 'Site Visit', icon: 'map-pin', requiresCamera: true },
+  { value: 'Online Meeting', label: 'Online Meeting', icon: 'video', requiresCamera: false },
+  { value: 'Phone Call', label: 'Phone Call', icon: 'phone', requiresCamera: false },
+  { value: 'Texting', label: 'Texting', icon: 'message-circle', requiresCamera: false },
+  { value: 'Email', label: 'Email', icon: 'mail', requiresCamera: false },
 ]
 
 // Lead Claim Statuses
@@ -405,4 +406,141 @@ export function calculateNextStepDueDate(stage: OpportunityStage): Date {
     dueDate.setTime(dueDate.getTime() + config.daysAllowed * 24 * 60 * 60 * 1000)
   }
   return dueDate
+}
+
+// =====================================================
+// PIPELINE TIMELINE TYPES AND HELPERS
+// =====================================================
+
+export type PipelineStepStatus = 'done' | 'upcoming' | 'overdue'
+
+export interface PipelineTimelineStep {
+  stage: OpportunityStage
+  label: string
+  dueDate: Date | null
+  status: PipelineStepStatus
+  completedAt: Date | null
+  daysAllowed: number
+}
+
+// Active pipeline stages in order (excluding terminal states)
+const ACTIVE_PIPELINE_STAGES: OpportunityStage[] = ['Prospecting', 'Discovery', 'Quote Sent', 'Negotiation']
+
+// Calculate pipeline timeline based on opportunity data and stage history
+export function calculatePipelineTimeline(
+  opportunity: {
+    stage: OpportunityStage
+    created_at: string
+    closed_at?: string | null
+  },
+  stageHistory?: Array<{
+    new_stage: OpportunityStage
+    changed_at: string
+  }>
+): PipelineTimelineStep[] {
+  const timeline: PipelineTimelineStep[] = []
+  const currentStage = opportunity.stage
+  const now = new Date()
+
+  // Build a map of when each stage was entered
+  const stageEntryTimes: Record<string, Date> = {}
+
+  // Initial stage is Prospecting at created_at
+  stageEntryTimes['Prospecting'] = new Date(opportunity.created_at)
+
+  // Build entry times from history
+  if (stageHistory && stageHistory.length > 0) {
+    stageHistory.forEach(history => {
+      stageEntryTimes[history.new_stage] = new Date(history.changed_at)
+    })
+  }
+
+  // Get the index of current stage
+  const currentStageIndex = ACTIVE_PIPELINE_STAGES.indexOf(currentStage)
+
+  // For closed stages, all steps should be done
+  const isClosed = currentStage === 'Closed Won' || currentStage === 'Closed Lost'
+  const isOnHold = currentStage === 'On Hold'
+
+  for (let i = 0; i < ACTIVE_PIPELINE_STAGES.length; i++) {
+    const stage = ACTIVE_PIPELINE_STAGES[i]
+    const config = getStageConfig(stage)
+
+    if (!config) continue
+
+    let status: PipelineStepStatus = 'upcoming'
+    let dueDate: Date | null = null
+    let completedAt: Date | null = null
+
+    if (isClosed) {
+      // If pipeline is closed, all stages up to negotiation are done
+      status = 'done'
+      completedAt = stageEntryTimes[stage] || null
+      if (i < ACTIVE_PIPELINE_STAGES.length - 1 && stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]) {
+        completedAt = stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]
+      } else if (opportunity.closed_at) {
+        completedAt = new Date(opportunity.closed_at)
+      }
+    } else if (isOnHold) {
+      // On hold - past stages are done, current is on hold
+      if (i < currentStageIndex || (currentStageIndex === -1 && stageEntryTimes[stage])) {
+        status = 'done'
+        if (stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]) {
+          completedAt = stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]
+        }
+      } else {
+        status = 'upcoming'
+      }
+    } else {
+      // Active pipeline
+      if (i < currentStageIndex) {
+        // Past stage - done
+        status = 'done'
+        if (stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]) {
+          completedAt = stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]
+        }
+      } else if (i === currentStageIndex) {
+        // Current stage - calculate due date
+        const entryTime = stageEntryTimes[stage] || new Date(opportunity.created_at)
+        dueDate = new Date(entryTime.getTime() + config.daysAllowed * 24 * 60 * 60 * 1000)
+
+        if (dueDate < now) {
+          status = 'overdue'
+        } else {
+          status = 'upcoming'
+        }
+      } else {
+        // Future stage
+        status = 'upcoming'
+
+        // Calculate estimated due date based on cumulative days
+        if (currentStageIndex >= 0) {
+          let cumulativeDays = 0
+          for (let j = currentStageIndex; j <= i; j++) {
+            const cfg = getStageConfig(ACTIVE_PIPELINE_STAGES[j])
+            if (cfg) cumulativeDays += cfg.daysAllowed
+          }
+          const currentEntryTime = stageEntryTimes[currentStage] || new Date(opportunity.created_at)
+          dueDate = new Date(currentEntryTime.getTime() + cumulativeDays * 24 * 60 * 60 * 1000)
+        }
+      }
+    }
+
+    timeline.push({
+      stage,
+      label: stage,
+      dueDate,
+      status,
+      completedAt,
+      daysAllowed: config.daysAllowed,
+    })
+  }
+
+  return timeline
+}
+
+// Get stage order index (for comparison)
+export function getStageIndex(stage: OpportunityStage): number {
+  const order = ['Prospecting', 'Discovery', 'Quote Sent', 'Negotiation', 'Closed Won', 'Closed Lost', 'On Hold']
+  return order.indexOf(stage)
 }

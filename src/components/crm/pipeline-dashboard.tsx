@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,21 +24,36 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import { OPPORTUNITY_STAGES, APPROACH_METHODS, LOST_REASONS } from '@/lib/constants'
-import type { OpportunityStage, ApproachMethod, LostReason } from '@/types/database'
+import {
+  OPPORTUNITY_STAGES,
+  APPROACH_METHODS,
+  LOST_REASONS,
+  calculatePipelineTimeline,
+  type PipelineTimelineStep,
+} from '@/lib/constants'
+import type { OpportunityStage, ApproachMethod, LostReason, UserRole } from '@/types/database'
+import { PipelineDetailDialog } from '@/components/crm/pipeline-detail-dialog'
 import {
   TrendingUp,
   Search,
   FileText,
   Users2,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   Pause,
-  MoreVertical,
   AlertCircle,
   Upload,
   MapPin,
+  Clock,
+  Camera,
+  Eye,
 } from 'lucide-react'
+
+interface StageHistory {
+  new_stage: OpportunityStage
+  changed_at: string
+}
 
 interface Opportunity {
   opportunity_id: string
@@ -65,11 +80,14 @@ interface Opportunity {
   account_status: string | null
   owner_name: string | null
   is_overdue: boolean
+  stage_history?: StageHistory[]
 }
 
 interface PipelineDashboardProps {
   opportunities: Opportunity[]
   currentUserId: string
+  userRole?: UserRole | null
+  canUpdate?: boolean
 }
 
 const STAGE_CONFIG: { stage: OpportunityStage; label: string; icon: typeof TrendingUp; color: string }[] = [
@@ -82,15 +100,22 @@ const STAGE_CONFIG: { stage: OpportunityStage; label: string; icon: typeof Trend
   { stage: 'On Hold', label: 'On Hold', icon: Pause, color: 'bg-gray-500' },
 ]
 
-export function PipelineDashboard({ opportunities, currentUserId }: PipelineDashboardProps) {
+export function PipelineDashboard({ opportunities, currentUserId, userRole, canUpdate = true }: PipelineDashboardProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const [selectedStage, setSelectedStage] = useState<OpportunityStage | 'all'>('all')
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const [updateDialog, setUpdateDialog] = useState<{
     open: boolean
     opportunity: Opportunity | null
   }>({ open: false, opportunity: null })
+
+  // Detail dialog state
+  const [detailDialog, setDetailDialog] = useState<{
+    open: boolean
+    opportunityId: string | null
+  }>({ open: false, opportunityId: null })
 
   // Update form state
   const [newStage, setNewStage] = useState<OpportunityStage | ''>('')
@@ -101,6 +126,10 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
   const [lostReason, setLostReason] = useState<LostReason | ''>('')
   const [competitorPrice, setCompetitorPrice] = useState('')
   const [customerBudget, setCustomerBudget] = useState('')
+
+  // Check if current approach method requires camera only
+  const requiresCamera = approachMethod === 'Site Visit'
+  const selectedMethod = APPROACH_METHODS.find(m => m.value === approachMethod)
 
   // Calculate counts per stage
   const stageCounts = STAGE_CONFIG.reduce((acc, { stage }) => {
@@ -129,6 +158,10 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
     setUpdateDialog({ open: true, opportunity })
   }
 
+  const openDetailDialog = (opportunityId: string) => {
+    setDetailDialog({ open: true, opportunityId })
+  }
+
   const handleUpdatePipeline = async () => {
     if (!updateDialog.opportunity || !newStage || !approachMethod) return
 
@@ -145,6 +178,12 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
         alert('Harga kompetitor atau budget customer wajib diisi untuk alasan ini')
         return
       }
+    }
+
+    // Validate evidence for Site Visit
+    if (approachMethod === 'Site Visit' && !evidenceFile) {
+      alert('Bukti foto wajib diupload untuk Site Visit')
+      return
     }
 
     setIsLoading(updateDialog.opportunity.opportunity_id)
@@ -215,6 +254,72 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
     return Array.from(new Set(nextStages))
   }
 
+  // Get timeline for an opportunity
+  const getOpportunityTimeline = (opp: Opportunity): PipelineTimelineStep[] => {
+    return calculatePipelineTimeline(
+      {
+        stage: opp.stage,
+        created_at: opp.created_at,
+        closed_at: opp.closed_at,
+      },
+      opp.stage_history
+    )
+  }
+
+  const getStepStatusBadge = (status: string) => {
+    switch (status) {
+      case 'done':
+        return (
+          <Badge variant="outline" className="text-green-600 border-green-600 text-[10px] px-1">
+            <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />
+            Done
+          </Badge>
+        )
+      case 'overdue':
+        return (
+          <Badge variant="destructive" className="text-[10px] px-1">
+            <AlertCircle className="h-2.5 w-2.5 mr-0.5" />
+            Overdue
+          </Badge>
+        )
+      case 'upcoming':
+        return (
+          <Badge variant="secondary" className="text-[10px] px-1">
+            <Clock className="h-2.5 w-2.5 mr-0.5" />
+            Upcoming
+          </Badge>
+        )
+      default:
+        return null
+    }
+  }
+
+  // Handle file selection (for non-Site Visit methods)
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setEvidenceFile(file)
+    }
+  }
+
+  // Handle camera capture (for Site Visit)
+  const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate that it's an image
+      if (!file.type.startsWith('image/')) {
+        alert('Hanya file gambar yang diizinkan untuk Site Visit')
+        return
+      }
+      setEvidenceFile(file)
+    }
+  }
+
+  // Reset evidence when approach method changes
+  useEffect(() => {
+    setEvidenceFile(null)
+  }, [approachMethod])
+
   return (
     <div className="space-y-4 lg:space-y-6">
       {/* Stage Cards - Horizontal scroll on mobile */}
@@ -261,65 +366,96 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
               {filteredOpportunities.map((opp) => {
                 const nextStages = getAvailableNextStages(opp.stage)
                 const stageConfig = STAGE_CONFIG.find(s => s.stage === opp.stage)
+                const timeline = getOpportunityTimeline(opp)
 
                 return (
                   <Card key={opp.opportunity_id} className="bg-muted/50">
                     <CardContent className="p-3 lg:p-4">
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold text-sm lg:text-base truncate">{opp.name}</h3>
-                            {opp.is_overdue && (
-                              <Badge variant="destructive" className="text-xs">
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                Overdue
+                      <div className="flex flex-col gap-3">
+                        {/* Header */}
+                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-semibold text-sm lg:text-base truncate">{opp.name}</h3>
+                              {opp.is_overdue && (
+                                <Badge variant="destructive" className="text-xs">
+                                  <AlertCircle className="h-3 w-3 mr-1" />
+                                  Overdue
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs lg:text-sm text-muted-foreground truncate">{opp.account_name}</p>
+
+                            <div className="flex flex-wrap items-center gap-2 lg:gap-4 mt-2">
+                              <Badge variant="outline" className={`text-xs ${stageConfig?.color.replace('bg-', 'border-')}`}>
+                                {opp.stage}
                               </Badge>
-                            )}
-                          </div>
-                          <p className="text-xs lg:text-sm text-muted-foreground truncate">{opp.account_name}</p>
-
-                          <div className="flex flex-wrap items-center gap-2 lg:gap-4 mt-2">
-                            <Badge variant="outline" className={`text-xs ${stageConfig?.color.replace('bg-', 'border-')}`}>
-                              {opp.stage}
-                            </Badge>
-                            <span className="text-xs lg:text-sm font-medium text-brand">
-                              {formatCurrency(opp.estimated_value)}
-                            </span>
-                            {opp.probability && (
-                              <span className="text-[10px] lg:text-xs text-muted-foreground">
-                                {opp.probability}% probability
+                              <span className="text-xs lg:text-sm font-medium text-brand">
+                                {formatCurrency(opp.estimated_value)}
                               </span>
-                            )}
-                          </div>
-
-                          {opp.next_step && (
-                            <p className="text-xs lg:text-sm mt-2">
-                              <span className="text-muted-foreground">Next Step:</span> {opp.next_step}
-                              {opp.next_step_due_date && (
-                                <span className="text-muted-foreground ml-2">
-                                  (Due: {formatDate(opp.next_step_due_date)})
+                              {opp.probability && (
+                                <span className="text-[10px] lg:text-xs text-muted-foreground">
+                                  {opp.probability}% probability
                                 </span>
                               )}
-                            </p>
-                          )}
+                            </div>
 
-                          {opp.owner_name && (
-                            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">
-                              Owner: {opp.owner_name}
-                            </p>
-                          )}
+                            {opp.owner_name && (
+                              <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">
+                                Owner: {opp.owner_name}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex gap-2 flex-shrink-0">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openDetailDialog(opp.opportunity_id)}
+                              className="w-full lg:w-auto"
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View Detail
+                            </Button>
+                            {canUpdate && nextStages.length > 0 && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => openUpdateDialog(opp)}
+                                disabled={isLoading === opp.opportunity_id}
+                                className="w-full lg:w-auto"
+                              >
+                                Update Status
+                              </Button>
+                            )}
+                          </div>
                         </div>
 
-                        {nextStages.length > 0 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openUpdateDialog(opp)}
-                            disabled={isLoading === opp.opportunity_id}
-                            className="w-full lg:w-auto flex-shrink-0"
-                          >
-                            Update Status
-                          </Button>
+                        {/* Timeline - Only show for active pipelines */}
+                        {!['Closed Won', 'Closed Lost'].includes(opp.stage) && timeline.length > 0 && (
+                          <div className="border-t pt-3 mt-1">
+                            <p className="text-xs text-muted-foreground mb-2">Pipeline Timeline</p>
+                            <div className="flex gap-2 overflow-x-auto pb-1">
+                              {timeline.map((step, index) => (
+                                <div
+                                  key={step.stage}
+                                  className="flex-shrink-0 bg-background border rounded-lg p-2 min-w-[100px]"
+                                >
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-xs font-medium truncate">{step.label}</span>
+                                    {getStepStatusBadge(step.status)}
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {step.status === 'done' && step.completedAt
+                                      ? `Completed: ${formatDate(step.completedAt.toISOString())}`
+                                      : step.dueDate
+                                      ? `Due: ${formatDate(step.dueDate.toISOString())}`
+                                      : `Max ${step.daysAllowed}d`}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
                     </CardContent>
@@ -411,39 +547,102 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
               />
             </div>
 
-            {/* Evidence Upload */}
+            {/* Evidence Upload - Different behavior based on approach method */}
             <div className="space-y-2">
-              <Label>Evidence (Upload File) <span className="text-red-500">*</span></Label>
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept="image/*,.pdf,.doc,.docx"
-                  onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  {evidenceFile ? evidenceFile.name : 'Upload Evidence'}
-                </Button>
-                {evidenceFile && (
+              <Label>
+                Evidence {requiresCamera && <span className="text-red-500">*</span>}
+              </Label>
+
+              {requiresCamera ? (
+                // Camera only for Site Visit
+                <div className="space-y-2">
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleCameraCapture}
+                  />
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEvidenceFile(null)}
+                    variant="outline"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="w-full"
                   >
-                    Remove
+                    <Camera className="h-4 w-4 mr-2" />
+                    {evidenceFile ? evidenceFile.name : 'Take Photo'}
                   </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Upload screenshot, photo, or document as proof
-              </p>
+                  <p className="text-xs text-amber-600">
+                    Site Visit wajib mengambil foto langsung dari kamera (tidak bisa upload dari device)
+                  </p>
+                  {evidenceFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEvidenceFile(null)}
+                    >
+                      Remove Photo
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                // File upload or camera for other methods
+                <div className="space-y-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*,.pdf,.doc,.docx"
+                    onChange={handleFileSelect}
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleCameraCapture}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex-1"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload File
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="flex-1"
+                    >
+                      <Camera className="h-4 w-4 mr-2" />
+                      Take Photo
+                    </Button>
+                  </div>
+                  {evidenceFile && (
+                    <div className="flex items-center justify-between bg-muted p-2 rounded">
+                      <span className="text-sm truncate">{evidenceFile.name}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEvidenceFile(null)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Upload screenshot, photo, or document as proof
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Location Tagging */}
@@ -521,7 +720,7 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
                 isLoading === updateDialog.opportunity?.opportunity_id ||
                 !newStage ||
                 !approachMethod ||
-                !evidenceFile ||
+                (requiresCamera && !evidenceFile) ||
                 (newStage === 'Closed Lost' && !lostReason)
               }
             >
@@ -530,6 +729,17 @@ export function PipelineDashboard({ opportunities, currentUserId }: PipelineDash
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Pipeline Detail Dialog */}
+      <PipelineDetailDialog
+        opportunityId={detailDialog.opportunityId}
+        open={detailDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailDialog({ open: false, opportunityId: null })
+          }
+        }}
+      />
     </div>
   )
 }
