@@ -98,7 +98,7 @@ export default async function MyLeadsPage() {
         </div>
       </div>
 
-      <MyLeadsDashboard leads={transformedLeads} currentUserId={profile.user_id} />
+      <MyLeadsDashboard leads={transformedLeads} currentUserId={profile.user_id} userRole={profile.role} />
     </div>
   )
 }
