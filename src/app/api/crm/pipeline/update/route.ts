@@ -7,11 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-// Fallback isImageFile function (watermark disabled for now due to serverless issues)
-const checkIsImageFile = (mimeType: string): boolean => {
-  return mimeType.startsWith('image/')
-}
+import { addWatermark, isImageFile, type WatermarkData } from '@/lib/watermark'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -92,25 +88,79 @@ export async function POST(request: NextRequest) {
       const arrayBuffer = await evidenceFile.arrayBuffer()
       const buffer: Uint8Array = new Uint8Array(arrayBuffer)
 
-      // Check if it's an image file - upload directly (watermark disabled for serverless compatibility)
-      if (checkIsImageFile(evidenceFile.type)) {
-        // Upload image file directly (watermarking disabled due to sharp library issues on Vercel)
-        const filePath = `evidence/${opportunityId}/${timestamp}_${evidenceFile.name}`
-        const { error: uploadError } = await adminClient.storage
-          .from('attachments')
-          .upload(filePath, buffer, {
-            contentType: evidenceFile.type,
-            upsert: false,
-          })
-
-        if (uploadError) {
-          console.error('Error uploading evidence:', uploadError)
-        } else {
-          const { data: signedUrl } = await adminClient.storage
+      // Check if it's an image file - apply watermark
+      if (isImageFile(evidenceFile.type)) {
+        try {
+          // First, upload original image (for audit purposes)
+          const originalFilePath = `evidence/${opportunityId}/${timestamp}_original_${evidenceFile.name}`
+          const { error: originalUploadError } = await adminClient.storage
             .from('attachments')
-            .createSignedUrl(filePath, 60 * 60 * 24 * 365) // 1 year
+            .upload(originalFilePath, buffer, {
+              contentType: evidenceFile.type,
+              upsert: false,
+            })
 
-          evidenceUrl = signedUrl?.signedUrl || null
+          if (!originalUploadError) {
+            const { data: originalSignedUrl } = await adminClient.storage
+              .from('attachments')
+              .createSignedUrl(originalFilePath, 60 * 60 * 24 * 365) // 1 year
+            evidenceOriginalUrl = originalSignedUrl?.signedUrl || null
+          }
+
+          // Prepare watermark data
+          const watermarkData: WatermarkData = {
+            updateTime: updateTime,
+            companyName: companyName,
+            pipelineStage: newStage,
+            salesName: salesName,
+            location: {
+              lat: locationLat ? parseFloat(locationLat) : null,
+              lng: locationLng ? parseFloat(locationLng) : null,
+              address: locationAddress || null,
+            },
+          }
+
+          // Apply watermark to image
+          const watermarkedBuffer = await addWatermark(buffer, watermarkData)
+
+          // Upload watermarked image
+          const watermarkedFilePath = `evidence/${opportunityId}/${timestamp}_${evidenceFile.name}`
+          const { error: uploadError } = await adminClient.storage
+            .from('attachments')
+            .upload(watermarkedFilePath, watermarkedBuffer, {
+              contentType: 'image/jpeg', // Watermarked images are converted to JPEG
+              upsert: false,
+            })
+
+          if (uploadError) {
+            console.error('Error uploading watermarked evidence:', uploadError)
+            // Fallback: use original URL if watermarked upload fails
+            evidenceUrl = evidenceOriginalUrl
+          } else {
+            const { data: signedUrl } = await adminClient.storage
+              .from('attachments')
+              .createSignedUrl(watermarkedFilePath, 60 * 60 * 24 * 365) // 1 year
+            evidenceUrl = signedUrl?.signedUrl || null
+          }
+
+          evidenceFileName = evidenceFile.name
+        } catch (watermarkError) {
+          console.error('Error processing watermark:', watermarkError)
+          // Fallback: upload original image without watermark
+          const filePath = `evidence/${opportunityId}/${timestamp}_${evidenceFile.name}`
+          const { error: uploadError } = await adminClient.storage
+            .from('attachments')
+            .upload(filePath, buffer, {
+              contentType: evidenceFile.type,
+              upsert: false,
+            })
+
+          if (!uploadError) {
+            const { data: signedUrl } = await adminClient.storage
+              .from('attachments')
+              .createSignedUrl(filePath, 60 * 60 * 24 * 365) // 1 year
+            evidenceUrl = signedUrl?.signedUrl || null
+          }
           evidenceFileName = evidenceFile.name
         }
       } else {
