@@ -49,10 +49,24 @@ ORDER BY l.claimed_at DESC;
 COMMENT ON VIEW v_my_leads IS 'Leads claimed by salesperson - shows claimed leads with sales owner';
 
 -- =====================================================
--- STEP 3: Update RPC Functions
+-- STEP 3: DROP existing RPC Functions first (with exact signatures)
+-- This is needed because we're changing the function signatures
 -- =====================================================
 
--- Update rpc_lead_triage - Remove auto-transition, Qualified stays as Qualified
+-- Drop old rpc_lead_triage (original signature)
+DROP FUNCTION IF EXISTS rpc_lead_triage(TEXT, lead_triage_status, TEXT, TEXT);
+
+-- Drop old rpc_lead_handover_to_sales_pool (original signature)
+DROP FUNCTION IF EXISTS rpc_lead_handover_to_sales_pool(TEXT, TEXT, INTEGER, TEXT);
+
+-- Drop old rpc_sales_claim_lead (original signature)
+DROP FUNCTION IF EXISTS rpc_sales_claim_lead(BIGINT, BOOLEAN, BOOLEAN, TEXT);
+
+-- =====================================================
+-- STEP 4: Create updated RPC Functions
+-- =====================================================
+
+-- rpc_lead_triage - Remove auto-transition, Qualified stays as Qualified
 CREATE OR REPLACE FUNCTION rpc_lead_triage(
   p_lead_id TEXT,
   p_new_status lead_triage_status,
@@ -151,7 +165,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION rpc_lead_triage IS 'Lead triage - Qualified stays as Qualified, Assign to Sales requires potential_revenue';
 
--- Update rpc_lead_handover_to_sales_pool - Use 'Assign to Sales' status
+-- rpc_lead_handover_to_sales_pool - Use 'Assign to Sales' status
 CREATE OR REPLACE FUNCTION rpc_lead_handover_to_sales_pool(
   p_lead_id TEXT,
   p_notes TEXT DEFAULT NULL,
@@ -235,7 +249,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION rpc_lead_handover_to_sales_pool IS 'Assign lead to sales pool - changes status to Assign to Sales';
 
--- Update rpc_sales_claim_lead - Status stays 'Assign to Sales', creates account & pipeline
+-- rpc_sales_claim_lead - Status stays 'Assign to Sales', creates account & pipeline
 CREATE OR REPLACE FUNCTION rpc_sales_claim_lead(
   p_pool_id BIGINT,
   p_create_account BOOLEAN DEFAULT true,
@@ -386,7 +400,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 COMMENT ON FUNCTION rpc_sales_claim_lead IS 'Claim lead from pool - creates account with calon_account status and pipeline with Prospecting stage';
 
 -- =====================================================
--- STEP 4: Add unique constraint on lead_handover_pool.lead_id if not exists
+-- STEP 5: Add unique constraint on lead_handover_pool.lead_id if not exists
 -- =====================================================
 
 DO $$
@@ -407,9 +421,10 @@ END $$;
 -- Summary of Changes:
 -- 1. Migrated existing 'Handed Over' leads to 'Assign to Sales'
 -- 2. Updated v_my_leads view to filter by claim_status = 'claimed'
--- 3. Updated rpc_lead_triage: No auto-transition, Qualified stays as Qualified
--- 4. Updated rpc_lead_handover_to_sales_pool: Sets status to 'Assign to Sales'
--- 5. Updated rpc_sales_claim_lead:
+-- 3. Dropped old functions and recreated with new signatures
+-- 4. Updated rpc_lead_triage: No auto-transition, Qualified stays as Qualified
+-- 5. Updated rpc_lead_handover_to_sales_pool: Sets status to 'Assign to Sales'
+-- 6. Updated rpc_sales_claim_lead:
 --    - Status stays as 'Assign to Sales' (only claim_status changes)
 --    - Creates account with 'calon_account' status
 --    - Creates pipeline with 'Prospecting' stage
