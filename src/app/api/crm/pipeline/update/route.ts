@@ -8,22 +8,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-// Dynamic import for watermark to avoid serverless issues with sharp
-let addWatermark: ((buffer: Buffer | Uint8Array, data: any) => Promise<Uint8Array>) | null = null
-let isImageFile: ((mimeType: string) => boolean) | null = null
-
-// Try to load watermark module (may fail on some serverless environments)
-try {
-  const watermarkModule = require('@/lib/watermark')
-  addWatermark = watermarkModule.addWatermark
-  isImageFile = watermarkModule.isImageFile
-} catch (e) {
-  console.warn('Watermark module not available, watermarking disabled')
-}
-
-// Fallback isImageFile function
+// Fallback isImageFile function (watermark disabled for now due to serverless issues)
 const checkIsImageFile = (mimeType: string): boolean => {
-  if (isImageFile) return isImageFile(mimeType)
   return mimeType.startsWith('image/')
 }
 
@@ -100,74 +86,32 @@ export async function POST(request: NextRequest) {
     let evidenceOriginalUrl: string | null = null
     let evidenceFileName: string | null = null
 
-    // 1. Upload evidence file if provided (with watermark for images)
+    // 1. Upload evidence file if provided
     if (evidenceFile) {
       const timestamp = Date.now()
-      const fileExtension = evidenceFile.name.split('.').pop()
-      const baseFileName = evidenceFile.name.replace(/\.[^/.]+$/, '')
-      const originalFileName = `${timestamp}_original_${evidenceFile.name}`
-      const watermarkedFileName = `${timestamp}_${baseFileName}_watermarked.jpg`
-
       const arrayBuffer = await evidenceFile.arrayBuffer()
-      let buffer: Uint8Array = new Uint8Array(arrayBuffer)
+      const buffer: Uint8Array = new Uint8Array(arrayBuffer)
 
-      // Check if it's an image file
+      // Check if it's an image file - upload directly (watermark disabled for serverless compatibility)
       if (checkIsImageFile(evidenceFile.type)) {
-        // Upload original file first (for audit purposes)
-        const originalFilePath = `evidence/${opportunityId}/${originalFileName}`
-        const { error: originalUploadError } = await adminClient.storage
+        // Upload image file directly (watermarking disabled due to sharp library issues on Vercel)
+        const filePath = `evidence/${opportunityId}/${timestamp}_${evidenceFile.name}`
+        const { error: uploadError } = await adminClient.storage
           .from('attachments')
-          .upload(originalFilePath, buffer, {
+          .upload(filePath, buffer, {
             contentType: evidenceFile.type,
             upsert: false,
           })
 
-        if (!originalUploadError) {
-          const { data: originalSignedUrl } = await adminClient.storage
-            .from('attachments')
-            .createSignedUrl(originalFilePath, 60 * 60 * 24 * 365) // 1 year
-          evidenceOriginalUrl = originalSignedUrl?.signedUrl || null
-        }
-
-        // Add watermark to image (if watermark module is available)
-        if (addWatermark) {
-          const watermarkData = {
-            updateTime,
-            companyName,
-            pipelineStage: newStage,
-            salesName,
-            location: {
-              lat: locationLat ? parseFloat(locationLat) : null,
-              lng: locationLng ? parseFloat(locationLng) : null,
-              address: locationAddress || null,
-            },
-          }
-
-          try {
-            buffer = await addWatermark(buffer, watermarkData)
-          } catch (err) {
-            console.error('Watermark failed, using original:', err)
-          }
-        }
-
-        // Upload watermarked image
-        const watermarkedFilePath = `evidence/${opportunityId}/${watermarkedFileName}`
-        const { error: uploadError } = await adminClient.storage
-          .from('attachments')
-          .upload(watermarkedFilePath, buffer, {
-            contentType: 'image/jpeg',
-            upsert: false,
-          })
-
         if (uploadError) {
-          console.error('Error uploading watermarked evidence:', uploadError)
+          console.error('Error uploading evidence:', uploadError)
         } else {
           const { data: signedUrl } = await adminClient.storage
             .from('attachments')
-            .createSignedUrl(watermarkedFilePath, 60 * 60 * 24 * 365) // 1 year
+            .createSignedUrl(filePath, 60 * 60 * 24 * 365) // 1 year
 
           evidenceUrl = signedUrl?.signedUrl || null
-          evidenceFileName = `${baseFileName}_watermarked.jpg`
+          evidenceFileName = evidenceFile.name
         }
       } else {
         // Non-image files - upload as-is
