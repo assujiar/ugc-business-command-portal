@@ -517,24 +517,21 @@ export function calculatePipelineTimeline(
       }
     } else {
       // Active pipeline
-      if (i < currentStageIndex) {
-        // Past stage - done
+      if (i <= currentStageIndex) {
+        // Past or current stage - done (pipeline has reached this stage)
         status = 'done'
         completedAt = stageEntryTimes[stage] || null
-        // If we have entry time for next stage, use that as completion time
-        if (i < ALL_PIPELINE_STAGES.length - 1 && stageEntryTimes[ALL_PIPELINE_STAGES[i + 1]]) {
+        // If we have entry time for next stage, use that as completion time for past stages
+        if (i < currentStageIndex && i < ALL_PIPELINE_STAGES.length - 1 && stageEntryTimes[ALL_PIPELINE_STAGES[i + 1]]) {
           completedAt = stageEntryTimes[ALL_PIPELINE_STAGES[i + 1]]
         }
-      } else if (i === currentStageIndex) {
-        // Current stage - check if overdue
+      } else {
+        // Future stage - check if overdue
         if (dueDate && dueDate < now) {
           status = 'overdue'
         } else {
-          status = 'upcoming' // Current stage not yet done
+          status = 'upcoming'
         }
-      } else {
-        // Future stage
-        status = 'upcoming'
       }
     }
 
