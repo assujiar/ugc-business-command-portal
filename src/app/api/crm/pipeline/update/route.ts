@@ -307,7 +307,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. Create stage history record
-    const { error: historyError } = await (adminClient as any)
+    // Note: The table originally has from_stage/to_stage columns.
+    // Migration 023 adds old_stage/new_stage columns.
+    // Try with all columns first, fallback to original columns only if it fails.
+    let historyError = null
+
+    // First try: Insert with all columns (works if migration 023 has been run)
+    const { error: historyError1 } = await (adminClient as any)
       .from('opportunity_stage_history')
       .insert({
         opportunity_id: opportunityId,
@@ -319,8 +325,28 @@ export async function POST(request: NextRequest) {
         notes: notes || null,
       })
 
+    if (historyError1) {
+      console.error('Stage history insert (attempt 1 - all columns):', historyError1)
+
+      // Fallback: Try with original columns only (works before migration 023)
+      const { error: historyError2 } = await (adminClient as any)
+        .from('opportunity_stage_history')
+        .insert({
+          opportunity_id: opportunityId,
+          from_stage: oldStage,
+          to_stage: newStage,
+          changed_by: user.id,
+          notes: notes || null,
+        })
+
+      if (historyError2) {
+        console.error('Stage history insert (attempt 2 - original columns):', historyError2)
+        historyError = historyError2
+      }
+    }
+
     if (historyError) {
-      console.error('Error creating stage history:', historyError)
+      console.error('Error creating stage history (all attempts failed):', historyError)
     }
 
     return NextResponse.json({
