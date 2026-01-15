@@ -116,14 +116,16 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
   const [selectedStage, setSelectedStage] = useState<OpportunityStage | 'all'>('all')
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [currentTime, setCurrentTime] = useState<Date | undefined>(undefined)
   const [updateDialog, setUpdateDialog] = useState<{
     open: boolean
     opportunity: Opportunity | null
   }>({ open: false, opportunity: null })
 
-  // Calculate is_overdue client-side to avoid hydration mismatch
+  // Set current time only on client-side to avoid hydration mismatch
   useEffect(() => {
     setMounted(true)
+    setCurrentTime(new Date())
   }, [])
 
   // Helper to check if opportunity is overdue
@@ -363,7 +365,8 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
         created_at: opp.created_at,
         closed_at: opp.closed_at,
       },
-      opp.stage_history
+      opp.stage_history,
+      currentTime // Pass current time to avoid hydration mismatch
     )
   }
 
