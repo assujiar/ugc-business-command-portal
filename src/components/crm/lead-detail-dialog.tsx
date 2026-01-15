@@ -84,7 +84,8 @@ interface Lead {
   created_by: string | null
   created_at: string
   updated_at: string
-  // Creator info for MACX access check
+  // Creator info
+  creator_name?: string | null
   creator_role?: UserRole | null
   creator_department?: string | null
   creator_is_marketing?: boolean | null
@@ -784,6 +785,14 @@ export function LeadDetailDialog({
               <div>
                 <Label className="text-xs text-muted-foreground">Created At</Label>
                 <p>{formatDate(lead.created_at)}</p>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Created By</Label>
+                <p>
+                  {lead.creator_name
+                    ? `${lead.creator_name}${lead.creator_department ? ` - ${lead.creator_department}` : ''}`
+                    : '-'}
+                </p>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Updated At</Label>
