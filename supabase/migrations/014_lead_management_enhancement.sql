@@ -113,9 +113,13 @@ CREATE INDEX IF NOT EXISTS idx_accounts_last_transaction ON accounts(last_transa
 -- ALTER OPPORTUNITIES TABLE
 -- =====================================================
 ALTER TABLE opportunities
+  ADD COLUMN IF NOT EXISTS lead_id TEXT REFERENCES leads(lead_id),
   ADD COLUMN IF NOT EXISTS lost_reason lost_reason,
   ADD COLUMN IF NOT EXISTS competitor_price DECIMAL(15,2),
   ADD COLUMN IF NOT EXISTS customer_budget DECIMAL(15,2);
+
+-- Index for lead_id on opportunities
+CREATE INDEX IF NOT EXISTS idx_opportunities_lead_id ON opportunities(lead_id);
 
 -- Index for lost opportunities
 CREATE INDEX IF NOT EXISTS idx_opportunities_lost_reason ON opportunities(lost_reason) WHERE stage = 'Closed Lost';
