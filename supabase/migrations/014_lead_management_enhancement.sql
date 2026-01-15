@@ -111,17 +111,14 @@ CREATE INDEX IF NOT EXISTS idx_accounts_last_transaction ON accounts(last_transa
 
 -- =====================================================
 -- ALTER OPPORTUNITIES TABLE
+-- Note: lost_reason already exists as TEXT in opportunities table
+-- Note: source_lead_id already exists for linking to leads
 -- =====================================================
 ALTER TABLE opportunities
-  ADD COLUMN IF NOT EXISTS lead_id TEXT REFERENCES leads(lead_id),
-  ADD COLUMN IF NOT EXISTS lost_reason lost_reason,
   ADD COLUMN IF NOT EXISTS competitor_price DECIMAL(15,2),
   ADD COLUMN IF NOT EXISTS customer_budget DECIMAL(15,2);
 
--- Index for lead_id on opportunities
-CREATE INDEX IF NOT EXISTS idx_opportunities_lead_id ON opportunities(lead_id);
-
--- Index for lost opportunities
+-- Index for lost opportunities (lost_reason is existing TEXT column)
 CREATE INDEX IF NOT EXISTS idx_opportunities_lost_reason ON opportunities(lost_reason) WHERE stage = 'Closed Lost';
 
 -- =====================================================
@@ -244,6 +241,7 @@ LEFT JOIN profiles ps ON l.sales_owner_user_id = ps.user_id
 LEFT JOIN accounts a ON l.account_id = a.account_id;
 
 -- Create view for pipeline with updates
+-- Note: opportunities.source_lead_id is the FK to leads (not lead_id)
 DROP VIEW IF EXISTS v_pipeline_with_updates CASCADE;
 CREATE VIEW v_pipeline_with_updates AS
 SELECT
@@ -253,18 +251,18 @@ SELECT
   o.estimated_value,
   o.currency,
   o.probability,
-  o.expected_close_date,
+  o.next_step_due_date AS expected_close_date,
   o.next_step,
   o.next_step_due_date,
-  o.close_reason,
+  o.outcome AS close_reason,
   o.lost_reason,
   o.competitor_price,
   o.customer_budget,
   o.closed_at,
-  o.notes,
+  o.description AS notes,
   o.owner_user_id,
   o.account_id,
-  o.lead_id,
+  o.source_lead_id AS lead_id,
   o.created_at,
   o.updated_at,
   a.company_name AS account_name,
@@ -281,7 +279,7 @@ SELECT
 FROM opportunities o
 LEFT JOIN accounts a ON o.account_id = a.account_id
 LEFT JOIN profiles p ON o.owner_user_id = p.user_id
-LEFT JOIN leads l ON o.lead_id = l.lead_id;
+LEFT JOIN leads l ON o.source_lead_id = l.lead_id;
 
 -- Create view for sales inbox (Lead Bidding) - unclaimed leads from Assigned to Sales
 DROP VIEW IF EXISTS v_lead_bidding CASCADE;
@@ -441,18 +439,31 @@ END$$;
 
 DO $$
 BEGIN
-    COMMENT ON TYPE lost_reason IS 'Reasons for lost opportunities in pipeline';
+    COMMENT ON TYPE approach_method IS 'Methods used for approaching opportunities';
+EXCEPTION WHEN OTHERS THEN NULL;
+END$$;
+
+-- Comments wrapped in DO blocks to prevent failure if objects don't exist
+DO $$
+BEGIN
+    COMMENT ON TABLE pipeline_updates IS 'Tracking pipeline update activities with evidence and location';
 EXCEPTION WHEN OTHERS THEN NULL;
 END$$;
 
 DO $$
 BEGIN
-    COMMENT ON TYPE approach_method IS 'Methods used for approaching opportunities';
+    COMMENT ON COLUMN leads.potential_revenue IS 'Estimated revenue potential when handing over to sales';
 EXCEPTION WHEN OTHERS THEN NULL;
 END$$;
 
-COMMENT ON TABLE pipeline_updates IS 'Tracking pipeline update activities with evidence and location';
-COMMENT ON COLUMN leads.potential_revenue IS 'Estimated revenue potential when handing over to sales';
-COMMENT ON COLUMN leads.claim_status IS 'Whether the lead has been claimed by sales';
-COMMENT ON COLUMN accounts.account_status IS 'Current lifecycle status of the account';
-COMMENT ON COLUMN opportunities.lost_reason IS 'Reason for losing the opportunity';
+DO $$
+BEGIN
+    COMMENT ON COLUMN leads.claim_status IS 'Whether the lead has been claimed by sales';
+EXCEPTION WHEN OTHERS THEN NULL;
+END$$;
+
+DO $$
+BEGIN
+    COMMENT ON COLUMN accounts.account_status IS 'Current lifecycle status of the account';
+EXCEPTION WHEN OTHERS THEN NULL;
+END$$;
