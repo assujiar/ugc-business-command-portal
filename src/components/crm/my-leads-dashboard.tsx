@@ -22,7 +22,6 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import { ACCOUNT_STATUSES } from '@/lib/constants'
 import {
   Users,
   Building2,
@@ -52,12 +51,7 @@ interface Lead {
   created_at: string
   is_own_lead: boolean
   account_id: string | null
-  account_name: string | null
-  account_status: string | null
   opportunity_id: string | null
-  opportunity_name: string | null
-  opportunity_stage: string | null
-  opportunity_value: number | null
 }
 
 interface MyLeadsDashboardProps {
@@ -98,41 +92,6 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
   const claimedLeads = leads.filter(l => l.claim_status === 'claimed').length
   const ownLeads = leads.filter(l => l.is_own_lead).length
   const withPipeline = leads.filter(l => l.opportunity_id).length
-
-  const getStatusBadgeVariant = (status: string | null) => {
-    switch (status) {
-      case 'Qualified':
-      case 'Assign to Sales':
-        return 'default'
-      case 'Prospecting':
-        return 'outline'
-      default:
-        return 'secondary'
-    }
-  }
-
-  const getAccountStatusLabel = (status: string | null) => {
-    const found = ACCOUNT_STATUSES.find(s => s.value === status)
-    return found?.label || status || '-'
-  }
-
-  const getAccountStatusBadgeVariant = (status: string | null) => {
-    switch (status) {
-      case 'new_account':
-        return 'default'
-      case 'active_account':
-        return 'default'
-      case 'calon_account':
-        return 'secondary'
-      case 'passive_account':
-        return 'outline'
-      case 'lost_account':
-      case 'failed_account':
-        return 'destructive'
-      default:
-        return 'secondary'
-    }
-  }
 
   const getPriorityLabel = (priority: number) => {
     switch (priority) {
@@ -244,48 +203,30 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                         </TableCell>
                         <TableCell>
                           {lead.account_id ? (
-                            <div>
-                              <Link
-                                href={`/accounts?id=${lead.account_id}`}
-                                className="text-brand hover:underline text-sm"
-                              >
-                                {lead.account_name || 'View Account'}
-                              </Link>
-                              <Badge
-                                variant={getAccountStatusBadgeVariant(lead.account_status)}
-                                className="ml-2 text-xs"
-                              >
-                                {getAccountStatusLabel(lead.account_status)}
-                              </Badge>
-                            </div>
+                            <Link
+                              href={`/accounts?id=${lead.account_id}`}
+                              className="text-brand hover:underline text-sm"
+                            >
+                              View Account
+                            </Link>
                           ) : (
                             <span className="text-muted-foreground text-sm">-</span>
                           )}
                         </TableCell>
                         <TableCell>
                           {lead.opportunity_id ? (
-                            <div>
-                              <Link
-                                href={`/pipeline?opp=${lead.opportunity_id}`}
-                                className="text-brand hover:underline text-sm"
-                              >
-                                {lead.opportunity_name || 'View Pipeline'}
-                              </Link>
-                              <Badge
-                                variant="outline"
-                                className="ml-2 text-xs"
-                              >
-                                {lead.opportunity_stage}
-                              </Badge>
-                            </div>
+                            <Link
+                              href={`/pipeline?opp=${lead.opportunity_id}`}
+                              className="text-brand hover:underline text-sm"
+                            >
+                              View Pipeline
+                            </Link>
                           ) : (
                             <span className="text-muted-foreground text-sm">-</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {lead.opportunity_value
-                            ? formatCurrency(lead.opportunity_value)
-                            : lead.potential_revenue
+                          {lead.potential_revenue
                             ? formatCurrency(lead.potential_revenue)
                             : '-'}
                         </TableCell>
@@ -368,9 +309,9 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                             {lead.source}
                           </Badge>
                         )}
-                        {lead.opportunity_stage && (
+                        {lead.opportunity_id && (
                           <Badge variant="secondary" className="text-xs">
-                            {lead.opportunity_stage}
+                            Has Pipeline
                           </Badge>
                         )}
                       </div>
@@ -380,9 +321,9 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                           <p>{formatDate(lead.created_at)}</p>
                         </div>
                         <div className="text-right">
-                          {(lead.opportunity_value || lead.potential_revenue) && (
+                          {lead.potential_revenue && (
                             <p className="text-sm font-medium">
-                              {formatCurrency(lead.opportunity_value || lead.potential_revenue)}
+                              {formatCurrency(lead.potential_revenue)}
                             </p>
                           )}
                         </div>

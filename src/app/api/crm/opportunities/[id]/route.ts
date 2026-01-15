@@ -1,10 +1,13 @@
 // =====================================================
 // API Route: /api/crm/opportunities/[id]
 // SOURCE: PDF Section 5 - Opportunity Operations
+// Pipeline cycle target: 7 days from Prospecting to Closed
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getStageConfig, calculateNextStepDueDate } from '@/lib/constants'
+import type { OpportunityStage } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -41,6 +44,7 @@ export async function GET(
 }
 
 // PATCH /api/crm/opportunities/[id] - Update opportunity
+// Auto-sets next_step_due_date and probability when stage changes
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -56,12 +60,36 @@ export async function PATCH(
 
     const body = await request.json()
 
+    // Build update data
+    const updateData: Record<string, unknown> = {
+      ...body,
+      updated_at: new Date().toISOString(),
+    }
+
+    // If stage is being updated, auto-set next_step_due_date, probability, and next_step
+    if (body.stage) {
+      const stageConfig = getStageConfig(body.stage as OpportunityStage)
+      if (stageConfig) {
+        // Calculate next step due date based on stage timeline
+        const nextDueDate = calculateNextStepDueDate(body.stage as OpportunityStage)
+        updateData.next_step_due_date = nextDueDate.toISOString().split('T')[0]
+        updateData.probability = stageConfig.probability
+
+        // Only set next_step if not provided in request
+        if (!body.next_step) {
+          updateData.next_step = stageConfig.nextStep
+        }
+
+        // If closing the opportunity, set closed_at
+        if (body.stage === 'Closed Won' || body.stage === 'Closed Lost') {
+          updateData.closed_at = new Date().toISOString()
+        }
+      }
+    }
+
     const { data, error } = await (supabase as any)
       .from('opportunities' as any as any)
-      .update({
-        ...body,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('opportunity_id', id)
       .select()
       .single()
