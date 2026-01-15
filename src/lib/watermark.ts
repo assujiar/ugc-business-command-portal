@@ -1,7 +1,7 @@
 // =====================================================
 // Image Watermark Utility
 // Adds watermark with pipeline update information to evidence photos
-// Uses dynamic import for Sharp to handle serverless environments
+// Uses watermark-jimp (pure JS) for Vercel serverless compatibility
 // =====================================================
 
 import { formatDateTimeFull } from '@/lib/utils'
@@ -18,25 +18,18 @@ export interface WatermarkData {
   }
 }
 
-// Dynamic import for Sharp with caching
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let sharpInstance: any = null
-let sharpLoadAttempted = false
+// Dynamic import for watermark-jimp
+let watermarkModule: typeof import('watermark-jimp') | null = null
 
-async function getSharp(): Promise<any> {
-  if (sharpLoadAttempted) {
-    return sharpInstance
-  }
-
-  sharpLoadAttempted = true
+async function getWatermarkModule(): Promise<typeof import('watermark-jimp') | null> {
+  if (watermarkModule) return watermarkModule
 
   try {
-    const sharp = await import('sharp')
-    sharpInstance = sharp.default || sharp
-    console.log('[Watermark] Sharp module loaded successfully')
-    return sharpInstance
+    watermarkModule = await import('watermark-jimp')
+    console.log('[Watermark] watermark-jimp module loaded successfully')
+    return watermarkModule
   } catch (error) {
-    console.error('[Watermark] Failed to load Sharp module:', error)
+    console.error('[Watermark] Failed to load watermark-jimp:', error)
     return null
   }
 }
@@ -50,94 +43,49 @@ export async function addWatermark(
   imageBuffer: Buffer | Uint8Array,
   watermarkData: WatermarkData
 ): Promise<Uint8Array> {
-  // Get Sharp module dynamically
-  const sharp = await getSharp()
+  const wm = await getWatermarkModule()
 
-  if (!sharp) {
-    console.warn('[Watermark] Sharp not available, returning original image')
+  if (!wm) {
+    console.warn('[Watermark] Module not available, returning original image')
     return imageBuffer instanceof Uint8Array ? imageBuffer : new Uint8Array(imageBuffer)
   }
 
   try {
-    // Convert to Buffer if needed for sharp
+    // Convert to Buffer if needed
     const inputBuffer = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer)
 
-    // Get image metadata to determine dimensions
-    const metadata = await sharp(inputBuffer).metadata()
-    const width = metadata.width || 800
-    const height = metadata.height || 600
-
-    // Calculate text size based on image dimensions (responsive)
-    const baseFontSize = Math.max(Math.floor(width / 40), 14) // Min 14px
-    const lineHeight = Math.floor(baseFontSize * 1.4)
-    const padding = Math.floor(baseFontSize * 0.8)
-
-    // Format watermark text lines
+    // Format watermark text
     const dateTime = formatDateTimeFull(watermarkData.updateTime)
     const coordText = watermarkData.location.lat && watermarkData.location.lng
       ? `${watermarkData.location.lat.toFixed(6)}, ${watermarkData.location.lng.toFixed(6)}`
       : '-'
 
     // Truncate address if too long
-    const maxAddressLength = 50
     let address = watermarkData.location.address || '-'
-    if (address.length > maxAddressLength) {
-      address = address.substring(0, maxAddressLength) + '...'
+    if (address.length > 35) {
+      address = address.substring(0, 35) + '...'
     }
 
-    // Watermark lines
-    const lines = [
-      `Tanggal: ${dateTime}`,
-      `Perusahaan: ${watermarkData.companyName}`,
+    // Create multi-line watermark text
+    const watermarkText = [
+      `${dateTime}`,
+      `${watermarkData.companyName}`,
       `Stage: ${watermarkData.pipelineStage}`,
       `Sales: ${watermarkData.salesName}`,
-      `Koordinat: ${coordText}`,
-      `Lokasi: ${address}`,
-    ]
+      `Loc: ${coordText}`,
+      `${address}`,
+    ].join(' | ')
 
-    // Calculate overlay dimensions
-    const overlayHeight = (lines.length * lineHeight) + (padding * 2)
-    const overlayWidth = width
+    // Apply text watermark using watermark-jimp
+    const watermarkedBuffer = await wm.addTextWatermark(inputBuffer, {
+      text: watermarkText,
+      textSize: 2, // 1-8, smaller = smaller text
+      opacity: 0.8,
+      color: '#FFFFFF',
+      position: 'bottom-center',
+    })
 
-    // Create SVG text overlay with semi-transparent background
-    const svgText = `
-      <svg width="${overlayWidth}" height="${overlayHeight}">
-        <defs>
-          <style>
-            .watermark-text {
-              font-family: Arial, sans-serif;
-              font-size: ${baseFontSize}px;
-              fill: white;
-              font-weight: bold;
-              text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-            }
-          </style>
-        </defs>
-        <!-- Semi-transparent background -->
-        <rect x="0" y="0" width="${overlayWidth}" height="${overlayHeight}" fill="rgba(0,0,0,0.6)" />
-
-        <!-- Watermark text -->
-        ${lines.map((line, index) => `
-          <text x="${padding}" y="${padding + (index + 1) * lineHeight - 4}" class="watermark-text">
-            ${escapeXml(line)}
-          </text>
-        `).join('')}
-      </svg>
-    `
-
-    // Apply watermark to bottom of image
-    const watermarkedBuffer = await sharp(inputBuffer)
-      .composite([
-        {
-          input: Buffer.from(svgText),
-          gravity: 'south', // Position at bottom
-        }
-      ])
-      .jpeg({ quality: 90 })
-      .toBuffer()
-
-    console.log('[Watermark] Successfully added watermark to image')
-    // Return as Uint8Array for storage compatibility
+    console.log('[Watermark] Successfully added text watermark to image')
     return new Uint8Array(watermarkedBuffer)
   } catch (error) {
     console.error('[Watermark] Error adding watermark:', error)
@@ -147,20 +95,33 @@ export async function addWatermark(
 }
 
 /**
- * Escape special XML characters to prevent SVG injection
- */
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
-}
-
-/**
  * Check if a file is an image based on MIME type
  */
 export function isImageFile(mimeType: string): boolean {
   return mimeType.startsWith('image/')
+}
+
+/**
+ * Generate watermark text for display purposes
+ * Can be used in frontend to overlay text on image viewer
+ */
+export function generateWatermarkText(data: WatermarkData): string[] {
+  const dateTime = formatDateTimeFull(data.updateTime)
+  const coordText = data.location.lat && data.location.lng
+    ? `${data.location.lat.toFixed(6)}, ${data.location.lng.toFixed(6)}`
+    : '-'
+
+  let address = data.location.address || '-'
+  if (address.length > 50) {
+    address = address.substring(0, 50) + '...'
+  }
+
+  return [
+    `Tanggal: ${dateTime}`,
+    `Perusahaan: ${data.companyName}`,
+    `Stage: ${data.pipelineStage}`,
+    `Sales: ${data.salesName}`,
+    `Koordinat: ${coordText}`,
+    `Lokasi: ${address}`,
+  ]
 }

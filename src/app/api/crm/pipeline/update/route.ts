@@ -311,6 +311,8 @@ export async function POST(request: NextRequest) {
       .from('opportunity_stage_history')
       .insert({
         opportunity_id: opportunityId,
+        from_stage: oldStage,
+        to_stage: newStage,
         old_stage: oldStage,
         new_stage: newStage,
         changed_by: user.id,
