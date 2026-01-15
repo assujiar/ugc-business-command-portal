@@ -23,36 +23,15 @@ export default async function PipelinePage() {
   }
 
   // Fetch opportunities with related account and owner data
-  // Step 1: Fetch opportunities
-  const { data: opportunities, error: oppError } = await supabase
+  // Step 1: Fetch ALL opportunities (no filter)
+  const { data: opportunities, error: oppError } = await (supabase as any)
     .from('opportunities')
-    .select(`
-      opportunity_id,
-      name,
-      stage,
-      estimated_value,
-      currency,
-      probability,
-      next_step,
-      next_step_due_date,
-      lost_reason,
-      competitor_price,
-      customer_budget,
-      closed_at,
-      outcome,
-      owner_user_id,
-      account_id,
-      source_lead_id,
-      created_at,
-      updated_at
-    `)
+    .select('*')
     .order('created_at', { ascending: false })
 
-  if (oppError) {
-    console.error('Error fetching opportunities:', oppError)
-  }
-
-  console.log('Pipeline: Fetched opportunities count:', opportunities?.length || 0)
+  console.log('Pipeline DEBUG - Error:', oppError)
+  console.log('Pipeline DEBUG - Data:', JSON.stringify(opportunities))
+  console.log('Pipeline DEBUG - Count:', opportunities?.length || 0)
 
   // Step 2: Fetch account data for each opportunity
   const accountIds = Array.from(new Set((opportunities || []).map((o: any) => o.account_id).filter(Boolean))) as string[]
