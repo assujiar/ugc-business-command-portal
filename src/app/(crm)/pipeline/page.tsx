@@ -51,7 +51,7 @@ export default async function PipelinePage() {
     console.error('Error fetching opportunities:', oppError)
   }
 
-  // Transform data
+  // Transform data - add all fields required by Opportunity interface
   const transformedOpportunities = (opportunities || []).map((opp: any) => ({
     opportunity_id: opp.opportunity_id,
     name: opp.name,
@@ -59,18 +59,23 @@ export default async function PipelinePage() {
     estimated_value: opp.estimated_value,
     currency: opp.currency,
     probability: opp.probability,
+    expected_close_date: null,
     next_step: opp.next_step,
     next_step_due_date: opp.next_step_due_date,
+    close_reason: null,
     lost_reason: opp.lost_reason,
     competitor_price: opp.competitor_price,
     customer_budget: opp.customer_budget,
     closed_at: opp.closed_at,
-    outcome: opp.outcome,
+    notes: null,
     owner_user_id: opp.owner_user_id,
     account_id: opp.account_id,
-    source_lead_id: opp.source_lead_id,
+    lead_id: opp.source_lead_id,
     created_at: opp.created_at,
     updated_at: opp.updated_at,
+    account_name: null,
+    account_status: null,
+    owner_name: null,
     is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() && !['Closed Won', 'Closed Lost'].includes(opp.stage),
   }))
 
