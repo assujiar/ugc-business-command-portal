@@ -70,6 +70,9 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
     loading: boolean
   }>({ open: false, lead: null, loading: false })
 
+  // State for creating opportunity
+  const [creatingOpportunity, setCreatingOpportunity] = useState<string | null>(null)
+
   // Function to fetch full lead details including shipment
   const fetchLeadDetails = async (leadId: string) => {
     setDetailDialog({ open: true, lead: null, loading: true })
@@ -84,6 +87,30 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
     } catch (error) {
       console.error('Error fetching lead:', error)
       setDetailDialog({ open: false, lead: null, loading: false })
+    }
+  }
+
+  // Function to create opportunity for lead without pipeline
+  const createOpportunity = async (leadId: string) => {
+    setCreatingOpportunity(leadId)
+    try {
+      const response = await fetch(`/api/crm/leads/${leadId}/create-opportunity`, {
+        method: 'POST',
+      })
+      if (response.ok) {
+        const { data } = await response.json()
+        // Refresh the page to show updated data
+        router.refresh()
+        alert(`Pipeline berhasil dibuat: ${data.opportunity_id}`)
+      } else {
+        const { error } = await response.json()
+        alert(`Gagal membuat pipeline: ${error}`)
+      }
+    } catch (error) {
+      console.error('Error creating opportunity:', error)
+      alert('Gagal membuat pipeline')
+    } finally {
+      setCreatingOpportunity(null)
     }
   }
 
@@ -221,6 +248,23 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                             >
                               View Pipeline
                             </Link>
+                          ) : lead.account_id && lead.claim_status === 'claimed' ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => createOpportunity(lead.lead_id)}
+                              disabled={creatingOpportunity === lead.lead_id}
+                            >
+                              {creatingOpportunity === lead.lead_id ? (
+                                'Creating...'
+                              ) : (
+                                <>
+                                  <PlusCircle className="h-3 w-3 mr-1" />
+                                  Create Pipeline
+                                </>
+                              )}
+                            </Button>
                           ) : (
                             <span className="text-muted-foreground text-sm">-</span>
                           )}
@@ -258,7 +302,7 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                                 <Eye className="h-4 w-4 mr-2" />
                                 View Detail
                               </DropdownMenuItem>
-                              {lead.opportunity_id && (
+                              {lead.opportunity_id ? (
                                 <>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem asChild>
@@ -268,7 +312,18 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                                     </Link>
                                   </DropdownMenuItem>
                                 </>
-                              )}
+                              ) : lead.account_id && lead.claim_status === 'claimed' ? (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => createOpportunity(lead.lead_id)}
+                                    disabled={creatingOpportunity === lead.lead_id}
+                                  >
+                                    <PlusCircle className="h-4 w-4 mr-2" />
+                                    {creatingOpportunity === lead.lead_id ? 'Creating...' : 'Create Pipeline'}
+                                  </DropdownMenuItem>
+                                </>
+                              ) : null}
                               {lead.account_id && (
                                 <DropdownMenuItem asChild>
                                   <Link href={`/accounts?id=${lead.account_id}`}>
@@ -339,14 +394,31 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                           <Eye className="h-4 w-4 mr-1" />
                           View Detail
                         </Button>
-                        {lead.opportunity_id && (
+                        {lead.opportunity_id ? (
                           <Button size="sm" variant="outline" asChild className="flex-1">
                             <Link href={`/pipeline?opp=${lead.opportunity_id}`}>
                               Pipeline
                               <ArrowRight className="h-4 w-4 ml-1" />
                             </Link>
                           </Button>
-                        )}
+                        ) : lead.account_id && lead.claim_status === 'claimed' ? (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="flex-1"
+                            onClick={() => createOpportunity(lead.lead_id)}
+                            disabled={creatingOpportunity === lead.lead_id}
+                          >
+                            {creatingOpportunity === lead.lead_id ? (
+                              'Creating...'
+                            ) : (
+                              <>
+                                <PlusCircle className="h-4 w-4 mr-1" />
+                                Create Pipeline
+                              </>
+                            )}
+                          </Button>
+                        ) : null}
                       </div>
                     </CardContent>
                   </Card>
