@@ -1,12 +1,13 @@
 // =====================================================
 // API Route: /api/crm/pipeline/update
-// Pipeline Update with Evidence Upload
+// Pipeline Update with Evidence Upload + Watermarking
 // Creates activity record and updates account status
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { addWatermark, isImageFile } from '@/lib/watermark'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -39,10 +40,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Get current opportunity
+    // Get current opportunity with account and lead info for watermark
     const { data: opportunity, error: oppError } = await (adminClient as any)
       .from('opportunities')
-      .select('*, accounts(account_id, account_status)')
+      .select(`
+        *,
+        accounts(account_id, account_status, company_name),
+        leads(company_name)
+      `)
       .eq('opportunity_id', opportunityId)
       .single() as { data: any; error: any }
 
@@ -50,41 +55,115 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
     }
 
+    // Get sales user profile for watermark
+    const { data: salesProfile } = await supabase
+      .from('profiles')
+      .select('name')
+      .eq('user_id', user.id)
+      .single()
+
     const oldStage = opportunity.stage
+    const companyName = opportunity.accounts?.company_name || opportunity.leads?.company_name || opportunity.name
+    const salesName = (salesProfile as { name: string } | null)?.name || 'Unknown'
+    const updateTime = new Date()
+
     let evidenceUrl: string | null = null
+    let evidenceOriginalUrl: string | null = null
     let evidenceFileName: string | null = null
 
-    // 1. Upload evidence file if provided
+    // 1. Upload evidence file if provided (with watermark for images)
     if (evidenceFile) {
       const timestamp = Date.now()
-      const fileName = `${timestamp}_${evidenceFile.name}`
-      const filePath = `evidence/${opportunityId}/${fileName}`
+      const fileExtension = evidenceFile.name.split('.').pop()
+      const baseFileName = evidenceFile.name.replace(/\.[^/.]+$/, '')
+      const originalFileName = `${timestamp}_original_${evidenceFile.name}`
+      const watermarkedFileName = `${timestamp}_${baseFileName}_watermarked.jpg`
 
       const arrayBuffer = await evidenceFile.arrayBuffer()
-      const buffer = new Uint8Array(arrayBuffer)
+      let buffer: Uint8Array = new Uint8Array(arrayBuffer)
 
-      const { error: uploadError } = await adminClient.storage
-        .from('attachments')
-        .upload(filePath, buffer, {
-          contentType: evidenceFile.type,
-          upsert: false,
-        })
-
-      if (uploadError) {
-        console.error('Error uploading evidence:', uploadError)
-        // Continue without evidence if upload fails
-      } else {
-        const { data: signedUrl } = await adminClient.storage
+      // Check if it's an image file
+      if (isImageFile(evidenceFile.type)) {
+        // Upload original file first (for audit purposes)
+        const originalFilePath = `evidence/${opportunityId}/${originalFileName}`
+        const { error: originalUploadError } = await adminClient.storage
           .from('attachments')
-          .createSignedUrl(filePath, 60 * 60 * 24 * 365) // 1 year
+          .upload(originalFilePath, buffer, {
+            contentType: evidenceFile.type,
+            upsert: false,
+          })
 
-        evidenceUrl = signedUrl?.signedUrl || null
-        evidenceFileName = evidenceFile.name
+        if (!originalUploadError) {
+          const { data: originalSignedUrl } = await adminClient.storage
+            .from('attachments')
+            .createSignedUrl(originalFilePath, 60 * 60 * 24 * 365) // 1 year
+          evidenceOriginalUrl = originalSignedUrl?.signedUrl || null
+        }
+
+        // Add watermark to image
+        const watermarkData = {
+          updateTime,
+          companyName,
+          pipelineStage: newStage,
+          salesName,
+          location: {
+            lat: locationLat ? parseFloat(locationLat) : null,
+            lng: locationLng ? parseFloat(locationLng) : null,
+            address: locationAddress || null,
+          },
+        }
+
+        try {
+          buffer = await addWatermark(buffer, watermarkData)
+        } catch (err) {
+          console.error('Watermark failed, using original:', err)
+        }
+
+        // Upload watermarked image
+        const watermarkedFilePath = `evidence/${opportunityId}/${watermarkedFileName}`
+        const { error: uploadError } = await adminClient.storage
+          .from('attachments')
+          .upload(watermarkedFilePath, buffer, {
+            contentType: 'image/jpeg',
+            upsert: false,
+          })
+
+        if (uploadError) {
+          console.error('Error uploading watermarked evidence:', uploadError)
+        } else {
+          const { data: signedUrl } = await adminClient.storage
+            .from('attachments')
+            .createSignedUrl(watermarkedFilePath, 60 * 60 * 24 * 365) // 1 year
+
+          evidenceUrl = signedUrl?.signedUrl || null
+          evidenceFileName = `${baseFileName}_watermarked.jpg`
+        }
+      } else {
+        // Non-image files - upload as-is
+        const filePath = `evidence/${opportunityId}/${timestamp}_${evidenceFile.name}`
+
+        const { error: uploadError } = await adminClient.storage
+          .from('attachments')
+          .upload(filePath, buffer, {
+            contentType: evidenceFile.type,
+            upsert: false,
+          })
+
+        if (uploadError) {
+          console.error('Error uploading evidence:', uploadError)
+        } else {
+          const { data: signedUrl } = await adminClient.storage
+            .from('attachments')
+            .createSignedUrl(filePath, 60 * 60 * 24 * 365) // 1 year
+
+          evidenceUrl = signedUrl?.signedUrl || null
+          evidenceFileName = evidenceFile.name
+        }
       }
     }
 
     // 2. Create pipeline update record
-    const updateData = {
+    const updateData: Record<string, unknown> = {
       opportunity_id: opportunityId,
       old_stage: oldStage,
       new_stage: newStage,
@@ -96,7 +175,12 @@ export async function POST(request: NextRequest) {
       location_lng: locationLng ? parseFloat(locationLng) : null,
       location_address: locationAddress || null,
       updated_by: user.id,
-      updated_at: new Date().toISOString(),
+      updated_at: updateTime.toISOString(),
+    }
+
+    // Add original URL if we have a watermarked image
+    if (evidenceOriginalUrl) {
+      updateData.evidence_original_url = evidenceOriginalUrl
     }
 
     const { error: pipelineUpdateError } = await (adminClient as any)
@@ -110,11 +194,11 @@ export async function POST(request: NextRequest) {
     // 3. Update opportunity
     const oppUpdateData: Record<string, unknown> = {
       stage: newStage,
-      updated_at: new Date().toISOString(),
+      updated_at: updateTime.toISOString(),
     }
 
     if (newStage === 'Closed Won' || newStage === 'Closed Lost') {
-      oppUpdateData.closed_at = new Date().toISOString()
+      oppUpdateData.closed_at = updateTime.toISOString()
     }
 
     if (newStage === 'Closed Lost' && lostReason) {
@@ -141,8 +225,8 @@ export async function POST(request: NextRequest) {
       description: notes || `Pipeline updated from ${oldStage} to ${newStage}`,
       outcome: `Completed via ${approachMethod}`,
       status: 'Done',
-      due_date: new Date().toISOString().split('T')[0],
-      completed_at: new Date().toISOString(),
+      due_date: updateTime.toISOString().split('T')[0],
+      completed_at: updateTime.toISOString(),
       related_opportunity_id: opportunityId,
       related_account_id: opportunity.account_id,
       owner_user_id: user.id,
@@ -170,9 +254,9 @@ export async function POST(request: NextRequest) {
           .from('accounts')
           .update({
             account_status: newAccountStatus,
-            first_transaction_date: new Date().toISOString(),
-            last_transaction_date: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            first_transaction_date: updateTime.toISOString(),
+            last_transaction_date: updateTime.toISOString(),
+            updated_at: updateTime.toISOString(),
           })
           .eq('account_id', opportunity.account_id)
 
@@ -187,7 +271,7 @@ export async function POST(request: NextRequest) {
           .from('accounts')
           .update({
             account_status: newAccountStatus,
-            updated_at: new Date().toISOString(),
+            updated_at: updateTime.toISOString(),
           })
           .eq('account_id', opportunity.account_id)
 
@@ -219,6 +303,7 @@ export async function POST(request: NextRequest) {
         old_stage: oldStage,
         new_stage: newStage,
         evidence_url: evidenceUrl,
+        evidence_original_url: evidenceOriginalUrl,
       }
     })
   } catch (error) {
