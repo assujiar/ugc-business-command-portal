@@ -216,21 +216,6 @@ function buildTimeline(
       status = dueDate && dueDate < now ? 'overdue' : 'current'
     }
 
-    // Add stage entry if not Prospecting (already added as creation)
-    if (stage !== 'Prospecting' && entryDate) {
-      const historyEntry = data.stage_history.find(h => h.new_stage === stage)
-      items.push({
-        id: `stage-${stage}`,
-        type: 'stage_change',
-        stage,
-        date: entryDate,
-        dueDate: dueDate?.toISOString(),
-        status,
-        title: `Moved to ${stage}`,
-        actorName: historyEntry?.changer_name,
-      })
-    }
-
     // Add activities for this stage
     stageUpdates.forEach(update => {
       items.push({
