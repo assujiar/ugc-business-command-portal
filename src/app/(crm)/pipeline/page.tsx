@@ -23,6 +23,7 @@ export default async function PipelinePage() {
   }
 
   // Fetch opportunities with related account and owner data (using admin client to bypass RLS)
+  // Step 1: Fetch opportunities
   const { data: opportunities, error: oppError } = await (adminClient as any)
     .from('opportunities')
     .select(`
@@ -43,19 +44,54 @@ export default async function PipelinePage() {
       account_id,
       source_lead_id,
       created_at,
-      updated_at,
-      accounts (
-        company_name,
-        account_status
-      ),
-      profiles!opportunities_owner_user_id_fkey (
-        name
-      )
+      updated_at
     `)
     .order('created_at', { ascending: false })
 
   if (oppError) {
     console.error('Error fetching opportunities:', oppError)
+  }
+
+  console.log('Pipeline: Fetched opportunities count:', opportunities?.length || 0)
+
+  // Step 2: Fetch account data for each opportunity
+  const accountIds = Array.from(new Set((opportunities || []).map((o: any) => o.account_id).filter(Boolean))) as string[]
+  let accountsMap: Record<string, { company_name: string; account_status: string | null }> = {}
+
+  if (accountIds.length > 0) {
+    const { data: accounts, error: accError } = await (adminClient as any)
+      .from('accounts')
+      .select('account_id, company_name, account_status')
+      .in('account_id', accountIds)
+
+    if (accError) {
+      console.error('Error fetching accounts:', accError)
+    } else {
+      accountsMap = (accounts || []).reduce((acc: any, a: any) => {
+        acc[a.account_id] = { company_name: a.company_name, account_status: a.account_status }
+        return acc
+      }, {})
+    }
+  }
+
+  // Step 3: Fetch owner profiles
+  const ownerIds = Array.from(new Set((opportunities || []).map((o: any) => o.owner_user_id).filter(Boolean))) as string[]
+  let ownersMap: Record<string, string> = {}
+
+  if (ownerIds.length > 0) {
+    const { data: owners, error: ownError } = await (adminClient as any)
+      .from('profiles')
+      .select('user_id, name')
+      .in('user_id', ownerIds)
+
+    if (ownError) {
+      console.error('Error fetching owners:', ownError)
+    } else {
+      ownersMap = (owners || []).reduce((acc: any, o: any) => {
+        acc[o.user_id] = o.name
+        return acc
+      }, {})
+    }
   }
 
   // Transform data - add all fields required by Opportunity interface
@@ -80,9 +116,9 @@ export default async function PipelinePage() {
     lead_id: opp.source_lead_id,
     created_at: opp.created_at,
     updated_at: opp.updated_at,
-    account_name: opp.accounts?.company_name || null,
-    account_status: opp.accounts?.account_status || null,
-    owner_name: opp.profiles?.name || null,
+    account_name: accountsMap[opp.account_id]?.company_name || null,
+    account_status: accountsMap[opp.account_id]?.account_status || null,
+    owner_name: ownersMap[opp.owner_user_id] || null,
     is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() && !['Closed Won', 'Closed Lost'].includes(opp.stage),
   }))
 
