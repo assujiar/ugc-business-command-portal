@@ -33,6 +33,7 @@ import {
   INDUSTRIES,
   PRIORITY_LEVELS,
 } from '@/lib/constants'
+import { toast } from '@/hooks/use-toast'
 import type { LeadTriageStatus, LeadSource, UserRole } from '@/types/database'
 
 interface ShipmentDetails {
@@ -255,9 +256,12 @@ export function LeadDetailDialog({
       }
 
       setIsEditing(false)
+      toast.success('Perubahan tersimpan', `Lead ${editData.company_name} berhasil diupdate`)
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      setError(errorMessage)
+      toast.error('Gagal menyimpan', errorMessage)
     } finally {
       setLoading(false)
     }

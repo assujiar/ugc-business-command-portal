@@ -20,6 +20,7 @@ import {
 import { formatCurrency, formatDate, isOverdue } from '@/lib/utils'
 import { OPPORTUNITY_STAGES } from '@/lib/constants'
 import { MoreVertical, AlertCircle, ChevronRight } from 'lucide-react'
+import { toast } from '@/hooks/use-toast'
 
 interface Opportunity {
   opportunity_id: string
@@ -42,7 +43,7 @@ export function PipelineBoard({ opportunities }: PipelineBoardProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState<string | null>(null)
 
-  const handleStageChange = async (oppId: string, newStage: string) => {
+  const handleStageChange = async (oppId: string, newStage: string, oppName: string) => {
     setIsLoading(oppId)
     try {
       const response = await fetch(`/api/crm/opportunities/${oppId}/stage`, {
@@ -52,10 +53,17 @@ export function PipelineBoard({ opportunities }: PipelineBoardProps) {
       })
 
       if (response.ok) {
+        toast.success(
+          'Pipeline diupdate',
+          `${oppName} dipindahkan ke ${newStage}`
+        )
         router.refresh()
+      } else {
+        throw new Error('Failed to change stage')
       }
     } catch (error) {
       console.error('Error changing stage:', error)
+      toast.error('Gagal update pipeline', 'Terjadi kesalahan saat memindahkan stage')
     } finally {
       setIsLoading(null)
     }
@@ -123,7 +131,7 @@ export function PipelineBoard({ opportunities }: PipelineBoardProps) {
                         {getNextStages(opp.stage).map((nextStage) => (
                           <DropdownMenuItem
                             key={nextStage}
-                            onClick={() => handleStageChange(opp.opportunity_id, nextStage)}
+                            onClick={() => handleStageChange(opp.opportunity_id, nextStage, opp.name)}
                           >
                             <ChevronRight className="h-4 w-4 mr-2" />
                             Move to {nextStage}

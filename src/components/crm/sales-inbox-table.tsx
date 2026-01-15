@@ -29,6 +29,7 @@ import { UserPlus, Clock, AlertTriangle, MoreVertical, Eye } from 'lucide-react'
 import { formatDate, formatDateTime, isOverdue } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LeadDetailDialog } from '@/components/crm/lead-detail-dialog'
+import { toast } from '@/hooks/use-toast'
 import type { UserRole } from '@/types/database'
 
 interface PoolLead {
@@ -77,7 +78,7 @@ export function SalesInboxTable({ leads, currentUserId = '', userRole }: SalesIn
     }
   }
 
-  const handleClaim = async (poolId: number, createAccount: boolean = true) => {
+  const handleClaim = async (poolId: number, companyName: string, createAccount: boolean = true) => {
     setIsLoading(poolId)
     try {
       const response = await fetch('/api/crm/leads/claim', {
@@ -93,13 +94,15 @@ export function SalesInboxTable({ leads, currentUserId = '', userRole }: SalesIn
       const result = await response.json()
 
       if (result.data?.success) {
+        toast.success('Lead berhasil di-claim', `${companyName} sekarang ada di My Leads`)
         router.push('/my-leads')
         router.refresh()
       } else {
-        alert(result.data?.error || 'Failed to claim lead')
+        toast.error('Gagal claim lead', result.data?.error || 'Terjadi kesalahan')
       }
     } catch (error) {
       console.error('Error claiming lead:', error)
+      toast.error('Gagal claim lead', 'Terjadi kesalahan saat mengklaim lead')
     } finally {
       setIsLoading(null)
     }
@@ -191,7 +194,7 @@ export function SalesInboxTable({ leads, currentUserId = '', userRole }: SalesIn
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() => handleClaim(lead.pool_id)}
+                        onClick={() => handleClaim(lead.pool_id, lead.company_name)}
                       >
                         <UserPlus className="h-4 w-4 mr-2" />
                         Claim Lead
