@@ -218,6 +218,11 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
     setError(null)
 
     try {
+      // Debug: log shipment data before submission
+      console.log('=== DEBUG: Form Submit ===')
+      console.log('showShipmentDetails:', showShipmentDetails)
+      console.log('shipmentData:', JSON.stringify(shipmentData, null, 2))
+
       // Prepare shipment data if enabled
       const shipment = showShipmentDetails
         ? {
@@ -225,6 +230,8 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
             department: selectedService?.department || null,
           }
         : null
+
+      console.log('shipment to send:', JSON.stringify(shipment, null, 2))
 
       // If source is "Lainnya", use custom_source as source_detail
       const submitData = {
