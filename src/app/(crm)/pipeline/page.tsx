@@ -45,7 +45,8 @@ export default async function PipelinePage() {
       created_at,
       updated_at,
       accounts (
-        company_name
+        company_name,
+        account_status
       ),
       profiles!opportunities_owner_user_id_fkey (
         name
@@ -80,7 +81,7 @@ export default async function PipelinePage() {
     created_at: opp.created_at,
     updated_at: opp.updated_at,
     account_name: opp.accounts?.company_name || null,
-    account_status: null,
+    account_status: opp.accounts?.account_status || null,
     owner_name: opp.profiles?.name || null,
     is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() && !['Closed Won', 'Closed Lost'].includes(opp.stage),
   }))
