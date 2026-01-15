@@ -203,7 +203,8 @@ LEFT JOIN profiles pm ON l.marketing_owner_user_id = pm.user_id
 LEFT JOIN profiles ps ON l.sales_owner_user_id = ps.user_id;
 
 -- Create view for lead management consolidated page
-CREATE OR REPLACE VIEW v_lead_management AS
+DROP VIEW IF EXISTS v_lead_management;
+CREATE VIEW v_lead_management AS
 SELECT
   l.lead_id,
   l.company_name,
