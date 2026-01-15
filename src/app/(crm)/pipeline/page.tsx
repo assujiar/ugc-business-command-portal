@@ -23,7 +23,7 @@ export default async function PipelinePage() {
   }
 
   // Fetch opportunities
-  const { data: opportunities } = await supabase
+  const { data: opportunities, error: oppError } = await supabase
     .from('opportunities')
     .select(`
       opportunity_id,
@@ -32,30 +32,24 @@ export default async function PipelinePage() {
       estimated_value,
       currency,
       probability,
-      expected_close_date,
       next_step,
       next_step_due_date,
-      close_reason,
       lost_reason,
       competitor_price,
       customer_budget,
       closed_at,
-      notes,
+      outcome,
       owner_user_id,
       account_id,
-      lead_id,
+      source_lead_id,
       created_at,
-      updated_at,
-      accounts (
-        account_id,
-        company_name,
-        account_status
-      ),
-      profiles:owner_user_id (
-        name
-      )
+      updated_at
     `)
     .order('created_at', { ascending: false })
+
+  if (oppError) {
+    console.error('Error fetching opportunities:', oppError)
+  }
 
   // Transform data
   const transformedOpportunities = (opportunities || []).map((opp: any) => ({
@@ -65,23 +59,18 @@ export default async function PipelinePage() {
     estimated_value: opp.estimated_value,
     currency: opp.currency,
     probability: opp.probability,
-    expected_close_date: opp.expected_close_date,
     next_step: opp.next_step,
     next_step_due_date: opp.next_step_due_date,
-    close_reason: opp.close_reason,
     lost_reason: opp.lost_reason,
     competitor_price: opp.competitor_price,
     customer_budget: opp.customer_budget,
     closed_at: opp.closed_at,
-    notes: opp.notes,
+    outcome: opp.outcome,
     owner_user_id: opp.owner_user_id,
     account_id: opp.account_id,
-    lead_id: opp.lead_id,
+    source_lead_id: opp.source_lead_id,
     created_at: opp.created_at,
     updated_at: opp.updated_at,
-    account_name: opp.accounts?.company_name || null,
-    account_status: opp.accounts?.account_status || null,
-    owner_name: opp.profiles?.name || null,
     is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() && !['Closed Won', 'Closed Lost'].includes(opp.stage),
   }))
 
