@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getStageConfig, calculateNextStepDueDate } from '@/lib/constants'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -165,22 +166,24 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Create Opportunity (Pipeline) if requested and account was created
+    // Pipeline cycle target: 7 days total from Prospecting to Closed
+    // Stage timeline: Prospecting(2d) → Discovery(2d) → Quote Sent(1.5d) → Negotiation(1.5d)
     if (create_opportunity && accountId) {
-      // Calculate next step due date (7 days from now)
-      const nextStepDueDate = new Date()
-      nextStepDueDate.setDate(nextStepDueDate.getDate() + 7)
+      const initialStage = 'Prospecting'
+      const stageConfig = getStageConfig(initialStage)
+      const nextStepDueDate = calculateNextStepDueDate(initialStage)
 
       const opportunityData = {
         name: `Pipeline - ${lead.company_name}`,
         account_id: accountId,
         source_lead_id: lead.lead_id,
-        stage: 'Prospecting',
+        stage: initialStage,
         estimated_value: lead.potential_revenue || 0,
         currency: 'IDR',
-        probability: 10,
+        probability: stageConfig?.probability || 10,
         owner_user_id: user.id,
         created_by: user.id,
-        next_step: 'Initial Contact',
+        next_step: stageConfig?.nextStep || 'Initial Contact',
         next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
       }
 

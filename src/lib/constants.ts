@@ -323,3 +323,86 @@ export const LEAD_CLAIM_STATUSES = [
   { value: 'unclaimed', label: 'Unclaimed' },
   { value: 'claimed', label: 'Claimed' },
 ] as const
+
+// =====================================================
+// PIPELINE STAGE CONFIGURATION
+// Target: Complete pipeline cycle in 7 days maximum
+// =====================================================
+
+export type PipelineStageConfig = {
+  stage: OpportunityStage
+  daysAllowed: number
+  probability: number
+  nextStep: string
+  nextStage: OpportunityStage | null
+}
+
+// Pipeline stage configuration with deadlines
+// Total cycle: Prospecting(1d) → Discovery(2d) → Quote Sent(1d) → Negotiation(3d) = 7 days
+export const PIPELINE_STAGE_CONFIG: PipelineStageConfig[] = [
+  {
+    stage: 'Prospecting',
+    daysAllowed: 1,      // Max 1x24 jam to move to Discovery
+    probability: 10,
+    nextStep: 'Initial Contact - Schedule Discovery Meeting',
+    nextStage: 'Discovery',
+  },
+  {
+    stage: 'Discovery',
+    daysAllowed: 2,      // Max 2x24 jam to move to Quote Sent
+    probability: 25,
+    nextStep: 'Understand Requirements - Prepare Quote',
+    nextStage: 'Quote Sent',
+  },
+  {
+    stage: 'Quote Sent',
+    daysAllowed: 1,      // Max 1x24 jam to move to Negotiation
+    probability: 50,
+    nextStep: 'Follow Up Quote - Start Negotiation',
+    nextStage: 'Negotiation',
+  },
+  {
+    stage: 'Negotiation',
+    daysAllowed: 3,      // Max 3x24 jam to close (Won/Lost)
+    probability: 75,
+    nextStep: 'Finalize Terms - Close Deal',
+    nextStage: 'Closed Won',
+  },
+  {
+    stage: 'Closed Won',
+    daysAllowed: 0,
+    probability: 100,
+    nextStep: 'Handover to Operations',
+    nextStage: null,
+  },
+  {
+    stage: 'Closed Lost',
+    daysAllowed: 0,
+    probability: 0,
+    nextStep: 'Document Lost Reason',
+    nextStage: null,
+  },
+  {
+    stage: 'On Hold',
+    daysAllowed: 7,
+    probability: 0,
+    nextStep: 'Review and Reactivate',
+    nextStage: null,
+  },
+]
+
+// Helper function to get stage config
+export function getStageConfig(stage: OpportunityStage): PipelineStageConfig | undefined {
+  return PIPELINE_STAGE_CONFIG.find(s => s.stage === stage)
+}
+
+// Calculate next step due date based on stage
+export function calculateNextStepDueDate(stage: OpportunityStage): Date {
+  const config = getStageConfig(stage)
+  const dueDate = new Date()
+  if (config) {
+    // Add the allowed days for the stage
+    dueDate.setTime(dueDate.getTime() + config.daysAllowed * 24 * 60 * 60 * 1000)
+  }
+  return dueDate
+}
