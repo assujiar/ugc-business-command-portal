@@ -9,6 +9,9 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { canAccessPipeline } from '@/lib/permissions'
 
+// Force dynamic rendering - required for authenticated pages
+export const dynamic = 'force-dynamic'
+
 export default async function PipelinePage() {
   const supabase = await createClient()
   const { profile } = await getSessionAndProfile()
