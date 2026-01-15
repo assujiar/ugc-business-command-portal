@@ -51,6 +51,19 @@ export function canAccessLeadInbox(role: UserRole | null | undefined): boolean {
   return isAdmin(role) || isMarketing(role)
 }
 
+// Can user access lead management page?
+// All roles that can VIEW leads should have access
+export function canAccessLeadManagement(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  // Admin, Director - can see all leads
+  if (isAdmin(role)) return true
+  // Marketing roles - can see their leads / department leads
+  if (isMarketing(role)) return true
+  // Sales roles - can see leads they created or claimed
+  if (isSales(role)) return true
+  return false
+}
+
 // Can user access sales inbox (handover pool)?
 export function canAccessSalesInbox(role: UserRole | null | undefined): boolean {
   return isAdmin(role) || isSales(role)
