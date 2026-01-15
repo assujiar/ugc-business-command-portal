@@ -25,36 +25,11 @@ export default async function LeadBiddingPage() {
     redirect('/dashboard')
   }
 
-  // Fetch unclaimed leads from handover pool
-  const { data: leads } = await supabase
-    .from('leads')
-    .select(`
-      lead_id,
-      company_name,
-      contact_name,
-      contact_email,
-      contact_phone,
-      triage_status,
-      source,
-      priority,
-      potential_revenue,
-      claim_status,
-      claimed_by_name,
-      qualified_at,
-      created_at,
-      lead_handover_pool (
-        pool_id,
-        handed_over_at,
-        handover_notes,
-        expires_at,
-        handed_over_by,
-        profiles:handed_over_by (
-          name
-        )
-      )
-    `)
-    .eq('triage_status', 'Assign to Sales')
-    .or('claim_status.eq.unclaimed,claim_status.is.null')
+  // Fetch unclaimed leads from v_lead_bidding view
+  // The view already joins with lead_handover_pool and profiles
+  const { data: leads } = await (supabase as any)
+    .from('v_lead_bidding')
+    .select('*')
     .order('priority', { ascending: false })
 
   // Transform data for the table
@@ -69,11 +44,10 @@ export default async function LeadBiddingPage() {
     potential_revenue: lead.potential_revenue,
     qualified_at: lead.qualified_at,
     created_at: lead.created_at,
-    pool_id: lead.lead_handover_pool?.[0]?.pool_id || null,
-    handed_over_at: lead.lead_handover_pool?.[0]?.handed_over_at || null,
-    handover_notes: lead.lead_handover_pool?.[0]?.handover_notes || null,
-    expires_at: lead.lead_handover_pool?.[0]?.expires_at || null,
-    handed_over_by_name: lead.lead_handover_pool?.[0]?.profiles?.name || null,
+    pool_id: lead.pool_id || null,
+    handed_over_at: lead.handed_over_at || null,
+    handover_notes: lead.handover_notes || null,
+    handed_over_by_name: lead.handed_over_by_name || null,
   }))
 
   return (

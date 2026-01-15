@@ -88,7 +88,7 @@ LEFT JOIN profiles pm ON l.marketing_owner_user_id = pm.user_id
 LEFT JOIN profiles ps ON l.sales_owner_user_id = ps.user_id
 LEFT JOIN profiles pc ON l.created_by = pc.user_id;
 
--- Update v_lead_bidding to include creator info
+-- Update v_lead_bidding to include creator info and contact_phone
 DROP VIEW IF EXISTS v_lead_bidding CASCADE;
 CREATE VIEW v_lead_bidding AS
 SELECT
@@ -96,6 +96,7 @@ SELECT
   l.company_name,
   l.contact_name,
   l.contact_email,
+  l.contact_phone,
   l.industry,
   l.triage_status,
   l.source,
@@ -109,7 +110,6 @@ SELECT
   hp.pool_id,
   hp.handed_over_at,
   hp.handover_notes,
-  hp.expires_at,
   pm.name AS handed_over_by_name,
   -- Creator info
   pc.name AS creator_name,

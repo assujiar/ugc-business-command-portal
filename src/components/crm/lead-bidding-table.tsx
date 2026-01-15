@@ -28,8 +28,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { formatDate, formatCurrency } from '@/lib/utils'
-import { UserPlus, Clock, AlertTriangle, MoreVertical, Eye } from 'lucide-react'
+import { formatDateTimeFull, formatCurrency } from '@/lib/utils'
+import { UserPlus, MoreVertical, Eye } from 'lucide-react'
 import { LeadDetailDialog } from '@/components/crm/lead-detail-dialog'
 import type { UserRole } from '@/types/database'
 
@@ -47,7 +47,6 @@ interface Lead {
   pool_id: number | null
   handed_over_at: string | null
   handover_notes: string | null
-  expires_at: string | null
   handed_over_by_name: string | null
 }
 
@@ -90,7 +89,7 @@ export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBidding
   }
 
   const handleClaimLead = async () => {
-    if (!claimDialog.lead || !claimDialog.lead.pool_id) return
+    if (!claimDialog.lead) return
 
     setIsLoading(claimDialog.lead.lead_id)
 
@@ -99,7 +98,8 @@ export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBidding
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pool_id: claimDialog.lead.pool_id,
+          lead_id: claimDialog.lead.lead_id,
+          pool_id: claimDialog.lead.pool_id || null,
           create_account: true,
           create_opportunity: true,
         }),
@@ -136,29 +136,12 @@ export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBidding
     }
   }
 
-  const isExpiringSoon = (expiresAt: string | null) => {
-    if (!expiresAt) return false
-    const expiry = new Date(expiresAt)
-    const now = new Date()
-    const hoursDiff = (expiry.getTime() - now.getTime()) / (1000 * 60 * 60)
-    return hoursDiff < 24 && hoursDiff > 0
-  }
-
-  const isExpired = (expiresAt: string | null) => {
-    if (!expiresAt) return false
-    return new Date(expiresAt) < new Date()
-  }
-
   return (
     <>
       <Card>
         <CardHeader className="pb-3 lg:pb-6">
-          <CardTitle className="text-base lg:text-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <span>Available Leads ({leads.length})</span>
-            <div className="flex items-center gap-2 text-xs lg:text-sm font-normal text-muted-foreground">
-              <Clock className="h-3 w-3 lg:h-4 lg:w-4" />
-              <span>Leads expire 7 days after assignment</span>
-            </div>
+          <CardTitle className="text-base lg:text-lg">
+            Available Leads ({leads.length})
           </CardTitle>
         </CardHeader>
         <CardContent className="px-0 lg:px-6">
@@ -176,18 +159,15 @@ export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBidding
                       <TableHead>Potential Revenue</TableHead>
                       <TableHead>Assigned By</TableHead>
                       <TableHead>Assigned At</TableHead>
-                      <TableHead>Expires</TableHead>
                       <TableHead className="w-[120px]">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {leads.map((lead) => {
                       const priority = getPriorityLabel(lead.priority)
-                      const expiringSoon = isExpiringSoon(lead.expires_at)
-                      const expired = isExpired(lead.expires_at)
 
                       return (
-                        <TableRow key={lead.lead_id} className={expired ? 'opacity-50' : ''}>
+                        <TableRow key={lead.lead_id}>
                           <TableCell className="font-medium">{lead.company_name}</TableCell>
                           <TableCell>
                             <div>
@@ -208,20 +188,7 @@ export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBidding
                               : '-'}
                           </TableCell>
                           <TableCell>{lead.handed_over_by_name || '-'}</TableCell>
-                          <TableCell>{formatDate(lead.handed_over_at)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              {expiringSoon && !expired && (
-                                <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                              )}
-                              {expired && (
-                                <AlertTriangle className="h-4 w-4 text-red-500" />
-                              )}
-                              <span className={expiringSoon ? 'text-yellow-600' : expired ? 'text-red-500' : ''}>
-                                {formatDate(lead.expires_at)}
-                              </span>
-                            </div>
-                          </TableCell>
+                          <TableCell>{formatDateTimeFull(lead.handed_over_at)}</TableCell>
                           <TableCell>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -244,7 +211,6 @@ export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBidding
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() => setClaimDialog({ open: true, lead })}
-                                  disabled={expired || !lead.pool_id}
                                 >
                                   <UserPlus className="h-4 w-4 mr-2" />
                                   Claim Lead
@@ -263,11 +229,9 @@ export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBidding
               <div className="md:hidden space-y-3 px-4">
                 {leads.map((lead) => {
                   const priority = getPriorityLabel(lead.priority)
-                  const expiringSoon = isExpiringSoon(lead.expires_at)
-                  const expired = isExpired(lead.expires_at)
 
                   return (
-                    <Card key={lead.lead_id} className={`bg-muted/30 ${expired ? 'opacity-50' : ''}`}>
+                    <Card key={lead.lead_id} className="bg-muted/30">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
@@ -294,19 +258,9 @@ export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBidding
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-                          <span>By: {lead.handed_over_by_name || '-'}</span>
-                          <div className="flex items-center gap-1">
-                            {expiringSoon && !expired && (
-                              <AlertTriangle className="h-3 w-3 text-yellow-500" />
-                            )}
-                            {expired && (
-                              <AlertTriangle className="h-3 w-3 text-red-500" />
-                            )}
-                            <span className={expiringSoon ? 'text-yellow-600' : expired ? 'text-red-500' : ''}>
-                              Exp: {formatDate(lead.expires_at)}
-                            </span>
-                          </div>
+                        <div className="mt-3 text-xs text-muted-foreground space-y-1">
+                          <div>Assigned By: {lead.handed_over_by_name || '-'}</div>
+                          <div>Assigned At: {formatDateTimeFull(lead.handed_over_at)}</div>
                         </div>
 
                         <div className="mt-3 pt-3 border-t flex gap-2">
@@ -322,7 +276,7 @@ export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBidding
                           <Button
                             size="sm"
                             onClick={() => setClaimDialog({ open: true, lead })}
-                            disabled={isLoading === lead.lead_id || expired || !lead.pool_id}
+                            disabled={isLoading === lead.lead_id}
                             className="flex-1"
                           >
                             <UserPlus className="h-4 w-4 mr-1" />
