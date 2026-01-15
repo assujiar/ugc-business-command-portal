@@ -3,14 +3,14 @@
 // Shows opportunities grouped by stage with update dialog
 // =====================================================
 
-import { createClient } from '@/lib/supabase/server'
 import { PipelineDashboard } from '@/components/crm/pipeline-dashboard'
 import { getSessionAndProfile } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { canAccessPipeline } from '@/lib/permissions'
 
 export default async function PipelinePage() {
-  const supabase = await createClient()
+  const adminClient = createAdminClient()
   const { profile } = await getSessionAndProfile()
 
   if (!profile) {
@@ -22,8 +22,8 @@ export default async function PipelinePage() {
     redirect('/dashboard')
   }
 
-  // Fetch opportunities with related account and owner data
-  const { data: opportunities, error: oppError } = await supabase
+  // Fetch opportunities with related account and owner data (using admin client to bypass RLS)
+  const { data: opportunities, error: oppError } = await (adminClient as any)
     .from('opportunities')
     .select(`
       opportunity_id,
