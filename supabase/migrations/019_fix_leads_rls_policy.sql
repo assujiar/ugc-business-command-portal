@@ -8,6 +8,55 @@
 -- 4. Sales - can see owned leads OR handover_eligible leads
 -- =====================================================
 
+-- =====================================================
+-- HELPER FUNCTIONS (ensure they exist)
+-- =====================================================
+
+-- Check if current user has MACX role
+CREATE OR REPLACE FUNCTION is_macx()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN get_user_role() = 'MACX';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Check if a user is in the marketing department (by department field or marketing role)
+CREATE OR REPLACE FUNCTION is_user_in_marketing_department(check_user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  user_dept TEXT;
+  user_role_val user_role;
+BEGIN
+  SELECT department, role INTO user_dept, user_role_val
+  FROM profiles
+  WHERE user_id = check_user_id;
+
+  -- Check by department field (case insensitive)
+  IF user_dept IS NOT NULL AND LOWER(user_dept) LIKE '%marketing%' THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Also check by marketing roles (as fallback)
+  IF user_role_val IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN
+    RETURN TRUE;
+  END IF;
+
+  RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Check if a lead was created by a marketing department user
+CREATE OR REPLACE FUNCTION is_lead_from_marketing_department(lead_created_by UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  IF lead_created_by IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  RETURN is_user_in_marketing_department(lead_created_by);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
 -- Helper function to check if user is Marketing Manager
 CREATE OR REPLACE FUNCTION is_marketing_manager()
 RETURNS BOOLEAN AS $$
