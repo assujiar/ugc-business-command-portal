@@ -244,7 +244,8 @@ export default async function PipelinePage() {
     account_name: accountsMap[opp.account_id]?.company_name || null,
     account_status: accountsMap[opp.account_id]?.account_status || null,
     owner_name: ownersMap[opp.owner_user_id] || null,
-    is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() && !['Closed Won', 'Closed Lost'].includes(opp.stage),
+    // Note: is_overdue calculation moved to client to avoid hydration mismatch
+    is_overdue: false, // Will be recalculated in PipelineDashboard component
     stage_history: stageHistoryMap[opp.opportunity_id] || [],
     // Include lead info for permission checks in client
     lead_created_by: leadsMap[opp.source_lead_id]?.created_by || null,
