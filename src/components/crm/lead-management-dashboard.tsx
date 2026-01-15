@@ -339,6 +339,7 @@ export function LeadManagementDashboard({
                       <TableHead>Source</TableHead>
                       <TableHead>Priority</TableHead>
                       <TableHead>Potential Revenue</TableHead>
+                      <TableHead>Created By</TableHead>
                       {selectedStatus === 'Assign to Sales' && (
                         <>
                           <TableHead>Claim Status</TableHead>
@@ -374,6 +375,11 @@ export function LeadManagementDashboard({
                           <TableCell>
                             {lead.potential_revenue
                               ? formatCurrency(lead.potential_revenue)
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {lead.creator_name
+                              ? `${lead.creator_name}${lead.creator_department ? ` - ${lead.creator_department}` : ''}`
                               : '-'}
                           </TableCell>
                           {selectedStatus === 'Assign to Sales' && (
@@ -513,12 +519,19 @@ export function LeadManagementDashboard({
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-                          <span>{formatDate(lead.created_at)}</span>
-                          {lead.potential_revenue && (
-                            <span className="font-medium text-foreground">
-                              {formatCurrency(lead.potential_revenue)}
-                            </span>
+                        <div className="mt-3 text-xs text-muted-foreground space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span>{formatDate(lead.created_at)}</span>
+                            {lead.potential_revenue && (
+                              <span className="font-medium text-foreground">
+                                {formatCurrency(lead.potential_revenue)}
+                              </span>
+                            )}
+                          </div>
+                          {lead.creator_name && (
+                            <div>
+                              <span>Created by: {lead.creator_name}{lead.creator_department ? ` - ${lead.creator_department}` : ''}</span>
+                            </div>
                           )}
                         </div>
                       </CardContent>
