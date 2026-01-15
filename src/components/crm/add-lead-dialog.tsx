@@ -636,26 +636,44 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
 
                   {/* Fleet Type (only for Domestics) */}
                   {isDomesticsService && (
-                    <div className="space-y-2">
-                      <Label htmlFor="fleet_type">Fleet Requirement</Label>
-                      <Select
-                        value={shipmentData.fleet_type}
-                        onValueChange={(value) =>
-                          setShipmentData((prev) => ({ ...prev, fleet_type: value }))
-                        }
-                      >
-                        <SelectTrigger id="fleet_type">
-                          <SelectValue placeholder="Select fleet type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FLEET_TYPES.map((fleet) => (
-                            <SelectItem key={fleet} value={fleet}>
-                              {fleet}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="fleet_type">Fleet Requirement</Label>
+                        <Select
+                          value={shipmentData.fleet_type}
+                          onValueChange={(value) =>
+                            setShipmentData((prev) => ({ ...prev, fleet_type: value }))
+                          }
+                        >
+                          <SelectTrigger id="fleet_type">
+                            <SelectValue placeholder="Select fleet type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FLEET_TYPES.map((fleet) => (
+                              <SelectItem key={fleet} value={fleet}>
+                                {fleet}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="fleet_quantity">Fleet Quantity</Label>
+                        <Input
+                          id="fleet_quantity"
+                          type="number"
+                          min="1"
+                          value={shipmentData.fleet_quantity}
+                          onChange={(e) =>
+                            setShipmentData((prev) => ({
+                              ...prev,
+                              fleet_quantity: parseInt(e.target.value) || 1,
+                            }))
+                          }
+                          placeholder="Enter quantity"
+                        />
+                      </div>
+                    </>
                   )}
 
                   {/* Incoterms (only for Export/Import) */}
