@@ -7,6 +7,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessPipeline, canViewPipeline, canUpdatePipeline } from '@/lib/permissions'
+import type { UserRole } from '@/types/database'
+
+interface Profile {
+  user_id: string
+  name: string
+  email: string
+  role: UserRole
+  department?: string | null
+}
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -27,11 +36,13 @@ export async function GET(
     }
 
     // Get user profile
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from('profiles')
       .select('*')
       .eq('user_id', user.id)
       .single()
+
+    const profile = profileData as Profile | null
 
     if (!profile || !canAccessPipeline(profile.role)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
