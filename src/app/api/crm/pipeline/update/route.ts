@@ -7,7 +7,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { addWatermark, isImageFile } from '@/lib/watermark'
+
+// Dynamic import for watermark to avoid serverless issues with sharp
+let addWatermark: ((buffer: Buffer | Uint8Array, data: any) => Promise<Uint8Array>) | null = null
+let isImageFile: ((mimeType: string) => boolean) | null = null
+
+// Try to load watermark module (may fail on some serverless environments)
+try {
+  const watermarkModule = require('@/lib/watermark')
+  addWatermark = watermarkModule.addWatermark
+  isImageFile = watermarkModule.isImageFile
+} catch (e) {
+  console.warn('Watermark module not available, watermarking disabled')
+}
+
+// Fallback isImageFile function
+const checkIsImageFile = (mimeType: string): boolean => {
+  if (isImageFile) return isImageFile(mimeType)
+  return mimeType.startsWith('image/')
+}
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -94,7 +112,7 @@ export async function POST(request: NextRequest) {
       let buffer: Uint8Array = new Uint8Array(arrayBuffer)
 
       // Check if it's an image file
-      if (isImageFile(evidenceFile.type)) {
+      if (checkIsImageFile(evidenceFile.type)) {
         // Upload original file first (for audit purposes)
         const originalFilePath = `evidence/${opportunityId}/${originalFileName}`
         const { error: originalUploadError } = await adminClient.storage
@@ -111,23 +129,25 @@ export async function POST(request: NextRequest) {
           evidenceOriginalUrl = originalSignedUrl?.signedUrl || null
         }
 
-        // Add watermark to image
-        const watermarkData = {
-          updateTime,
-          companyName,
-          pipelineStage: newStage,
-          salesName,
-          location: {
-            lat: locationLat ? parseFloat(locationLat) : null,
-            lng: locationLng ? parseFloat(locationLng) : null,
-            address: locationAddress || null,
-          },
-        }
+        // Add watermark to image (if watermark module is available)
+        if (addWatermark) {
+          const watermarkData = {
+            updateTime,
+            companyName,
+            pipelineStage: newStage,
+            salesName,
+            location: {
+              lat: locationLat ? parseFloat(locationLat) : null,
+              lng: locationLng ? parseFloat(locationLng) : null,
+              address: locationAddress || null,
+            },
+          }
 
-        try {
-          buffer = await addWatermark(buffer, watermarkData)
-        } catch (err) {
-          console.error('Watermark failed, using original:', err)
+          try {
+            buffer = await addWatermark(buffer, watermarkData)
+          } catch (err) {
+            console.error('Watermark failed, using original:', err)
+          }
         }
 
         // Upload watermarked image
