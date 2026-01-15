@@ -585,24 +585,18 @@ export function LeadDetailDialog({
                   <Label className="text-xs text-muted-foreground">Department</Label>
                   <p className="text-sm">{lead.shipment_details.department || '-'}</p>
                 </div>
-                {lead.shipment_details.fleet_type && (
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Fleet Type</Label>
-                    <p className="text-sm">{lead.shipment_details.fleet_type}</p>
-                  </div>
-                )}
-                {lead.shipment_details.fleet_quantity && lead.shipment_details.fleet_quantity > 1 && (
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Fleet Quantity</Label>
-                    <p className="text-sm">{lead.shipment_details.fleet_quantity}</p>
-                  </div>
-                )}
-                {lead.shipment_details.incoterm && (
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Incoterm</Label>
-                    <p className="text-sm">{lead.shipment_details.incoterm}</p>
-                  </div>
-                )}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Fleet Type</Label>
+                  <p className="text-sm">{lead.shipment_details.fleet_type || '-'}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Fleet Quantity</Label>
+                  <p className="text-sm">{lead.shipment_details.fleet_quantity || '-'}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Incoterm</Label>
+                  <p className="text-sm">{lead.shipment_details.incoterm || '-'}</p>
+                </div>
               </div>
 
               {/* Cargo Information */}
@@ -615,12 +609,10 @@ export function LeadDetailDialog({
                     <Label className="text-xs text-muted-foreground">Cargo Category</Label>
                     <p className="text-sm">{lead.shipment_details.cargo_category || '-'}</p>
                   </div>
-                  {lead.shipment_details.cargo_description && (
-                    <div className="space-y-1 sm:col-span-2">
-                      <Label className="text-xs text-muted-foreground">Cargo Description</Label>
-                      <p className="text-sm bg-muted p-2 rounded">{lead.shipment_details.cargo_description}</p>
-                    </div>
-                  )}
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-xs text-muted-foreground">Cargo Description</Label>
+                    <p className="text-sm bg-muted p-2 rounded">{lead.shipment_details.cargo_description || '-'}</p>
+                  </div>
                 </div>
               </div>
 
@@ -631,15 +623,19 @@ export function LeadDetailDialog({
                   <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
                     <MapPin className="h-3 w-3" /> Origin
                   </p>
-                  <div className="space-y-1">
-                    {lead.shipment_details.origin_address && (
-                      <p className="text-sm">{lead.shipment_details.origin_address}</p>
-                    )}
-                    <p className="text-sm">
-                      {[lead.shipment_details.origin_city, lead.shipment_details.origin_country]
-                        .filter(Boolean)
-                        .join(', ') || '-'}
-                    </p>
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Address</Label>
+                      <p className="text-sm">{lead.shipment_details.origin_address || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">City</Label>
+                      <p className="text-sm">{lead.shipment_details.origin_city || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Country</Label>
+                      <p className="text-sm">{lead.shipment_details.origin_country || '-'}</p>
+                    </div>
                   </div>
                 </div>
 
@@ -648,15 +644,19 @@ export function LeadDetailDialog({
                   <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
                     <MapPin className="h-3 w-3" /> Destination
                   </p>
-                  <div className="space-y-1">
-                    {lead.shipment_details.destination_address && (
-                      <p className="text-sm">{lead.shipment_details.destination_address}</p>
-                    )}
-                    <p className="text-sm">
-                      {[lead.shipment_details.destination_city, lead.shipment_details.destination_country]
-                        .filter(Boolean)
-                        .join(', ') || '-'}
-                    </p>
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Address</Label>
+                      <p className="text-sm">{lead.shipment_details.destination_address || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">City</Label>
+                      <p className="text-sm">{lead.shipment_details.destination_city || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Country</Label>
+                      <p className="text-sm">{lead.shipment_details.destination_country || '-'}</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -682,38 +682,34 @@ export function LeadDetailDialog({
                     <p className="text-sm">{lead.shipment_details.volume_total_cbm ? `${lead.shipment_details.volume_total_cbm} CBM` : '-'}</p>
                   </div>
                 </div>
-                {(lead.shipment_details.length_cm || lead.shipment_details.width_cm || lead.shipment_details.height_cm) && (
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Length</Label>
-                      <p className="text-sm">{lead.shipment_details.length_cm ? `${lead.shipment_details.length_cm} cm` : '-'}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Width</Label>
-                      <p className="text-sm">{lead.shipment_details.width_cm ? `${lead.shipment_details.width_cm} cm` : '-'}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Height</Label>
-                      <p className="text-sm">{lead.shipment_details.height_cm ? `${lead.shipment_details.height_cm} cm` : '-'}</p>
-                    </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Length</Label>
+                    <p className="text-sm">{lead.shipment_details.length_cm ? `${lead.shipment_details.length_cm} cm` : '-'}</p>
                   </div>
-                )}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Width</Label>
+                    <p className="text-sm">{lead.shipment_details.width_cm ? `${lead.shipment_details.width_cm} cm` : '-'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Height</Label>
+                    <p className="text-sm">{lead.shipment_details.height_cm ? `${lead.shipment_details.height_cm} cm` : '-'}</p>
+                  </div>
+                </div>
               </div>
 
               {/* Scope of Work */}
-              {lead.shipment_details.scope_of_work && (
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Scope of Work</Label>
-                  <p className="text-sm whitespace-pre-wrap bg-muted p-3 rounded-md">
-                    {lead.shipment_details.scope_of_work}
-                  </p>
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Scope of Work</Label>
+                <p className="text-sm whitespace-pre-wrap bg-muted p-3 rounded-md">
+                  {lead.shipment_details.scope_of_work || '-'}
+                </p>
+              </div>
 
               {/* Additional Services */}
-              {lead.shipment_details.additional_services && lead.shipment_details.additional_services.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Additional Services</Label>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Additional Services</Label>
+                {lead.shipment_details.additional_services && lead.shipment_details.additional_services.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {lead.shipment_details.additional_services.map((service, index) => (
                       <Badge key={index} variant="secondary" className="text-xs">
@@ -721,8 +717,10 @@ export function LeadDetailDialog({
                       </Badge>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-sm text-muted-foreground">-</p>
+                )}
+              </div>
             </div>
           )}
 
