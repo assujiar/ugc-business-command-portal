@@ -1,10 +1,11 @@
 // =====================================================
 // Image Watermark Utility
 // Adds watermark with pipeline update information to evidence photos
-// Uses watermark-jimp (pure JS) for Vercel serverless compatibility
+// Uses Jimp (pure JS) for Vercel serverless compatibility
 // =====================================================
 
 import { formatDateTimeFull } from '@/lib/utils'
+import Jimp from 'jimp'
 
 export interface WatermarkData {
   updateTime: Date
@@ -18,22 +19,6 @@ export interface WatermarkData {
   }
 }
 
-// Dynamic import for watermark-jimp
-let watermarkModule: typeof import('watermark-jimp') | null = null
-
-async function getWatermarkModule(): Promise<typeof import('watermark-jimp') | null> {
-  if (watermarkModule) return watermarkModule
-
-  try {
-    watermarkModule = await import('watermark-jimp')
-    console.log('[Watermark] watermark-jimp module loaded successfully')
-    return watermarkModule
-  } catch (error) {
-    console.error('[Watermark] Failed to load watermark-jimp:', error)
-    return null
-  }
-}
-
 /**
  * Add watermark to an image with pipeline update information
  * Watermark includes: date/time, company name, stage, sales name, geolocation
@@ -43,50 +28,75 @@ export async function addWatermark(
   imageBuffer: Buffer | Uint8Array,
   watermarkData: WatermarkData
 ): Promise<Uint8Array> {
-  const wm = await getWatermarkModule()
-
-  if (!wm) {
-    console.warn('[Watermark] Module not available, returning original image')
-    return imageBuffer instanceof Uint8Array ? imageBuffer : new Uint8Array(imageBuffer)
-  }
-
   try {
     // Convert to Buffer if needed
     const inputBuffer = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer)
 
-    // Format watermark text
+    // Load image with Jimp
+    const image = await Jimp.read(inputBuffer)
+
+    // Format watermark text lines
     const dateTime = formatDateTimeFull(watermarkData.updateTime)
     const coordText = watermarkData.location.lat && watermarkData.location.lng
-      ? `${watermarkData.location.lat.toFixed(6)}, ${watermarkData.location.lng.toFixed(6)}`
-      : '-'
+      ? `GPS: ${watermarkData.location.lat.toFixed(6)}, ${watermarkData.location.lng.toFixed(6)}`
+      : ''
 
     // Truncate address if too long
-    let address = watermarkData.location.address || '-'
-    if (address.length > 35) {
-      address = address.substring(0, 35) + '...'
+    let address = watermarkData.location.address || ''
+    if (address.length > 60) {
+      address = address.substring(0, 60) + '...'
     }
 
-    // Create multi-line watermark text
-    const watermarkText = [
-      `${dateTime}`,
-      `${watermarkData.companyName}`,
-      `Stage: ${watermarkData.pipelineStage}`,
-      `Sales: ${watermarkData.salesName}`,
-      `Loc: ${coordText}`,
-      `${address}`,
-    ].join(' | ')
+    // Create watermark lines
+    const lines = [
+      dateTime,
+      watermarkData.companyName,
+      `Stage: ${watermarkData.pipelineStage} | Sales: ${watermarkData.salesName}`,
+      coordText,
+      address,
+    ].filter(line => line.length > 0)
 
-    // Apply text watermark using watermark-jimp
-    const watermarkedBuffer = await wm.addTextWatermark(inputBuffer, {
-      text: watermarkText,
-      textSize: 2, // 1-8, smaller = smaller text
-      opacity: 0.8,
-      color: '#FFFFFF',
-      position: 'bottom-center',
-    })
+    // Load font (Jimp's built-in font)
+    const font = await Jimp.loadFont(Jimp.FONT_SANS_16_WHITE)
 
-    console.log('[Watermark] Successfully added text watermark to image')
-    return new Uint8Array(watermarkedBuffer)
+    // Calculate dimensions
+    const imageWidth = image.getWidth()
+    const imageHeight = image.getHeight()
+    const lineHeight = 20
+    const padding = 10
+    const totalTextHeight = lines.length * lineHeight + padding * 2
+
+    // Create semi-transparent overlay at bottom
+    const overlayHeight = totalTextHeight
+    const overlayY = imageHeight - overlayHeight
+
+    // Add dark overlay for better text visibility
+    for (let y = overlayY; y < imageHeight; y++) {
+      for (let x = 0; x < imageWidth; x++) {
+        const pixelColor = image.getPixelColor(x, y)
+        const rgba = Jimp.intToRGBA(pixelColor)
+        // Darken the pixel (multiply by 0.4 for dark overlay)
+        const newColor = Jimp.rgbaToInt(
+          Math.floor(rgba.r * 0.4),
+          Math.floor(rgba.g * 0.4),
+          Math.floor(rgba.b * 0.4),
+          rgba.a
+        )
+        image.setPixelColor(newColor, x, y)
+      }
+    }
+
+    // Print each line of text
+    let currentY = overlayY + padding
+    for (const line of lines) {
+      image.print(font, padding, currentY, line)
+      currentY += lineHeight
+    }
+
+    // Convert to buffer and return
+    const outputBuffer = await image.getBufferAsync(Jimp.MIME_JPEG)
+    console.log('[Watermark] Successfully added watermark to image')
+    return new Uint8Array(outputBuffer)
   } catch (error) {
     console.error('[Watermark] Error adding watermark:', error)
     // Return original image if watermarking fails
