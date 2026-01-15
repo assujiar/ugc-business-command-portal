@@ -438,6 +438,7 @@ export interface Database {
           notes: string | null
           approach_method: ApproachMethod
           evidence_url: string | null
+          evidence_original_url: string | null
           evidence_file_name: string | null
           location_lat: number | null
           location_lng: number | null
@@ -454,6 +455,7 @@ export interface Database {
           notes?: string | null
           approach_method: ApproachMethod
           evidence_url?: string | null
+          evidence_original_url?: string | null
           evidence_file_name?: string | null
           location_lat?: number | null
           location_lng?: number | null
@@ -470,6 +472,7 @@ export interface Database {
           notes?: string | null
           approach_method?: ApproachMethod
           evidence_url?: string | null
+          evidence_original_url?: string | null
           evidence_file_name?: string | null
           location_lat?: number | null
           location_lng?: number | null

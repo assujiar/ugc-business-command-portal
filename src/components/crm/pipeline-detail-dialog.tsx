@@ -14,7 +14,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDateTimeFull, formatCurrency } from '@/lib/utils'
 import {
   APPROACH_METHODS,
   PIPELINE_STAGE_CONFIG,
@@ -48,6 +48,8 @@ interface PipelineUpdate {
   notes: string | null
   evidence_url: string | null
   evidence_file_name: string | null
+  location_lat: number | null
+  location_lng: number | null
   location_address: string | null
   updated_by: string | null
   updated_at: string
@@ -144,6 +146,8 @@ interface TimelineItem {
   approachMethod?: ApproachMethod
   evidenceUrl?: string | null
   evidenceFileName?: string | null
+  locationLat?: number | null
+  locationLng?: number | null
   locationAddress?: string | null
   notes?: string | null
   actorName?: string | null
@@ -240,6 +244,8 @@ function buildTimeline(
         approachMethod: update.approach_method,
         evidenceUrl: update.evidence_url,
         evidenceFileName: update.evidence_file_name,
+        locationLat: update.location_lat,
+        locationLng: update.location_lng,
         locationAddress: update.location_address,
         notes: update.notes,
         actorName: update.updater_name,
@@ -507,14 +513,14 @@ export function PipelineDetailDialog({
                                     )}
                                   </div>
                                   <span className="text-xs text-muted-foreground">
-                                    {formatDate(item.date)}
+                                    {formatDateTimeFull(item.date)}
                                   </span>
                                 </div>
 
                                 {/* Due Date */}
                                 {item.dueDate && item.status !== 'done' && (
                                   <p className={`text-xs mb-2 ${item.status === 'overdue' ? 'text-red-600' : 'text-muted-foreground'}`}>
-                                    Due: {formatDate(item.dueDate)}
+                                    Due: {formatDateTimeFull(item.dueDate)}
                                   </p>
                                 )}
 
@@ -531,12 +537,41 @@ export function PipelineDetailDialog({
                                   </p>
                                 )}
 
-                                {/* Location */}
+                                {/* Location with Map Preview */}
                                 {item.locationAddress && (
-                                  <p className="text-xs text-muted-foreground flex items-center gap-1 mb-2">
-                                    <MapPin className="h-3 w-3" />
-                                    {item.locationAddress}
-                                  </p>
+                                  <div className="mb-2">
+                                    <p className="text-xs text-muted-foreground flex items-center gap-1 mb-2">
+                                      <MapPin className="h-3 w-3 flex-shrink-0" />
+                                      <span className="break-words">{item.locationAddress}</span>
+                                    </p>
+                                    {item.locationLat && item.locationLng && (
+                                      <div className="space-y-2">
+                                        {/* Static Map Preview */}
+                                        <div className="relative rounded-lg overflow-hidden border">
+                                          <img
+                                            src={`https://staticmap.openstreetmap.de/staticmap.php?center=${item.locationLat},${item.locationLng}&zoom=16&size=400x200&maptype=mapnik&markers=${item.locationLat},${item.locationLng},red-pushpin`}
+                                            alt="Location Map"
+                                            className="w-full h-32 object-cover"
+                                            onError={(e) => {
+                                              // Fallback if static map fails
+                                              const target = e.target as HTMLImageElement
+                                              target.style.display = 'none'
+                                            }}
+                                          />
+                                        </div>
+                                        {/* View Location Button */}
+                                        <a
+                                          href={`https://www.google.com/maps?q=${item.locationLat},${item.locationLng}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-2 text-xs text-brand hover:underline"
+                                        >
+                                          <ExternalLink className="h-3 w-3" />
+                                          View Location in Maps
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
 
                                 {/* Evidence */}
