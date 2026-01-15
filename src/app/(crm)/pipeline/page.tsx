@@ -194,32 +194,62 @@ export default async function PipelinePage() {
   }
 
   // Step 7: Fetch stage history for filtered opportunities
-  // Use to_stage (original column) which always exists
-  // new_stage column is added by migration 023
+  // Use both opportunity_stage_history and pipeline_updates as fallback
+  // pipeline_updates always records stage changes, stage_history might be empty
   const opportunityIds = filteredOpportunities.map((o: any) => o.opportunity_id)
   let stageHistoryMap: Record<string, Array<{ new_stage: string; changed_at: string }>> = {}
 
   if (opportunityIds.length > 0) {
+    // First try opportunity_stage_history
     const { data: stageHistory } = await supabase
       .from('opportunity_stage_history')
       .select('opportunity_id, to_stage, new_stage, changed_at')
       .in('opportunity_id', opportunityIds)
       .order('changed_at', { ascending: true })
 
-    stageHistoryMap = (stageHistory || []).reduce((acc: any, h: any) => {
-      if (!acc[h.opportunity_id]) {
-        acc[h.opportunity_id] = []
-      }
-      // Use new_stage if available, fallback to to_stage
+    // Also fetch pipeline_updates as fallback source
+    const { data: pipelineUpdates } = await (adminClient as any)
+      .from('pipeline_updates')
+      .select('opportunity_id, new_stage, updated_at')
+      .in('opportunity_id', opportunityIds)
+      .order('updated_at', { ascending: true })
+
+    // Initialize map
+    opportunityIds.forEach((id: string) => {
+      stageHistoryMap[id] = []
+    })
+
+    // First add from stage_history
+    (stageHistory || []).forEach((h: any) => {
       const stage = h.new_stage || h.to_stage
       if (stage) {
-        acc[h.opportunity_id].push({
+        stageHistoryMap[h.opportunity_id].push({
           new_stage: stage,
           changed_at: h.changed_at,
         })
       }
-      return acc
-    }, {})
+    })
+
+    // Then add from pipeline_updates (as fallback for missing entries)
+    (pipelineUpdates || []).forEach((p: any) => {
+      if (p.new_stage) {
+        const existingStages = stageHistoryMap[p.opportunity_id].map((h: any) => h.new_stage)
+        // Only add if this stage isn't already in history
+        if (!existingStages.includes(p.new_stage)) {
+          stageHistoryMap[p.opportunity_id].push({
+            new_stage: p.new_stage,
+            changed_at: p.updated_at,
+          })
+        }
+      }
+    })
+
+    // Sort each opportunity's history by changed_at
+    Object.keys(stageHistoryMap).forEach((oppId) => {
+      stageHistoryMap[oppId].sort((a: any, b: any) =>
+        new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime()
+      )
+    })
   }
 
   // Determine if user can update any pipeline (admin or salesperson)

@@ -122,3 +122,40 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Add comment explaining the trigger behavior
 COMMENT ON FUNCTION log_stage_change() IS 'Logs opportunity stage changes. Skips when auth.uid() is NULL (admin client calls) because API handles it manually.';
+
+-- =====================================================
+-- PART 4: Backfill stage_history from pipeline_updates
+-- pipeline_updates table has records of stage changes that weren't
+-- properly inserted into opportunity_stage_history due to trigger issues
+-- =====================================================
+
+-- Insert missing stage history records from pipeline_updates
+INSERT INTO opportunity_stage_history (
+    opportunity_id,
+    from_stage,
+    to_stage,
+    old_stage,
+    new_stage,
+    changed_by,
+    changed_at,
+    notes
+)
+SELECT
+    pu.opportunity_id,
+    pu.old_stage,
+    pu.new_stage,
+    pu.old_stage,
+    pu.new_stage,
+    pu.updated_by,
+    pu.updated_at,
+    pu.notes
+FROM pipeline_updates pu
+WHERE NOT EXISTS (
+    -- Don't insert if there's already a history record for this stage change
+    SELECT 1 FROM opportunity_stage_history osh
+    WHERE osh.opportunity_id = pu.opportunity_id
+    AND (osh.new_stage = pu.new_stage OR osh.to_stage = pu.new_stage)
+    AND ABS(EXTRACT(EPOCH FROM (osh.changed_at - pu.updated_at))) < 60 -- Within 1 minute
+)
+AND pu.new_stage IS NOT NULL
+ORDER BY pu.updated_at;
