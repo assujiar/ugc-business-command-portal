@@ -372,11 +372,11 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
 
   const getStepStatusBadge = (status: string) => {
     switch (status) {
-      case 'done':
+      case 'on_schedule':
         return (
           <Badge variant="outline" className="text-green-600 border-green-600 text-[10px] px-1">
             <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />
-            Done
+            On Schedule
           </Badge>
         )
       case 'overdue':
@@ -386,11 +386,11 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
             Overdue
           </Badge>
         )
-      case 'upcoming':
+      case 'need_attention':
         return (
-          <Badge variant="secondary" className="text-[10px] px-1">
+          <Badge variant="outline" className="text-amber-600 border-amber-600 text-[10px] px-1 animate-pulse">
             <Clock className="h-2.5 w-2.5 mr-0.5" />
-            Upcoming
+            Need Attention
           </Badge>
         )
       default:
@@ -547,7 +547,7 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                               <div
                                 className="absolute top-4 left-6 h-1 rounded-full bg-gradient-to-r from-blue-500 via-cyan-500 to-emerald-500"
                                 style={{
-                                  width: `${Math.max(0, (timeline.filter(s => s.status === 'done').length / timeline.length) * 100 - 10)}%`
+                                  width: `${Math.max(0, (timeline.filter(s => s.isCompleted).length / timeline.length) * 100 - 10)}%`
                                 }}
                               />
                               <div className="flex justify-between overflow-x-auto pb-1">
@@ -569,16 +569,20 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                                       {/* Status dot with ring effect */}
                                       <div
                                         className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
-                                          step.status === 'done'
+                                          step.isCompleted && step.status === 'on_schedule'
                                             ? `${colors.bg} ring-2 ${colors.ring} ring-offset-2 ring-offset-background`
                                             : step.status === 'overdue'
-                                            ? 'bg-red-500 ring-2 ring-red-400 ring-offset-2 ring-offset-background animate-pulse'
+                                            ? 'bg-red-500 ring-2 ring-red-400 ring-offset-2 ring-offset-background'
+                                            : step.status === 'need_attention'
+                                            ? 'bg-amber-500 ring-2 ring-amber-400 ring-offset-2 ring-offset-background animate-pulse'
                                             : 'bg-muted ring-2 ring-muted-foreground/20 ring-offset-2 ring-offset-background'
                                         }`}
                                       >
-                                        {step.status === 'done' ? (
+                                        {step.isCompleted && step.status === 'on_schedule' ? (
                                           <CheckCircle2 className="h-5 w-5 text-white drop-shadow" />
                                         ) : step.status === 'overdue' ? (
+                                          <AlertCircle className="h-5 w-5 text-white drop-shadow" />
+                                        ) : step.status === 'need_attention' ? (
                                           <AlertCircle className="h-5 w-5 text-white drop-shadow" />
                                         ) : (
                                           <Clock className="h-4 w-4 text-muted-foreground" />
@@ -586,21 +590,26 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                                       </div>
                                       {/* Stage label with color */}
                                       <span className={`text-[10px] font-semibold mt-2 text-center ${
-                                        step.status === 'done' ? colors.text :
+                                        step.isCompleted && step.status === 'on_schedule' ? colors.text :
                                         step.status === 'overdue' ? 'text-red-500 dark:text-red-400' :
+                                        step.status === 'need_attention' ? 'text-amber-500 dark:text-amber-400' :
                                         'text-muted-foreground'
                                       }`}>
                                         {step.label}
                                       </span>
                                       {/* Status badge */}
                                       <span className={`text-[8px] font-medium mt-1 px-1.5 py-0.5 rounded-full ${
-                                        step.status === 'done'
+                                        step.isCompleted && step.status === 'on_schedule'
                                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
                                           : step.status === 'overdue'
                                           ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                          : step.status === 'need_attention'
+                                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                                           : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                                       }`}>
-                                        {step.status === 'done' ? 'Done' : step.status === 'overdue' ? 'Overdue' : 'On Schedule'}
+                                        {step.isCompleted && step.status === 'on_schedule' ? 'On Schedule' :
+                                         step.status === 'overdue' ? 'Overdue' :
+                                         step.status === 'need_attention' ? 'Need Attention' : 'On Schedule'}
                                       </span>
                                       {/* Due date */}
                                       {step.dueDate && (
@@ -609,9 +618,9 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                                         </span>
                                       )}
                                       {/* Activity/Completed date */}
-                                      {step.status === 'done' && step.completedAt && (
-                                        <span className="text-[8px] text-emerald-600 dark:text-emerald-400">
-                                          {step.completedAt.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
+                                      {step.isCompleted && step.completedAt && (
+                                        <span className={`text-[8px] ${step.status === 'overdue' ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                          Done: {step.completedAt.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
                                         </span>
                                       )}
                                     </div>

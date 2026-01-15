@@ -412,7 +412,11 @@ export function calculateNextStepDueDate(stage: OpportunityStage): Date {
 // PIPELINE TIMELINE TYPES AND HELPERS
 // =====================================================
 
-export type PipelineStepStatus = 'done' | 'upcoming' | 'overdue'
+// Pipeline step status:
+// - on_schedule: Completed before/on due date, OR not yet due
+// - overdue: Completed AFTER due date (late completion)
+// - need_attention: Due date passed but not completed yet
+export type PipelineStepStatus = 'on_schedule' | 'overdue' | 'need_attention'
 
 export interface PipelineTimelineStep {
   stage: OpportunityStage
@@ -421,6 +425,7 @@ export interface PipelineTimelineStep {
   status: PipelineStepStatus
   completedAt: Date | null
   daysAllowed: number
+  isCompleted: boolean // Whether the stage has been completed
 }
 
 // All pipeline stages in order (including terminal states for timeline)
@@ -485,54 +490,65 @@ export function calculatePipelineTimeline(
     const config = getStageConfig(isClosedStage ? 'Negotiation' : stage)
     if (!config && !isClosedStage) continue
 
-    let status: PipelineStepStatus = 'upcoming'
+    let status: PipelineStepStatus = 'on_schedule'
     let dueDate: Date | null = null
     let completedAt: Date | null = null
+    let isCompleted = false
     const daysAllowed = isClosedStage ? 0 : (config?.daysAllowed || 0)
 
     // Calculate due date from creation date (sequential)
     const cumulativeDays = getCumulativeDaysFromStart(i)
     dueDate = new Date(createdAt.getTime() + cumulativeDays * 24 * 60 * 60 * 1000)
 
+    // Determine if stage is completed and get completion time
     if (i === 0) {
-      // PROSPECTING: Always DONE when pipeline is created
-      // This is because claiming a lead or creating a lead automatically creates pipeline in Prospecting
-      status = 'done'
+      // PROSPECTING: Always completed when pipeline is created
+      isCompleted = true
       completedAt = createdAt
     } else if (isClosed) {
-      // Pipeline is closed - all stages are done
-      status = 'done'
+      // Pipeline is closed - all stages are completed
+      isCompleted = true
       completedAt = stageEntryTimes[stage] || (opportunity.closed_at ? new Date(opportunity.closed_at) : null)
-
-      // For closed stage, use closed_at
       if (isClosedStage && opportunity.closed_at) {
         completedAt = new Date(opportunity.closed_at)
       }
     } else if (isOnHold) {
       // On hold - check if this stage was reached
       if (stageEntryTimes[stage]) {
-        status = 'done'
+        isCompleted = true
         completedAt = stageEntryTimes[stage]
-      } else {
-        status = 'upcoming'
       }
     } else {
       // Active pipeline
       if (i <= currentStageIndex) {
-        // Past or current stage - done (pipeline has reached this stage)
-        status = 'done'
+        // Past or current stage - completed
+        isCompleted = true
         completedAt = stageEntryTimes[stage] || null
-        // If we have entry time for next stage, use that as completion time for past stages
+        // If we have entry time for next stage, use that as completion time
         if (i < currentStageIndex && i < ALL_PIPELINE_STAGES.length - 1 && stageEntryTimes[ALL_PIPELINE_STAGES[i + 1]]) {
           completedAt = stageEntryTimes[ALL_PIPELINE_STAGES[i + 1]]
         }
+      }
+    }
+
+    // Determine status based on completion and due date
+    // Status logic:
+    // - on_schedule: Completed before/on due date, OR not yet due
+    // - overdue: Completed AFTER due date (late completion)
+    // - need_attention: Due date passed but not completed yet
+    if (isCompleted && completedAt && dueDate) {
+      // Stage is completed - check if on time or late
+      if (completedAt <= dueDate) {
+        status = 'on_schedule'
       } else {
-        // Future stage - check if overdue
-        if (dueDate && dueDate < now) {
-          status = 'overdue'
-        } else {
-          status = 'upcoming'
-        }
+        status = 'overdue' // Late completion
+      }
+    } else if (!isCompleted && dueDate) {
+      // Stage not completed - check if past due
+      if (now > dueDate) {
+        status = 'need_attention' // Past due, needs action
+      } else {
+        status = 'on_schedule' // Still have time
       }
     }
 
@@ -543,6 +559,7 @@ export function calculatePipelineTimeline(
       status,
       completedAt,
       daysAllowed,
+      isCompleted,
     })
   }
 
