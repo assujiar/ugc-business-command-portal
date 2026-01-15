@@ -4,54 +4,84 @@
 -- =====================================================
 
 -- =====================================================
--- NEW ENUMS
+-- NEW ENUMS (with idempotent checks)
 -- =====================================================
 
 -- Add 'Assigned to Sales' to lead_triage_status
-ALTER TYPE lead_triage_status ADD VALUE IF NOT EXISTS 'Assigned to Sales' AFTER 'Disqualified';
+DO $$
+BEGIN
+    ALTER TYPE lead_triage_status ADD VALUE IF NOT EXISTS 'Assigned to Sales' AFTER 'Disqualified';
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END$$;
 
 -- Lead Claim Status
-CREATE TYPE lead_claim_status AS ENUM (
-  'unclaimed',
-  'claimed'
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'lead_claim_status') THEN
+        CREATE TYPE lead_claim_status AS ENUM (
+            'unclaimed',
+            'claimed'
+        );
+    END IF;
+END$$;
 
 -- Account Status for tracking lifecycle
-CREATE TYPE account_status AS ENUM (
-  'calon_account',      -- Pipeline belum closed
-  'new_account',        -- Pipeline closed win, berlaku 3 bulan sejak transaksi pertama
-  'failed_account',     -- Pipeline closed lost
-  'active_account',     -- Aktif bertransaksi mulai bulan keempat
-  'passive_account',    -- Tidak ada transaksi >1 bulan sejak transaksi terakhir
-  'lost_account'        -- Tidak ada transaksi >3 bulan sejak transaksi terakhir
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'account_status') THEN
+        CREATE TYPE account_status AS ENUM (
+            'calon_account',
+            'new_account',
+            'failed_account',
+            'active_account',
+            'passive_account',
+            'lost_account'
+        );
+    END IF;
+END$$;
 
 -- Lost Reason for pipeline
-CREATE TYPE lost_reason AS ENUM (
-  'harga_tidak_masuk',
-  'kompetitor_lebih_murah',
-  'budget_tidak_cukup',
-  'timing_tidak_tepat',
-  'tidak_ada_kebutuhan',
-  'kompetitor_lebih_baik',
-  'service_tidak_sesuai',
-  'lokasi_tidak_terjangkau',
-  'lainnya'
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'lost_reason') THEN
+        CREATE TYPE lost_reason AS ENUM (
+            'harga_tidak_masuk',
+            'kompetitor_lebih_murah',
+            'budget_tidak_cukup',
+            'timing_tidak_tepat',
+            'tidak_ada_kebutuhan',
+            'kompetitor_lebih_baik',
+            'service_tidak_sesuai',
+            'lokasi_tidak_terjangkau',
+            'lainnya'
+        );
+    END IF;
+END$$;
 
 -- Approach Method for pipeline updates
-CREATE TYPE approach_method AS ENUM (
-  'Call',
-  'Email',
-  'Meeting',
-  'Site Visit',
-  'WhatsApp',
-  'Proposal',
-  'Contract Review'
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'approach_method') THEN
+        CREATE TYPE approach_method AS ENUM (
+            'Call',
+            'Email',
+            'Meeting',
+            'Site Visit',
+            'WhatsApp',
+            'Proposal',
+            'Contract Review'
+        );
+    END IF;
+END$$;
 
 -- Add 'Completed' to activity_status if not exists
-ALTER TYPE activity_status ADD VALUE IF NOT EXISTS 'Completed' AFTER 'Done';
+DO $$
+BEGIN
+    ALTER TYPE activity_status ADD VALUE IF NOT EXISTS 'Completed' AFTER 'Done';
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END$$;
 
 -- =====================================================
 -- ALTER LEADS TABLE
@@ -356,9 +386,14 @@ LEFT JOIN profiles p ON a.owner_user_id = p.user_id;
 -- ON CONFLICT (id) DO NOTHING;
 
 -- =====================================================
--- RLS POLICIES
+-- RLS POLICIES (with idempotent drops first)
 -- =====================================================
 ALTER TABLE pipeline_updates ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view own pipeline updates" ON pipeline_updates;
+DROP POLICY IF EXISTS "Users can insert own pipeline updates" ON pipeline_updates;
+DROP POLICY IF EXISTS "Users can update own pipeline updates" ON pipeline_updates;
 
 -- Policy: Users can view their own pipeline updates
 CREATE POLICY "Users can view own pipeline updates"
@@ -383,12 +418,32 @@ CREATE POLICY "Users can update own pipeline updates"
   USING (updated_by = auth.uid());
 
 -- =====================================================
--- COMMENTS
+-- COMMENTS (wrapped in exception handlers)
 -- =====================================================
-COMMENT ON TYPE lead_claim_status IS 'Status of lead claiming by sales - unclaimed/claimed';
-COMMENT ON TYPE account_status IS 'Account lifecycle status based on pipeline and transaction history';
-COMMENT ON TYPE lost_reason IS 'Reasons for lost opportunities in pipeline';
-COMMENT ON TYPE approach_method IS 'Methods used for approaching opportunities';
+DO $$
+BEGIN
+    COMMENT ON TYPE lead_claim_status IS 'Status of lead claiming by sales - unclaimed/claimed';
+EXCEPTION WHEN OTHERS THEN NULL;
+END$$;
+
+DO $$
+BEGIN
+    COMMENT ON TYPE account_status IS 'Account lifecycle status based on pipeline and transaction history';
+EXCEPTION WHEN OTHERS THEN NULL;
+END$$;
+
+DO $$
+BEGIN
+    COMMENT ON TYPE lost_reason IS 'Reasons for lost opportunities in pipeline';
+EXCEPTION WHEN OTHERS THEN NULL;
+END$$;
+
+DO $$
+BEGIN
+    COMMENT ON TYPE approach_method IS 'Methods used for approaching opportunities';
+EXCEPTION WHEN OTHERS THEN NULL;
+END$$;
+
 COMMENT ON TABLE pipeline_updates IS 'Tracking pipeline update activities with evidence and location';
 COMMENT ON COLUMN leads.potential_revenue IS 'Estimated revenue potential when handing over to sales';
 COMMENT ON COLUMN leads.claim_status IS 'Whether the lead has been claimed by sales';
