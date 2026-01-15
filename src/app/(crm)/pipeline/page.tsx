@@ -194,13 +194,15 @@ export default async function PipelinePage() {
   }
 
   // Step 7: Fetch stage history for filtered opportunities
+  // Use to_stage (original column) which always exists
+  // new_stage column is added by migration 023
   const opportunityIds = filteredOpportunities.map((o: any) => o.opportunity_id)
   let stageHistoryMap: Record<string, Array<{ new_stage: string; changed_at: string }>> = {}
 
   if (opportunityIds.length > 0) {
     const { data: stageHistory } = await supabase
       .from('opportunity_stage_history')
-      .select('opportunity_id, new_stage, changed_at')
+      .select('opportunity_id, to_stage, new_stage, changed_at')
       .in('opportunity_id', opportunityIds)
       .order('changed_at', { ascending: true })
 
@@ -208,10 +210,14 @@ export default async function PipelinePage() {
       if (!acc[h.opportunity_id]) {
         acc[h.opportunity_id] = []
       }
-      acc[h.opportunity_id].push({
-        new_stage: h.new_stage,
-        changed_at: h.changed_at,
-      })
+      // Use new_stage if available, fallback to to_stage
+      const stage = h.new_stage || h.to_stage
+      if (stage) {
+        acc[h.opportunity_id].push({
+          new_stage: stage,
+          changed_at: h.changed_at,
+        })
+      }
       return acc
     }, {})
   }
