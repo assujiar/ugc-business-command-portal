@@ -220,7 +220,12 @@ export default async function PipelinePage() {
       .order('updated_at', { ascending: true })
 
     // First add from stage_history
-    const historyArr = stageHistory || []
+    const historyArr = (stageHistory || []) as Array<{
+      opportunity_id: string
+      to_stage: string | null
+      new_stage: string | null
+      changed_at: string
+    }>
     for (let i = 0; i < historyArr.length; i++) {
       const h = historyArr[i]
       const stage = h.new_stage || h.to_stage
@@ -233,7 +238,11 @@ export default async function PipelinePage() {
     }
 
     // Then add from pipeline_updates (as fallback for missing entries)
-    const updatesArr = pipelineUpdates || []
+    const updatesArr = (pipelineUpdates || []) as Array<{
+      opportunity_id: string
+      new_stage: string | null
+      updated_at: string
+    }>
     for (let i = 0; i < updatesArr.length; i++) {
       const p = updatesArr[i]
       if (p.new_stage && stageHistoryMap[p.opportunity_id]) {
