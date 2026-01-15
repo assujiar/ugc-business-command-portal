@@ -28,6 +28,7 @@ import {
 import { MoreHorizontal, CheckCircle, XCircle, Leaf, Send } from 'lucide-react'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { toast } from '@/hooks/use-toast'
 
 interface Lead {
   lead_id: string
@@ -49,7 +50,7 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState<string | null>(null)
 
-  const handleTriage = async (leadId: string, newStatus: string) => {
+  const handleTriage = async (leadId: string, newStatus: string, companyName: string) => {
     setIsLoading(leadId)
     try {
       const response = await fetch(`/api/crm/leads/${leadId}/triage`, {
@@ -59,10 +60,23 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
       })
 
       if (response.ok) {
+        const statusMessages: Record<string, string> = {
+          'In Review': 'sedang ditinjau',
+          'Qualified': 'berhasil dikualifikasi',
+          'Nurture': 'dipindahkan ke Nurture',
+          'Disqualified': 'didiskualifikasi',
+        }
+        toast.success(
+          `Lead ${newStatus}`,
+          `${companyName} ${statusMessages[newStatus] || 'berhasil diupdate'}`
+        )
         router.refresh()
+      } else {
+        throw new Error('Failed to update lead status')
       }
     } catch (error) {
       console.error('Error triaging lead:', error)
+      toast.error('Gagal update status', 'Terjadi kesalahan saat mengubah status lead')
     } finally {
       setIsLoading(null)
     }
@@ -152,20 +166,20 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
                       <DropdownMenuLabel>Triage Actions</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       {lead.triage_status === 'New' && (
-                        <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'In Review')}>
+                        <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'In Review', lead.company_name)}>
                           <CheckCircle className="mr-2 h-4 w-4" />
                           Mark In Review
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Qualified')}>
+                      <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Qualified', lead.company_name)}>
                         <Send className="mr-2 h-4 w-4 text-green-500" />
                         Mark Qualified
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Nurture')}>
+                      <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Nurture', lead.company_name)}>
                         <Leaf className="mr-2 h-4 w-4 text-purple-500" />
                         Move to Nurture
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Disqualified')}>
+                      <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Disqualified', lead.company_name)}>
                         <XCircle className="mr-2 h-4 w-4 text-red-500" />
                         Disqualify
                       </DropdownMenuItem>

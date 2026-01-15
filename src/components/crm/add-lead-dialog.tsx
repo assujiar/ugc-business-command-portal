@@ -55,6 +55,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { toast } from '@/hooks/use-toast'
 
 interface AddLeadDialogProps {
   trigger?: React.ReactNode
@@ -287,6 +288,12 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
         company_name: formData.company_name,
       })
 
+      // Show success toast notification
+      toast.success(
+        'Lead berhasil dibuat',
+        `${formData.company_name} telah ditambahkan ke Lead Inbox`
+      )
+
       // Reset form
       setFormData({
         company_name: '',
@@ -332,7 +339,9 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
       setSuccessDialogOpen(true)
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      setError(errorMessage)
+      toast.error('Gagal membuat lead', errorMessage)
     } finally {
       setLoading(false)
     }
