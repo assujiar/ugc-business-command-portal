@@ -70,10 +70,16 @@ export async function POST(request: NextRequest) {
     const isSalesUser = isSales(userRole)
 
     const body = await request.json()
+
+    // Debug: log entire request body
+    console.log('=== DEBUG: API Received ===')
+    console.log('Full body keys:', Object.keys(body))
+    console.log('Full body:', JSON.stringify(body, null, 2))
+
     const { shipment_details, ...leadData } = body
 
-    // Debug: log received shipment details
-    console.log('=== DEBUG: API Received ===')
+    console.log('shipment_details exists:', !!shipment_details)
+    console.log('shipment_details type:', typeof shipment_details)
     console.log('shipment_details:', JSON.stringify(shipment_details, null, 2))
 
     // Map form fields to database columns
@@ -206,6 +212,9 @@ export async function POST(request: NextRequest) {
         created_by: user.id,
       }
 
+      console.log('=== DEBUG: Inserting shipment ===')
+      console.log('shipmentInsertData:', JSON.stringify(shipmentInsertData, null, 2))
+
       const { error: shipmentError } = await (supabase as any)
         .from('shipment_details' as any)
         .insert(shipmentInsertData)
@@ -213,6 +222,8 @@ export async function POST(request: NextRequest) {
       if (shipmentError) {
         console.error('Error creating shipment details:', shipmentError)
         // Don't fail the whole request, just log the error
+      } else {
+        console.log('Shipment details created successfully')
       }
     }
 
