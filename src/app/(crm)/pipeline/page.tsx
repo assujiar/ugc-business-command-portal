@@ -196,8 +196,13 @@ export default async function PipelinePage() {
   // Step 7: Fetch stage history for filtered opportunities
   // Use both opportunity_stage_history and pipeline_updates as fallback
   // pipeline_updates always records stage changes, stage_history might be empty
-  const opportunityIds = filteredOpportunities.map((o: any) => o.opportunity_id)
-  let stageHistoryMap: Record<string, Array<{ new_stage: string; changed_at: string }>> = {}
+  const opportunityIds: string[] = filteredOpportunities.map((o: any) => o.opportunity_id)
+  const stageHistoryMap: Record<string, Array<{ new_stage: string; changed_at: string }>> = {}
+
+  // Initialize map for all opportunity IDs
+  for (const id of opportunityIds) {
+    stageHistoryMap[id] = []
+  }
 
   if (opportunityIds.length > 0) {
     // First try opportunity_stage_history
@@ -214,26 +219,34 @@ export default async function PipelinePage() {
       .in('opportunity_id', opportunityIds)
       .order('updated_at', { ascending: true })
 
-    // Initialize map
-    opportunityIds.forEach((id: string) => {
-      stageHistoryMap[id] = []
-    })
-
     // First add from stage_history
-    (stageHistory || []).forEach((h: any) => {
+    const historyArr = (stageHistory || []) as Array<{
+      opportunity_id: string
+      to_stage: string | null
+      new_stage: string | null
+      changed_at: string
+    }>
+    for (let i = 0; i < historyArr.length; i++) {
+      const h = historyArr[i]
       const stage = h.new_stage || h.to_stage
-      if (stage) {
+      if (stage && stageHistoryMap[h.opportunity_id]) {
         stageHistoryMap[h.opportunity_id].push({
           new_stage: stage,
           changed_at: h.changed_at,
         })
       }
-    })
+    }
 
     // Then add from pipeline_updates (as fallback for missing entries)
-    (pipelineUpdates || []).forEach((p: any) => {
-      if (p.new_stage) {
-        const existingStages = stageHistoryMap[p.opportunity_id].map((h: any) => h.new_stage)
+    const updatesArr = (pipelineUpdates || []) as Array<{
+      opportunity_id: string
+      new_stage: string | null
+      updated_at: string
+    }>
+    for (let i = 0; i < updatesArr.length; i++) {
+      const p = updatesArr[i]
+      if (p.new_stage && stageHistoryMap[p.opportunity_id]) {
+        const existingStages = stageHistoryMap[p.opportunity_id].map((h) => h.new_stage)
         // Only add if this stage isn't already in history
         if (!existingStages.includes(p.new_stage)) {
           stageHistoryMap[p.opportunity_id].push({
@@ -242,14 +255,16 @@ export default async function PipelinePage() {
           })
         }
       }
-    })
+    }
 
     // Sort each opportunity's history by changed_at
-    Object.keys(stageHistoryMap).forEach((oppId) => {
-      stageHistoryMap[oppId].sort((a: any, b: any) =>
+    const oppIds = Object.keys(stageHistoryMap)
+    for (let i = 0; i < oppIds.length; i++) {
+      const oppId = oppIds[i]
+      stageHistoryMap[oppId].sort((a, b) =>
         new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime()
       )
-    })
+    }
   }
 
   // Determine if user can update any pipeline (admin or salesperson)
