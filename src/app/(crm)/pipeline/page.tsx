@@ -22,7 +22,7 @@ export default async function PipelinePage() {
     redirect('/dashboard')
   }
 
-  // Fetch opportunities
+  // Fetch opportunities with related account and owner data
   const { data: opportunities, error: oppError } = await supabase
     .from('opportunities')
     .select(`
@@ -43,7 +43,13 @@ export default async function PipelinePage() {
       account_id,
       source_lead_id,
       created_at,
-      updated_at
+      updated_at,
+      accounts (
+        company_name
+      ),
+      profiles!opportunities_owner_user_id_fkey (
+        name
+      )
     `)
     .order('created_at', { ascending: false })
 
@@ -73,9 +79,9 @@ export default async function PipelinePage() {
     lead_id: opp.source_lead_id,
     created_at: opp.created_at,
     updated_at: opp.updated_at,
-    account_name: null,
+    account_name: opp.accounts?.company_name || null,
     account_status: null,
-    owner_name: null,
+    owner_name: opp.profiles?.name || null,
     is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() && !['Closed Won', 'Closed Lost'].includes(opp.stage),
   }))
 
