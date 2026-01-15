@@ -423,10 +423,25 @@ export interface PipelineTimelineStep {
   daysAllowed: number
 }
 
-// Active pipeline stages in order (excluding terminal states)
-const ACTIVE_PIPELINE_STAGES: OpportunityStage[] = ['Prospecting', 'Discovery', 'Quote Sent', 'Negotiation']
+// All pipeline stages in order (including terminal states for timeline)
+const ALL_PIPELINE_STAGES: OpportunityStage[] = ['Prospecting', 'Discovery', 'Quote Sent', 'Negotiation', 'Closed Won']
+
+// Get cumulative days from start for each stage
+// Prospecting: 0 days (starts at creation)
+// Discovery: 1 day (after Prospecting's 1 day)
+// Quote Sent: 3 days (after Discovery's 2 days)
+// Negotiation: 4 days (after Quote Sent's 1 day)
+// Closed: 7 days (after Negotiation's 3 days)
+function getCumulativeDaysFromStart(stageIndex: number): number {
+  const cumulativeDays = [0, 1, 3, 4, 7] // Prospecting, Discovery, Quote Sent, Negotiation, Closed
+  return cumulativeDays[stageIndex] || 0
+}
 
 // Calculate pipeline timeline based on opportunity data and stage history
+// Key Logic:
+// - Prospecting is DONE when pipeline is created (claim lead/create lead)
+// - Due dates are sequential from creation date
+// - Timeline includes Closed stage
 export function calculatePipelineTimeline(
   opportunity: {
     stage: OpportunityStage
@@ -440,13 +455,14 @@ export function calculatePipelineTimeline(
 ): PipelineTimelineStep[] {
   const timeline: PipelineTimelineStep[] = []
   const currentStage = opportunity.stage
+  const createdAt = new Date(opportunity.created_at)
   const now = new Date()
 
   // Build a map of when each stage was entered
   const stageEntryTimes: Record<string, Date> = {}
 
-  // Initial stage is Prospecting at created_at
-  stageEntryTimes['Prospecting'] = new Date(opportunity.created_at)
+  // Initial stage is Prospecting at created_at - and it's immediately DONE
+  stageEntryTimes['Prospecting'] = createdAt
 
   // Build entry times from history
   if (stageHistory && stageHistory.length > 0) {
@@ -455,39 +471,47 @@ export function calculatePipelineTimeline(
     })
   }
 
-  // Get the index of current stage
-  const currentStageIndex = ACTIVE_PIPELINE_STAGES.indexOf(currentStage)
-
-  // For closed stages, all steps should be done
+  // Determine current stage index
+  const currentStageIndex = ALL_PIPELINE_STAGES.indexOf(currentStage)
   const isClosed = currentStage === 'Closed Won' || currentStage === 'Closed Lost'
   const isOnHold = currentStage === 'On Hold'
 
-  for (let i = 0; i < ACTIVE_PIPELINE_STAGES.length; i++) {
-    const stage = ACTIVE_PIPELINE_STAGES[i]
-    const config = getStageConfig(stage)
+  for (let i = 0; i < ALL_PIPELINE_STAGES.length; i++) {
+    const stage = ALL_PIPELINE_STAGES[i]
+    const isClosedStage = stage === 'Closed Won'
 
-    if (!config) continue
+    // For closed stage, use different config
+    const config = getStageConfig(isClosedStage ? 'Negotiation' : stage)
+    if (!config && !isClosedStage) continue
 
     let status: PipelineStepStatus = 'upcoming'
     let dueDate: Date | null = null
     let completedAt: Date | null = null
+    const daysAllowed = isClosedStage ? 0 : (config?.daysAllowed || 0)
 
-    if (isClosed) {
-      // If pipeline is closed, all stages up to negotiation are done
+    // Calculate due date from creation date (sequential)
+    const cumulativeDays = getCumulativeDaysFromStart(i)
+    dueDate = new Date(createdAt.getTime() + cumulativeDays * 24 * 60 * 60 * 1000)
+
+    if (i === 0) {
+      // PROSPECTING: Always DONE when pipeline is created
+      // This is because claiming a lead or creating a lead automatically creates pipeline in Prospecting
       status = 'done'
-      completedAt = stageEntryTimes[stage] || null
-      if (i < ACTIVE_PIPELINE_STAGES.length - 1 && stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]) {
-        completedAt = stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]
-      } else if (opportunity.closed_at) {
+      completedAt = createdAt
+    } else if (isClosed) {
+      // Pipeline is closed - all stages are done
+      status = 'done'
+      completedAt = stageEntryTimes[stage] || (opportunity.closed_at ? new Date(opportunity.closed_at) : null)
+
+      // For closed stage, use closed_at
+      if (isClosedStage && opportunity.closed_at) {
         completedAt = new Date(opportunity.closed_at)
       }
     } else if (isOnHold) {
-      // On hold - past stages are done, current is on hold
-      if (i < currentStageIndex || (currentStageIndex === -1 && stageEntryTimes[stage])) {
+      // On hold - check if this stage was reached
+      if (stageEntryTimes[stage]) {
         status = 'done'
-        if (stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]) {
-          completedAt = stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]
-        }
+        completedAt = stageEntryTimes[stage]
       } else {
         status = 'upcoming'
       }
@@ -496,43 +520,31 @@ export function calculatePipelineTimeline(
       if (i < currentStageIndex) {
         // Past stage - done
         status = 'done'
-        if (stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]) {
-          completedAt = stageEntryTimes[ACTIVE_PIPELINE_STAGES[i + 1]]
+        completedAt = stageEntryTimes[stage] || null
+        // If we have entry time for next stage, use that as completion time
+        if (i < ALL_PIPELINE_STAGES.length - 1 && stageEntryTimes[ALL_PIPELINE_STAGES[i + 1]]) {
+          completedAt = stageEntryTimes[ALL_PIPELINE_STAGES[i + 1]]
         }
       } else if (i === currentStageIndex) {
-        // Current stage - calculate due date
-        const entryTime = stageEntryTimes[stage] || new Date(opportunity.created_at)
-        dueDate = new Date(entryTime.getTime() + config.daysAllowed * 24 * 60 * 60 * 1000)
-
-        if (dueDate < now) {
+        // Current stage - check if overdue
+        if (dueDate && dueDate < now) {
           status = 'overdue'
         } else {
-          status = 'upcoming'
+          status = 'upcoming' // Current stage not yet done
         }
       } else {
         // Future stage
         status = 'upcoming'
-
-        // Calculate estimated due date based on cumulative days
-        if (currentStageIndex >= 0) {
-          let cumulativeDays = 0
-          for (let j = currentStageIndex; j <= i; j++) {
-            const cfg = getStageConfig(ACTIVE_PIPELINE_STAGES[j])
-            if (cfg) cumulativeDays += cfg.daysAllowed
-          }
-          const currentEntryTime = stageEntryTimes[currentStage] || new Date(opportunity.created_at)
-          dueDate = new Date(currentEntryTime.getTime() + cumulativeDays * 24 * 60 * 60 * 1000)
-        }
       }
     }
 
     timeline.push({
-      stage,
-      label: stage,
+      stage: isClosedStage ? (isClosed && currentStage === 'Closed Lost' ? 'Closed Lost' : 'Closed Won') : stage,
+      label: isClosedStage ? 'Closed' : stage,
       dueDate,
       status,
       completedAt,
-      daysAllowed: config.daysAllowed,
+      daysAllowed,
     })
   }
 
