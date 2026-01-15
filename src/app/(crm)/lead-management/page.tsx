@@ -78,10 +78,12 @@ export default async function LeadManagementPage() {
         return false
       }
 
-      // Sales Support: same as salesperson
+      // Sales Support: leads from sales department OR claimed leads (same as sales manager)
       if (profile.role === 'sales support') {
-        if (lead.created_by === profile.user_id) return true
-        if (lead.sales_owner_user_id === profile.user_id) return true
+        // Check if creator is in sales department
+        if (isCreatorInSalesDepartment(lead.creator_role, lead.creator_department)) return true
+        // Also include if sales_owner is set (lead was claimed by sales)
+        if (lead.sales_owner_user_id) return true
         return false
       }
 
@@ -124,7 +126,7 @@ export default async function LeadManagementPage() {
   // Determine description based on role
   const getDescription = () => {
     if (isAdmin(profile.role)) return 'Manage all leads'
-    if (profile.role === 'sales manager') return 'Manage leads from sales department'
+    if (profile.role === 'sales manager' || profile.role === 'sales support') return 'Manage leads from sales department'
     if (isMarketingManagerRole(profile.role)) return 'Manage leads from marketing department'
     if (isSalesRole(profile.role)) return 'Manage leads you created or claimed'
     return 'Manage leads you have created'
