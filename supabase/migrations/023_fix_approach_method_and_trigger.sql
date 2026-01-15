@@ -95,8 +95,25 @@ BEGIN
     -- When auth.uid() is NULL (admin client), skip trigger insertion
     -- The API handles stage history creation manually in this case
     IF OLD.stage IS DISTINCT FROM NEW.stage AND current_user_id IS NOT NULL THEN
-        INSERT INTO opportunity_stage_history (opportunity_id, old_stage, new_stage, changed_by)
-        VALUES (NEW.opportunity_id, OLD.stage, NEW.stage, current_user_id);
+        -- Insert all 4 columns for backward compatibility
+        -- from_stage/to_stage are the original columns (NOT NULL)
+        -- old_stage/new_stage are added by this migration
+        INSERT INTO opportunity_stage_history (
+            opportunity_id,
+            from_stage,
+            to_stage,
+            old_stage,
+            new_stage,
+            changed_by
+        )
+        VALUES (
+            NEW.opportunity_id,
+            OLD.stage,
+            NEW.stage,
+            OLD.stage,
+            NEW.stage,
+            current_user_id
+        );
     END IF;
 
     RETURN NEW;
