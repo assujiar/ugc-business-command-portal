@@ -23,7 +23,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDateTimeFull, formatCurrency } from '@/lib/utils'
 import {
   OPPORTUNITY_STAGES,
   APPROACH_METHODS,
@@ -48,6 +48,8 @@ import {
   Clock,
   Camera,
   Eye,
+  Loader2,
+  Navigation,
 } from 'lucide-react'
 
 interface StageHistory {
@@ -90,6 +92,13 @@ interface PipelineDashboardProps {
   canUpdate?: boolean
 }
 
+interface GeoLocation {
+  lat: number
+  lng: number
+  address: string
+  accuracy: number
+}
+
 const STAGE_CONFIG: { stage: OpportunityStage; label: string; icon: typeof TrendingUp; color: string }[] = [
   { stage: 'Prospecting', label: 'Prospecting', icon: Search, color: 'bg-blue-500' },
   { stage: 'Discovery', label: 'Discovery', icon: TrendingUp, color: 'bg-cyan-500' },
@@ -122,10 +131,14 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
   const [approachMethod, setApproachMethod] = useState<ApproachMethod | ''>('')
   const [notes, setNotes] = useState('')
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null)
-  const [locationAddress, setLocationAddress] = useState('')
   const [lostReason, setLostReason] = useState<LostReason | ''>('')
   const [competitorPrice, setCompetitorPrice] = useState('')
   const [customerBudget, setCustomerBudget] = useState('')
+
+  // Geolocation state
+  const [geoLocation, setGeoLocation] = useState<GeoLocation | null>(null)
+  const [geoLoading, setGeoLoading] = useState(false)
+  const [geoError, setGeoError] = useState<string | null>(null)
 
   // Check if current approach method requires camera only
   const requiresCamera = approachMethod === 'Site Visit'
@@ -142,20 +155,88 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     ? opportunities
     : opportunities.filter(opp => opp.stage === selectedStage)
 
+  // Get current location automatically
+  const getCurrentLocation = async () => {
+    setGeoLoading(true)
+    setGeoError(null)
+
+    if (!navigator.geolocation) {
+      setGeoError('Geolocation tidak didukung browser')
+      setGeoLoading(false)
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude, accuracy } = position.coords
+
+        // Try to get address from coordinates using reverse geocoding
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+            { headers: { 'Accept-Language': 'id' } }
+          )
+          const data = await response.json()
+          const address = data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+
+          setGeoLocation({
+            lat: latitude,
+            lng: longitude,
+            address,
+            accuracy,
+          })
+        } catch {
+          // Fallback to coordinates only
+          setGeoLocation({
+            lat: latitude,
+            lng: longitude,
+            address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+            accuracy,
+          })
+        }
+        setGeoLoading(false)
+      },
+      (error) => {
+        let message = 'Gagal mendapatkan lokasi'
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            message = 'Akses lokasi ditolak. Silakan izinkan akses lokasi di browser.'
+            break
+          case error.POSITION_UNAVAILABLE:
+            message = 'Lokasi tidak tersedia'
+            break
+          case error.TIMEOUT:
+            message = 'Request lokasi timeout'
+            break
+        }
+        setGeoError(message)
+        setGeoLoading(false)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    )
+  }
+
   const resetForm = () => {
     setNewStage('')
     setApproachMethod('')
     setNotes('')
     setEvidenceFile(null)
-    setLocationAddress('')
     setLostReason('')
     setCompetitorPrice('')
     setCustomerBudget('')
+    setGeoLocation(null)
+    setGeoError(null)
   }
 
   const openUpdateDialog = (opportunity: Opportunity) => {
     resetForm()
     setUpdateDialog({ open: true, opportunity })
+    // Auto-get location when dialog opens
+    getCurrentLocation()
   }
 
   const openDetailDialog = (opportunityId: string) => {
@@ -194,7 +275,13 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
       formData.append('new_stage', newStage)
       formData.append('approach_method', approachMethod)
       formData.append('notes', notes)
-      formData.append('location_address', locationAddress)
+
+      // Send geolocation data
+      if (geoLocation) {
+        formData.append('location_lat', geoLocation.lat.toString())
+        formData.append('location_lng', geoLocation.lng.toString())
+        formData.append('location_address', geoLocation.address)
+      }
 
       if (newStage === 'Closed Lost') {
         formData.append('lost_reason', lostReason)
@@ -431,29 +518,53 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                           </div>
                         </div>
 
-                        {/* Timeline - Only show for active pipelines */}
+                        {/* Timeline - Horizontal milestone for pipeline cards */}
                         {!['Closed Won', 'Closed Lost'].includes(opp.stage) && timeline.length > 0 && (
                           <div className="border-t pt-3 mt-1">
                             <p className="text-xs text-muted-foreground mb-2">Pipeline Timeline</p>
-                            <div className="flex gap-2 overflow-x-auto pb-1">
-                              {timeline.map((step, index) => (
-                                <div
-                                  key={step.stage}
-                                  className="flex-shrink-0 bg-background border rounded-lg p-2 min-w-[100px]"
-                                >
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs font-medium truncate">{step.label}</span>
-                                    {getStepStatusBadge(step.status)}
+                            {/* Horizontal timeline with connecting line */}
+                            <div className="relative">
+                              {/* Connecting line */}
+                              <div className="absolute top-3 left-4 right-4 h-0.5 bg-gray-200" />
+                              <div className="flex justify-between overflow-x-auto pb-1">
+                                {timeline.map((step, index) => (
+                                  <div
+                                    key={step.stage}
+                                    className="flex flex-col items-center relative z-10 min-w-[80px]"
+                                  >
+                                    {/* Status dot */}
+                                    <div
+                                      className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                                        step.status === 'done'
+                                          ? 'bg-green-500'
+                                          : step.status === 'overdue'
+                                          ? 'bg-red-500'
+                                          : 'bg-gray-300'
+                                      }`}
+                                    >
+                                      {step.status === 'done' ? (
+                                        <CheckCircle2 className="h-4 w-4 text-white" />
+                                      ) : step.status === 'overdue' ? (
+                                        <AlertCircle className="h-4 w-4 text-white" />
+                                      ) : (
+                                        <Clock className="h-3 w-3 text-gray-500" />
+                                      )}
+                                    </div>
+                                    {/* Stage label */}
+                                    <span className="text-[10px] font-medium mt-1 text-center">{step.label}</span>
+                                    {/* Due date */}
+                                    <span className={`text-[9px] text-center ${
+                                      step.status === 'overdue' ? 'text-red-500' : 'text-muted-foreground'
+                                    }`}>
+                                      {step.status === 'done' && step.completedAt
+                                        ? formatDateTimeFull(step.completedAt.toISOString())
+                                        : step.dueDate
+                                        ? formatDateTimeFull(step.dueDate.toISOString())
+                                        : `${step.daysAllowed}d`}
+                                    </span>
                                   </div>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    {step.status === 'done' && step.completedAt
-                                      ? `Completed: ${formatDate(step.completedAt.toISOString())}`
-                                      : step.dueDate
-                                      ? `Due: ${formatDate(step.dueDate.toISOString())}`
-                                      : `Max ${step.daysAllowed}d`}
-                                  </p>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
                           </div>
                         )}
@@ -501,6 +612,49 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
               <Badge variant="outline" className="mt-1">
                 {updateDialog.opportunity?.stage}
               </Badge>
+            </div>
+
+            {/* Location Status - Auto Geotagging */}
+            <div className="p-3 bg-muted rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium flex items-center gap-2">
+                  <Navigation className="h-4 w-4" />
+                  Location Update
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={getCurrentLocation}
+                  disabled={geoLoading}
+                >
+                  {geoLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Refresh'
+                  )}
+                </Button>
+              </div>
+              {geoLoading && (
+                <p className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Mendapatkan lokasi...
+                </p>
+              )}
+              {geoError && (
+                <p className="text-xs text-red-500">{geoError}</p>
+              )}
+              {geoLocation && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground break-words">{geoLocation.address}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Coordinates: {geoLocation.lat.toFixed(6)}, {geoLocation.lng.toFixed(6)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Accuracy: {geoLocation.accuracy.toFixed(0)}m
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* New Stage */}
@@ -643,19 +797,6 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                   </p>
                 </div>
               )}
-            </div>
-
-            {/* Location Tagging */}
-            <div className="space-y-2">
-              <Label>Location</Label>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Enter location address"
-                  value={locationAddress}
-                  onChange={(e) => setLocationAddress(e.target.value)}
-                />
-              </div>
             </div>
 
             {/* Lost Reason (only for Closed Lost) */}

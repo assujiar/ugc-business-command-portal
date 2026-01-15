@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
     const newStage = formData.get('new_stage') as string
     const approachMethod = formData.get('approach_method') as string
     const notes = formData.get('notes') as string
+    const locationLat = formData.get('location_lat') as string | null
+    const locationLng = formData.get('location_lng') as string | null
     const locationAddress = formData.get('location_address') as string
     const lostReason = formData.get('lost_reason') as string | null
     const competitorPrice = formData.get('competitor_price') as string | null
@@ -90,6 +92,8 @@ export async function POST(request: NextRequest) {
       notes: notes || null,
       evidence_url: evidenceUrl,
       evidence_file_name: evidenceFileName,
+      location_lat: locationLat ? parseFloat(locationLat) : null,
+      location_lng: locationLng ? parseFloat(locationLng) : null,
       location_address: locationAddress || null,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
