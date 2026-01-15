@@ -177,7 +177,7 @@ CREATE TRIGGER trg_pipeline_update_id
 -- =====================================================
 
 -- Drop and recreate v_lead_inbox to include all marketing statuses
-DROP VIEW IF EXISTS v_lead_inbox;
+DROP VIEW IF EXISTS v_lead_inbox CASCADE;
 CREATE VIEW v_lead_inbox AS
 SELECT
   l.lead_id,
@@ -203,7 +203,7 @@ LEFT JOIN profiles pm ON l.marketing_owner_user_id = pm.user_id
 LEFT JOIN profiles ps ON l.sales_owner_user_id = ps.user_id;
 
 -- Create view for lead management consolidated page
-DROP VIEW IF EXISTS v_lead_management;
+DROP VIEW IF EXISTS v_lead_management CASCADE;
 CREATE VIEW v_lead_management AS
 SELECT
   l.lead_id,
@@ -240,7 +240,8 @@ LEFT JOIN profiles ps ON l.sales_owner_user_id = ps.user_id
 LEFT JOIN accounts a ON l.account_id = a.account_id;
 
 -- Create view for pipeline with updates
-CREATE OR REPLACE VIEW v_pipeline_with_updates AS
+DROP VIEW IF EXISTS v_pipeline_with_updates CASCADE;
+CREATE VIEW v_pipeline_with_updates AS
 SELECT
   o.opportunity_id,
   o.name,
@@ -279,7 +280,8 @@ LEFT JOIN profiles p ON o.owner_user_id = p.user_id
 LEFT JOIN leads l ON o.lead_id = l.lead_id;
 
 -- Create view for sales inbox (Lead Bidding) - unclaimed leads from Assigned to Sales
-CREATE OR REPLACE VIEW v_lead_bidding AS
+DROP VIEW IF EXISTS v_lead_bidding CASCADE;
+CREATE VIEW v_lead_bidding AS
 SELECT
   l.lead_id,
   l.company_name,
@@ -305,7 +307,7 @@ WHERE l.triage_status = 'Assigned to Sales'
   AND (l.claim_status = 'unclaimed' OR l.claim_status IS NULL);
 
 -- Update v_my_leads to include leads created by sales and claimed leads
-DROP VIEW IF EXISTS v_my_leads;
+DROP VIEW IF EXISTS v_my_leads CASCADE;
 CREATE VIEW v_my_leads AS
 SELECT
   l.lead_id,
@@ -335,7 +337,8 @@ WHERE l.sales_owner_user_id IS NOT NULL
   OR l.claim_status = 'claimed';
 
 -- View for accounts with status tracking
-CREATE OR REPLACE VIEW v_accounts_with_status AS
+DROP VIEW IF EXISTS v_accounts_with_status CASCADE;
+CREATE VIEW v_accounts_with_status AS
 SELECT
   a.account_id,
   a.company_name,
