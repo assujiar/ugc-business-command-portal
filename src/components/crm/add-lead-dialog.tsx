@@ -575,12 +575,12 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                     <Select
                       value={shipmentData.service_type_code}
                       onValueChange={(value) =>
-                        setShipmentData({
-                          ...shipmentData,
+                        setShipmentData((prev) => ({
+                          ...prev,
                           service_type_code: value,
                           fleet_type: '',
                           incoterm: '',
-                        })
+                        }))
                       }
                     >
                       <SelectTrigger id="service_type">
@@ -627,7 +627,7 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       <Select
                         value={shipmentData.fleet_type}
                         onValueChange={(value) =>
-                          setShipmentData({ ...shipmentData, fleet_type: value })
+                          setShipmentData((prev) => ({ ...prev, fleet_type: value }))
                         }
                       >
                         <SelectTrigger id="fleet_type">
@@ -651,7 +651,7 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       <Select
                         value={shipmentData.incoterm}
                         onValueChange={(value) =>
-                          setShipmentData({ ...shipmentData, incoterm: value })
+                          setShipmentData((prev) => ({ ...prev, incoterm: value }))
                         }
                       >
                         <SelectTrigger id="incoterm">
@@ -680,10 +680,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                     <Select
                       value={shipmentData.cargo_category}
                       onValueChange={(value) =>
-                        setShipmentData({
-                          ...shipmentData,
+                        setShipmentData((prev) => ({
+                          ...prev,
                           cargo_category: value,
-                        })
+                        }))
                       }
                     >
                       <SelectTrigger id="cargo_category">
@@ -705,10 +705,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       id="cargo_description"
                       value={shipmentData.cargo_description}
                       onChange={(e) =>
-                        setShipmentData({
-                          ...shipmentData,
+                        setShipmentData((prev) => ({
+                          ...prev,
                           cargo_description: e.target.value,
-                        })
+                        }))
                       }
                       placeholder="Describe the cargo..."
                       rows={2}
@@ -733,10 +733,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                         id="origin_address"
                         value={shipmentData.origin_address}
                         onChange={(e) =>
-                          setShipmentData({
-                            ...shipmentData,
+                          setShipmentData((prev) => ({
+                            ...prev,
                             origin_address: e.target.value,
-                          })
+                          }))
                         }
                         placeholder="Street address"
                       />
@@ -747,10 +747,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                         id="origin_city"
                         value={shipmentData.origin_city}
                         onChange={(e) =>
-                          setShipmentData({
-                            ...shipmentData,
+                          setShipmentData((prev) => ({
+                            ...prev,
                             origin_city: e.target.value,
-                          })
+                          }))
                         }
                         placeholder="City"
                       />
@@ -760,10 +760,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       <Select
                         value={shipmentData.origin_country}
                         onValueChange={(value) =>
-                          setShipmentData({
-                            ...shipmentData,
+                          setShipmentData((prev) => ({
+                            ...prev,
                             origin_country: value,
-                          })
+                          }))
                         }
                       >
                         <SelectTrigger id="origin_country">
@@ -791,10 +791,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                         id="destination_address"
                         value={shipmentData.destination_address}
                         onChange={(e) =>
-                          setShipmentData({
-                            ...shipmentData,
+                          setShipmentData((prev) => ({
+                            ...prev,
                             destination_address: e.target.value,
-                          })
+                          }))
                         }
                         placeholder="Street address"
                       />
@@ -805,10 +805,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                         id="destination_city"
                         value={shipmentData.destination_city}
                         onChange={(e) =>
-                          setShipmentData({
-                            ...shipmentData,
+                          setShipmentData((prev) => ({
+                            ...prev,
                             destination_city: e.target.value,
-                          })
+                          }))
                         }
                         placeholder="City"
                       />
@@ -818,10 +818,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       <Select
                         value={shipmentData.destination_country}
                         onValueChange={(value) =>
-                          setShipmentData({
-                            ...shipmentData,
+                          setShipmentData((prev) => ({
+                            ...prev,
                             destination_country: value,
-                          })
+                          }))
                         }
                       >
                         <SelectTrigger id="destination_country">
@@ -853,10 +853,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       min="1"
                       value={shipmentData.quantity}
                       onChange={(e) =>
-                        setShipmentData({
-                          ...shipmentData,
+                        setShipmentData((prev) => ({
+                          ...prev,
                           quantity: parseInt(e.target.value) || 1,
-                        })
+                        }))
                       }
                     />
                   </div>
@@ -866,10 +866,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                     <Select
                       value={shipmentData.unit_of_measure}
                       onValueChange={(value) =>
-                        setShipmentData({
-                          ...shipmentData,
+                        setShipmentData((prev) => ({
+                          ...prev,
                           unit_of_measure: value,
-                        })
+                        }))
                       }
                     >
                       <SelectTrigger id="unit_of_measure">
@@ -894,12 +894,12 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       min="0"
                       value={shipmentData.weight_per_unit_kg ?? ''}
                       onChange={(e) =>
-                        setShipmentData({
-                          ...shipmentData,
+                        setShipmentData((prev) => ({
+                          ...prev,
                           weight_per_unit_kg: e.target.value
                             ? parseFloat(e.target.value)
                             : null,
-                        })
+                        }))
                       }
                       placeholder="Gross weight"
                     />
@@ -916,12 +916,12 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       min="0"
                       value={shipmentData.length_cm ?? ''}
                       onChange={(e) =>
-                        setShipmentData({
-                          ...shipmentData,
+                        setShipmentData((prev) => ({
+                          ...prev,
                           length_cm: e.target.value
                             ? parseFloat(e.target.value)
                             : null,
-                        })
+                        }))
                       }
                     />
                   </div>
@@ -935,12 +935,12 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       min="0"
                       value={shipmentData.width_cm ?? ''}
                       onChange={(e) =>
-                        setShipmentData({
-                          ...shipmentData,
+                        setShipmentData((prev) => ({
+                          ...prev,
                           width_cm: e.target.value
                             ? parseFloat(e.target.value)
                             : null,
-                        })
+                        }))
                       }
                     />
                   </div>
@@ -954,12 +954,12 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                       min="0"
                       value={shipmentData.height_cm ?? ''}
                       onChange={(e) =>
-                        setShipmentData({
-                          ...shipmentData,
+                        setShipmentData((prev) => ({
+                          ...prev,
                           height_cm: e.target.value
                             ? parseFloat(e.target.value)
                             : null,
-                        })
+                        }))
                       }
                     />
                   </div>
@@ -1004,10 +1004,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                   id="scope_of_work"
                   value={shipmentData.scope_of_work}
                   onChange={(e) =>
-                    setShipmentData({
-                      ...shipmentData,
+                    setShipmentData((prev) => ({
+                      ...prev,
                       scope_of_work: e.target.value,
-                    })
+                    }))
                   }
                   placeholder="Detail pekerjaan dan kebutuhan..."
                   rows={3}
