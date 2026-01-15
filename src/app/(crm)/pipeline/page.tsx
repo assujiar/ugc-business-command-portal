@@ -6,14 +6,32 @@
 import { PipelineDashboard } from '@/components/crm/pipeline-dashboard'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
-import { canAccessPipeline, canUpdatePipeline, isAdmin } from '@/lib/permissions'
+import { canAccessPipeline, isAdmin } from '@/lib/permissions'
+import type { UserRole } from '@/types/database'
 
 // Force dynamic rendering - required for authenticated pages
 export const dynamic = 'force-dynamic'
 
+// Helper to check if user is in sales department
+function isSalesRole(role: UserRole): boolean {
+  return role === 'salesperson' || role === 'sales manager' || role === 'sales support'
+}
+
+// Helper to check if user is individual marketing (can only see own leads)
+function isIndividualMarketingRole(role: UserRole): boolean {
+  return role === 'Marcomm' || role === 'VSDO' || role === 'DGO'
+}
+
+// Helper to check if user is marketing manager/macx (can see all marketing dept leads)
+function isMarketingManagerRole(role: UserRole): boolean {
+  return role === 'Marketing Manager' || role === 'MACX'
+}
+
 export default async function PipelinePage() {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
   const { profile } = await getSessionAndProfile()
 
   if (!profile) {
@@ -25,90 +43,184 @@ export default async function PipelinePage() {
     redirect('/dashboard')
   }
 
-  // Fetch opportunities with related account and owner data
-  // Step 1: Fetch ALL opportunities (no filter)
-  const { data: opportunities, error: oppError } = await (supabase as any)
+  // Step 1: Fetch opportunities with lead info for filtering
+  // Need to get lead creator info to filter by role
+  const { data: allOpportunities, error: oppError } = await (adminClient as any)
     .from('opportunities')
     .select('*')
     .order('created_at', { ascending: false })
 
-  console.log('Pipeline DEBUG - Error:', oppError)
-  console.log('Pipeline DEBUG - Data:', JSON.stringify(opportunities))
-  console.log('Pipeline DEBUG - Count:', opportunities?.length || 0)
+  if (oppError) {
+    console.error('Pipeline ERROR:', oppError)
+  }
 
-  // Step 2: Fetch account data for each opportunity
-  const accountIds = Array.from(new Set((opportunities || []).map((o: any) => o.account_id).filter(Boolean))) as string[]
+  // Step 2: Fetch lead info for all opportunities with source_lead_id
+  const leadIds = Array.from(new Set((allOpportunities || [])
+    .map((o: any) => o.source_lead_id)
+    .filter(Boolean))) as string[]
+
+  let leadsMap: Record<string, {
+    created_by: string | null
+    sales_owner_user_id: string | null
+    marketing_owner_user_id: string | null
+  }> = {}
+
+  if (leadIds.length > 0) {
+    const { data: leads } = await (adminClient as any)
+      .from('leads')
+      .select('lead_id, created_by, sales_owner_user_id, marketing_owner_user_id')
+      .in('lead_id', leadIds)
+
+    leadsMap = (leads || []).reduce((acc: any, l: any) => {
+      acc[l.lead_id] = {
+        created_by: l.created_by,
+        sales_owner_user_id: l.sales_owner_user_id,
+        marketing_owner_user_id: l.marketing_owner_user_id,
+      }
+      return acc
+    }, {})
+  }
+
+  // Step 3: Fetch creator profiles to determine their department (for marketing manager/macx)
+  let creatorProfilesMap: Record<string, { department: string | null; role: UserRole | null }> = {}
+
+  if (isMarketingManagerRole(profile.role) || profile.role === 'sales manager') {
+    const creatorIds = Array.from(new Set(Object.values(leadsMap)
+      .map((l: any) => l.created_by)
+      .filter(Boolean))) as string[]
+
+    if (creatorIds.length > 0) {
+      const { data: creators } = await supabase
+        .from('profiles')
+        .select('user_id, department, role')
+        .in('user_id', creatorIds)
+
+      creatorProfilesMap = (creators || []).reduce((acc: any, c: any) => {
+        acc[c.user_id] = { department: c.department, role: c.role }
+        return acc
+      }, {})
+    }
+  }
+
+  // Step 4: Filter opportunities based on user role
+  let filteredOpportunities = allOpportunities || []
+
+  if (!isAdmin(profile.role)) {
+    filteredOpportunities = (allOpportunities || []).filter((opp: any) => {
+      const leadInfo = leadsMap[opp.source_lead_id]
+
+      // Salesperson: Pipeline from leads they created OR claimed
+      if (profile.role === 'salesperson') {
+        if (leadInfo?.created_by === profile.user_id) return true
+        if (leadInfo?.sales_owner_user_id === profile.user_id) return true
+        if (opp.owner_user_id === profile.user_id) return true
+        return false
+      }
+
+      // Sales Manager: Pipeline from all sales department leads
+      if (profile.role === 'sales manager') {
+        // Check if lead creator is in sales department
+        if (leadInfo?.created_by) {
+          const creatorProfile = creatorProfilesMap[leadInfo.created_by]
+          if (creatorProfile?.department?.toLowerCase().includes('sales')) return true
+          if (creatorProfile?.role && isSalesRole(creatorProfile.role)) return true
+        }
+        // Also include if sales_owner is set (lead was claimed by sales)
+        if (leadInfo?.sales_owner_user_id) return true
+        return false
+      }
+
+      // Sales Support: Same as salesperson
+      if (profile.role === 'sales support') {
+        if (leadInfo?.created_by === profile.user_id) return true
+        if (leadInfo?.sales_owner_user_id === profile.user_id) return true
+        if (opp.owner_user_id === profile.user_id) return true
+        return false
+      }
+
+      // Individual Marketing (Marcomm, VSDO, DGO): Only leads they created
+      if (isIndividualMarketingRole(profile.role)) {
+        if (leadInfo?.created_by === profile.user_id) return true
+        if (leadInfo?.marketing_owner_user_id === profile.user_id) return true
+        return false
+      }
+
+      // Marketing Manager/MACX: All marketing department leads
+      if (isMarketingManagerRole(profile.role)) {
+        if (leadInfo?.created_by) {
+          const creatorProfile = creatorProfilesMap[leadInfo.created_by]
+          if (creatorProfile?.department?.toLowerCase().includes('marketing')) return true
+          // Check if creator role is marketing
+          const marketingRoles: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+          if (creatorProfile?.role && marketingRoles.includes(creatorProfile.role)) return true
+        }
+        return false
+      }
+
+      return false
+    })
+  }
+
+  // Step 5: Fetch account data for filtered opportunities
+  const accountIds = Array.from(new Set(filteredOpportunities.map((o: any) => o.account_id).filter(Boolean))) as string[]
   let accountsMap: Record<string, { company_name: string; account_status: string | null }> = {}
 
   if (accountIds.length > 0) {
-    const { data: accounts, error: accError } = await supabase
+    const { data: accounts } = await supabase
       .from('accounts')
       .select('account_id, company_name, account_status')
       .in('account_id', accountIds)
 
-    if (accError) {
-      console.error('Error fetching accounts:', accError)
-    } else {
-      accountsMap = (accounts || []).reduce((acc: any, a: any) => {
-        acc[a.account_id] = { company_name: a.company_name, account_status: a.account_status }
-        return acc
-      }, {})
-    }
+    accountsMap = (accounts || []).reduce((acc: any, a: any) => {
+      acc[a.account_id] = { company_name: a.company_name, account_status: a.account_status }
+      return acc
+    }, {})
   }
 
-  // Step 3: Fetch owner profiles
-  const ownerIds = Array.from(new Set((opportunities || []).map((o: any) => o.owner_user_id).filter(Boolean))) as string[]
+  // Step 6: Fetch owner profiles for filtered opportunities
+  const ownerIds = Array.from(new Set(filteredOpportunities.map((o: any) => o.owner_user_id).filter(Boolean))) as string[]
   let ownersMap: Record<string, string> = {}
 
   if (ownerIds.length > 0) {
-    const { data: owners, error: ownError } = await supabase
+    const { data: owners } = await supabase
       .from('profiles')
       .select('user_id, name')
       .in('user_id', ownerIds)
 
-    if (ownError) {
-      console.error('Error fetching owners:', ownError)
-    } else {
-      ownersMap = (owners || []).reduce((acc: any, o: any) => {
-        acc[o.user_id] = o.name
-        return acc
-      }, {})
-    }
+    ownersMap = (owners || []).reduce((acc: any, o: any) => {
+      acc[o.user_id] = o.name
+      return acc
+    }, {})
   }
 
-  // Step 4: Fetch stage history for all opportunities
-  const opportunityIds = (opportunities || []).map((o: any) => o.opportunity_id)
+  // Step 7: Fetch stage history for filtered opportunities
+  const opportunityIds = filteredOpportunities.map((o: any) => o.opportunity_id)
   let stageHistoryMap: Record<string, Array<{ new_stage: string; changed_at: string }>> = {}
 
   if (opportunityIds.length > 0) {
-    const { data: stageHistory, error: histError } = await supabase
+    const { data: stageHistory } = await supabase
       .from('opportunity_stage_history')
       .select('opportunity_id, new_stage, changed_at')
       .in('opportunity_id', opportunityIds)
       .order('changed_at', { ascending: true })
 
-    if (histError) {
-      console.error('Error fetching stage history:', histError)
-    } else {
-      // Group by opportunity_id
-      stageHistoryMap = (stageHistory || []).reduce((acc: any, h: any) => {
-        if (!acc[h.opportunity_id]) {
-          acc[h.opportunity_id] = []
-        }
-        acc[h.opportunity_id].push({
-          new_stage: h.new_stage,
-          changed_at: h.changed_at,
-        })
-        return acc
-      }, {})
-    }
+    stageHistoryMap = (stageHistory || []).reduce((acc: any, h: any) => {
+      if (!acc[h.opportunity_id]) {
+        acc[h.opportunity_id] = []
+      }
+      acc[h.opportunity_id].push({
+        new_stage: h.new_stage,
+        changed_at: h.changed_at,
+      })
+      return acc
+    }, {})
   }
 
   // Determine if user can update any pipeline (admin or salesperson)
   const userCanUpdate = isAdmin(profile.role) || profile.role === 'salesperson'
 
   // Transform data - add all fields required by Opportunity interface
-  const transformedOpportunities = (opportunities || []).map((opp: any) => ({
+  const transformedOpportunities = filteredOpportunities.map((opp: any) => ({
     opportunity_id: opp.opportunity_id,
     name: opp.name,
     stage: opp.stage,
@@ -134,6 +246,9 @@ export default async function PipelinePage() {
     owner_name: ownersMap[opp.owner_user_id] || null,
     is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() && !['Closed Won', 'Closed Lost'].includes(opp.stage),
     stage_history: stageHistoryMap[opp.opportunity_id] || [],
+    // Include lead info for permission checks in client
+    lead_created_by: leadsMap[opp.source_lead_id]?.created_by || null,
+    lead_sales_owner: leadsMap[opp.source_lead_id]?.sales_owner_user_id || null,
   }))
 
   return (
