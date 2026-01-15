@@ -47,6 +47,20 @@ export function formatDateTime(date: string | Date | null | undefined): string {
   }).format(new Date(date))
 }
 
+// Format datetime with seconds (dd MMM yyyy HH:mm:ss)
+export function formatDateTimeFull(date: string | Date | null | undefined): string {
+  if (!date) return '-'
+  const d = new Date(date)
+  const day = d.getDate().toString().padStart(2, '0')
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const month = months[d.getMonth()]
+  const year = d.getFullYear()
+  const hours = d.getHours().toString().padStart(2, '0')
+  const minutes = d.getMinutes().toString().padStart(2, '0')
+  const seconds = d.getSeconds().toString().padStart(2, '0')
+  return `${day} ${month} ${year} ${hours}:${minutes}:${seconds}`
+}
+
 // Check if date is overdue
 export function isOverdue(date: string | Date | null | undefined): boolean {
   if (!date) return false

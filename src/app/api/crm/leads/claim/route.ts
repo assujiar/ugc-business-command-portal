@@ -34,44 +34,95 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { pool_id, create_account = true, create_opportunity = true } = body
+    const { pool_id, lead_id, create_account = true, create_opportunity = true } = body
 
-    if (!pool_id) {
-      return NextResponse.json({ error: 'pool_id is required' }, { status: 400 })
+    if (!pool_id && !lead_id) {
+      return NextResponse.json({ error: 'pool_id or lead_id is required' }, { status: 400 })
     }
 
-    // Get pool entry and lead info
-    const { data: poolEntry, error: poolError } = await (adminClient as any)
-      .from('lead_handover_pool')
-      .select(`
-        pool_id,
-        lead_id,
-        claimed_by,
-        claimed_at,
-        leads (
+    let lead: any = null
+    let poolId = pool_id
+
+    if (pool_id) {
+      // Get pool entry and lead info
+      const { data: poolEntry, error: poolError } = await (adminClient as any)
+        .from('lead_handover_pool')
+        .select(`
+          pool_id,
           lead_id,
-          company_name,
-          contact_name,
-          contact_email,
-          contact_phone,
-          industry,
-          potential_revenue,
-          claim_status
-        )
-      `)
-      .eq('pool_id', pool_id)
-      .single() as { data: any; error: any }
+          claimed_by,
+          claimed_at,
+          leads (
+            lead_id,
+            company_name,
+            contact_name,
+            contact_email,
+            contact_phone,
+            industry,
+            potential_revenue,
+            claim_status
+          )
+        `)
+        .eq('pool_id', pool_id)
+        .single() as { data: any; error: any }
 
-    if (poolError || !poolEntry) {
-      return NextResponse.json({ error: 'Pool entry not found' }, { status: 404 })
+      if (poolError || !poolEntry) {
+        return NextResponse.json({ error: 'Pool entry not found' }, { status: 404 })
+      }
+
+      // Check if already claimed
+      if (poolEntry.claimed_by) {
+        return NextResponse.json({ error: 'Lead already claimed' }, { status: 400 })
+      }
+
+      lead = poolEntry.leads
+    } else {
+      // Fetch lead directly by lead_id
+      const { data: leadData, error: leadError } = await (adminClient as any)
+        .from('leads')
+        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status')
+        .eq('lead_id', lead_id)
+        .single()
+
+      if (leadError || !leadData) {
+        return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+      }
+
+      lead = leadData
+
+      // Check if pool entry exists, if not create one
+      const { data: existingPool } = await (adminClient as any)
+        .from('lead_handover_pool')
+        .select('pool_id, claimed_by')
+        .eq('lead_id', lead_id)
+        .single()
+
+      if (existingPool) {
+        if (existingPool.claimed_by) {
+          return NextResponse.json({ error: 'Lead already claimed' }, { status: 400 })
+        }
+        poolId = existingPool.pool_id
+      } else {
+        // Create pool entry for this lead
+        const { data: newPool, error: poolInsertError } = await (adminClient as any)
+          .from('lead_handover_pool')
+          .insert({
+            lead_id: lead_id,
+            handed_over_by: user.id,
+            handover_notes: 'Auto-created during claim',
+            priority: 1,
+          })
+          .select('pool_id')
+          .single()
+
+        if (poolInsertError) {
+          console.error('Error creating pool entry:', poolInsertError)
+        } else {
+          poolId = newPool?.pool_id
+        }
+      }
     }
 
-    // Check if already claimed
-    if (poolEntry.claimed_by) {
-      return NextResponse.json({ error: 'Lead already claimed' }, { status: 400 })
-    }
-
-    const lead = poolEntry.leads
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
     }
@@ -142,17 +193,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Update pool entry
-    const { error: updatePoolError } = await (adminClient as any)
-      .from('lead_handover_pool')
-      .update({
-        claimed_by: user.id,
-        claimed_at: new Date().toISOString(),
-      })
-      .eq('pool_id', pool_id)
+    // 3. Update pool entry if exists
+    if (poolId) {
+      const { error: updatePoolError } = await (adminClient as any)
+        .from('lead_handover_pool')
+        .update({
+          claimed_by: user.id,
+          claimed_at: new Date().toISOString(),
+        })
+        .eq('pool_id', poolId)
 
-    if (updatePoolError) {
-      console.error('Error updating pool entry:', updatePoolError)
+      if (updatePoolError) {
+        console.error('Error updating pool entry:', updatePoolError)
+      }
     }
 
     // 4. Update lead - status stays as 'Assign to Sales', only claim_status changes
