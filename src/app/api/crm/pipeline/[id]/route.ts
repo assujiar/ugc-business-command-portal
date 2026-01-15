@@ -76,14 +76,15 @@ export async function GET(
     }
 
     // Get owner profile
-    let ownerName = null
+    let ownerName: string | null = null
     if (opportunity.owner_user_id) {
-      const { data: owner } = await supabase
+      const { data: ownerData } = await supabase
         .from('profiles')
         .select('name')
         .eq('user_id', opportunity.owner_user_id)
         .single()
-      ownerName = owner?.name
+      const owner = ownerData as { name: string } | null
+      ownerName = owner?.name || null
     }
 
     // Get pipeline updates with updater names
@@ -98,12 +99,13 @@ export async function GET(
     let updaterMap: Record<string, string> = {}
 
     if (updaterIds.length > 0) {
-      const { data: updaters } = await supabase
+      const { data: updatersData } = await supabase
         .from('profiles')
         .select('user_id, name')
         .in('user_id', updaterIds)
 
-      updaterMap = (updaters || []).reduce((acc: Record<string, string>, u: any) => {
+      const updaters = updatersData as Array<{ user_id: string; name: string }> | null
+      updaterMap = (updaters || []).reduce((acc: Record<string, string>, u) => {
         acc[u.user_id] = u.name
         return acc
       }, {})
@@ -125,12 +127,13 @@ export async function GET(
     let changerMap: Record<string, string> = {}
 
     if (changerIds.length > 0) {
-      const { data: changers } = await supabase
+      const { data: changersData } = await supabase
         .from('profiles')
         .select('user_id, name')
         .in('user_id', changerIds)
 
-      changerMap = (changers || []).reduce((acc: Record<string, string>, c: any) => {
+      const changers = changersData as Array<{ user_id: string; name: string }> | null
+      changerMap = (changers || []).reduce((acc: Record<string, string>, c) => {
         acc[c.user_id] = c.name
         return acc
       }, {})
