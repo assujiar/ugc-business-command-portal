@@ -451,12 +451,13 @@ export function calculatePipelineTimeline(
   stageHistory?: Array<{
     new_stage: OpportunityStage
     changed_at: string
-  }>
+  }>,
+  currentTime?: Date // Pass current time to avoid hydration mismatch
 ): PipelineTimelineStep[] {
   const timeline: PipelineTimelineStep[] = []
   const currentStage = opportunity.stage
   const createdAt = new Date(opportunity.created_at)
-  const now = new Date()
+  const now = currentTime || new Date()
 
   // Build a map of when each stage was entered
   const stageEntryTimes: Record<string, Date> = {}
