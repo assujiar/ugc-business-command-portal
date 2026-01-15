@@ -7,7 +7,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { addWatermark, isImageFile } from '@/lib/watermark'
+
+// Dynamic import for watermark to avoid serverless issues with sharp
+let addWatermark: ((buffer: Buffer | Uint8Array, data: any) => Promise<Uint8Array>) | null = null
+let isImageFile: ((mimeType: string) => boolean) | null = null
+
+// Try to load watermark module (may fail on some serverless environments)
+try {
+  const watermarkModule = require('@/lib/watermark')
+  addWatermark = watermarkModule.addWatermark
+  isImageFile = watermarkModule.isImageFile
+} catch (e) {
+  console.warn('Watermark module not available, watermarking disabled')
+}
+
+// Fallback isImageFile function
+const checkIsImageFile = (mimeType: string): boolean => {
+  if (isImageFile) return isImageFile(mimeType)
+  return mimeType.startsWith('image/')
+}
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -40,19 +58,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Get current opportunity with account and lead info for watermark
+    // Get current opportunity with account info for watermark
+    // Note: leads join won't work with source_lead_id, need to fetch separately
     const { data: opportunity, error: oppError } = await (adminClient as any)
       .from('opportunities')
       .select(`
         *,
-        accounts(account_id, account_status, company_name),
-        leads(company_name)
+        accounts(account_id, account_status, company_name)
       `)
       .eq('opportunity_id', opportunityId)
       .single() as { data: any; error: any }
 
     if (oppError || !opportunity) {
       return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
+    }
+
+    // Get lead info separately using source_lead_id (for company name in watermark)
+    let leadCompanyName: string | null = null
+    if (opportunity.source_lead_id) {
+      const { data: leadData } = await (adminClient as any)
+        .from('leads')
+        .select('company_name')
+        .eq('lead_id', opportunity.source_lead_id)
+        .single()
+      leadCompanyName = leadData?.company_name || null
     }
 
     // Get sales user profile for watermark
@@ -63,7 +92,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     const oldStage = opportunity.stage
-    const companyName = opportunity.accounts?.company_name || opportunity.leads?.company_name || opportunity.name
+    const companyName = opportunity.accounts?.company_name || leadCompanyName || opportunity.name
     const salesName = (salesProfile as { name: string } | null)?.name || 'Unknown'
     const updateTime = new Date()
 
@@ -83,7 +112,7 @@ export async function POST(request: NextRequest) {
       let buffer: Uint8Array = new Uint8Array(arrayBuffer)
 
       // Check if it's an image file
-      if (isImageFile(evidenceFile.type)) {
+      if (checkIsImageFile(evidenceFile.type)) {
         // Upload original file first (for audit purposes)
         const originalFilePath = `evidence/${opportunityId}/${originalFileName}`
         const { error: originalUploadError } = await adminClient.storage
@@ -100,23 +129,25 @@ export async function POST(request: NextRequest) {
           evidenceOriginalUrl = originalSignedUrl?.signedUrl || null
         }
 
-        // Add watermark to image
-        const watermarkData = {
-          updateTime,
-          companyName,
-          pipelineStage: newStage,
-          salesName,
-          location: {
-            lat: locationLat ? parseFloat(locationLat) : null,
-            lng: locationLng ? parseFloat(locationLng) : null,
-            address: locationAddress || null,
-          },
-        }
+        // Add watermark to image (if watermark module is available)
+        if (addWatermark) {
+          const watermarkData = {
+            updateTime,
+            companyName,
+            pipelineStage: newStage,
+            salesName,
+            location: {
+              lat: locationLat ? parseFloat(locationLat) : null,
+              lng: locationLng ? parseFloat(locationLng) : null,
+              address: locationAddress || null,
+            },
+          }
 
-        try {
-          buffer = await addWatermark(buffer, watermarkData)
-        } catch (err) {
-          console.error('Watermark failed, using original:', err)
+          try {
+            buffer = await addWatermark(buffer, watermarkData)
+          } catch (err) {
+            console.error('Watermark failed, using original:', err)
+          }
         }
 
         // Upload watermarked image
@@ -203,7 +234,7 @@ export async function POST(request: NextRequest) {
 
     if (newStage === 'Closed Lost' && lostReason) {
       oppUpdateData.lost_reason = lostReason
-      oppUpdateData.close_reason = lostReason
+      oppUpdateData.outcome = lostReason // Column is "outcome" not "close_reason"
       if (competitorPrice) oppUpdateData.competitor_price = parseFloat(competitorPrice)
       if (customerBudget) oppUpdateData.customer_budget = parseFloat(customerBudget)
     }
