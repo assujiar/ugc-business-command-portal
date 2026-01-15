@@ -5,12 +5,12 @@
 
 import { PipelineDashboard } from '@/components/crm/pipeline-dashboard'
 import { getSessionAndProfile } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { canAccessPipeline } from '@/lib/permissions'
 
 export default async function PipelinePage() {
-  const adminClient = createAdminClient()
+  const supabase = await createClient()
   const { profile } = await getSessionAndProfile()
 
   if (!profile) {
@@ -22,9 +22,9 @@ export default async function PipelinePage() {
     redirect('/dashboard')
   }
 
-  // Fetch opportunities with related account and owner data (using admin client to bypass RLS)
+  // Fetch opportunities with related account and owner data
   // Step 1: Fetch opportunities
-  const { data: opportunities, error: oppError } = await (adminClient as any)
+  const { data: opportunities, error: oppError } = await supabase
     .from('opportunities')
     .select(`
       opportunity_id,
@@ -59,7 +59,7 @@ export default async function PipelinePage() {
   let accountsMap: Record<string, { company_name: string; account_status: string | null }> = {}
 
   if (accountIds.length > 0) {
-    const { data: accounts, error: accError } = await (adminClient as any)
+    const { data: accounts, error: accError } = await supabase
       .from('accounts')
       .select('account_id, company_name, account_status')
       .in('account_id', accountIds)
@@ -79,7 +79,7 @@ export default async function PipelinePage() {
   let ownersMap: Record<string, string> = {}
 
   if (ownerIds.length > 0) {
-    const { data: owners, error: ownError } = await (adminClient as any)
+    const { data: owners, error: ownError } = await supabase
       .from('profiles')
       .select('user_id, name')
       .in('user_id', ownerIds)
