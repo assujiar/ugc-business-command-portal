@@ -48,13 +48,35 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Get opportunity with account info
+    // Get opportunity with account and lead info
     const { data: opportunity, error: oppError } = await (adminClient as any)
       .from('opportunities')
       .select(`
         *,
-        accounts(account_id, company_name, account_status),
-        leads(lead_id, company_name, created_by, marketing_owner_user_id, sales_owner_user_id)
+        accounts(
+          account_id,
+          company_name,
+          account_status,
+          industry,
+          pic_name,
+          pic_email,
+          pic_phone,
+          address,
+          city
+        ),
+        leads(
+          lead_id,
+          company_name,
+          contact_name,
+          contact_email,
+          contact_phone,
+          industry,
+          source,
+          potential_revenue,
+          created_by,
+          marketing_owner_user_id,
+          sales_owner_user_id
+        )
       `)
       .eq('opportunity_id', opportunityId)
       .single()
@@ -75,16 +97,26 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied to this pipeline' }, { status: 403 })
     }
 
-    // Get owner profile
-    let ownerName: string | null = null
+    // Get owner/sales profile
+    let ownerInfo: { name: string; email?: string; department?: string } | null = null
     if (opportunity.owner_user_id) {
       const { data: ownerData } = await supabase
         .from('profiles')
-        .select('name')
+        .select('name, email, department')
         .eq('user_id', opportunity.owner_user_id)
         .single()
-      const owner = ownerData as { name: string } | null
-      ownerName = owner?.name || null
+      ownerInfo = ownerData as { name: string; email?: string; department?: string } | null
+    }
+
+    // Get lead creator profile (for lead source info)
+    let creatorInfo: { name: string; department?: string } | null = null
+    if (opportunity.leads?.created_by) {
+      const { data: creatorData } = await supabase
+        .from('profiles')
+        .select('name, department')
+        .eq('user_id', opportunity.leads.created_by)
+        .single()
+      creatorInfo = creatorData as { name: string; department?: string } | null
     }
 
     // Get pipeline updates with updater names
@@ -92,7 +124,7 @@ export async function GET(
       .from('pipeline_updates')
       .select('*')
       .eq('opportunity_id', opportunityId)
-      .order('updated_at', { ascending: false })
+      .order('updated_at', { ascending: true }) // Ascending for timeline
 
     // Get updater names
     const updaterIds = Array.from(new Set((pipelineUpdates || []).map((u: any) => u.updated_by).filter(Boolean))) as string[]
@@ -144,7 +176,7 @@ export async function GET(
       changer_name: changerMap[history.changed_by] || null,
     }))
 
-    // Transform response
+    // Transform response with complete info
     const responseData = {
       opportunity_id: opportunity.opportunity_id,
       name: opportunity.name,
@@ -161,16 +193,42 @@ export async function GET(
       customer_budget: opportunity.customer_budget,
       closed_at: opportunity.closed_at,
       notes: opportunity.notes,
-      owner_user_id: opportunity.owner_user_id,
-      owner_name: ownerName,
-      account_id: opportunity.account_id,
-      account_name: opportunity.accounts?.company_name || null,
-      account_status: opportunity.accounts?.account_status || null,
-      lead_id: opportunity.lead_id,
       created_at: opportunity.created_at,
       updated_at: opportunity.updated_at,
+
+      // Account info
+      account_id: opportunity.account_id,
+      company_name: opportunity.accounts?.company_name || opportunity.leads?.company_name || null,
+      industry: opportunity.accounts?.industry || opportunity.leads?.industry || null,
+      address: opportunity.accounts?.address || null,
+      city: opportunity.accounts?.city || null,
+      account_status: opportunity.accounts?.account_status || null,
+
+      // PIC info (from account or lead)
+      pic_name: opportunity.accounts?.pic_name || opportunity.leads?.contact_name || null,
+      pic_email: opportunity.accounts?.pic_email || opportunity.leads?.contact_email || null,
+      pic_phone: opportunity.accounts?.pic_phone || opportunity.leads?.contact_phone || null,
+
+      // Lead info
+      lead_id: opportunity.lead_id,
+      potential_revenue: opportunity.leads?.potential_revenue || opportunity.estimated_value || null,
+      lead_source: opportunity.leads?.source || null,
+
+      // Creator/Source info
+      lead_creator_name: creatorInfo?.name || null,
+      lead_creator_department: creatorInfo?.department || null,
+
+      // Sales owner info
+      owner_user_id: opportunity.owner_user_id,
+      owner_name: ownerInfo?.name || null,
+      owner_email: ownerInfo?.email || null,
+      owner_department: ownerInfo?.department || null,
+
+      // Pipeline activities & history
       pipeline_updates: updatesWithNames,
       stage_history: historyWithNames,
+
+      // Permissions
       can_update: canUpdatePipeline(profile.role, user.id, {
         owner_user_id: opportunity.owner_user_id,
         lead_created_by: opportunity.leads?.created_by,
