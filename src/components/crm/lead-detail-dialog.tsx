@@ -108,6 +108,7 @@ interface LeadDetailDialogProps {
   onOpenChange: (open: boolean) => void
   currentUserId: string
   userRole: UserRole | null
+  loading?: boolean
 }
 
 const MANAGER_ROLES: UserRole[] = ['Director', 'super admin', 'Marketing Manager', 'sales manager']
@@ -129,10 +130,11 @@ export function LeadDetailDialog({
   onOpenChange,
   currentUserId,
   userRole,
+  loading = false,
 }: LeadDetailDialogProps) {
   const router = useRouter()
   const [isEditing, setIsEditing] = React.useState(false)
-  const [loading, setLoading] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [attachments, setAttachments] = React.useState<Attachment[]>([])
   const [loadingAttachments, setLoadingAttachments] = React.useState(false)
@@ -225,7 +227,7 @@ export function LeadDetailDialog({
   const handleSave = async () => {
     if (!lead) return
 
-    setLoading(true)
+    setSaving(true)
     setError(null)
 
     try {
@@ -258,7 +260,7 @@ export function LeadDetailDialog({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
@@ -299,6 +301,20 @@ export function LeadDetailDialog({
       default:
         return 'secondary'
     }
+  }
+
+  // Show loading state in dialog
+  if (loading && !lead) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[95vw] max-w-[600px] p-4 lg:p-6">
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="mt-4 text-sm text-muted-foreground">Loading lead details...</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   if (!lead) return null
@@ -832,14 +848,14 @@ export function LeadDetailDialog({
                   }
                   setError(null)
                 }}
-                disabled={loading}
+                disabled={saving}
                 className="w-full sm:w-auto"
               >
                 <X className="h-4 w-4 mr-2" />
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={loading} className="w-full sm:w-auto">
-                {loading ? (
+              <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
+                {saving ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Check className="h-4 w-4 mr-2" />

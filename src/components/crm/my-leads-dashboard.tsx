@@ -431,6 +431,7 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
       <LeadDetailDialog
         lead={detailDialog.lead}
         open={detailDialog.open}
+        loading={detailDialog.loading}
         onOpenChange={(open) => {
           if (!open) {
             setDetailDialog({ open: false, lead: null, loading: false })

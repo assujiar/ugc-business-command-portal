@@ -27,14 +27,56 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch lead data
+    // Fetch lead data with all needed fields explicitly
     const { data, error } = await (supabase as any)
       .from('leads')
-      .select('*')
+      .select(`
+        lead_id,
+        company_name,
+        contact_name,
+        contact_email,
+        contact_phone,
+        contact_mobile,
+        job_title,
+        industry,
+        source,
+        source_detail,
+        service_code,
+        service_description,
+        route,
+        origin,
+        destination,
+        volume_estimate,
+        timeline,
+        notes,
+        triage_status,
+        status,
+        priority,
+        potential_revenue,
+        handover_eligible,
+        marketing_owner_user_id,
+        sales_owner_user_id,
+        opportunity_id,
+        customer_id,
+        account_id,
+        qualified_at,
+        disqualified_at,
+        disqualified_reason,
+        handed_over_at,
+        claimed_at,
+        converted_at,
+        claim_status,
+        claimed_by_name,
+        dedupe_key,
+        created_by,
+        created_at,
+        updated_at
+      `)
       .eq('lead_id', id)
       .single()
 
     if (error) {
+      console.error('Error fetching lead:', error)
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
 
@@ -45,10 +87,31 @@ export async function GET(
       .eq('lead_id', id)
       .single()
 
-    // Return lead with shipment details
+    // Fetch creator info for MACX access check
+    let creatorInfo = null
+    if (data.created_by) {
+      const { data: creator } = await (supabase as any)
+        .from('profiles')
+        .select('role, department, name')
+        .eq('user_id', data.created_by)
+        .single()
+      creatorInfo = creator
+    }
+
+    // Return lead with shipment details and creator info
     return NextResponse.json({
       data: {
         ...data,
+        // Ensure these fields are explicitly set
+        contact_name: data.contact_name || null,
+        contact_email: data.contact_email || null,
+        contact_phone: data.contact_phone || null,
+        industry: data.industry || null,
+        // Creator info for MACX access
+        creator_role: creatorInfo?.role || null,
+        creator_department: creatorInfo?.department || null,
+        creator_is_marketing: creatorInfo?.department?.toLowerCase().includes('marketing') ||
+          ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'].includes(creatorInfo?.role) || false,
         shipment_details: shipmentDetails || null
       }
     })

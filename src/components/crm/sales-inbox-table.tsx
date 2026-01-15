@@ -210,6 +210,7 @@ export function SalesInboxTable({ leads, currentUserId = '', userRole }: SalesIn
     <LeadDetailDialog
       lead={detailDialog.lead}
       open={detailDialog.open}
+      loading={detailDialog.loading}
       onOpenChange={(open) => {
         if (!open) {
           setDetailDialog({ open: false, lead: null, loading: false })
