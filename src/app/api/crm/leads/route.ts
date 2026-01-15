@@ -72,10 +72,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { shipment_details, ...leadData } = body
 
-    // Debug: log received shipment details
-    console.log('=== DEBUG: API Received ===')
-    console.log('shipment_details:', JSON.stringify(shipment_details, null, 2))
-
     // Map form fields to database columns
     // If salesperson creates lead, auto-assign to them and mark as claimed
     const mappedLeadData: Record<string, any> = {
@@ -212,7 +208,6 @@ export async function POST(request: NextRequest) {
 
       if (shipmentError) {
         console.error('Error creating shipment details:', shipmentError)
-        // Don't fail the whole request, just log the error
       }
     }
 

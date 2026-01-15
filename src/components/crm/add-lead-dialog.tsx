@@ -227,11 +227,6 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
       // Use ref to get latest shipmentData (avoid stale closure)
       const currentShipmentData = shipmentDataRef.current
 
-      // Debug: log shipment data before submission
-      console.log('=== DEBUG: Form Submit ===')
-      console.log('showShipmentDetails:', showShipmentDetails)
-      console.log('shipmentData (from ref):', JSON.stringify(currentShipmentData, null, 2))
-
       // Get current selected service for department
       const currentSelectedService = SERVICE_TYPES.find(
         (s) => s.code === currentShipmentData.service_type_code
@@ -244,8 +239,6 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
             department: currentSelectedService?.department || null,
           }
         : null
-
-      console.log('shipment to send:', JSON.stringify(shipment, null, 2))
 
       // If source is "Lainnya", use custom_source as source_detail
       const submitData = {
