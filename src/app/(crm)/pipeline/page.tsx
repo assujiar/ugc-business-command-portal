@@ -7,7 +7,7 @@ import { PipelineDashboard } from '@/components/crm/pipeline-dashboard'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { canAccessPipeline } from '@/lib/permissions'
+import { canAccessPipeline, canUpdatePipeline, isAdmin } from '@/lib/permissions'
 
 // Force dynamic rendering - required for authenticated pages
 export const dynamic = 'force-dynamic'
@@ -76,6 +76,37 @@ export default async function PipelinePage() {
     }
   }
 
+  // Step 4: Fetch stage history for all opportunities
+  const opportunityIds = (opportunities || []).map((o: any) => o.opportunity_id)
+  let stageHistoryMap: Record<string, Array<{ new_stage: string; changed_at: string }>> = {}
+
+  if (opportunityIds.length > 0) {
+    const { data: stageHistory, error: histError } = await supabase
+      .from('opportunity_stage_history')
+      .select('opportunity_id, new_stage, changed_at')
+      .in('opportunity_id', opportunityIds)
+      .order('changed_at', { ascending: true })
+
+    if (histError) {
+      console.error('Error fetching stage history:', histError)
+    } else {
+      // Group by opportunity_id
+      stageHistoryMap = (stageHistory || []).reduce((acc: any, h: any) => {
+        if (!acc[h.opportunity_id]) {
+          acc[h.opportunity_id] = []
+        }
+        acc[h.opportunity_id].push({
+          new_stage: h.new_stage,
+          changed_at: h.changed_at,
+        })
+        return acc
+      }, {})
+    }
+  }
+
+  // Determine if user can update any pipeline (admin or salesperson)
+  const userCanUpdate = isAdmin(profile.role) || profile.role === 'salesperson'
+
   // Transform data - add all fields required by Opportunity interface
   const transformedOpportunities = (opportunities || []).map((opp: any) => ({
     opportunity_id: opp.opportunity_id,
@@ -102,6 +133,7 @@ export default async function PipelinePage() {
     account_status: accountsMap[opp.account_id]?.account_status || null,
     owner_name: ownersMap[opp.owner_user_id] || null,
     is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() && !['Closed Won', 'Closed Lost'].includes(opp.stage),
+    stage_history: stageHistoryMap[opp.opportunity_id] || [],
   }))
 
   return (
@@ -116,6 +148,8 @@ export default async function PipelinePage() {
       <PipelineDashboard
         opportunities={transformedOpportunities}
         currentUserId={profile.user_id}
+        userRole={profile.role}
+        canUpdate={userCanUpdate}
       />
     </div>
   )

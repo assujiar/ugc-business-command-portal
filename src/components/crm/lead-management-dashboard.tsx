@@ -35,6 +35,7 @@ import { formatDate, formatCurrency } from '@/lib/utils'
 import { LEAD_STATUS_ACTIONS } from '@/lib/constants'
 import type { LeadTriageStatus, UserRole, LeadSource } from '@/types/database'
 import { LeadDetailDialog } from '@/components/crm/lead-detail-dialog'
+import { PipelineDetailDialog } from '@/components/crm/pipeline-detail-dialog'
 import {
   MoreVertical,
   Inbox,
@@ -46,6 +47,7 @@ import {
   Users,
   Clock,
   Eye,
+  TrendingUp,
 } from 'lucide-react'
 
 interface ShipmentDetails {
@@ -106,6 +108,8 @@ interface Lead {
   creator_is_marketing?: boolean | null
   // Shipment details (fetched separately)
   shipment_details?: ShipmentDetails | null
+  // Opportunity/Pipeline info
+  opportunity_id?: string | null
 }
 
 interface StatusCounts {
@@ -162,6 +166,12 @@ export function LeadManagementDashboard({
     lead: Lead | null
     loading: boolean
   }>({ open: false, lead: null, loading: false })
+
+  // State for pipeline detail dialog
+  const [pipelineDialog, setPipelineDialog] = useState<{
+    open: boolean
+    opportunityId: string | null
+  }>({ open: false, opportunityId: null })
 
   // Function to fetch full lead details including shipment
   const fetchLeadDetails = async (leadId: string) => {
@@ -339,6 +349,7 @@ export function LeadManagementDashboard({
                       <TableHead>Source</TableHead>
                       <TableHead>Priority</TableHead>
                       <TableHead>Potential Revenue</TableHead>
+                      <TableHead>Pipeline</TableHead>
                       <TableHead>Created By</TableHead>
                       {selectedStatus === 'Assign to Sales' && (
                         <>
@@ -376,6 +387,21 @@ export function LeadManagementDashboard({
                             {lead.potential_revenue
                               ? formatCurrency(lead.potential_revenue)
                               : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {lead.opportunity_id ? (
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="h-auto p-0 text-brand"
+                                onClick={() => setPipelineDialog({ open: true, opportunityId: lead.opportunity_id! })}
+                              >
+                                <TrendingUp className="h-3 w-3 mr-1" />
+                                View Pipeline
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {lead.creator_name
@@ -418,6 +444,15 @@ export function LeadManagementDashboard({
                                   <Eye className="h-4 w-4 mr-2" />
                                   View Detail
                                 </DropdownMenuItem>
+                                {/* View Pipeline Action - Only if opportunity exists */}
+                                {lead.opportunity_id && (
+                                  <DropdownMenuItem
+                                    onClick={() => setPipelineDialog({ open: true, opportunityId: lead.opportunity_id! })}
+                                  >
+                                    <TrendingUp className="h-4 w-4 mr-2" />
+                                    View Pipeline
+                                  </DropdownMenuItem>
+                                )}
                                 {actions.length > 0 && (
                                   <>
                                     <DropdownMenuSeparator />
@@ -653,6 +688,17 @@ export function LeadManagementDashboard({
         }}
         currentUserId={currentUserId}
         userRole={userRole}
+      />
+
+      {/* Pipeline Detail Dialog */}
+      <PipelineDetailDialog
+        opportunityId={pipelineDialog.opportunityId}
+        open={pipelineDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPipelineDialog({ open: false, opportunityId: null })
+          }
+        }}
       />
     </div>
   )

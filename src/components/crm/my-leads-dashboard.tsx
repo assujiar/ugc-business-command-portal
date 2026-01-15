@@ -31,8 +31,10 @@ import {
   PlusCircle,
   MoreVertical,
   Eye,
+  FileText,
 } from 'lucide-react'
 import { LeadDetailDialog } from '@/components/crm/lead-detail-dialog'
+import { PipelineDetailDialog } from '@/components/crm/pipeline-detail-dialog'
 import type { UserRole } from '@/types/database'
 
 interface Lead {
@@ -69,6 +71,12 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
     lead: any | null
     loading: boolean
   }>({ open: false, lead: null, loading: false })
+
+  // State for pipeline detail dialog
+  const [pipelineDialog, setPipelineDialog] = useState<{
+    open: boolean
+    opportunityId: string | null
+  }>({ open: false, opportunityId: null })
 
   // State for creating opportunity
   const [creatingOpportunity, setCreatingOpportunity] = useState<string | null>(null)
@@ -242,12 +250,15 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                         </TableCell>
                         <TableCell>
                           {lead.opportunity_id ? (
-                            <Link
-                              href={`/pipeline?opp=${lead.opportunity_id}`}
-                              className="text-brand hover:underline text-sm"
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-brand"
+                              onClick={() => setPipelineDialog({ open: true, opportunityId: lead.opportunity_id! })}
                             >
+                              <TrendingUp className="h-3 w-3 mr-1" />
                               View Pipeline
-                            </Link>
+                            </Button>
                           ) : lead.account_id && lead.claim_status === 'claimed' ? (
                             <Button
                               size="sm"
@@ -305,11 +316,11 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                               {lead.opportunity_id ? (
                                 <>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/pipeline?opp=${lead.opportunity_id}`}>
-                                      <ArrowRight className="h-4 w-4 mr-2" />
-                                      View Pipeline
-                                    </Link>
+                                  <DropdownMenuItem
+                                    onClick={() => setPipelineDialog({ open: true, opportunityId: lead.opportunity_id! })}
+                                  >
+                                    <TrendingUp className="h-4 w-4 mr-2" />
+                                    View Pipeline
                                   </DropdownMenuItem>
                                 </>
                               ) : lead.account_id && lead.claim_status === 'claimed' ? (
@@ -395,11 +406,14 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
                           View Detail
                         </Button>
                         {lead.opportunity_id ? (
-                          <Button size="sm" variant="outline" asChild className="flex-1">
-                            <Link href={`/pipeline?opp=${lead.opportunity_id}`}>
-                              Pipeline
-                              <ArrowRight className="h-4 w-4 ml-1" />
-                            </Link>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => setPipelineDialog({ open: true, opportunityId: lead.opportunity_id! })}
+                          >
+                            <TrendingUp className="h-4 w-4 mr-1" />
+                            Pipeline
                           </Button>
                         ) : lead.account_id && lead.claim_status === 'claimed' ? (
                           <Button
@@ -451,6 +465,17 @@ export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDash
         }}
         currentUserId={currentUserId}
         userRole={userRole || null}
+      />
+
+      {/* Pipeline Detail Dialog */}
+      <PipelineDetailDialog
+        opportunityId={pipelineDialog.opportunityId}
+        open={pipelineDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPipelineDialog({ open: false, opportunityId: null })
+          }
+        }}
       />
     </div>
   )

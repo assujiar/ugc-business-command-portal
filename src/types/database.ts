@@ -17,7 +17,7 @@ export type LeadTriageStatus = 'New' | 'In Review' | 'Qualified' | 'Nurture' | '
 export type LeadSource = 'Webform (SEM)' | 'Webform (Organic)' | 'Instagram' | 'TikTok' | 'Facebook' | 'Event' | 'Referral' | 'Outbound' | 'Lainnya'
 export type OpportunityStage = 'Prospecting' | 'Discovery' | 'Quote Sent' | 'Negotiation' | 'Closed Won' | 'Closed Lost' | 'On Hold'
 export type ActivityStatus = 'Planned' | 'Done' | 'Cancelled' | 'Completed'
-export type ActivityTypeV2 = 'Call' | 'Email' | 'Meeting' | 'Site Visit' | 'WhatsApp' | 'Task' | 'Proposal' | 'Contract Review'
+export type ActivityTypeV2 = 'Call' | 'Email' | 'Meeting' | 'Site Visit' | 'WhatsApp' | 'Task' | 'Proposal' | 'Contract Review' | 'Online Meeting' | 'Phone Call' | 'Texting'
 export type CadenceEnrollmentStatus = 'Active' | 'Paused' | 'Completed' | 'Stopped'
 export type ProspectingTargetStatus = 'new' | 'researching' | 'outreach_planned' | 'contacted' | 'meeting_scheduled' | 'converted' | 'dropped'
 
@@ -43,7 +43,10 @@ export type LostReason =
   | 'lokasi_tidak_terjangkau'
   | 'lainnya'
 
-export type ApproachMethod = 'Call' | 'Email' | 'Meeting' | 'Site Visit' | 'WhatsApp' | 'Proposal' | 'Contract Review'
+export type ApproachMethod = 'Site Visit' | 'Online Meeting' | 'Phone Call' | 'Texting' | 'Email'
+
+// Pipeline Step Status for timeline
+export type PipelineStepStatus = 'done' | 'upcoming' | 'overdue'
 export type UserRole =
   | 'Director'
   | 'super admin'
