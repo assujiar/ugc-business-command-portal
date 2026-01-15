@@ -95,7 +95,7 @@ export async function GET(
       .order('updated_at', { ascending: false })
 
     // Get updater names
-    const updaterIds = [...new Set((pipelineUpdates || []).map((u: any) => u.updated_by).filter(Boolean))]
+    const updaterIds = Array.from(new Set((pipelineUpdates || []).map((u: any) => u.updated_by).filter(Boolean))) as string[]
     let updaterMap: Record<string, string> = {}
 
     if (updaterIds.length > 0) {
@@ -123,7 +123,7 @@ export async function GET(
       .eq('opportunity_id', opportunityId)
       .order('changed_at', { ascending: true })
 
-    const changerIds = [...new Set((stageHistory || []).map((h: any) => h.changed_by).filter(Boolean))]
+    const changerIds = Array.from(new Set((stageHistory || []).map((h: any) => h.changed_by).filter(Boolean))) as string[]
     let changerMap: Record<string, string> = {}
 
     if (changerIds.length > 0) {
