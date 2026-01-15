@@ -115,10 +115,24 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const [selectedStage, setSelectedStage] = useState<OpportunityStage | 'all'>('all')
   const [isLoading, setIsLoading] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
   const [updateDialog, setUpdateDialog] = useState<{
     open: boolean
     opportunity: Opportunity | null
   }>({ open: false, opportunity: null })
+
+  // Calculate is_overdue client-side to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Helper to check if opportunity is overdue
+  // Uses pre-calculated is_overdue from database (v_pipeline_with_updates view)
+  // Only shows after mount to avoid hydration mismatch (server time != client time during SSR)
+  const isOverdue = (opp: Opportunity): boolean => {
+    if (!mounted) return false // Prevent hydration mismatch
+    return opp.is_overdue // Use database-calculated value from view
+  }
 
   // Detail dialog state
   const [detailDialog, setDetailDialog] = useState<{
@@ -464,7 +478,7 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <h3 className="font-semibold text-sm lg:text-base truncate">{opp.name}</h3>
-                              {opp.is_overdue && (
+                              {isOverdue(opp) && (
                                 <Badge variant="destructive" className="text-xs">
                                   <AlertCircle className="h-3 w-3 mr-1" />
                                   Overdue
