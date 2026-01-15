@@ -324,31 +324,102 @@ export function PipelineDetailDialog({
     }
   }
 
-  const getStatusIcon = (status: string) => {
+  // Stage-specific colors for colorful timeline
+  const getStageColors = (stage: OpportunityStage) => {
+    const colors: Record<string, { icon: string; bg: string; border: string; text: string }> = {
+      'Prospecting': {
+        icon: 'bg-blue-500 shadow-blue-500/50',
+        bg: 'bg-blue-50 dark:bg-blue-950/30',
+        border: 'border-blue-500',
+        text: 'text-blue-700 dark:text-blue-400'
+      },
+      'Discovery': {
+        icon: 'bg-cyan-500 shadow-cyan-500/50',
+        bg: 'bg-cyan-50 dark:bg-cyan-950/30',
+        border: 'border-cyan-500',
+        text: 'text-cyan-700 dark:text-cyan-400'
+      },
+      'Quote Sent': {
+        icon: 'bg-amber-500 shadow-amber-500/50',
+        bg: 'bg-amber-50 dark:bg-amber-950/30',
+        border: 'border-amber-500',
+        text: 'text-amber-700 dark:text-amber-400'
+      },
+      'Negotiation': {
+        icon: 'bg-orange-500 shadow-orange-500/50',
+        bg: 'bg-orange-50 dark:bg-orange-950/30',
+        border: 'border-orange-500',
+        text: 'text-orange-700 dark:text-orange-400'
+      },
+      'Closed Won': {
+        icon: 'bg-emerald-500 shadow-emerald-500/50',
+        bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+        border: 'border-emerald-500',
+        text: 'text-emerald-700 dark:text-emerald-400'
+      },
+      'Closed Lost': {
+        icon: 'bg-red-500 shadow-red-500/50',
+        bg: 'bg-red-50 dark:bg-red-950/30',
+        border: 'border-red-500',
+        text: 'text-red-700 dark:text-red-400'
+      },
+      'On Hold': {
+        icon: 'bg-gray-500 shadow-gray-500/50',
+        bg: 'bg-gray-50 dark:bg-gray-950/30',
+        border: 'border-gray-500',
+        text: 'text-gray-700 dark:text-gray-400'
+      },
+    }
+    return colors[stage] || colors['On Hold']
+  }
+
+  const getStatusIcon = (status: string, stage: OpportunityStage) => {
+    const stageColors = getStageColors(stage)
     switch (status) {
       case 'done':
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />
+        return (
+          <div className={`w-8 h-8 rounded-full ${stageColors.icon} flex items-center justify-center shadow-lg`}>
+            <CheckCircle2 className="h-5 w-5 text-white drop-shadow" />
+          </div>
+        )
       case 'current':
-        return <Circle className="h-5 w-5 text-blue-500 fill-blue-500" />
+        return (
+          <div className={`w-8 h-8 rounded-full ${stageColors.icon} flex items-center justify-center shadow-lg ring-4 ring-offset-2 ring-offset-background ${stageColors.border.replace('border', 'ring')}/30 animate-pulse`}>
+            <Circle className="h-4 w-4 text-white fill-white drop-shadow" />
+          </div>
+        )
       case 'overdue':
-        return <AlertCircle className="h-5 w-5 text-red-500" />
+        return (
+          <div className="w-8 h-8 rounded-full bg-red-500 shadow-red-500/50 flex items-center justify-center shadow-lg ring-4 ring-offset-2 ring-offset-background ring-red-500/30 animate-pulse">
+            <AlertCircle className="h-5 w-5 text-white drop-shadow" />
+          </div>
+        )
       case 'upcoming':
-        return <Clock className="h-5 w-5 text-gray-400" />
+        return (
+          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shadow ring-2 ring-offset-2 ring-offset-background ring-muted-foreground/20">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </div>
+        )
       default:
-        return <Circle className="h-5 w-5 text-gray-400" />
+        return (
+          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+            <Circle className="h-4 w-4 text-muted-foreground" />
+          </div>
+        )
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, stage: OpportunityStage) => {
+    const stageColors = getStageColors(stage)
     switch (status) {
       case 'done':
-        return 'border-green-500 bg-green-50'
+        return `${stageColors.border} ${stageColors.bg} border-l-4`
       case 'current':
-        return 'border-blue-500 bg-blue-50'
+        return `${stageColors.border} ${stageColors.bg} border-l-4 shadow-md`
       case 'overdue':
-        return 'border-red-500 bg-red-50'
+        return 'border-red-500 bg-red-50 dark:bg-red-950/30 border-l-4 shadow-md'
       default:
-        return 'border-gray-300 bg-gray-50'
+        return 'border-muted-foreground/30 bg-muted/50 border-l-4'
     }
   }
 
@@ -475,7 +546,7 @@ export function PipelineDetailDialog({
               </Card>
 
               {/* Pipeline Activity Timeline */}
-              <Card>
+              <Card className="overflow-hidden">
                 <CardContent className="p-4">
                   <h3 className="text-sm font-semibold text-muted-foreground mb-4 flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
@@ -484,35 +555,39 @@ export function PipelineDetailDialog({
 
                   {timeline.length > 0 ? (
                     <div className="relative">
-                      {/* Vertical Timeline Line */}
-                      <div className="absolute left-[11px] top-3 bottom-3 w-0.5 bg-gray-200" />
+                      {/* Gradient Vertical Timeline Line */}
+                      <div className="absolute left-[15px] top-4 bottom-4 w-1 rounded-full bg-gradient-to-b from-blue-500 via-purple-500 via-amber-500 to-orange-500 opacity-30 dark:opacity-20" />
 
                       <div className="space-y-4">
-                        {timeline.map((item, index) => (
+                        {timeline.map((item, index) => {
+                          const stageColors = getStageColors(item.stage)
+                          return (
                           <div key={item.id} className="relative flex gap-4">
                             {/* Status Icon */}
-                            <div className="relative z-10 flex-shrink-0 bg-background">
-                              {getStatusIcon(item.status)}
+                            <div className="relative z-10 flex-shrink-0">
+                              {getStatusIcon(item.status, item.stage)}
                             </div>
 
                             {/* Content */}
                             <div className={`flex-1 pb-4 ${index === timeline.length - 1 ? 'pb-0' : ''}`}>
-                              <div className={`rounded-lg border p-3 ${getStatusColor(item.status)}`}>
+                              <div className={`rounded-lg border p-3 transition-all duration-200 hover:shadow-lg ${getStatusColor(item.status, item.stage)}`}>
                                 {/* Header */}
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-medium text-sm">{item.title}</span>
-                                    <Badge variant="outline" className="text-xs">
+                                    <span className={`font-medium text-sm ${stageColors.text}`}>{item.title}</span>
+                                    <Badge
+                                      className={`text-xs ${stageColors.bg} ${stageColors.text} border ${stageColors.border}`}
+                                    >
                                       {item.stage}
                                     </Badge>
                                     {item.status === 'overdue' && (
-                                      <Badge variant="destructive" className="text-xs">Overdue</Badge>
+                                      <Badge variant="destructive" className="text-xs animate-pulse">Overdue</Badge>
                                     )}
                                     {item.status === 'current' && (
-                                      <Badge className="bg-blue-500 text-xs">Current</Badge>
+                                      <Badge className={`text-xs ${stageColors.icon.split(' ')[0]} text-white`}>Current</Badge>
                                     )}
                                   </div>
-                                  <span className="text-xs text-muted-foreground">
+                                  <span className="text-xs text-muted-foreground font-medium">
                                     {formatDateTimeFull(item.date)}
                                   </span>
                                 </div>
@@ -612,7 +687,8 @@ export function PipelineDetailDialog({
                               </div>
                             </div>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   ) : (
@@ -625,13 +701,13 @@ export function PipelineDetailDialog({
 
               {/* Lost Info (if applicable) */}
               {data.stage === 'Closed Lost' && (
-                <Card className="border-red-200 bg-red-50">
+                <Card className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30">
                   <CardContent className="p-4">
-                    <h3 className="text-sm font-semibold text-red-700 mb-3">Lost Information</h3>
+                    <h3 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-3">Lost Information</h3>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <p className="text-xs text-red-600">Lost Reason</p>
-                        <p className="font-medium text-red-800 capitalize">
+                        <p className="text-xs text-red-600 dark:text-red-500">Lost Reason</p>
+                        <p className="font-medium text-red-800 dark:text-red-300 capitalize">
                           {data.lost_reason?.replace(/_/g, ' ') || '-'}
                         </p>
                       </div>

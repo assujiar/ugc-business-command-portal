@@ -67,9 +67,9 @@ export async function GET(
         leads(
           lead_id,
           company_name,
-          contact_name,
-          contact_email,
-          contact_phone,
+          pic_name,
+          pic_email,
+          pic_phone,
           industry,
           source,
           potential_revenue,
@@ -205,9 +205,9 @@ export async function GET(
       account_status: opportunity.accounts?.account_status || null,
 
       // PIC info (from account or lead)
-      pic_name: opportunity.accounts?.pic_name || opportunity.leads?.contact_name || null,
-      pic_email: opportunity.accounts?.pic_email || opportunity.leads?.contact_email || null,
-      pic_phone: opportunity.accounts?.pic_phone || opportunity.leads?.contact_phone || null,
+      pic_name: opportunity.accounts?.pic_name || opportunity.leads?.pic_name || null,
+      pic_email: opportunity.accounts?.pic_email || opportunity.leads?.pic_email || null,
+      pic_phone: opportunity.accounts?.pic_phone || opportunity.leads?.pic_phone || null,
 
       // Lead info
       lead_id: opportunity.lead_id,

@@ -520,50 +520,78 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
 
                         {/* Timeline - Horizontal milestone for pipeline cards */}
                         {!['Closed Won', 'Closed Lost'].includes(opp.stage) && timeline.length > 0 && (
-                          <div className="border-t pt-3 mt-1">
-                            <p className="text-xs text-muted-foreground mb-2">Pipeline Timeline</p>
+                          <div className="border-t border-border/50 pt-3 mt-1">
+                            <p className="text-xs font-medium text-muted-foreground mb-3">Pipeline Timeline</p>
                             {/* Horizontal timeline with connecting line */}
                             <div className="relative">
-                              {/* Connecting line */}
-                              <div className="absolute top-3 left-4 right-4 h-0.5 bg-gray-200" />
+                              {/* Gradient connecting line */}
+                              <div className="absolute top-4 left-6 right-6 h-1 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-orange-500 opacity-30 dark:opacity-20" />
+                              {/* Progress line */}
+                              <div
+                                className="absolute top-4 left-6 h-1 rounded-full bg-gradient-to-r from-blue-500 via-cyan-500 to-emerald-500"
+                                style={{
+                                  width: `${Math.max(0, (timeline.filter(s => s.status === 'done').length / timeline.length) * 100 - 10)}%`
+                                }}
+                              />
                               <div className="flex justify-between overflow-x-auto pb-1">
-                                {timeline.map((step, index) => (
-                                  <div
-                                    key={step.stage}
-                                    className="flex flex-col items-center relative z-10 min-w-[80px]"
-                                  >
-                                    {/* Status dot */}
+                                {timeline.map((step, index) => {
+                                  // Stage-specific colors
+                                  const stageColors: Record<string, { bg: string; ring: string; text: string }> = {
+                                    'Prospecting': { bg: 'bg-blue-500', ring: 'ring-blue-400', text: 'text-blue-600 dark:text-blue-400' },
+                                    'Discovery': { bg: 'bg-cyan-500', ring: 'ring-cyan-400', text: 'text-cyan-600 dark:text-cyan-400' },
+                                    'Quote Sent': { bg: 'bg-amber-500', ring: 'ring-amber-400', text: 'text-amber-600 dark:text-amber-400' },
+                                    'Negotiation': { bg: 'bg-orange-500', ring: 'ring-orange-400', text: 'text-orange-600 dark:text-orange-400' },
+                                  }
+                                  const colors = stageColors[step.stage] || { bg: 'bg-gray-500', ring: 'ring-gray-400', text: 'text-gray-600' }
+
+                                  return (
                                     <div
-                                      className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                                        step.status === 'done'
-                                          ? 'bg-green-500'
-                                          : step.status === 'overdue'
-                                          ? 'bg-red-500'
-                                          : 'bg-gray-300'
-                                      }`}
+                                      key={step.stage}
+                                      className="flex flex-col items-center relative z-10 min-w-[80px] px-1"
                                     >
-                                      {step.status === 'done' ? (
-                                        <CheckCircle2 className="h-4 w-4 text-white" />
-                                      ) : step.status === 'overdue' ? (
-                                        <AlertCircle className="h-4 w-4 text-white" />
-                                      ) : (
-                                        <Clock className="h-3 w-3 text-gray-500" />
-                                      )}
+                                      {/* Status dot with ring effect */}
+                                      <div
+                                        className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
+                                          step.status === 'done'
+                                            ? `${colors.bg} ring-2 ${colors.ring} ring-offset-2 ring-offset-background`
+                                            : step.status === 'overdue'
+                                            ? 'bg-red-500 ring-2 ring-red-400 ring-offset-2 ring-offset-background animate-pulse'
+                                            : 'bg-muted ring-2 ring-muted-foreground/20 ring-offset-2 ring-offset-background'
+                                        }`}
+                                      >
+                                        {step.status === 'done' ? (
+                                          <CheckCircle2 className="h-5 w-5 text-white drop-shadow" />
+                                        ) : step.status === 'overdue' ? (
+                                          <AlertCircle className="h-5 w-5 text-white drop-shadow" />
+                                        ) : (
+                                          <Clock className="h-4 w-4 text-muted-foreground" />
+                                        )}
+                                      </div>
+                                      {/* Stage label with color */}
+                                      <span className={`text-[10px] font-semibold mt-2 text-center ${
+                                        step.status === 'done' ? colors.text :
+                                        step.status === 'overdue' ? 'text-red-500 dark:text-red-400' :
+                                        'text-muted-foreground'
+                                      }`}>
+                                        {step.label}
+                                      </span>
+                                      {/* Due date with badge style */}
+                                      <span className={`text-[9px] text-center mt-0.5 px-1.5 py-0.5 rounded-full ${
+                                        step.status === 'done'
+                                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                          : step.status === 'overdue'
+                                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 font-medium'
+                                          : 'bg-muted text-muted-foreground'
+                                      }`}>
+                                        {step.status === 'done' && step.completedAt
+                                          ? formatDateTimeFull(step.completedAt.toISOString())
+                                          : step.dueDate
+                                          ? formatDateTimeFull(step.dueDate.toISOString())
+                                          : `${step.daysAllowed}d`}
+                                      </span>
                                     </div>
-                                    {/* Stage label */}
-                                    <span className="text-[10px] font-medium mt-1 text-center">{step.label}</span>
-                                    {/* Due date */}
-                                    <span className={`text-[9px] text-center ${
-                                      step.status === 'overdue' ? 'text-red-500' : 'text-muted-foreground'
-                                    }`}>
-                                      {step.status === 'done' && step.completedAt
-                                        ? formatDateTimeFull(step.completedAt.toISOString())
-                                        : step.dueDate
-                                        ? formatDateTimeFull(step.dueDate.toISOString())
-                                        : `${step.daysAllowed}d`}
-                                    </span>
-                                  </div>
-                                ))}
+                                  )
+                                })}
                               </div>
                             </div>
                           </div>
