@@ -43,10 +43,10 @@ export default async function PipelinePage() {
     redirect('/dashboard')
   }
 
-  // Step 1: Fetch opportunities with lead info for filtering
-  // Need to get lead creator info to filter by role
+  // Step 1: Fetch opportunities from view (includes computed is_overdue)
+  // Using v_pipeline_with_updates view which has is_overdue calculated by database
   const { data: allOpportunities, error: oppError } = await (adminClient as any)
-    .from('opportunities')
+    .from('v_pipeline_with_updates')
     .select('*')
     .order('created_at', { ascending: false })
 
@@ -54,9 +54,9 @@ export default async function PipelinePage() {
     console.error('Pipeline ERROR:', oppError)
   }
 
-  // Step 2: Fetch lead info for all opportunities with source_lead_id
+  // Step 2: Fetch lead info for all opportunities with lead_id (from view)
   const leadIds = Array.from(new Set((allOpportunities || [])
-    .map((o: any) => o.source_lead_id)
+    .map((o: any) => o.lead_id)
     .filter(Boolean))) as string[]
 
   let leadsMap: Record<string, {
@@ -107,7 +107,7 @@ export default async function PipelinePage() {
 
   if (!isAdmin(profile.role)) {
     filteredOpportunities = (allOpportunities || []).filter((opp: any) => {
-      const leadInfo = leadsMap[opp.source_lead_id]
+      const leadInfo = leadsMap[opp.lead_id]
 
       // Salesperson: Pipeline from leads they created OR claimed
       if (profile.role === 'salesperson') {
@@ -219,7 +219,8 @@ export default async function PipelinePage() {
   // Determine if user can update any pipeline (admin or salesperson)
   const userCanUpdate = isAdmin(profile.role) || profile.role === 'salesperson'
 
-  // Transform data - add all fields required by Opportunity interface
+  // Transform data - use values from v_pipeline_with_updates view
+  // View already has: account_name, owner_name, is_overdue, lead_id (from source_lead_id)
   const transformedOpportunities = filteredOpportunities.map((opp: any) => ({
     opportunity_id: opp.opportunity_id,
     name: opp.name,
@@ -227,29 +228,31 @@ export default async function PipelinePage() {
     estimated_value: opp.estimated_value,
     currency: opp.currency,
     probability: opp.probability,
-    expected_close_date: null,
+    expected_close_date: opp.expected_close_date,
     next_step: opp.next_step,
     next_step_due_date: opp.next_step_due_date,
-    close_reason: null,
+    close_reason: opp.close_reason,
     lost_reason: opp.lost_reason,
     competitor_price: opp.competitor_price,
     customer_budget: opp.customer_budget,
     closed_at: opp.closed_at,
-    notes: null,
+    notes: opp.notes,
     owner_user_id: opp.owner_user_id,
     account_id: opp.account_id,
-    lead_id: opp.source_lead_id,
+    lead_id: opp.lead_id,
     created_at: opp.created_at,
     updated_at: opp.updated_at,
-    account_name: accountsMap[opp.account_id]?.company_name || null,
-    account_status: accountsMap[opp.account_id]?.account_status || null,
-    owner_name: ownersMap[opp.owner_user_id] || null,
-    // Note: is_overdue calculation moved to client to avoid hydration mismatch
-    is_overdue: false, // Will be recalculated in PipelineDashboard component
+    // From view (pre-calculated)
+    account_name: opp.account_name || accountsMap[opp.account_id]?.company_name || null,
+    account_status: opp.account_status || accountsMap[opp.account_id]?.account_status || null,
+    owner_name: opp.owner_name || ownersMap[opp.owner_user_id] || null,
+    // is_overdue from database (NOW() calculated at query time)
+    // Client will still use mounted check for hydration safety
+    is_overdue: opp.is_overdue || false,
     stage_history: stageHistoryMap[opp.opportunity_id] || [],
     // Include lead info for permission checks in client
-    lead_created_by: leadsMap[opp.source_lead_id]?.created_by || null,
-    lead_sales_owner: leadsMap[opp.source_lead_id]?.sales_owner_user_id || null,
+    lead_created_by: leadsMap[opp.lead_id]?.created_by || null,
+    lead_sales_owner: leadsMap[opp.lead_id]?.sales_owner_user_id || null,
   }))
 
   return (

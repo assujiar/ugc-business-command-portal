@@ -126,12 +126,12 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     setMounted(true)
   }, [])
 
-  // Helper to check if opportunity is overdue (client-side only)
+  // Helper to check if opportunity is overdue
+  // Uses pre-calculated is_overdue from database (v_pipeline_with_updates view)
+  // Only shows after mount to avoid hydration mismatch (server time != client time during SSR)
   const isOverdue = (opp: Opportunity): boolean => {
-    if (!mounted) return false
-    if (!opp.next_step_due_date) return false
-    if (['Closed Won', 'Closed Lost'].includes(opp.stage)) return false
-    return new Date(opp.next_step_due_date) < new Date()
+    if (!mounted) return false // Prevent hydration mismatch
+    return opp.is_overdue // Use database-calculated value from view
   }
 
   // Detail dialog state
