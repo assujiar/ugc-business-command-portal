@@ -27,9 +27,9 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch lead data
+    // Fetch lead data from view (includes creator info)
     const { data, error } = await (supabase as any)
-      .from('leads')
+      .from('v_lead_management')
       .select('*')
       .eq('lead_id', id)
       .single()
