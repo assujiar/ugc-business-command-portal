@@ -599,13 +599,6 @@ export function PipelineDetailDialog({
                                   </span>
                                 </div>
 
-                                {/* Due Date */}
-                                {item.dueDate && item.status !== 'done' && (
-                                  <p className={`text-xs mb-2 ${item.status === 'overdue' ? 'text-red-600' : 'text-muted-foreground'}`}>
-                                    Due: {formatDateTimeFull(item.dueDate)}
-                                  </p>
-                                )}
-
                                 {/* Subtitle/Notes */}
                                 {item.subtitle && (
                                   <p className="text-sm text-muted-foreground mb-2">{item.subtitle}</p>
