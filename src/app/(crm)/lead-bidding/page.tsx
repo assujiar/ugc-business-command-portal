@@ -85,7 +85,7 @@ export default async function LeadBiddingPage() {
         </p>
       </div>
 
-      <LeadBiddingTable leads={transformedLeads} currentUserId={profile.user_id} />
+      <LeadBiddingTable leads={transformedLeads} currentUserId={profile.user_id} userRole={profile.role} />
     </div>
   )
 }

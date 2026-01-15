@@ -6,9 +6,16 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { SalesInboxTable } from '@/components/crm/sales-inbox-table'
+import { getSessionAndProfile } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 
 export default async function SalesInboxPage() {
   const supabase = await createClient()
+  const { profile } = await getSessionAndProfile()
+
+  if (!profile) {
+    redirect('/login')
+  }
 
   const { data: leads, error } = await supabase
     .from('v_sales_inbox')
@@ -24,7 +31,11 @@ export default async function SalesInboxPage() {
         </p>
       </div>
 
-      <SalesInboxTable leads={leads || []} />
+      <SalesInboxTable
+        leads={leads || []}
+        currentUserId={profile.user_id}
+        userRole={profile.role}
+      />
     </div>
   )
 }

@@ -21,8 +21,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import { UserPlus, Clock, AlertTriangle } from 'lucide-react'
+import { UserPlus, Clock, AlertTriangle, MoreVertical, Eye } from 'lucide-react'
+import { LeadDetailDialog } from '@/components/crm/lead-detail-dialog'
+import type { UserRole } from '@/types/database'
 
 interface Lead {
   lead_id: string
@@ -45,15 +54,40 @@ interface Lead {
 interface LeadBiddingTableProps {
   leads: Lead[]
   currentUserId: string
+  userRole?: UserRole | null
 }
 
-export function LeadBiddingTable({ leads, currentUserId }: LeadBiddingTableProps) {
+export function LeadBiddingTable({ leads, currentUserId, userRole }: LeadBiddingTableProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const [claimDialog, setClaimDialog] = useState<{
     open: boolean
     lead: Lead | null
   }>({ open: false, lead: null })
+
+  // State for lead detail dialog
+  const [detailDialog, setDetailDialog] = useState<{
+    open: boolean
+    lead: any | null
+    loading: boolean
+  }>({ open: false, lead: null, loading: false })
+
+  // Function to fetch full lead details including shipment
+  const fetchLeadDetails = async (leadId: string) => {
+    setDetailDialog({ open: true, lead: null, loading: true })
+    try {
+      const response = await fetch(`/api/crm/leads/${leadId}`)
+      if (response.ok) {
+        const { data } = await response.json()
+        setDetailDialog({ open: true, lead: data, loading: false })
+      } else {
+        setDetailDialog({ open: false, lead: null, loading: false })
+      }
+    } catch (error) {
+      console.error('Error fetching lead:', error)
+      setDetailDialog({ open: false, lead: null, loading: false })
+    }
+  }
 
   const handleClaimLead = async () => {
     if (!claimDialog.lead || !claimDialog.lead.pool_id) return
@@ -189,14 +223,34 @@ export function LeadBiddingTable({ leads, currentUserId }: LeadBiddingTableProps
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Button
-                              size="sm"
-                              onClick={() => setClaimDialog({ open: true, lead })}
-                              disabled={isLoading === lead.lead_id || expired || !lead.pool_id}
-                            >
-                              <UserPlus className="h-4 w-4 mr-1" />
-                              {isLoading === lead.lead_id ? 'Claiming...' : 'Claim'}
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  disabled={isLoading === lead.lead_id}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => fetchLeadDetails(lead.lead_id)}
+                                >
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Detail
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => setClaimDialog({ open: true, lead })}
+                                  disabled={expired || !lead.pool_id}
+                                >
+                                  <UserPlus className="h-4 w-4 mr-2" />
+                                  Claim Lead
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
                         </TableRow>
                       )
@@ -255,15 +309,24 @@ export function LeadBiddingTable({ leads, currentUserId }: LeadBiddingTableProps
                           </div>
                         </div>
 
-                        <div className="mt-3 pt-3 border-t">
+                        <div className="mt-3 pt-3 border-t flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => fetchLeadDetails(lead.lead_id)}
+                            className="flex-1"
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            View Detail
+                          </Button>
                           <Button
                             size="sm"
                             onClick={() => setClaimDialog({ open: true, lead })}
                             disabled={isLoading === lead.lead_id || expired || !lead.pool_id}
-                            className="w-full"
+                            className="flex-1"
                           >
                             <UserPlus className="h-4 w-4 mr-1" />
-                            {isLoading === lead.lead_id ? 'Claiming...' : 'Claim Lead'}
+                            {isLoading === lead.lead_id ? 'Claiming...' : 'Claim'}
                           </Button>
                         </div>
                       </CardContent>
@@ -365,6 +428,19 @@ export function LeadBiddingTable({ leads, currentUserId }: LeadBiddingTableProps
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lead Detail Dialog */}
+      <LeadDetailDialog
+        lead={detailDialog.lead}
+        open={detailDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailDialog({ open: false, lead: null, loading: false })
+          }
+        }}
+        currentUserId={currentUserId}
+        userRole={userRole || null}
+      />
     </>
   )
 }

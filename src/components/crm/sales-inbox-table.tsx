@@ -16,11 +16,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { UserPlus, Clock, AlertTriangle } from 'lucide-react'
+import { UserPlus, Clock, AlertTriangle, MoreVertical, Eye } from 'lucide-react'
 import { formatDate, formatDateTime, isOverdue } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { LeadDetailDialog } from '@/components/crm/lead-detail-dialog'
+import type { UserRole } from '@/types/database'
 
 interface PoolLead {
   lead_id: string
@@ -36,11 +45,37 @@ interface PoolLead {
 
 interface SalesInboxTableProps {
   leads: PoolLead[]
+  currentUserId?: string
+  userRole?: UserRole | null
 }
 
-export function SalesInboxTable({ leads }: SalesInboxTableProps) {
+export function SalesInboxTable({ leads, currentUserId = '', userRole }: SalesInboxTableProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState<number | null>(null)
+
+  // State for lead detail dialog
+  const [detailDialog, setDetailDialog] = useState<{
+    open: boolean
+    lead: any | null
+    loading: boolean
+  }>({ open: false, lead: null, loading: false })
+
+  // Function to fetch full lead details including shipment
+  const fetchLeadDetails = async (leadId: string) => {
+    setDetailDialog({ open: true, lead: null, loading: true })
+    try {
+      const response = await fetch(`/api/crm/leads/${leadId}`)
+      if (response.ok) {
+        const { data } = await response.json()
+        setDetailDialog({ open: true, lead: data, loading: false })
+      } else {
+        setDetailDialog({ open: false, lead: null, loading: false })
+      }
+    } catch (error) {
+      console.error('Error fetching lead:', error)
+      setDetailDialog({ open: false, lead: null, loading: false })
+    }
+  }
 
   const handleClaim = async (poolId: number, createAccount: boolean = true) => {
     setIsLoading(poolId)
@@ -95,6 +130,7 @@ export function SalesInboxTable({ leads }: SalesInboxTableProps) {
   }
 
   return (
+  <>
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Available Leads ({leads.length})</CardTitle>
@@ -135,14 +171,33 @@ export function SalesInboxTable({ leads }: SalesInboxTableProps) {
                   {lead.handover_notes || '-'}
                 </TableCell>
                 <TableCell>
-                  <Button
-                    size="sm"
-                    onClick={() => handleClaim(lead.pool_id)}
-                    disabled={isLoading === lead.pool_id}
-                  >
-                    <UserPlus className="h-4 w-4 mr-1" />
-                    {isLoading === lead.pool_id ? 'Claiming...' : 'Claim'}
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={isLoading === lead.pool_id}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => fetchLeadDetails(lead.lead_id)}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Detail
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleClaim(lead.pool_id)}
+                      >
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Claim Lead
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
@@ -150,5 +205,19 @@ export function SalesInboxTable({ leads }: SalesInboxTableProps) {
         </Table>
       </CardContent>
     </Card>
+
+    {/* Lead Detail Dialog */}
+    <LeadDetailDialog
+      lead={detailDialog.lead}
+      open={detailDialog.open}
+      onOpenChange={(open) => {
+        if (!open) {
+          setDetailDialog({ open: false, lead: null, loading: false })
+        }
+      }}
+      currentUserId={currentUserId}
+      userRole={userRole || null}
+    />
+  </>
   )
 }

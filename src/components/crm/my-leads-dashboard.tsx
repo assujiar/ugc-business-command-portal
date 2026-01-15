@@ -14,6 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { ACCOUNT_STATUSES } from '@/lib/constants'
 import {
@@ -23,7 +30,11 @@ import {
   ArrowRight,
   UserPlus,
   PlusCircle,
+  MoreVertical,
+  Eye,
 } from 'lucide-react'
+import { LeadDetailDialog } from '@/components/crm/lead-detail-dialog'
+import type { UserRole } from '@/types/database'
 
 interface Lead {
   lead_id: string
@@ -52,10 +63,35 @@ interface Lead {
 interface MyLeadsDashboardProps {
   leads: Lead[]
   currentUserId: string
+  userRole?: UserRole | null
 }
 
-export function MyLeadsDashboard({ leads, currentUserId }: MyLeadsDashboardProps) {
+export function MyLeadsDashboard({ leads, currentUserId, userRole }: MyLeadsDashboardProps) {
   const router = useRouter()
+
+  // State for lead detail dialog
+  const [detailDialog, setDetailDialog] = useState<{
+    open: boolean
+    lead: any | null
+    loading: boolean
+  }>({ open: false, lead: null, loading: false })
+
+  // Function to fetch full lead details including shipment
+  const fetchLeadDetails = async (leadId: string) => {
+    setDetailDialog({ open: true, lead: null, loading: true })
+    try {
+      const response = await fetch(`/api/crm/leads/${leadId}`)
+      if (response.ok) {
+        const { data } = await response.json()
+        setDetailDialog({ open: true, lead: data, loading: false })
+      } else {
+        setDetailDialog({ open: false, lead: null, loading: false })
+      }
+    } catch (error) {
+      console.error('Error fetching lead:', error)
+      setDetailDialog({ open: false, lead: null, loading: false })
+    }
+  }
 
   // Stats
   const totalLeads = leads.length
@@ -264,18 +300,44 @@ export function MyLeadsDashboard({ leads, currentUserId }: MyLeadsDashboardProps
                           </div>
                         </TableCell>
                         <TableCell>
-                          {lead.opportunity_id ? (
-                            <Button size="sm" variant="outline" asChild>
-                              <Link href={`/pipeline?opp=${lead.opportunity_id}`}>
-                                Pipeline
-                                <ArrowRight className="h-4 w-4 ml-1" />
-                              </Link>
-                            </Button>
-                          ) : (
-                            <Button size="sm" variant="outline" disabled>
-                              No Pipeline
-                            </Button>
-                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => fetchLeadDetails(lead.lead_id)}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Detail
+                              </DropdownMenuItem>
+                              {lead.opportunity_id && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/pipeline?opp=${lead.opportunity_id}`}>
+                                      <ArrowRight className="h-4 w-4 mr-2" />
+                                      View Pipeline
+                                    </Link>
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {lead.account_id && (
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/accounts?id=${lead.account_id}`}>
+                                    <Building2 className="h-4 w-4 mr-2" />
+                                    View Account
+                                  </Link>
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -326,16 +388,25 @@ export function MyLeadsDashboard({ leads, currentUserId }: MyLeadsDashboardProps
                         </div>
                       </div>
 
-                      {lead.opportunity_id && (
-                        <div className="mt-3 pt-3 border-t">
-                          <Button size="sm" variant="outline" asChild className="w-full">
+                      <div className="mt-3 pt-3 border-t flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => fetchLeadDetails(lead.lead_id)}
+                          className="flex-1"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View Detail
+                        </Button>
+                        {lead.opportunity_id && (
+                          <Button size="sm" variant="outline" asChild className="flex-1">
                             <Link href={`/pipeline?opp=${lead.opportunity_id}`}>
-                              View Pipeline
+                              Pipeline
                               <ArrowRight className="h-4 w-4 ml-1" />
                             </Link>
                           </Button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -355,6 +426,19 @@ export function MyLeadsDashboard({ leads, currentUserId }: MyLeadsDashboardProps
           )}
         </CardContent>
       </Card>
+
+      {/* Lead Detail Dialog */}
+      <LeadDetailDialog
+        lead={detailDialog.lead}
+        open={detailDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailDialog({ open: false, lead: null, loading: false })
+          }
+        }}
+        currentUserId={currentUserId}
+        userRole={userRole || null}
+      />
     </div>
   )
 }
