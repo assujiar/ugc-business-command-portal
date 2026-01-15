@@ -216,7 +216,6 @@ SELECT
   l.potential_revenue,
   l.claim_status,
   l.claimed_by_name,
-  l.inquiry_text,
   l.notes,
   l.created_at,
   l.updated_at,
