@@ -56,13 +56,23 @@ export async function POST(
       .single()
 
     if (accountError || !account) {
+      console.error('Account not found:', accountError)
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
+    // Log account status for debugging
+    console.log('Account status check:', {
+      account_id: id,
+      account_status: account.account_status,
+      account_status_type: typeof account.account_status
+    })
+
     // Verify account is in failed status
-    if (account.account_status !== 'failed_account') {
+    // Handle cases where account_status might not exist (migration not applied)
+    const accountStatus = account.account_status
+    if (accountStatus && accountStatus !== 'failed_account') {
       return NextResponse.json({
-        error: 'Only failed accounts can be re-prospected'
+        error: `Only failed accounts can be re-prospected. Current status: ${accountStatus}`
       }, { status: 400 })
     }
 
