@@ -1,0 +1,782 @@
+'use client'
+
+// =====================================================
+// Accounts Client Component
+// Interactive features: filtering, modals, retry prospect
+// =====================================================
+
+import { useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Building2,
+  TrendingUp,
+  User,
+  Calendar,
+  DollarSign,
+  Activity,
+  Eye,
+  RotateCcw,
+  MoreHorizontal,
+  X,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  UserX,
+  Users,
+  Loader2
+} from 'lucide-react'
+
+interface AccountEnriched {
+  account_id: string
+  company_name: string
+  owner_name: string | null
+  pic_name: string | null
+  pic_email: string | null
+  pic_phone: string | null
+  industry: string | null
+  address: string | null
+  city: string | null
+  province: string | null
+  notes: string | null
+  activity_status: string | null
+  account_status: string | null
+  open_opportunities: number
+  planned_activities: number
+  overdue_activities: number
+  revenue_total: number
+  retry_count: number
+  lead_id: string | null
+}
+
+interface AccountsClientProps {
+  accounts: AccountEnriched[]
+}
+
+// Status configurations
+const ACCOUNT_STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+  calon_account: { label: 'Calon Account', icon: <Clock className="h-4 w-4" />, color: 'bg-blue-100 text-blue-800' },
+  new_account: { label: 'New Account', icon: <CheckCircle className="h-4 w-4" />, color: 'bg-green-100 text-green-800' },
+  active_account: { label: 'Active Account', icon: <Activity className="h-4 w-4" />, color: 'bg-emerald-100 text-emerald-800' },
+  passive_account: { label: 'Passive Account', icon: <Clock className="h-4 w-4" />, color: 'bg-yellow-100 text-yellow-800' },
+  failed_account: { label: 'Failed Account', icon: <AlertCircle className="h-4 w-4" />, color: 'bg-red-100 text-red-800' },
+  lost_account: { label: 'Lost Account', icon: <UserX className="h-4 w-4" />, color: 'bg-gray-100 text-gray-800' },
+}
+
+const ACTIVITY_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  Active: { label: 'Active', color: 'bg-green-100 text-green-800' },
+  Passive: { label: 'Passive', color: 'bg-yellow-100 text-yellow-800' },
+  Inactive: { label: 'Inactive', color: 'bg-gray-100 text-gray-800' },
+}
+
+function getAttemptLabel(attemptNumber: number): string {
+  const ordinals = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth']
+  if (attemptNumber <= 10) {
+    return `${ordinals[attemptNumber - 1]} Attempt Pipeline`
+  }
+  return `Attempt #${attemptNumber} Pipeline`
+}
+
+export default function AccountsClient({ accounts }: AccountsClientProps) {
+  const [filterAccountStatus, setFilterAccountStatus] = useState<string | null>(null)
+  const [filterActivityStatus, setFilterActivityStatus] = useState<string | null>(null)
+  const [selectedAccount, setSelectedAccount] = useState<AccountEnriched | null>(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showRetryModal, setShowRetryModal] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [retryFormData, setRetryFormData] = useState({
+    company_name: '',
+    pic_name: '',
+    pic_email: '',
+    pic_phone: '',
+    industry: '',
+    notes: '',
+    potential_revenue: 0
+  })
+
+  // Calculate status counts
+  const accountStatusCounts = accounts.reduce((acc, account) => {
+    const status = account.account_status || 'unknown'
+    acc[status] = (acc[status] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
+  const activityStatusCounts = accounts.reduce((acc, account) => {
+    const status = account.activity_status || 'Inactive'
+    acc[status] = (acc[status] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
+  // Filter accounts
+  const filteredAccounts = accounts.filter(account => {
+    if (filterAccountStatus && account.account_status !== filterAccountStatus) return false
+    if (filterActivityStatus && account.activity_status !== filterActivityStatus) return false
+    return true
+  })
+
+  // Handle view detail
+  const handleViewDetail = (account: AccountEnriched) => {
+    setSelectedAccount(account)
+    setShowDetailModal(true)
+  }
+
+  // Handle retry prospect
+  const handleOpenRetryModal = (account: AccountEnriched) => {
+    setSelectedAccount(account)
+    setRetryFormData({
+      company_name: account.company_name || '',
+      pic_name: account.pic_name || '',
+      pic_email: account.pic_email || '',
+      pic_phone: account.pic_phone || '',
+      industry: account.industry || '',
+      notes: account.notes || '',
+      potential_revenue: 0
+    })
+    setShowRetryModal(true)
+  }
+
+  // Submit retry prospect
+  const handleSubmitRetry = async () => {
+    if (!selectedAccount) return
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch(`/api/crm/accounts/${selectedAccount.account_id}/retry-prospect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(retryFormData)
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert(result.data.message)
+        setShowRetryModal(false)
+        // Refresh page to show updated data
+        window.location.reload()
+      } else {
+        alert(result.error || 'Failed to create retry prospect')
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      alert('An error occurred')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilterAccountStatus(null)
+    setFilterActivityStatus(null)
+  }
+
+  const hasActiveFilters = filterAccountStatus || filterActivityStatus
+
+  return (
+    <div className="space-y-4 lg:space-y-6">
+      {/* Summary Cards */}
+      <div className="space-y-4">
+        {/* Account Status Cards */}
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">Account Status</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+            {Object.entries(ACCOUNT_STATUS_CONFIG).map(([status, config]) => {
+              const count = accountStatusCounts[status] || 0
+              const isActive = filterAccountStatus === status
+              return (
+                <Card
+                  key={status}
+                  className={`cursor-pointer transition-all hover:shadow-md ${
+                    isActive ? 'ring-2 ring-primary' : ''
+                  }`}
+                  onClick={() => setFilterAccountStatus(isActive ? null : status)}
+                >
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded ${config.color}`}>
+                        {config.icon}
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold">{count}</p>
+                        <p className="text-xs text-muted-foreground">{config.label}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Activity Status Cards */}
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">Activity Status</h3>
+          <div className="grid grid-cols-3 gap-2">
+            {Object.entries(ACTIVITY_STATUS_CONFIG).map(([status, config]) => {
+              const count = activityStatusCounts[status] || 0
+              const isActive = filterActivityStatus === status
+              return (
+                <Card
+                  key={status}
+                  className={`cursor-pointer transition-all hover:shadow-md ${
+                    isActive ? 'ring-2 ring-primary' : ''
+                  }`}
+                  onClick={() => setFilterActivityStatus(isActive ? null : status)}
+                >
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-lg font-bold">{count}</p>
+                        <p className="text-xs text-muted-foreground">{config.label}</p>
+                      </div>
+                      <Badge className={config.color}>{status}</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Active Filters Banner */}
+      {hasActiveFilters && (
+        <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
+          <span className="text-sm text-muted-foreground">Filters:</span>
+          {filterAccountStatus && (
+            <Badge variant="secondary" className="gap-1">
+              {ACCOUNT_STATUS_CONFIG[filterAccountStatus]?.label || filterAccountStatus}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() => setFilterAccountStatus(null)}
+              />
+            </Badge>
+          )}
+          {filterActivityStatus && (
+            <Badge variant="secondary" className="gap-1">
+              {filterActivityStatus}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() => setFilterActivityStatus(null)}
+              />
+            </Badge>
+          )}
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            Clear All
+          </Button>
+        </div>
+      )}
+
+      {/* Accounts Table */}
+      <Card>
+        <CardHeader className="pb-3 lg:pb-6">
+          <CardTitle className="text-base lg:text-lg">
+            All Accounts ({filteredAccounts.length})
+            {hasActiveFilters && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                (filtered from {accounts.length})
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-0 lg:px-6">
+          {filteredAccounts.length > 0 ? (
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Company Name</TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          <User className="h-4 w-4" />
+                          PIC
+                        </div>
+                      </TableHead>
+                      <TableHead>Owner</TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          <Activity className="h-4 w-4" />
+                          Activity
+                        </div>
+                      </TableHead>
+                      <TableHead>Account Status</TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          <TrendingUp className="h-4 w-4" />
+                          Opps
+                        </div>
+                      </TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          <DollarSign className="h-4 w-4" />
+                          Revenue
+                        </div>
+                      </TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          Activities
+                        </div>
+                      </TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAccounts.map((account) => (
+                      <TableRow key={account.account_id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <span className="font-medium">{account.company_name}</span>
+                              {account.retry_count > 0 && (
+                                <div className="text-xs text-orange-600">
+                                  {getAttemptLabel(account.retry_count + 1)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {account.pic_name ? (
+                            <div className="text-sm">
+                              <div className="font-medium">{account.pic_name}</div>
+                              {account.pic_email && (
+                                <div className="text-xs text-muted-foreground">{account.pic_email}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{account.owner_name || '-'}</TableCell>
+                        <TableCell>
+                          {account.activity_status ? (
+                            <Badge className={ACTIVITY_STATUS_CONFIG[account.activity_status]?.color || ''}>
+                              {account.activity_status}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {account.account_status ? (
+                            <Badge className={ACCOUNT_STATUS_CONFIG[account.account_status]?.color || ''}>
+                              {account.account_status.replace(/_/g, ' ')}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={account.open_opportunities > 0 ? 'default' : 'secondary'}>
+                            {account.open_opportunities}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {account.revenue_total > 0 ? (
+                            <span className="text-green-600">
+                              Rp {(account.revenue_total / 1000000).toFixed(1)}M
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span>{account.planned_activities}</span>
+                            {account.overdue_activities > 0 && (
+                              <Badge variant="destructive" className="text-xs">
+                                {account.overdue_activities} overdue
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleViewDetail(account)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Detail
+                              </DropdownMenuItem>
+                              {account.account_status === 'failed_account' && (
+                                <DropdownMenuItem onClick={() => handleOpenRetryModal(account)}>
+                                  <RotateCcw className="h-4 w-4 mr-2" />
+                                  Retry Prospect
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 px-4">
+                {filteredAccounts.map((account) => (
+                  <Card key={account.account_id} className="bg-muted/30">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            <h4 className="font-medium text-sm truncate">{account.company_name}</h4>
+                          </div>
+                          {account.retry_count > 0 && (
+                            <p className="text-xs text-orange-600 mt-1">
+                              {getAttemptLabel(account.retry_count + 1)}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Owner: {account.owner_name || '-'}
+                          </p>
+                          {account.pic_name && (
+                            <p className="text-xs text-muted-foreground">
+                              PIC: {account.pic_name}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-1 items-end">
+                          {account.account_status && (
+                            <Badge className={`text-xs ${ACCOUNT_STATUS_CONFIG[account.account_status]?.color || ''}`}>
+                              {account.account_status.replace(/_/g, ' ')}
+                            </Badge>
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleViewDetail(account)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Detail
+                              </DropdownMenuItem>
+                              {account.account_status === 'failed_account' && (
+                                <DropdownMenuItem onClick={() => handleOpenRetryModal(account)}>
+                                  <RotateCcw className="h-4 w-4 mr-2" />
+                                  Retry Prospect
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3 mt-3">
+                        <div className="text-center p-2 bg-background rounded">
+                          <div className="flex items-center justify-center gap-1">
+                            <Activity className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Status</span>
+                          </div>
+                          <p className="font-semibold text-xs">{account.activity_status || '-'}</p>
+                        </div>
+                        <div className="text-center p-2 bg-background rounded">
+                          <div className="flex items-center justify-center gap-1">
+                            <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Opps</span>
+                          </div>
+                          <p className="font-semibold text-sm">{account.open_opportunities}</p>
+                        </div>
+                        <div className="text-center p-2 bg-background rounded">
+                          <div className="flex items-center justify-center gap-1">
+                            <Calendar className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Planned</span>
+                          </div>
+                          <p className="font-semibold text-sm">{account.planned_activities}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-12 px-4">
+              <p className="text-muted-foreground">No accounts found</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* View Detail Modal */}
+      <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Account Detail
+            </DialogTitle>
+            <DialogDescription>
+              Complete information about this account
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAccount && (
+            <div className="space-y-4">
+              {/* Status Badges */}
+              <div className="flex flex-wrap gap-2">
+                {selectedAccount.account_status && (
+                  <Badge className={ACCOUNT_STATUS_CONFIG[selectedAccount.account_status]?.color || ''}>
+                    {selectedAccount.account_status.replace(/_/g, ' ')}
+                  </Badge>
+                )}
+                {selectedAccount.activity_status && (
+                  <Badge className={ACTIVITY_STATUS_CONFIG[selectedAccount.activity_status]?.color || ''}>
+                    {selectedAccount.activity_status}
+                  </Badge>
+                )}
+                {selectedAccount.retry_count > 0 && (
+                  <Badge variant="outline" className="text-orange-600 border-orange-600">
+                    {getAttemptLabel(selectedAccount.retry_count + 1)}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Company Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground">Company Name</Label>
+                  <p className="font-medium">{selectedAccount.company_name}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Industry</Label>
+                  <p className="font-medium">{selectedAccount.industry || '-'}</p>
+                </div>
+              </div>
+
+              {/* PIC Info */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  PIC Information
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Name</Label>
+                    <p className="font-medium">{selectedAccount.pic_name || '-'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Email</Label>
+                    <p className="font-medium">{selectedAccount.pic_email || '-'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Phone</Label>
+                    <p className="font-medium">{selectedAccount.pic_phone || '-'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Owner</Label>
+                    <p className="font-medium">{selectedAccount.owner_name || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address Info */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-2">Address</h4>
+                <p className="text-sm">
+                  {[selectedAccount.address, selectedAccount.city, selectedAccount.province]
+                    .filter(Boolean)
+                    .join(', ') || '-'}
+                </p>
+              </div>
+
+              {/* Stats */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-2">Statistics</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center p-3 bg-muted rounded">
+                    <p className="text-2xl font-bold">{selectedAccount.open_opportunities}</p>
+                    <p className="text-xs text-muted-foreground">Open Opportunities</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted rounded">
+                    <p className="text-2xl font-bold">{selectedAccount.planned_activities}</p>
+                    <p className="text-xs text-muted-foreground">Planned Activities</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted rounded">
+                    <p className="text-2xl font-bold text-red-600">{selectedAccount.overdue_activities}</p>
+                    <p className="text-xs text-muted-foreground">Overdue</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {selectedAccount.notes && (
+                <div className="border-t pt-4">
+                  <h4 className="font-medium mb-2">Notes</h4>
+                  <p className="text-sm text-muted-foreground">{selectedAccount.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailModal(false)}>
+              Close
+            </Button>
+            {selectedAccount?.account_status === 'failed_account' && (
+              <Button onClick={() => {
+                setShowDetailModal(false)
+                handleOpenRetryModal(selectedAccount)
+              }}>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Retry Prospect
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Retry Prospect Modal */}
+      <Dialog open={showRetryModal} onOpenChange={setShowRetryModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5" />
+              Retry Prospect
+            </DialogTitle>
+            <DialogDescription>
+              Create a new lead and pipeline for this failed account. This will be attempt #{(selectedAccount?.retry_count || 0) + 2}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Current Status */}
+            {selectedAccount && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  <strong>Current Status:</strong> {selectedAccount.account_status?.replace(/_/g, ' ')}
+                  {selectedAccount.retry_count > 0 && (
+                    <span className="ml-2">
+                      (Previous attempts: {selectedAccount.retry_count})
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* Edit Form */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label htmlFor="company_name">Company Name</Label>
+                <Input
+                  id="company_name"
+                  value={retryFormData.company_name}
+                  onChange={(e) => setRetryFormData(prev => ({ ...prev, company_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="pic_name">PIC Name</Label>
+                <Input
+                  id="pic_name"
+                  value={retryFormData.pic_name}
+                  onChange={(e) => setRetryFormData(prev => ({ ...prev, pic_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="pic_email">PIC Email</Label>
+                <Input
+                  id="pic_email"
+                  type="email"
+                  value={retryFormData.pic_email}
+                  onChange={(e) => setRetryFormData(prev => ({ ...prev, pic_email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="pic_phone">PIC Phone</Label>
+                <Input
+                  id="pic_phone"
+                  value={retryFormData.pic_phone}
+                  onChange={(e) => setRetryFormData(prev => ({ ...prev, pic_phone: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="industry">Industry</Label>
+                <Input
+                  id="industry"
+                  value={retryFormData.industry}
+                  onChange={(e) => setRetryFormData(prev => ({ ...prev, industry: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="potential_revenue">Potential Revenue (IDR)</Label>
+                <Input
+                  id="potential_revenue"
+                  type="number"
+                  value={retryFormData.potential_revenue}
+                  onChange={(e) => setRetryFormData(prev => ({ ...prev, potential_revenue: Number(e.target.value) }))}
+                />
+              </div>
+              <div className="col-span-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={retryFormData.notes}
+                  onChange={(e) => setRetryFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRetryModal(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitRetry} disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Submit Retry Prospect
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
