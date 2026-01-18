@@ -112,63 +112,95 @@ export async function POST(request: NextRequest) {
     }
 
     // If salesperson created the lead, auto-create Account and Pipeline
+    console.log('isSalesUser:', isSalesUser, 'userRole:', userRole)
     if (isSalesUser && leadResult) {
-      const { createAdminClient } = await import('@/lib/supabase/admin')
-      const adminClient = createAdminClient()
+      try {
+        console.log('Sales user creating lead - will auto-create Account and Pipeline')
 
-      // Create Account
-      const accountData = {
-        company_name: leadData.company_name,
-        pic_name: leadData.pic_name || null,
-        pic_email: leadData.pic_email || null,
-        pic_phone: leadData.pic_phone || null,
-        owner_user_id: user.id,
-        created_by: user.id,
-        account_status: 'calon_account',
-        lead_id: leadResult.lead_id,
-      }
+        // Check if service role key is available
+        if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          console.error('SUPABASE_SERVICE_ROLE_KEY is not configured - cannot create admin client')
+          throw new Error('Admin client not available')
+        }
 
-      const { data: newAccount, error: accountError } = await (adminClient as any)
-        .from('accounts')
-        .insert(accountData)
-        .select('account_id')
-        .single()
+        const { createAdminClient } = await import('@/lib/supabase/admin')
+        const adminClient = createAdminClient()
+        console.log('Admin client created successfully')
 
-      let accountId: string | null = null
-      if (!accountError && newAccount) {
-        accountId = newAccount.account_id
-      }
-
-      // Create Pipeline (Opportunity)
-      if (accountId) {
-        const opportunityData = {
-          name: `Pipeline - ${leadData.company_name}`,
-          account_id: accountId,
-          lead_id: leadResult.lead_id,
-          stage: 'Prospecting',
-          estimated_value: leadData.potential_revenue || 0,
-          currency: 'IDR',
-          probability: 10,
+        // Create Account
+        const accountData = {
+          company_name: leadData.company_name,
+          pic_name: leadData.pic_name || null,
+          pic_email: leadData.pic_email || null,
+          pic_phone: leadData.pic_phone || null,
           owner_user_id: user.id,
           created_by: user.id,
+          account_status: 'calon_account',
+          lead_id: leadResult.lead_id,
         }
 
-        const { data: newOpportunity } = await (adminClient as any)
-          .from('opportunities')
-          .insert(opportunityData)
-          .select('opportunity_id')
+        console.log('Creating account with data:', accountData)
+        const { data: newAccount, error: accountError } = await (adminClient as any)
+          .from('accounts')
+          .insert(accountData)
+          .select('account_id')
           .single()
 
-        // Update lead with account_id and opportunity_id
-        if (newOpportunity) {
-          await (adminClient as any)
-            .from('leads')
-            .update({
-              account_id: accountId,
-              opportunity_id: newOpportunity.opportunity_id,
-            })
-            .eq('lead_id', leadResult.lead_id)
+        let accountId: string | null = null
+        if (accountError) {
+          console.error('Error creating account for sales lead:', accountError)
+        } else if (newAccount) {
+          accountId = newAccount.account_id
+          console.log('Account created for sales lead:', accountId)
         }
+
+        // Create Pipeline (Opportunity)
+        if (accountId) {
+          const opportunityData = {
+            name: `Pipeline - ${leadData.company_name}`,
+            account_id: accountId,
+            lead_id: leadResult.lead_id,
+            stage: 'Prospecting',
+            estimated_value: leadData.potential_revenue || 0,
+            currency: 'IDR',
+            probability: 10,
+            owner_user_id: user.id,
+            created_by: user.id,
+          }
+
+          console.log('Creating pipeline with data:', opportunityData)
+          const { data: newOpportunity, error: opportunityError } = await (adminClient as any)
+            .from('opportunities')
+            .insert(opportunityData)
+            .select('opportunity_id')
+            .single()
+
+          if (opportunityError) {
+            console.error('Error creating pipeline for sales lead:', opportunityError)
+          } else if (newOpportunity) {
+            console.log('Pipeline created for sales lead:', newOpportunity.opportunity_id)
+
+            // Update lead with account_id and opportunity_id
+            const { error: updateError } = await (adminClient as any)
+              .from('leads')
+              .update({
+                account_id: accountId,
+                opportunity_id: newOpportunity.opportunity_id,
+              })
+              .eq('lead_id', leadResult.lead_id)
+
+            if (updateError) {
+              console.error('Error updating lead with account/opportunity:', updateError)
+            } else {
+              console.log('Lead updated with account_id and opportunity_id')
+              // Update leadResult for response
+              leadResult.account_id = accountId
+              leadResult.opportunity_id = newOpportunity.opportunity_id
+            }
+          }
+        }
+      } catch (autoCreateError) {
+        console.error('Unexpected error in auto-create account/pipeline:', autoCreateError)
       }
     }
 
