@@ -116,8 +116,16 @@ export async function POST(request: NextRequest) {
     if (isSalesUser && leadResult) {
       try {
         console.log('Sales user creating lead - will auto-create Account and Pipeline')
+
+        // Check if service role key is available
+        if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          console.error('SUPABASE_SERVICE_ROLE_KEY is not configured - cannot create admin client')
+          throw new Error('Admin client not available')
+        }
+
         const { createAdminClient } = await import('@/lib/supabase/admin')
         const adminClient = createAdminClient()
+        console.log('Admin client created successfully')
 
         // Create Account
         const accountData = {
