@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isSales } from '@/lib/permissions'
+import { getStageConfig, calculateNextStepDueDate } from '@/lib/constants'
 import type { UserRole } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
@@ -156,16 +157,22 @@ export async function POST(request: NextRequest) {
 
         // Create Pipeline (Opportunity)
         if (accountId) {
+          const initialStage = 'Prospecting'
+          const stageConfig = getStageConfig(initialStage)
+          const nextStepDueDate = calculateNextStepDueDate(initialStage)
+
           const opportunityData = {
             name: `Pipeline - ${leadData.company_name}`,
             account_id: accountId,
-            lead_id: leadResult.lead_id,
-            stage: 'Prospecting',
+            source_lead_id: leadResult.lead_id,
+            stage: initialStage,
             estimated_value: leadData.potential_revenue || 0,
             currency: 'IDR',
-            probability: 10,
+            probability: stageConfig?.probability || 10,
             owner_user_id: user.id,
             created_by: user.id,
+            next_step: stageConfig?.nextStep || 'Initial Contact',
+            next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
           }
 
           console.log('Creating pipeline with data:', opportunityData)
