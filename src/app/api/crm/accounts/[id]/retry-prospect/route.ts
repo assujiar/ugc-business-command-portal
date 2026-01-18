@@ -90,9 +90,14 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to update account' }, { status: 500 })
     }
 
-    // 2. Create new lead
+    // 2. Create new lead with unique dedupe_key for retry
+    const companyNameForLead = company_name || account.company_name
+    const emailForLead = pic_email || account.pic_email || ''
+    // Generate unique dedupe_key by appending retry count
+    const dedupeKey = `${companyNameForLead.toLowerCase().trim()}-${emailForLead.toLowerCase().trim()}-retry${newRetryCount}`
+
     const leadData = {
-      company_name: company_name || account.company_name,
+      company_name: companyNameForLead,
       contact_name: pic_name || account.pic_name,
       contact_email: pic_email || account.pic_email,
       contact_phone: pic_phone || account.pic_phone,
@@ -109,6 +114,7 @@ export async function POST(
       qualified_at: new Date().toISOString(),
       account_id: id,
       created_by: user.id,
+      dedupe_key: dedupeKey, // Unique key for retry leads
     }
 
     const { data: newLead, error: leadError } = await (adminClient as any)
