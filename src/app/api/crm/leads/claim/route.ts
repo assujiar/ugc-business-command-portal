@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       // Fetch lead data separately
       const { data: leadData, error: leadError } = await (adminClient as any)
         .from('leads')
-        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status')
+        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status, created_by')
         .eq('lead_id', poolEntry.lead_id)
         .single()
 
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       // Fetch lead directly by lead_id
       const { data: leadData, error: leadError } = await (adminClient as any)
         .from('leads')
-        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status')
+        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status, created_by')
         .eq('lead_id', lead_id)
         .single()
 
@@ -143,6 +143,8 @@ export async function POST(request: NextRequest) {
         industry: lead.industry,
         owner_user_id: user.id,
         created_by: user.id,
+        original_lead_id: lead.lead_id, // Track original lead for marketing visibility
+        original_creator_id: lead.created_by, // Track original creator (lead creator) for marketing visibility
       }
 
       const { data: newAccount, error: accountError } = await (adminClient as any)
@@ -185,6 +187,7 @@ export async function POST(request: NextRequest) {
         created_by: user.id,
         next_step: stageConfig?.nextStep || 'Initial Contact',
         next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
+        original_creator_id: lead.created_by, // Track original creator for marketing visibility
       }
 
       const { data: newOpportunity, error: oppError } = await (adminClient as any)

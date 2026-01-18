@@ -156,6 +156,8 @@ export async function POST(
       next_step: stageConfig?.nextStep || 'Initial Contact',
       next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
       attempt_number: newRetryCount + 1, // +1 because first attempt was the original
+      // Preserve original creator from account for marketing visibility
+      original_creator_id: account.original_creator_id || account.created_by,
     }
 
     const { data: newOpportunity, error: oppError } = await (adminClient as any)

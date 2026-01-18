@@ -138,6 +138,8 @@ export async function POST(request: NextRequest) {
           created_by: user.id,
           account_status: 'calon_account',
           lead_id: leadResult.lead_id,
+          original_lead_id: leadResult.lead_id, // Track original lead for marketing visibility
+          original_creator_id: user.id, // Track original creator for marketing visibility
         }
 
         console.log('Creating account with data:', accountData)
@@ -173,6 +175,7 @@ export async function POST(request: NextRequest) {
             created_by: user.id,
             next_step: stageConfig?.nextStep || 'Initial Contact',
             next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
+            original_creator_id: user.id, // Track original creator for marketing visibility
           }
 
           console.log('Creating pipeline with data:', opportunityData)
