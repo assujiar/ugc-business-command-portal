@@ -1,33 +1,20 @@
 -- =====================================================
--- Migration 026: Add Pipeline Retry Tracking
+-- Migration 025: Update v_accounts_enriched View
 --
--- Adds retry_count to track pipeline attempts for accounts
--- that have failed and are being re-prospected
+-- Changes:
+-- 1. Add account_status column (from migration 014)
+-- 2. Add lead_id column
+-- 3. Add revenue_total placeholder (for future DSO/AR module)
 -- =====================================================
 
--- Add retry_count column to accounts table
-ALTER TABLE accounts
-  ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0;
-
--- Add attempt_number column to opportunities table to track which attempt this pipeline is
-ALTER TABLE opportunities
-  ADD COLUMN IF NOT EXISTS attempt_number INTEGER DEFAULT 1;
-
--- Add comments
-COMMENT ON COLUMN accounts.retry_count IS 'Number of times this account has been re-prospected after failure';
-COMMENT ON COLUMN opportunities.attempt_number IS 'Which attempt number this pipeline represents (1=first, 2=second, etc.)';
-
--- Create index for filtering failed accounts with retries
-CREATE INDEX IF NOT EXISTS idx_accounts_retry_count ON accounts(retry_count) WHERE retry_count > 0;
-
--- Update v_accounts_enriched to include retry_count
+-- Drop and recreate view with new columns
 DROP VIEW IF EXISTS v_accounts_enriched CASCADE;
 
 CREATE VIEW v_accounts_enriched (
   account_id, company_name, domain, npwp, industry, address, city, province, country, postal_code, phone,
   pic_name, pic_email, pic_phone, owner_user_id, tenure_status, activity_status, account_status,
   first_deal_date, last_transaction_date, is_active, tags, notes, dedupe_key, created_by, created_at, updated_at,
-  lead_id, retry_count,
+  lead_id,
   owner_name, owner_email, open_opportunities, pipeline_value, contact_count, planned_activities, overdue_activities,
   revenue_total
 ) AS
@@ -60,7 +47,6 @@ SELECT
   a.created_at,
   a.updated_at,
   a.lead_id,
-  COALESCE(a.retry_count, 0) AS retry_count,
   p.name AS owner_name,
   p.email AS owner_email,
   COALESCE(opp_stats.open_opps, 0) AS open_opportunities,
@@ -97,4 +83,4 @@ LEFT JOIN (
 ) activity_stats ON a.account_id = activity_stats.related_account_id
 ORDER BY a.company_name;
 
-COMMENT ON VIEW v_accounts_enriched IS 'Accounts with computed badges, stats, status info, and retry tracking';
+COMMENT ON VIEW v_accounts_enriched IS 'Accounts with computed badges, stats, and status info';
