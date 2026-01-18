@@ -146,19 +146,48 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
     setShowDetailModal(true)
   }
 
-  // Handle retry prospect
-  const handleOpenRetryModal = (account: AccountEnriched) => {
-    setSelectedAccount(account)
-    setRetryFormData({
-      company_name: account.company_name || '',
-      pic_name: account.pic_name || '',
-      pic_email: account.pic_email || '',
-      pic_phone: account.pic_phone || '',
-      industry: account.industry || '',
-      notes: account.notes || '',
-      potential_revenue: 0
-    })
-    setShowRetryModal(true)
+  // Handle retry prospect - fetch fresh data first
+  const handleOpenRetryModal = async (account: AccountEnriched) => {
+    try {
+      // Fetch fresh account data to verify status
+      const response = await fetch(`/api/crm/accounts/${account.account_id}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        alert('Failed to fetch account data')
+        return
+      }
+
+      const freshAccount = result.data
+
+      // Check if account is still in failed status
+      if (freshAccount.account_status !== 'failed_account') {
+        alert(`This account is no longer in failed status. Current status: ${freshAccount.account_status || 'unknown'}. Please refresh the page.`)
+        return
+      }
+
+      // Update selected account with fresh data
+      const updatedAccount = {
+        ...account,
+        account_status: freshAccount.account_status,
+        retry_count: freshAccount.retry_count || 0
+      }
+
+      setSelectedAccount(updatedAccount)
+      setRetryFormData({
+        company_name: freshAccount.company_name || '',
+        pic_name: freshAccount.pic_name || '',
+        pic_email: freshAccount.pic_email || '',
+        pic_phone: freshAccount.pic_phone || '',
+        industry: freshAccount.industry || '',
+        notes: freshAccount.notes || '',
+        potential_revenue: 0
+      })
+      setShowRetryModal(true)
+    } catch (error) {
+      console.error('Error fetching account:', error)
+      alert('Failed to load account data')
+    }
   }
 
   // Submit retry prospect
