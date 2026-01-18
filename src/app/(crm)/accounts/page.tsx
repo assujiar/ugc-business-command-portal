@@ -15,17 +15,21 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Building2, TrendingUp, Users, Calendar } from 'lucide-react'
+import { Building2, TrendingUp, User, Calendar, DollarSign, Activity } from 'lucide-react'
 
 interface AccountEnriched {
   account_id: string
   company_name: string
   owner_name: string | null
+  pic_name: string | null
+  pic_email: string | null
+  pic_phone: string | null
+  activity_status: string | null
+  account_status: string | null
   open_opportunities: number
-  pipeline_value: number
-  contact_count: number
   planned_activities: number
   overdue_activities: number
+  revenue_total: number
 }
 
 export default async function AccountsPage() {
@@ -58,18 +62,30 @@ export default async function AccountsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Company Name</TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          <User className="h-4 w-4" />
+                          PIC
+                        </div>
+                      </TableHead>
                       <TableHead>Owner</TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          <Activity className="h-4 w-4" />
+                          Activity Status
+                        </div>
+                      </TableHead>
+                      <TableHead>Account Status</TableHead>
                       <TableHead>
                         <div className="flex items-center gap-1">
                           <TrendingUp className="h-4 w-4" />
                           Open Opps
                         </div>
                       </TableHead>
-                      <TableHead>Pipeline Value</TableHead>
                       <TableHead>
                         <div className="flex items-center gap-1">
-                          <Users className="h-4 w-4" />
-                          Contacts
+                          <DollarSign className="h-4 w-4" />
+                          Revenue Total
                         </div>
                       </TableHead>
                       <TableHead>
@@ -90,22 +106,56 @@ export default async function AccountsPage() {
                             <span className="font-medium">{account.company_name}</span>
                           </div>
                         </TableCell>
+                        <TableCell>
+                          {account.pic_name ? (
+                            <div className="text-sm">
+                              <div className="font-medium">{account.pic_name}</div>
+                              {account.pic_email && (
+                                <div className="text-xs text-muted-foreground">{account.pic_email}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell>{account.owner_name || '-'}</TableCell>
+                        <TableCell>
+                          {account.activity_status ? (
+                            <Badge variant={account.activity_status === 'Active' ? 'default' : 'secondary'}>
+                              {account.activity_status}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {account.account_status ? (
+                            <Badge variant={
+                              account.account_status === 'active_account' ? 'default' :
+                              account.account_status === 'calon_account' ? 'outline' :
+                              account.account_status === 'new_account' ? 'secondary' :
+                              'destructive'
+                            }>
+                              {account.account_status.replace('_', ' ')}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={account.open_opportunities > 0 ? 'default' : 'secondary'}>
                             {account.open_opportunities}
                           </Badge>
                         </TableCell>
                         <TableCell className="font-medium">
-                          {account.pipeline_value > 0 ? (
+                          {account.revenue_total > 0 ? (
                             <span className="text-green-600">
-                              Rp {(account.pipeline_value / 1000000).toFixed(1)}M
+                              Rp {(account.revenue_total / 1000000).toFixed(1)}M
                             </span>
                           ) : (
-                            '-'
+                            <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
-                        <TableCell>{account.contact_count}</TableCell>
                         <TableCell>{account.planned_activities}</TableCell>
                         <TableCell>
                           {account.overdue_activities > 0 ? (
@@ -134,28 +184,40 @@ export default async function AccountsPage() {
                           <p className="text-xs text-muted-foreground mt-1">
                             Owner: {account.owner_name || '-'}
                           </p>
+                          {account.pic_name && (
+                            <p className="text-xs text-muted-foreground">
+                              PIC: {account.pic_name}
+                            </p>
+                          )}
                         </div>
-                        {account.overdue_activities > 0 && (
-                          <Badge variant="destructive" className="text-xs flex-shrink-0">
-                            {account.overdue_activities} Overdue
-                          </Badge>
-                        )}
+                        <div className="flex flex-col gap-1 items-end">
+                          {account.account_status && (
+                            <Badge variant="outline" className="text-xs">
+                              {account.account_status.replace('_', ' ')}
+                            </Badge>
+                          )}
+                          {account.overdue_activities > 0 && (
+                            <Badge variant="destructive" className="text-xs">
+                              {account.overdue_activities} Overdue
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-3 gap-3 mt-3">
+                        <div className="text-center p-2 bg-background rounded">
+                          <div className="flex items-center justify-center gap-1">
+                            <Activity className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Status</span>
+                          </div>
+                          <p className="font-semibold text-xs">{account.activity_status || '-'}</p>
+                        </div>
                         <div className="text-center p-2 bg-background rounded">
                           <div className="flex items-center justify-center gap-1">
                             <TrendingUp className="h-3 w-3 text-muted-foreground" />
                             <span className="text-xs text-muted-foreground">Opps</span>
                           </div>
                           <p className="font-semibold text-sm">{account.open_opportunities}</p>
-                        </div>
-                        <div className="text-center p-2 bg-background rounded">
-                          <div className="flex items-center justify-center gap-1">
-                            <Users className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Contacts</span>
-                          </div>
-                          <p className="font-semibold text-sm">{account.contact_count}</p>
                         </div>
                         <div className="text-center p-2 bg-background rounded">
                           <div className="flex items-center justify-center gap-1">
@@ -166,11 +228,11 @@ export default async function AccountsPage() {
                         </div>
                       </div>
 
-                      {account.pipeline_value > 0 && (
+                      {account.revenue_total > 0 && (
                         <div className="mt-3 pt-3 border-t text-center">
-                          <span className="text-xs text-muted-foreground">Pipeline Value: </span>
+                          <span className="text-xs text-muted-foreground">Revenue Total: </span>
                           <span className="text-sm font-medium text-green-600">
-                            Rp {(account.pipeline_value / 1000000).toFixed(1)}M
+                            Rp {(account.revenue_total / 1000000).toFixed(1)}M
                           </span>
                         </div>
                       )}
