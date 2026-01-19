@@ -375,11 +375,11 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
           <Card className="cursor-default">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
-                <div className="p-2 rounded-lg bg-gray-100">
-                  <Target className="h-5 w-5 text-gray-600" />
+                <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
+                  <Target className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total}</p>
                   <p className="text-xs text-muted-foreground">100%</p>
                 </div>
               </div>
