@@ -33,8 +33,8 @@ import {
 } from '@/lib/constants'
 import type { OpportunityStage, ApproachMethod, LostReason, UserRole } from '@/types/database'
 import { PipelineDetailDialog } from '@/components/crm/pipeline-detail-dialog'
-import {
-  TrendingUp,
+import { CreatePipelineDialog } from '@/components/crm/create-pipeline-dialog'
+import { TrendingUp,
   Search,
   FileText,
   Users2,
@@ -50,6 +50,7 @@ import {
   Eye,
   Loader2,
   Navigation,
+  Plus,
 } from 'lucide-react'
 
 interface StageHistory {
@@ -426,6 +427,20 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
 
   return (
     <div className="space-y-4 lg:space-y-6">
+      {/* Header with Create Button */}
+      {canUpdate && (
+        <div className="flex justify-end">
+          <CreatePipelineDialog
+            trigger={
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Pipeline
+              </Button>
+            }
+          />
+        </div>
+      )}
+
       {/* Stage Cards - Horizontal scroll on mobile */}
       <div className="overflow-x-auto -mx-4 px-4 lg:mx-0 lg:px-0">
         <div className="flex lg:grid lg:grid-cols-7 gap-3 min-w-max lg:min-w-0">
