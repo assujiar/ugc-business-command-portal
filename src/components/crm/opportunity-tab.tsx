@@ -30,6 +30,8 @@ import {
   Clock,
   X,
   AlertTriangle,
+  Calculator,
+  Loader,
 } from 'lucide-react'
 
 interface Opportunity {
@@ -49,7 +51,7 @@ interface OpportunityTabProps {
   opportunities: Opportunity[]
 }
 
-type FilterType = 'all' | 'lost_rev' | 'won_rev' | 'on_progress_rev' | 'lost_opp' | 'won_opp' | LostReason
+type FilterType = 'all' | 'lost_rev' | 'won_rev' | 'on_progress_rev' | 'total_rev' | 'lost_opp' | 'won_opp' | 'on_progress_opp' | LostReason
 
 export function OpportunityTab({ opportunities }: OpportunityTabProps) {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
@@ -82,9 +84,13 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
       }
     }).filter(r => r.count > 0)
 
+    // Calculate average revenue per opportunity
+    const avgRevenuePerOpportunity = total > 0 ? totalRevenue / total : 0
+
     return {
       total,
       totalRevenue,
+      avgRevenuePerOpportunity,
       lost: {
         count: lostOpps.length,
         countPercent: total > 0 ? (lostOpps.length / total * 100) : 0,
@@ -117,7 +123,10 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
       case 'won_opp':
         return opportunities.filter(o => o.stage === 'Closed Won')
       case 'on_progress_rev':
+      case 'on_progress_opp':
         return opportunities.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
+      case 'total_rev':
+        return opportunities // Show all for total revenue
       default:
         // Check if it's a lost reason filter
         if (LOST_REASONS.some(r => r.value === activeFilter)) {
@@ -152,10 +161,10 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
 
   return (
     <div className="space-y-4 lg:space-y-6">
-      {/* Summary Cards - Revenue */}
+      {/* Summary Cards - Revenue Opportunity */}
       <div>
-        <h3 className="text-sm font-medium text-muted-foreground mb-2">Revenue Summary</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <h3 className="text-sm font-medium text-muted-foreground mb-2">Revenue Opportunity Summary</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Lost Revenue */}
           <Card
             className={`cursor-pointer transition-all hover:shadow-md ${
@@ -230,13 +239,58 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
               <p className="text-sm text-muted-foreground mt-2">On Progress Revenue</p>
             </CardContent>
           </Card>
+
+          {/* Total Revenue Opportunity */}
+          <Card
+            className={`cursor-pointer transition-all hover:shadow-md ${
+              activeFilter === 'total_rev' ? 'ring-2 ring-purple-500' : ''
+            }`}
+            onClick={() => setActiveFilter(activeFilter === 'total_rev' ? 'all' : 'total_rev')}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="p-2 rounded-lg bg-purple-100">
+                  <DollarSign className="h-5 w-5 text-purple-600" />
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-purple-600">
+                    {formatCurrency(stats.totalRevenue)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    100%
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">Total Revenue Opp</p>
+            </CardContent>
+          </Card>
+
+          {/* Avg Revenue per Opportunity */}
+          <Card className="cursor-default">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="p-2 rounded-lg bg-indigo-100">
+                  <Calculator className="h-5 w-5 text-indigo-600" />
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-indigo-600">
+                    {formatCurrency(stats.avgRevenuePerOpportunity)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    per opportunity
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">Avg Revenue/Opp</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
       {/* Summary Cards - Opportunity Count */}
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-2">Opportunity Summary</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Lost Opportunity */}
           <Card
             className={`cursor-pointer transition-all hover:shadow-md ${
@@ -280,6 +334,29 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
                 </div>
               </div>
               <p className="text-sm text-muted-foreground mt-2">Won Opportunity</p>
+            </CardContent>
+          </Card>
+
+          {/* On Progress Opportunity */}
+          <Card
+            className={`cursor-pointer transition-all hover:shadow-md ${
+              activeFilter === 'on_progress_opp' ? 'ring-2 ring-blue-500' : ''
+            }`}
+            onClick={() => setActiveFilter(activeFilter === 'on_progress_opp' ? 'all' : 'on_progress_opp')}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="p-2 rounded-lg bg-blue-100">
+                  <Loader className="h-5 w-5 text-blue-600" />
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-blue-600">{stats.onProgress.count}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.onProgress.countPercent.toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">On Progress Opp</p>
             </CardContent>
           </Card>
 
@@ -344,8 +421,10 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
             {activeFilter === 'lost_rev' && 'Lost Revenue'}
             {activeFilter === 'won_rev' && 'Won Revenue'}
             {activeFilter === 'on_progress_rev' && 'On Progress Revenue'}
+            {activeFilter === 'total_rev' && 'Total Revenue'}
             {activeFilter === 'lost_opp' && 'Lost Opportunity'}
             {activeFilter === 'won_opp' && 'Won Opportunity'}
+            {activeFilter === 'on_progress_opp' && 'On Progress Opportunity'}
             {LOST_REASONS.some(r => r.value === activeFilter) &&
               LOST_REASONS.find(r => r.value === activeFilter)?.label}
             <X
