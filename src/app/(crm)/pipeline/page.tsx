@@ -82,20 +82,27 @@ export default async function PipelinePage() {
   }
 
   // Step 3: Fetch creator profiles to determine their department (for marketing manager/macx)
+  // Also fetch marketing owner profiles for visibility check
   let creatorProfilesMap: Record<string, { department: string | null; role: UserRole | null }> = {}
 
   if (isMarketingManagerRole(profile.role) || profile.role === 'sales manager') {
-    const creatorIds = Array.from(new Set(Object.values(leadsMap)
-      .map((l: any) => l.created_by)
-      .filter(Boolean))) as string[]
+    // Collect all user IDs we need to check (creators + marketing owners)
+    const userIdsToCheck = new Set<string>()
 
-    if (creatorIds.length > 0) {
-      const { data: creators } = await supabase
+    Object.values(leadsMap).forEach((l: any) => {
+      if (l.created_by) userIdsToCheck.add(l.created_by)
+      if (l.marketing_owner_user_id) userIdsToCheck.add(l.marketing_owner_user_id)
+    })
+
+    const userIds = Array.from(userIdsToCheck)
+
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
         .from('profiles')
         .select('user_id, department, role')
-        .in('user_id', creatorIds)
+        .in('user_id', userIds)
 
-      creatorProfilesMap = (creators || []).reduce((acc: any, c: any) => {
+      creatorProfilesMap = (profiles || []).reduce((acc: any, c: any) => {
         acc[c.user_id] = { department: c.department, role: c.role }
         return acc
       }, {})
@@ -146,14 +153,25 @@ export default async function PipelinePage() {
       }
 
       // Marketing Manager/MACX: All marketing department leads
+      // Can see pipelines where lead was created by OR owned by marketing dept users
       if (isMarketingManagerRole(profile.role)) {
+        const marketingRoles: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+
+        // Check if lead creator is in marketing department
         if (leadInfo?.created_by) {
           const creatorProfile = creatorProfilesMap[leadInfo.created_by]
           if (creatorProfile?.department?.toLowerCase().includes('marketing')) return true
-          // Check if creator role is marketing
-          const marketingRoles: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
           if (creatorProfile?.role && marketingRoles.includes(creatorProfile.role)) return true
         }
+
+        // Also check if marketing_owner is in marketing department
+        // This allows marketing to see pipelines from leads they processed
+        if (leadInfo?.marketing_owner_user_id) {
+          const marketingOwnerProfile = creatorProfilesMap[leadInfo.marketing_owner_user_id]
+          if (marketingOwnerProfile?.department?.toLowerCase().includes('marketing')) return true
+          if (marketingOwnerProfile?.role && marketingRoles.includes(marketingOwnerProfile.role)) return true
+        }
+
         return false
       }
 
