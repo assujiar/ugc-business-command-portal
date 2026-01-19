@@ -6,11 +6,13 @@
 
 import { createClient } from '@/lib/supabase/server'
 import AccountsClient from './accounts-client'
+import type { UserRole } from '@/types/database'
 
 interface AccountEnriched {
   account_id: string
   company_name: string
   owner_name: string | null
+  owner_user_id: string | null
   pic_name: string | null
   pic_email: string | null
   pic_phone: string | null
@@ -18,6 +20,11 @@ interface AccountEnriched {
   address: string | null
   city: string | null
   province: string | null
+  country: string | null
+  postal_code: string | null
+  phone: string | null
+  domain: string | null
+  npwp: string | null
   notes: string | null
   activity_status: string | null
   account_status: string | null
@@ -37,6 +44,19 @@ interface AccountEnriched {
 export default async function AccountsPage() {
   const supabase = await createClient()
 
+  // Get user role
+  const { data: { user } } = await supabase.auth.getUser()
+  let userRole: UserRole | null = null
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single()
+    userRole = profile?.role as UserRole | null
+  }
+
   const { data: accounts } = await supabase
     .from('v_accounts_enriched')
     .select('*')
@@ -51,7 +71,7 @@ export default async function AccountsPage() {
         </p>
       </div>
 
-      <AccountsClient accounts={accounts || []} />
+      <AccountsClient accounts={accounts || []} userRole={userRole} />
     </div>
   )
 }
