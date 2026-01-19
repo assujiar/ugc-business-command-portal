@@ -1,45 +1,93 @@
 -- =====================================================
 -- Migration 031: Sales Plans Table and Activities View
 --
--- Creates sales_plans table for scheduled activities
--- Creates unified activities view combining pipeline_updates and sales_plans
+-- Sales Plans: Target planning for sales activities
+-- - Maintenance existing customer
+-- - Hunting new customer
+-- - Winback lost customer
 -- =====================================================
+
+-- =====================================================
+-- PLAN TYPE ENUM
+-- =====================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'sales_plan_type') THEN
+        CREATE TYPE sales_plan_type AS ENUM (
+            'maintenance_existing',
+            'hunting_new',
+            'winback_lost'
+        );
+    END IF;
+END$$;
+
+-- =====================================================
+-- POTENTIAL STATUS ENUM
+-- =====================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'potential_status') THEN
+        CREATE TYPE potential_status AS ENUM (
+            'pending',
+            'potential',
+            'not_potential'
+        );
+    END IF;
+END$$;
 
 -- =====================================================
 -- SALES PLANS TABLE
--- For scheduling sales activities (visits, calls, meetings)
+-- For planning sales activities/targets
 -- =====================================================
-CREATE TABLE IF NOT EXISTS sales_plans (
+DROP TABLE IF EXISTS sales_plans CASCADE;
+
+CREATE TABLE sales_plans (
   plan_id TEXT PRIMARY KEY,
 
-  -- Activity Details
-  activity_type approach_method NOT NULL,
-  subject TEXT NOT NULL,
-  description TEXT,
+  -- Plan Type
+  plan_type sales_plan_type NOT NULL,
 
-  -- Scheduling
-  scheduled_date DATE NOT NULL,
-  scheduled_time TIME,
+  -- Target Company Info
+  company_name TEXT NOT NULL,
+  pic_name TEXT,
+  pic_phone TEXT,
+  pic_email TEXT,
 
-  -- Relations
-  account_id TEXT REFERENCES accounts(account_id) ON DELETE SET NULL,
-  opportunity_id TEXT REFERENCES opportunities(opportunity_id) ON DELETE SET NULL,
-  lead_id TEXT REFERENCES leads(lead_id) ON DELETE SET NULL,
+  -- Linked Account (for maintenance_existing and winback_lost)
+  source_account_id TEXT REFERENCES accounts(account_id) ON DELETE SET NULL,
 
-  -- Completion Status
+  -- Planning
+  planned_date DATE NOT NULL,
+  planned_activity_method approach_method NOT NULL,
+  plan_notes TEXT,
+
+  -- Status: planned, completed, cancelled
   status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'completed', 'cancelled')),
-  completed_at TIMESTAMPTZ,
-  completed_notes TEXT,
 
-  -- Evidence (filled when completed)
+  -- Realization (filled when activity is done)
+  realized_at TIMESTAMPTZ,
+  actual_activity_method approach_method,
+  method_change_reason TEXT,
+  realization_notes TEXT,
+
+  -- Evidence
   evidence_url TEXT,
   evidence_file_name TEXT,
   evidence_original_url TEXT,
 
-  -- Location (filled when completed)
+  -- Location (for visit/canvassing)
   location_lat DECIMAL(10,8),
   location_lng DECIMAL(11,8),
   location_address TEXT,
+
+  -- For Hunting New Customer: Potential Assessment
+  potential_status potential_status DEFAULT 'pending',
+  not_potential_reason TEXT,
+
+  -- Auto-created records when marked as potential
+  created_lead_id TEXT REFERENCES leads(lead_id) ON DELETE SET NULL,
+  created_account_id TEXT REFERENCES accounts(account_id) ON DELETE SET NULL,
+  created_opportunity_id TEXT REFERENCES opportunities(opportunity_id) ON DELETE SET NULL,
 
   -- Ownership
   owner_user_id UUID NOT NULL REFERENCES profiles(user_id),
@@ -70,13 +118,14 @@ CREATE TRIGGER trg_sales_plan_id
 -- Indexes for sales_plans
 CREATE INDEX IF NOT EXISTS idx_sales_plans_owner ON sales_plans(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_sales_plans_status ON sales_plans(status);
-CREATE INDEX IF NOT EXISTS idx_sales_plans_scheduled ON sales_plans(scheduled_date);
-CREATE INDEX IF NOT EXISTS idx_sales_plans_account ON sales_plans(account_id);
-CREATE INDEX IF NOT EXISTS idx_sales_plans_opportunity ON sales_plans(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_sales_plans_planned_date ON sales_plans(planned_date);
+CREATE INDEX IF NOT EXISTS idx_sales_plans_plan_type ON sales_plans(plan_type);
+CREATE INDEX IF NOT EXISTS idx_sales_plans_potential ON sales_plans(potential_status) WHERE plan_type = 'hunting_new';
+CREATE INDEX IF NOT EXISTS idx_sales_plans_source_account ON sales_plans(source_account_id);
 
 -- =====================================================
 -- UNIFIED ACTIVITIES VIEW
--- Combines pipeline_updates (completed) and sales_plans (planned + completed)
+-- Combines pipeline_updates and sales_plans
 -- =====================================================
 DROP VIEW IF EXISTS v_activities_unified CASCADE;
 
@@ -85,30 +134,34 @@ CREATE VIEW v_activities_unified AS
 SELECT
   sp.plan_id AS activity_id,
   'sales_plan' AS source_type,
-  sp.activity_type::text AS activity_type,
-  sp.subject AS activity_detail,
-  sp.description AS notes,
+  sp.plan_type::text AS plan_type,
+  COALESCE(sp.actual_activity_method, sp.planned_activity_method)::text AS activity_type,
+  sp.company_name AS activity_detail,
+  COALESCE(sp.realization_notes, sp.plan_notes) AS notes,
   sp.status,
-  sp.scheduled_date::TIMESTAMPTZ AS scheduled_on,
-  sp.completed_at AS completed_on,
+  sp.planned_date::TIMESTAMPTZ AS scheduled_on,
+  sp.realized_at AS completed_on,
   sp.evidence_url,
   sp.evidence_file_name,
   sp.location_lat,
   sp.location_lng,
   sp.location_address,
   sp.owner_user_id,
-  sp.account_id,
-  sp.opportunity_id,
-  sp.lead_id,
+  COALESCE(sp.created_account_id, sp.source_account_id) AS account_id,
+  sp.created_opportunity_id AS opportunity_id,
+  sp.created_lead_id AS lead_id,
   sp.created_at,
+  sp.potential_status::text AS potential_status,
+  -- Target info
+  sp.pic_name,
+  sp.pic_phone,
+  sp.pic_email,
   -- Joined fields
   p.name AS sales_name,
-  a.company_name AS account_name,
-  o.name AS opportunity_name
+  COALESCE(a.company_name, sp.company_name) AS account_name
 FROM sales_plans sp
 LEFT JOIN profiles p ON sp.owner_user_id = p.user_id
-LEFT JOIN accounts a ON sp.account_id = a.account_id
-LEFT JOIN opportunities o ON sp.opportunity_id = o.opportunity_id
+LEFT JOIN accounts a ON COALESCE(sp.created_account_id, sp.source_account_id) = a.account_id
 
 UNION ALL
 
@@ -116,8 +169,9 @@ UNION ALL
 SELECT
   pu.update_id AS activity_id,
   'pipeline_update' AS source_type,
+  'pipeline' AS plan_type,
   pu.approach_method::text AS activity_type,
-  CONCAT('Pipeline Update: ', pu.old_stage, ' → ', pu.new_stage) AS activity_detail,
+  CONCAT('Pipeline: ', pu.old_stage, ' → ', pu.new_stage) AS activity_detail,
   pu.notes,
   'completed' AS status,
   pu.updated_at AS scheduled_on,
@@ -132,10 +186,14 @@ SELECT
   pu.opportunity_id,
   o.source_lead_id AS lead_id,
   pu.created_at,
+  NULL AS potential_status,
+  -- Target info (from account)
+  a.pic_name,
+  a.pic_phone,
+  a.pic_email,
   -- Joined fields
   p.name AS sales_name,
-  a.company_name AS account_name,
-  o.name AS opportunity_name
+  a.company_name AS account_name
 FROM pipeline_updates pu
 LEFT JOIN opportunities o ON pu.opportunity_id = o.opportunity_id
 LEFT JOIN profiles p ON pu.updated_by = p.user_id
@@ -152,7 +210,7 @@ DROP POLICY IF EXISTS "sales_plans_insert_policy" ON sales_plans;
 DROP POLICY IF EXISTS "sales_plans_update_policy" ON sales_plans;
 DROP POLICY IF EXISTS "sales_plans_delete_policy" ON sales_plans;
 
--- View policy: Sales can see own, managers/admins can see all in dept
+-- View policy: Sales can see own, managers/admins can see all
 CREATE POLICY "sales_plans_select_policy" ON sales_plans
   FOR SELECT USING (
     owner_user_id = auth.uid()
@@ -193,5 +251,7 @@ CREATE POLICY "sales_plans_delete_policy" ON sales_plans
 -- =====================================================
 -- COMMENTS
 -- =====================================================
-COMMENT ON TABLE sales_plans IS 'Scheduled sales activities (visits, calls, meetings)';
+COMMENT ON TABLE sales_plans IS 'Sales activity planning for maintenance, hunting, and winback';
+COMMENT ON COLUMN sales_plans.plan_type IS 'Type: maintenance_existing, hunting_new, winback_lost';
+COMMENT ON COLUMN sales_plans.potential_status IS 'For hunting_new: pending, potential, not_potential';
 COMMENT ON VIEW v_activities_unified IS 'Unified view of all activities from sales_plans and pipeline_updates';

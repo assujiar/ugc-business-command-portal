@@ -1,6 +1,6 @@
 // =====================================================
 // API Route: /api/crm/sales-plans/[id]
-// Individual sales plan operations
+// Individual sales plan operations (target planning)
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -31,8 +31,7 @@ export async function GET(
       .select(`
         *,
         profiles:owner_user_id(name, email),
-        accounts(company_name),
-        opportunities(name)
+        source_account:source_account_id(company_name)
       `)
       .eq('plan_id', id)
       .single()
@@ -45,8 +44,7 @@ export async function GET(
       data: {
         ...plan,
         owner_name: plan.profiles?.name || null,
-        account_name: plan.accounts?.company_name || null,
-        opportunity_name: plan.opportunities?.name || null,
+        account_name: plan.source_account?.company_name || plan.company_name || null,
       }
     })
   } catch (error) {
@@ -82,7 +80,7 @@ export async function PATCH(
     // Get existing plan to check ownership
     const { data: existingPlan } = await (adminClient as any)
       .from('sales_plans')
-      .select('owner_user_id')
+      .select('owner_user_id, planned_activity_method')
       .eq('plan_id', id)
       .single()
 
@@ -101,25 +99,29 @@ export async function PATCH(
       updated_at: new Date().toISOString(),
     }
 
-    // Update allowed fields
-    if (body.activity_type) updateData.activity_type = body.activity_type
-    if (body.subject) updateData.subject = body.subject
-    if (body.description !== undefined) updateData.description = body.description
-    if (body.scheduled_date) updateData.scheduled_date = body.scheduled_date
-    if (body.scheduled_time !== undefined) updateData.scheduled_time = body.scheduled_time
-    if (body.account_id !== undefined) updateData.account_id = body.account_id
-    if (body.opportunity_id !== undefined) updateData.opportunity_id = body.opportunity_id
+    // Update plan details (Edit action)
+    if (body.company_name !== undefined) updateData.company_name = body.company_name
+    if (body.pic_name !== undefined) updateData.pic_name = body.pic_name
+    if (body.pic_phone !== undefined) updateData.pic_phone = body.pic_phone
+    if (body.pic_email !== undefined) updateData.pic_email = body.pic_email
+    if (body.planned_date !== undefined) updateData.planned_date = body.planned_date
+    if (body.planned_activity_method !== undefined) updateData.planned_activity_method = body.planned_activity_method
+    if (body.plan_notes !== undefined) updateData.plan_notes = body.plan_notes
+
+    // Handle status update
     if (body.status) updateData.status = body.status
 
-    // Handle completion
+    // Handle realization (Update Realization action)
     if (body.status === 'completed') {
-      updateData.completed_at = body.completed_at || new Date().toISOString()
-      if (body.completed_notes) updateData.completed_notes = body.completed_notes
-      if (body.evidence_url) updateData.evidence_url = body.evidence_url
-      if (body.evidence_file_name) updateData.evidence_file_name = body.evidence_file_name
-      if (body.location_lat) updateData.location_lat = body.location_lat
-      if (body.location_lng) updateData.location_lng = body.location_lng
-      if (body.location_address) updateData.location_address = body.location_address
+      updateData.realized_at = new Date().toISOString()
+      if (body.actual_activity_method) updateData.actual_activity_method = body.actual_activity_method
+      if (body.method_change_reason !== undefined) updateData.method_change_reason = body.method_change_reason
+      if (body.realization_notes !== undefined) updateData.realization_notes = body.realization_notes
+      if (body.evidence_url !== undefined) updateData.evidence_url = body.evidence_url
+      if (body.evidence_file_name !== undefined) updateData.evidence_file_name = body.evidence_file_name
+      if (body.location_lat !== undefined) updateData.location_lat = body.location_lat
+      if (body.location_lng !== undefined) updateData.location_lng = body.location_lng
+      if (body.location_address !== undefined) updateData.location_address = body.location_address
     }
 
     const { data: plan, error } = await (adminClient as any)
