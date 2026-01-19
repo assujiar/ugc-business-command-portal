@@ -310,12 +310,13 @@ export const LOST_REASONS: { value: LostReason; label: string; requiresPrice: bo
   { value: 'lainnya', label: 'Lainnya', requiresPrice: false },
 ]
 
-// Approach Methods for Pipeline Updates
+// Approach Methods for Pipeline Updates and Sales Plans
 export const APPROACH_METHODS: { value: ApproachMethod; label: string; icon: string; requiresCamera: boolean }[] = [
   { value: 'Site Visit', label: 'Site Visit', icon: 'map-pin', requiresCamera: true },
   { value: 'Online Meeting', label: 'Online Meeting', icon: 'video', requiresCamera: false },
   { value: 'Phone Call', label: 'Phone Call', icon: 'phone', requiresCamera: false },
-  { value: 'Texting', label: 'Texting', icon: 'message-circle', requiresCamera: false },
+  { value: 'WhatsApp', label: 'WhatsApp', icon: 'message-circle', requiresCamera: false },
+  { value: 'Texting', label: 'Texting', icon: 'message-square', requiresCamera: false },
   { value: 'Email', label: 'Email', icon: 'mail', requiresCamera: false },
 ]
 

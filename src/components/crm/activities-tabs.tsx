@@ -120,17 +120,20 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
     const completed = completedActivities.length
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0
 
-    // Activity by type
+    // Activity by type - use exact ApproachMethod enum values
     const byMethod = activities.reduce((acc, a) => {
       const method = a.activity_type || 'unknown'
       acc[method] = (acc[method] || 0) + 1
       return acc
     }, {} as Record<string, number>)
 
-    const visits = byMethod['visit'] || 0
-    const calls = byMethod['phone_call'] || 0
-    const meetings = byMethod['online_meeting'] || 0
-    const whatsapp = byMethod['whatsapp'] || 0
+    // Match exact ApproachMethod enum values from database.ts/constants.ts
+    const visits = byMethod['Site Visit'] || 0
+    const calls = byMethod['Phone Call'] || 0
+    const meetings = byMethod['Online Meeting'] || 0
+    const texting = byMethod['Texting'] || 0
+    const email = byMethod['Email'] || 0
+    const whatsapp = byMethod['WhatsApp'] || 0
 
     // Activity by plan type
     const maintenance = activities.filter(a => a.plan_type === 'maintenance_existing').length
@@ -145,7 +148,7 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
 
     return {
       total, planned, completed, completionRate,
-      visits, calls, meetings, whatsapp,
+      visits, calls, meetings, texting, email, whatsapp,
       maintenance, hunting, winback, pipeline,
       huntingPotential,
     }
@@ -355,17 +358,17 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
               <Phone className="h-5 w-5 text-indigo-500" />
               <p className="text-xl font-bold text-indigo-600">{stats.calls}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Calls</p>
+            <p className="text-xs text-muted-foreground mt-1">Phone Calls</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="p-3">
             <div className="flex items-center justify-between">
-              <Video className="h-5 w-5 text-purple-500" />
-              <p className="text-xl font-bold text-purple-600">{stats.meetings}</p>
+              <MessageSquare className="h-5 w-5 text-green-500" />
+              <p className="text-xl font-bold text-green-600">{stats.whatsapp}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Meetings</p>
+            <p className="text-xs text-muted-foreground mt-1">WhatsApp</p>
           </CardContent>
         </Card>
 
