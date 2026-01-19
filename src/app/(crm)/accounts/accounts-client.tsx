@@ -73,6 +73,11 @@ interface AccountEnriched {
   revenue_total: number
   retry_count: number
   lead_id: string | null
+  // Revenue from opportunities
+  lost_rev_opp: number
+  won_rev_opp: number
+  on_progress_rev_opp: number
+  total_rev_opp: number
 }
 
 interface AccountsClientProps {
@@ -364,10 +369,28 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
                           Opps
                         </div>
                       </TableHead>
-                      <TableHead>
-                        <div className="flex items-center gap-1">
+                      <TableHead className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <DollarSign className="h-4 w-4 text-red-500" />
+                          Lost Rev
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <DollarSign className="h-4 w-4 text-green-500" />
+                          Won Rev
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <DollarSign className="h-4 w-4 text-blue-500" />
+                          On Progress
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <div className="flex items-center justify-end gap-1">
                           <DollarSign className="h-4 w-4" />
-                          Revenue
+                          Total Rev
                         </div>
                       </TableHead>
                       <TableHead>
@@ -431,10 +454,37 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
                             {account.open_opportunities}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium">
-                          {account.revenue_total > 0 ? (
+                        <TableCell className="text-right font-medium">
+                          {account.lost_rev_opp > 0 ? (
+                            <span className="text-red-600">
+                              Rp {(account.lost_rev_opp / 1000000).toFixed(1)}M
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {account.won_rev_opp > 0 ? (
                             <span className="text-green-600">
-                              Rp {(account.revenue_total / 1000000).toFixed(1)}M
+                              Rp {(account.won_rev_opp / 1000000).toFixed(1)}M
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {account.on_progress_rev_opp > 0 ? (
+                            <span className="text-blue-600">
+                              Rp {(account.on_progress_rev_opp / 1000000).toFixed(1)}M
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {account.total_rev_opp > 0 ? (
+                            <span className="text-gray-900 font-bold">
+                              Rp {(account.total_rev_opp / 1000000).toFixed(1)}M
                             </span>
                           ) : (
                             <span className="text-muted-foreground">-</span>
@@ -553,6 +603,34 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
                           <p className="font-semibold text-sm">{account.planned_activities}</p>
                         </div>
                       </div>
+
+                      {/* Revenue Opportunity Stats */}
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        <div className="text-center p-2 bg-red-50 rounded">
+                          <span className="text-xs text-red-600 block">Lost</span>
+                          <p className="font-semibold text-xs text-red-700">
+                            {account.lost_rev_opp > 0 ? `${(account.lost_rev_opp / 1000000).toFixed(1)}M` : '-'}
+                          </p>
+                        </div>
+                        <div className="text-center p-2 bg-green-50 rounded">
+                          <span className="text-xs text-green-600 block">Won</span>
+                          <p className="font-semibold text-xs text-green-700">
+                            {account.won_rev_opp > 0 ? `${(account.won_rev_opp / 1000000).toFixed(1)}M` : '-'}
+                          </p>
+                        </div>
+                        <div className="text-center p-2 bg-blue-50 rounded">
+                          <span className="text-xs text-blue-600 block">Progress</span>
+                          <p className="font-semibold text-xs text-blue-700">
+                            {account.on_progress_rev_opp > 0 ? `${(account.on_progress_rev_opp / 1000000).toFixed(1)}M` : '-'}
+                          </p>
+                        </div>
+                        <div className="text-center p-2 bg-gray-100 rounded">
+                          <span className="text-xs text-gray-600 block">Total</span>
+                          <p className="font-bold text-xs text-gray-900">
+                            {account.total_rev_opp > 0 ? `${(account.total_rev_opp / 1000000).toFixed(1)}M` : '-'}
+                          </p>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -663,6 +741,48 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
                   <div className="text-center p-3 bg-muted rounded">
                     <p className="text-2xl font-bold text-red-600">{selectedAccount.overdue_activities}</p>
                     <p className="text-xs text-muted-foreground">Overdue</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Revenue Opportunity */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Revenue Opportunity
+                </h4>
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="text-center p-3 bg-red-50 rounded">
+                    <p className="text-xl font-bold text-red-600">
+                      {selectedAccount.lost_rev_opp > 0
+                        ? `Rp ${(selectedAccount.lost_rev_opp / 1000000).toFixed(1)}M`
+                        : '-'}
+                    </p>
+                    <p className="text-xs text-red-600">Lost</p>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded">
+                    <p className="text-xl font-bold text-green-600">
+                      {selectedAccount.won_rev_opp > 0
+                        ? `Rp ${(selectedAccount.won_rev_opp / 1000000).toFixed(1)}M`
+                        : '-'}
+                    </p>
+                    <p className="text-xs text-green-600">Won</p>
+                  </div>
+                  <div className="text-center p-3 bg-blue-50 rounded">
+                    <p className="text-xl font-bold text-blue-600">
+                      {selectedAccount.on_progress_rev_opp > 0
+                        ? `Rp ${(selectedAccount.on_progress_rev_opp / 1000000).toFixed(1)}M`
+                        : '-'}
+                    </p>
+                    <p className="text-xs text-blue-600">On Progress</p>
+                  </div>
+                  <div className="text-center p-3 bg-gray-100 rounded">
+                    <p className="text-xl font-bold text-gray-900">
+                      {selectedAccount.total_rev_opp > 0
+                        ? `Rp ${(selectedAccount.total_rev_opp / 1000000).toFixed(1)}M`
+                        : '-'}
+                    </p>
+                    <p className="text-xs text-gray-600">Total</p>
                   </div>
                 </div>
               </div>

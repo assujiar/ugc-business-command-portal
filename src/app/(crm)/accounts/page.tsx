@@ -27,6 +27,11 @@ interface AccountEnriched {
   revenue_total: number
   retry_count: number
   lead_id: string | null
+  // Revenue from opportunities
+  lost_rev_opp: number
+  won_rev_opp: number
+  on_progress_rev_opp: number
+  total_rev_opp: number
 }
 
 export default async function AccountsPage() {
