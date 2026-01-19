@@ -1,11 +1,13 @@
 // =====================================================
 // API Route: /api/crm/opportunities/create
 // Create new opportunity/pipeline with shipment details
+// Includes original_creator_id for marketing visibility
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getStageConfig, calculateNextStepDueDate } from '@/lib/constants'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -31,10 +33,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify account exists and user owns it (or is admin)
+    // Fetch account to get original_creator_id and lead_id
     const { data: account, error: accountError } = await (adminClient as any)
       .from('accounts')
-      .select('account_id, company_name, owner_user_id, lead_id')
+      .select('account_id, company_name, owner_user_id, lead_id, original_lead_id, original_creator_id, created_by, account_status')
       .eq('account_id', account_id)
       .single()
 
@@ -45,18 +47,53 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create opportunity
-    const opportunityData = {
+    // Determine original_creator_id for marketing visibility
+    // Priority: account.original_creator_id > lead.created_by > account.created_by > user.id
+    let originalCreatorId = account.original_creator_id
+
+    if (!originalCreatorId) {
+      // Try to get from lead
+      const leadId = account.lead_id || account.original_lead_id
+      if (leadId) {
+        const { data: lead } = await (adminClient as any)
+          .from('leads')
+          .select('created_by')
+          .eq('lead_id', leadId)
+          .single()
+        if (lead?.created_by) {
+          originalCreatorId = lead.created_by
+        }
+      }
+    }
+
+    // Fallback to account.created_by or current user
+    if (!originalCreatorId) {
+      originalCreatorId = account.created_by || user.id
+    }
+
+    // Create opportunity with stage config
+    const initialStage = 'Prospecting'
+    const stageConfig = getStageConfig(initialStage)
+    const nextStepDueDate = calculateNextStepDueDate(initialStage)
+
+    const opportunityData: Record<string, unknown> = {
       name,
       account_id,
-      lead_id: account.lead_id || null,
-      stage: 'Prospecting',
+      source_lead_id: account.lead_id || account.original_lead_id || null,
+      stage: initialStage,
       estimated_value: estimated_value || 0,
       currency: 'IDR',
-      probability: 10,
-      notes: notes || null,
+      probability: stageConfig?.probability || 10,
       owner_user_id: user.id,
       created_by: user.id,
+      next_step: stageConfig?.nextStep || 'Initial Contact',
+      next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
+      original_creator_id: originalCreatorId,
+    }
+
+    // Add notes if provided
+    if (notes) {
+      opportunityData.description = notes
     }
 
     const { data: opportunity, error: oppError } = await (adminClient as any)
@@ -114,7 +151,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update account status to calon_account if not already set
+    // Update account status to calon_account if failed or not set
     if (!account.account_status || account.account_status === 'failed_account') {
       await (adminClient as any)
         .from('accounts')

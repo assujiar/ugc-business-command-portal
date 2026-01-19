@@ -46,10 +46,11 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
+      console.error('Error fetching accounts:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data: data || [] })
   } catch (error) {
     console.error('Error fetching my accounts:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
