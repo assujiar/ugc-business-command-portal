@@ -34,11 +34,10 @@ interface AccountEnriched {
   revenue_total: number
   retry_count: number
   lead_id: string | null
-  // Revenue from opportunities
-  lost_rev_opp: number
-  won_rev_opp: number
-  on_progress_rev_opp: number
-  total_rev_opp: number
+  // Revenue from DSO/AR module (placeholder for future development)
+  actual_revenue: number
+  total_payment: number
+  total_outstanding: number
 }
 
 export default async function AccountsPage() {
@@ -49,12 +48,12 @@ export default async function AccountsPage() {
   let userRole: UserRole | null = null
 
   if (user) {
-    const { data: profile } = await supabase
+    const { data: profile } = await (supabase as any)
       .from('profiles')
       .select('role')
       .eq('user_id', user.id)
-      .single()
-    userRole = profile?.role as UserRole | null
+      .single() as { data: { role: UserRole } | null }
+    userRole = profile?.role ?? null
   }
 
   const { data: accounts } = await supabase
