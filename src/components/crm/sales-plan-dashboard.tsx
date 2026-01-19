@@ -505,6 +505,12 @@ export function SalesPlanDashboard({
       return
     }
 
+    // For Site Visit, evidence photo is mandatory
+    if (updateData.actual_activity_method === 'Site Visit' && !evidenceFile) {
+      alert('Evidence photo is required for Site Visit')
+      return
+    }
+
     setLoading(true)
     try {
       // Upload evidence file if selected
@@ -515,6 +521,11 @@ export function SalesPlanDashboard({
           evidenceUrl = uploadedUrl
         } else if (!updateData.evidence_url) {
           // Upload failed and no URL provided
+          if (updateData.actual_activity_method === 'Site Visit') {
+            alert('Failed to upload evidence. Please try again.')
+            setLoading(false)
+            return
+          }
           console.warn('Evidence upload failed, continuing without evidence')
         }
       }
@@ -1162,7 +1173,12 @@ export function SalesPlanDashboard({
             )}
 
             <div className="space-y-2">
-              <Label>Evidence Photo</Label>
+              <Label>
+                Evidence Photo
+                {updateData.actual_activity_method === 'Site Visit' && (
+                  <span className="text-red-500 ml-1">* (Required)</span>
+                )}
+              </Label>
               {/* Hidden file inputs */}
               <input
                 ref={fileInputRef}
@@ -1180,29 +1196,38 @@ export function SalesPlanDashboard({
                 onChange={handleCameraCapture}
               />
 
-              {/* Upload buttons */}
+              {/* Upload buttons - Site Visit: camera only */}
               <div className="flex gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  className="flex-1"
+                  className={updateData.actual_activity_method === 'Site Visit' ? 'w-full' : 'flex-1'}
                   onClick={() => cameraInputRef.current?.click()}
                   disabled={isUploading}
                 >
                   <Camera className="h-4 w-4 mr-2" />
-                  Camera
+                  {updateData.actual_activity_method === 'Site Visit' ? 'Take Photo (Camera)' : 'Camera'}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Gallery
-                </Button>
+                {updateData.actual_activity_method !== 'Site Visit' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Gallery
+                  </Button>
+                )}
               </div>
+
+              {/* Site Visit notice */}
+              {updateData.actual_activity_method === 'Site Visit' && !evidenceFile && (
+                <p className="text-xs text-orange-600">
+                  Site Visit requires photo evidence taken directly from camera
+                </p>
+              )}
 
               {/* Selected file preview */}
               {evidenceFile && (
