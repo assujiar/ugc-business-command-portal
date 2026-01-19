@@ -32,6 +32,7 @@ import {
   Video,
 } from 'lucide-react'
 import { isAdmin, isMarketing, isSales } from '@/lib/permissions'
+import { SalesPerformanceAnalytics, SalespersonPerformanceCard } from '@/components/crm/sales-performance-analytics'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,6 +93,16 @@ export default async function DashboardPage() {
   }
   // Admin/Director see all (no filter)
 
+  // Additional queries for sales performance analytics
+  const salesProfilesQuery = (adminClient as any)
+    .from('profiles')
+    .select('user_id, name, email, role')
+    .in('role', ['salesperson', 'sales manager', 'sales support'])
+
+  const stageHistoryQuery = (adminClient as any)
+    .from('opportunity_stage_history')
+    .select('opportunity_id, old_stage, new_stage, changed_at')
+
   // Execute queries
   const [
     { data: leads },
@@ -99,12 +110,16 @@ export default async function DashboardPage() {
     { data: accounts },
     { data: salesPlans },
     { data: pipelineUpdates },
+    { data: salesProfiles },
+    { data: stageHistory },
   ] = await Promise.all([
     leadsQuery,
     opportunitiesQuery,
     accountsQuery,
     salesPlansQuery,
     pipelineUpdatesQuery,
+    salesProfilesQuery,
+    stageHistoryQuery,
   ])
 
   // =====================================================
@@ -437,6 +452,90 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Sales Performance Analytics - For Management Roles */}
+      {(isAdmin(role) || role === 'sales manager' || role === 'Marketing Manager' || role === 'MACX') && (
+        <SalesPerformanceAnalytics
+          opportunities={(opportunities || []).map((o: any) => ({
+            opportunity_id: o.opportunity_id,
+            name: o.name,
+            account_id: o.account_id,
+            stage: o.stage,
+            estimated_value: o.estimated_value,
+            owner_user_id: o.owner_user_id,
+            created_at: o.created_at,
+            closed_at: o.closed_at,
+          }))}
+          accounts={(accounts || []).map((a: any) => ({
+            account_id: a.account_id,
+            company_name: a.company_name,
+            account_status: a.account_status,
+            owner_user_id: a.owner_user_id,
+            created_at: a.created_at,
+            first_transaction_date: a.first_transaction_date,
+          }))}
+          pipelineUpdates={(pipelineUpdates || []).map((u: any) => ({
+            update_id: u.update_id,
+            opportunity_id: u.opportunity_id,
+            approach_method: u.approach_method,
+            updated_by: u.updated_by,
+            created_at: u.created_at,
+          }))}
+          stageHistory={(stageHistory || []).map((h: any) => ({
+            opportunity_id: h.opportunity_id,
+            old_stage: h.old_stage,
+            new_stage: h.new_stage,
+            changed_at: h.changed_at,
+          }))}
+          salesProfiles={(salesProfiles || []).map((p: any) => ({
+            user_id: p.user_id,
+            name: p.name,
+            email: p.email,
+            role: p.role,
+          }))}
+          currentUserId={userId}
+          currentUserRole={role}
+        />
+      )}
+
+      {/* Salesperson Performance Card - For Individual Salesperson */}
+      {role === 'salesperson' && (
+        <SalespersonPerformanceCard
+          opportunities={(opportunities || []).map((o: any) => ({
+            opportunity_id: o.opportunity_id,
+            name: o.name,
+            account_id: o.account_id,
+            stage: o.stage,
+            estimated_value: o.estimated_value,
+            owner_user_id: o.owner_user_id,
+            created_at: o.created_at,
+            closed_at: o.closed_at,
+          }))}
+          accounts={(accounts || []).map((a: any) => ({
+            account_id: a.account_id,
+            company_name: a.company_name,
+            account_status: a.account_status,
+            owner_user_id: a.owner_user_id,
+            created_at: a.created_at,
+            first_transaction_date: a.first_transaction_date,
+          }))}
+          pipelineUpdates={(pipelineUpdates || []).map((u: any) => ({
+            update_id: u.update_id,
+            opportunity_id: u.opportunity_id,
+            approach_method: u.approach_method,
+            updated_by: u.updated_by,
+            created_at: u.created_at,
+          }))}
+          salesProfiles={(salesProfiles || []).map((p: any) => ({
+            user_id: p.user_id,
+            name: p.name,
+            email: p.email,
+            role: p.role,
+          }))}
+          currentUserId={userId}
+          currentUserName={userName}
+        />
       )}
 
       {/* Account Status & Quick Actions */}
