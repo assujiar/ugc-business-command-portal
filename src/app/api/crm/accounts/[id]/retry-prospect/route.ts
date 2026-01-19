@@ -1,6 +1,7 @@
 // =====================================================
 // API Route: /api/crm/accounts/[id]/retry-prospect
 // Retry prospecting for failed accounts
+// Creates new pipeline only (no new lead)
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,7 +12,7 @@ import { getStageConfig, calculateNextStepDueDate } from '@/lib/constants'
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
 
-// POST /api/crm/accounts/[id]/retry-prospect - Create new lead and pipeline for failed account
+// POST /api/crm/accounts/[id]/retry-prospect - Create new pipeline for failed account
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -61,8 +62,11 @@ export async function POST(
     }
 
     // Determine the original creator for marketing visibility
-    // Priority: account.original_creator_id > original_lead.created_by > current_lead.created_by > account.created_by
+    // Priority: account.original_creator_id > original_lead.created_by > earliest_lead_by_marketing > current_lead.created_by > account.created_by
     let marketingOriginalCreatorId = account.original_creator_id
+
+    // Marketing roles for checking if creator is from marketing
+    const marketingRoles = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
 
     // If no original_creator_id on account, look up from leads
     if (!marketingOriginalCreatorId) {
@@ -78,7 +82,59 @@ export async function POST(
         }
       }
 
-      // If still not found, try current lead_id
+      // If still not found, search for the EARLIEST lead linked to this account that was created by marketing
+      // This handles cases where original_lead_id was not set (pre-migration accounts)
+      if (!marketingOriginalCreatorId) {
+        const { data: leadsForAccount } = await (adminClient as any)
+          .from('leads')
+          .select('lead_id, created_by, created_at')
+          .eq('account_id', id)
+          .order('created_at', { ascending: true })
+          .limit(10) // Get first 10 leads to find marketing creator
+
+        if (leadsForAccount && leadsForAccount.length > 0) {
+          // Get creator IDs to lookup their profiles
+          const creatorIds = Array.from(new Set(leadsForAccount.map((l: any) => l.created_by).filter(Boolean))) as string[]
+
+          let creatorsMap: Record<string, { role: string | null; department: string | null }> = {}
+          if (creatorIds.length > 0) {
+            const { data: profiles } = await (adminClient as any)
+              .from('profiles')
+              .select('user_id, role, department')
+              .in('user_id', creatorIds)
+
+            creatorsMap = (profiles || []).reduce((acc: any, p: any) => {
+              acc[p.user_id] = { role: p.role, department: p.department }
+              return acc
+            }, {})
+          }
+
+          // Find the first lead created by a marketing user
+          for (const lead of leadsForAccount) {
+            const creator = creatorsMap[lead.created_by]
+            if (!creator) continue
+
+            // Check if creator is from marketing
+            if (creator.role && marketingRoles.includes(creator.role)) {
+              marketingOriginalCreatorId = lead.created_by
+              console.log('Found marketing creator from earliest lead:', lead.lead_id, creator.role)
+              break
+            }
+            if (creator.department && creator.department.toLowerCase().includes('marketing')) {
+              marketingOriginalCreatorId = lead.created_by
+              console.log('Found marketing creator from earliest lead (by dept):', lead.lead_id, creator.department)
+              break
+            }
+          }
+
+          // If no marketing creator found, use the earliest lead's creator
+          if (!marketingOriginalCreatorId && leadsForAccount[0]?.created_by) {
+            marketingOriginalCreatorId = leadsForAccount[0].created_by
+          }
+        }
+      }
+
+      // Fallback: try current lead_id
       if (!marketingOriginalCreatorId && account.lead_id) {
         const { data: currentLead } = await (adminClient as any)
           .from('leads')
@@ -90,7 +146,7 @@ export async function POST(
         }
       }
 
-      // Last fallback: account.created_by (usually the sales user, not ideal but better than null)
+      // Last fallback: account.created_by
       if (!marketingOriginalCreatorId) {
         marketingOriginalCreatorId = account.created_by
       }
@@ -113,7 +169,6 @@ export async function POST(
     })
 
     // Verify account is in failed status
-    // Handle cases where account_status might not exist (migration not applied)
     const accountStatus = account.account_status
     if (accountStatus && accountStatus !== 'failed_account') {
       return NextResponse.json({
@@ -153,45 +208,8 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to update account' }, { status: 500 })
     }
 
-    // 2. Create new lead with unique dedupe_key for retry
-    const companyNameForLead = company_name || account.company_name
-    const emailForLead = pic_email || account.pic_email || ''
-    // Generate unique dedupe_key by appending retry count
-    const dedupeKey = `${companyNameForLead.toLowerCase().trim()}-${emailForLead.toLowerCase().trim()}-retry${newRetryCount}`
-
-    const leadData = {
-      company_name: companyNameForLead,
-      contact_name: pic_name || account.pic_name,
-      contact_email: pic_email || account.pic_email,
-      contact_phone: pic_phone || account.pic_phone,
-      source: 'Retry Prospect',
-      source_detail: `Retry attempt #${newRetryCount} from failed account`,
-      notes: notes || account.notes,
-      priority: 2,
-      industry: industry || account.industry,
-      potential_revenue: potential_revenue || 0,
-      triage_status: 'Assign to Sales',
-      claim_status: 'claimed',
-      sales_owner_user_id: user.id,
-      claimed_at: new Date().toISOString(),
-      qualified_at: new Date().toISOString(),
-      account_id: id,
-      created_by: user.id,
-      dedupe_key: dedupeKey, // Unique key for retry leads
-    }
-
-    const { data: newLead, error: leadError } = await (adminClient as any)
-      .from('leads')
-      .insert(leadData)
-      .select()
-      .single()
-
-    if (leadError) {
-      console.error('Error creating lead:', leadError)
-      return NextResponse.json({ error: 'Failed to create lead' }, { status: 500 })
-    }
-
-    // 3. Create new pipeline (opportunity) with attempt number
+    // 2. Create new pipeline (opportunity) with attempt number
+    // No new lead is created - we use the existing lead_id from account
     const initialStage = 'Prospecting'
     const stageConfig = getStageConfig(initialStage)
     const nextStepDueDate = calculateNextStepDueDate(initialStage)
@@ -199,7 +217,7 @@ export async function POST(
     const opportunityData = {
       name: `Pipeline - ${company_name || account.company_name}`,
       account_id: id,
-      source_lead_id: newLead.lead_id,
+      source_lead_id: account.lead_id || account.original_lead_id || null, // Use existing lead
       stage: initialStage,
       estimated_value: potential_revenue || 0,
       currency: 'IDR',
@@ -210,7 +228,7 @@ export async function POST(
       next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
       attempt_number: newRetryCount + 1, // +1 because first attempt was the original
       // Preserve original creator for marketing visibility
-      // Uses the resolved marketingOriginalCreatorId which checks original_lead.created_by
+      // Uses the resolved marketingOriginalCreatorId which tracks the original lead creator
       original_creator_id: marketingOriginalCreatorId,
     }
 
@@ -225,26 +243,14 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to create pipeline' }, { status: 500 })
     }
 
-    // 4. Update lead with opportunity_id
-    await (adminClient as any)
-      .from('leads')
-      .update({ opportunity_id: newOpportunity.opportunity_id })
-      .eq('lead_id', newLead.lead_id)
-
-    // 5. Update account with new lead_id
-    await (adminClient as any)
-      .from('accounts')
-      .update({ lead_id: newLead.lead_id })
-      .eq('account_id', id)
-
     return NextResponse.json({
       data: {
         success: true,
         account_id: id,
-        lead_id: newLead.lead_id,
         opportunity_id: newOpportunity.opportunity_id,
         attempt_number: newRetryCount + 1,
-        message: `Successfully created retry prospect (Attempt #${newRetryCount + 1})`
+        original_creator_id: marketingOriginalCreatorId,
+        message: `Successfully created retry pipeline (Attempt #${newRetryCount + 1})`
       }
     })
   } catch (error) {

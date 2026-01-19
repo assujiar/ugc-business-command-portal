@@ -97,9 +97,10 @@ export async function GET(
     }
 
     // Check if user can view this pipeline based on role-based access
+    // Use original_creator_id for proper marketing visibility (preserved across retries)
     const canView = canViewPipeline(profile.role, user.id, {
       owner_user_id: opportunity.owner_user_id,
-      lead_created_by: leadInfo?.created_by,
+      lead_created_by: opportunity.original_creator_id || leadInfo?.created_by,
       lead_marketing_owner: leadInfo?.marketing_owner_user_id,
       lead_sales_owner: leadInfo?.sales_owner_user_id,
     })
@@ -119,15 +120,19 @@ export async function GET(
       ownerInfo = ownerData as { name: string; email?: string; department?: string } | null
     }
 
-    // Get lead creator profile (for lead source info)
-    let creatorInfo: { name: string; department?: string } | null = null
-    if (leadInfo?.created_by) {
+    // Get original creator profile (for marketing visibility tracking)
+    // Priority: opportunity.original_creator_id > leadInfo.created_by
+    // original_creator_id preserves the original lead creator across retries
+    let creatorInfo: { name: string; department?: string; role?: string } | null = null
+    const originalCreatorId = opportunity.original_creator_id || leadInfo?.created_by
+
+    if (originalCreatorId) {
       const { data: creatorData } = await supabase
         .from('profiles')
-        .select('name, department')
-        .eq('user_id', leadInfo.created_by)
+        .select('name, department, role')
+        .eq('user_id', originalCreatorId)
         .single()
-      creatorInfo = creatorData as { name: string; department?: string } | null
+      creatorInfo = creatorData as { name: string; department?: string; role?: string } | null
     }
 
     // Get pipeline updates with updater names
@@ -225,9 +230,11 @@ export async function GET(
       potential_revenue: leadInfo?.potential_revenue || opportunity.estimated_value || null,
       lead_source: leadInfo?.source || null,
 
-      // Creator/Source info
+      // Creator/Source info (uses original_creator_id for marketing visibility)
+      original_creator_id: opportunity.original_creator_id || leadInfo?.created_by || null,
       lead_creator_name: creatorInfo?.name || null,
       lead_creator_department: creatorInfo?.department || null,
+      lead_creator_role: creatorInfo?.role || null,
 
       // Sales owner info
       owner_user_id: opportunity.owner_user_id,
@@ -242,7 +249,7 @@ export async function GET(
       // Permissions
       can_update: canUpdatePipeline(profile.role, user.id, {
         owner_user_id: opportunity.owner_user_id,
-        lead_created_by: leadInfo?.created_by,
+        lead_created_by: opportunity.original_creator_id || leadInfo?.created_by,
         lead_sales_owner: leadInfo?.sales_owner_user_id,
       }),
     }
