@@ -61,8 +61,11 @@ export async function POST(
     }
 
     // Determine the original creator for marketing visibility
-    // Priority: account.original_creator_id > original_lead.created_by > current_lead.created_by > account.created_by
+    // Priority: account.original_creator_id > original_lead.created_by > earliest_lead_by_marketing > current_lead.created_by > account.created_by
     let marketingOriginalCreatorId = account.original_creator_id
+
+    // Marketing roles for checking if creator is from marketing
+    const marketingRoles = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
 
     // If no original_creator_id on account, look up from leads
     if (!marketingOriginalCreatorId) {
@@ -78,7 +81,59 @@ export async function POST(
         }
       }
 
-      // If still not found, try current lead_id
+      // If still not found, search for the EARLIEST lead linked to this account that was created by marketing
+      // This handles cases where original_lead_id was not set (pre-migration accounts)
+      if (!marketingOriginalCreatorId) {
+        const { data: leadsForAccount } = await (adminClient as any)
+          .from('leads')
+          .select('lead_id, created_by, created_at')
+          .eq('account_id', id)
+          .order('created_at', { ascending: true })
+          .limit(10) // Get first 10 leads to find marketing creator
+
+        if (leadsForAccount && leadsForAccount.length > 0) {
+          // Get creator IDs to lookup their profiles
+          const creatorIds = Array.from(new Set(leadsForAccount.map((l: any) => l.created_by).filter(Boolean))) as string[]
+
+          let creatorsMap: Record<string, { role: string | null; department: string | null }> = {}
+          if (creatorIds.length > 0) {
+            const { data: profiles } = await (adminClient as any)
+              .from('profiles')
+              .select('user_id, role, department')
+              .in('user_id', creatorIds)
+
+            creatorsMap = (profiles || []).reduce((acc: any, p: any) => {
+              acc[p.user_id] = { role: p.role, department: p.department }
+              return acc
+            }, {})
+          }
+
+          // Find the first lead created by a marketing user
+          for (const lead of leadsForAccount) {
+            const creator = creatorsMap[lead.created_by]
+            if (!creator) continue
+
+            // Check if creator is from marketing
+            if (creator.role && marketingRoles.includes(creator.role)) {
+              marketingOriginalCreatorId = lead.created_by
+              console.log('Found marketing creator from earliest lead:', lead.lead_id, creator.role)
+              break
+            }
+            if (creator.department && creator.department.toLowerCase().includes('marketing')) {
+              marketingOriginalCreatorId = lead.created_by
+              console.log('Found marketing creator from earliest lead (by dept):', lead.lead_id, creator.department)
+              break
+            }
+          }
+
+          // If no marketing creator found, use the earliest lead's creator
+          if (!marketingOriginalCreatorId && leadsForAccount[0]?.created_by) {
+            marketingOriginalCreatorId = leadsForAccount[0].created_by
+          }
+        }
+      }
+
+      // Fallback: try current lead_id
       if (!marketingOriginalCreatorId && account.lead_id) {
         const { data: currentLead } = await (adminClient as any)
           .from('leads')
