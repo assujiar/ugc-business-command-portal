@@ -60,6 +60,51 @@ export async function POST(
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
+    // Determine the original creator for marketing visibility
+    // Priority: account.original_creator_id > original_lead.created_by > current_lead.created_by > account.created_by
+    let marketingOriginalCreatorId = account.original_creator_id
+
+    // If no original_creator_id on account, look up from leads
+    if (!marketingOriginalCreatorId) {
+      // First try original_lead_id
+      if (account.original_lead_id) {
+        const { data: originalLead } = await (adminClient as any)
+          .from('leads')
+          .select('created_by')
+          .eq('lead_id', account.original_lead_id)
+          .single()
+        if (originalLead?.created_by) {
+          marketingOriginalCreatorId = originalLead.created_by
+        }
+      }
+
+      // If still not found, try current lead_id
+      if (!marketingOriginalCreatorId && account.lead_id) {
+        const { data: currentLead } = await (adminClient as any)
+          .from('leads')
+          .select('created_by')
+          .eq('lead_id', account.lead_id)
+          .single()
+        if (currentLead?.created_by) {
+          marketingOriginalCreatorId = currentLead.created_by
+        }
+      }
+
+      // Last fallback: account.created_by (usually the sales user, not ideal but better than null)
+      if (!marketingOriginalCreatorId) {
+        marketingOriginalCreatorId = account.created_by
+      }
+    }
+
+    console.log('Retry prospect - Original creator lookup:', {
+      account_id: id,
+      account_original_creator_id: account.original_creator_id,
+      account_original_lead_id: account.original_lead_id,
+      account_lead_id: account.lead_id,
+      account_created_by: account.created_by,
+      resolved_original_creator: marketingOriginalCreatorId
+    })
+
     // Log account status for debugging
     console.log('Account status check:', {
       account_id: id,
@@ -80,19 +125,27 @@ export async function POST(
     const newRetryCount = (account.retry_count || 0) + 1
 
     // 1. Update account with new info and increment retry_count
+    // Also set original_creator_id if not already set (for marketing visibility on future retries)
+    const accountUpdateData: Record<string, unknown> = {
+      company_name: company_name || account.company_name,
+      pic_name: pic_name || account.pic_name,
+      pic_email: pic_email || account.pic_email,
+      pic_phone: pic_phone || account.pic_phone,
+      industry: industry || account.industry,
+      notes: notes || account.notes,
+      account_status: 'calon_account', // Reset to calon_account
+      retry_count: newRetryCount,
+      updated_at: new Date().toISOString(),
+    }
+
+    // Preserve original_creator_id on account if not already set
+    if (!account.original_creator_id && marketingOriginalCreatorId) {
+      accountUpdateData.original_creator_id = marketingOriginalCreatorId
+    }
+
     const { error: updateAccountError } = await (adminClient as any)
       .from('accounts')
-      .update({
-        company_name: company_name || account.company_name,
-        pic_name: pic_name || account.pic_name,
-        pic_email: pic_email || account.pic_email,
-        pic_phone: pic_phone || account.pic_phone,
-        industry: industry || account.industry,
-        notes: notes || account.notes,
-        account_status: 'calon_account', // Reset to calon_account
-        retry_count: newRetryCount,
-        updated_at: new Date().toISOString(),
-      })
+      .update(accountUpdateData)
       .eq('account_id', id)
 
     if (updateAccountError) {
@@ -156,8 +209,9 @@ export async function POST(
       next_step: stageConfig?.nextStep || 'Initial Contact',
       next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
       attempt_number: newRetryCount + 1, // +1 because first attempt was the original
-      // Preserve original creator from account for marketing visibility
-      original_creator_id: account.original_creator_id || account.created_by,
+      // Preserve original creator for marketing visibility
+      // Uses the resolved marketingOriginalCreatorId which checks original_lead.created_by
+      original_creator_id: marketingOriginalCreatorId,
     }
 
     const { data: newOpportunity, error: oppError } = await (adminClient as any)
