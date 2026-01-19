@@ -5,7 +5,7 @@
 // Target planning for maintenance, hunting, winback
 // =====================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -68,6 +68,10 @@ import {
   FileText,
   Image,
   ExternalLink,
+  Camera,
+  Loader2,
+  Navigation,
+  X,
 } from 'lucide-react'
 
 type SalesPlanType = 'maintenance_existing' | 'hunting_new' | 'winback_lost'
@@ -175,8 +179,17 @@ export function SalesPlanDashboard({
     method_change_reason: '',
     realization_notes: '',
     evidence_url: '',
+    location_lat: null as number | null,
+    location_lng: null as number | null,
     location_address: '',
   })
+
+  // File upload state
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   // Potential assessment state
   const [potentialData, setPotentialData] = useState({
@@ -349,9 +362,135 @@ export function SalesPlanDashboard({
       method_change_reason: '',
       realization_notes: '',
       evidence_url: '',
+      location_lat: null,
+      location_lng: null,
       location_address: '',
     })
+    setEvidenceFile(null)
     setIsUpdateOpen(true)
+    // Auto-get location when opening the dialog
+    handleGetLocation()
+  }
+
+  // Handle file selection from gallery
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setEvidenceFile(file)
+    }
+  }
+
+  // Handle camera capture
+  const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setEvidenceFile(file)
+    }
+  }
+
+  // Clear selected file
+  const handleClearFile = () => {
+    setEvidenceFile(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+  }
+
+  // Get current GPS location
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser')
+      return
+    }
+
+    setIsGettingLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude
+        const lng = position.coords.longitude
+
+        setUpdateData(prev => ({
+          ...prev,
+          location_lat: lat,
+          location_lng: lng,
+        }))
+
+        // Reverse geocode to get address
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+            { headers: { 'Accept-Language': 'id' } }
+          )
+          const data = await response.json()
+          if (data.display_name) {
+            setUpdateData(prev => ({
+              ...prev,
+              location_address: data.display_name,
+            }))
+          }
+        } catch (error) {
+          console.error('Error getting address:', error)
+          setUpdateData(prev => ({
+            ...prev,
+            location_address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+          }))
+        }
+
+        setIsGettingLocation(false)
+      },
+      (error) => {
+        console.error('Error getting location:', error)
+        setIsGettingLocation(false)
+        let errorMessage = 'Failed to get location'
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location access denied. Please enable location permissions.'
+            break
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable.'
+            break
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out.'
+            break
+        }
+        alert(errorMessage)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    )
+  }
+
+  // Upload evidence file to Supabase storage
+  const uploadEvidenceFile = async (): Promise<string | null> => {
+    if (!evidenceFile || !selectedPlan) return null
+
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('evidence', evidenceFile)
+      if (updateData.location_lat) formData.append('location_lat', updateData.location_lat.toString())
+      if (updateData.location_lng) formData.append('location_lng', updateData.location_lng.toString())
+      if (updateData.location_address) formData.append('location_address', updateData.location_address)
+
+      const response = await fetch(`/api/crm/sales-plans/${selectedPlan.plan_id}/evidence`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to upload evidence')
+      }
+
+      const result = await response.json()
+      return result.data.evidence_url
+    } catch (error) {
+      console.error('Error uploading evidence:', error)
+      return null
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const handleUpdateRealization = async () => {
@@ -368,6 +507,18 @@ export function SalesPlanDashboard({
 
     setLoading(true)
     try {
+      // Upload evidence file if selected
+      let evidenceUrl = updateData.evidence_url
+      if (evidenceFile) {
+        const uploadedUrl = await uploadEvidenceFile()
+        if (uploadedUrl) {
+          evidenceUrl = uploadedUrl
+        } else if (!updateData.evidence_url) {
+          // Upload failed and no URL provided
+          console.warn('Evidence upload failed, continuing without evidence')
+        }
+      }
+
       const response = await fetch(`/api/crm/sales-plans/${selectedPlan.plan_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -376,7 +527,9 @@ export function SalesPlanDashboard({
           actual_activity_method: updateData.actual_activity_method,
           method_change_reason: updateData.method_change_reason || null,
           realization_notes: updateData.realization_notes || null,
-          evidence_url: updateData.evidence_url || null,
+          evidence_url: evidenceUrl || null,
+          location_lat: updateData.location_lat,
+          location_lng: updateData.location_lng,
           location_address: updateData.location_address || null,
         }),
       })
@@ -386,6 +539,7 @@ export function SalesPlanDashboard({
       }
 
       setIsUpdateOpen(false)
+      setEvidenceFile(null)
 
       // If hunting new customer, open potential assessment
       if (selectedPlan.plan_type === 'hunting_new') {
@@ -1008,24 +1162,105 @@ export function SalesPlanDashboard({
             )}
 
             <div className="space-y-2">
-              <Label>Evidence URL</Label>
-              <Input
-                value={updateData.evidence_url}
-                onChange={(e) => setUpdateData({ ...updateData, evidence_url: e.target.value })}
-                placeholder="Upload evidence URL"
+              <Label>Evidence Photo</Label>
+              {/* Hidden file inputs */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf,.doc,.docx"
+                className="hidden"
+                onChange={handleFileSelect}
               />
-              <p className="text-xs text-muted-foreground">
-                Upload file/photo and paste the URL here
-              </p>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleCameraCapture}
+              />
+
+              {/* Upload buttons */}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => cameraInputRef.current?.click()}
+                  disabled={isUploading}
+                >
+                  <Camera className="h-4 w-4 mr-2" />
+                  Camera
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Gallery
+                </Button>
+              </div>
+
+              {/* Selected file preview */}
+              {evidenceFile && (
+                <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
+                  {evidenceFile.type.startsWith('image/') ? (
+                    <Image className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span className="text-sm flex-1 truncate">{evidenceFile.name}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearFile}
+                    className="h-6 w-6 p-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+
+              {isUploading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading...
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label>Location</Label>
-              <Input
-                value={updateData.location_address}
-                onChange={(e) => setUpdateData({ ...updateData, location_address: e.target.value })}
-                placeholder="Activity location"
-              />
+              <Label>Location (Auto GPS)</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={updateData.location_address}
+                  onChange={(e) => setUpdateData({ ...updateData, location_address: e.target.value })}
+                  placeholder="Getting location..."
+                  className="flex-1"
+                  readOnly
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleGetLocation}
+                  disabled={isGettingLocation}
+                >
+                  {isGettingLocation ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Navigation className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {updateData.location_lat && updateData.location_lng && (
+                <p className="text-xs text-muted-foreground">
+                  GPS: {updateData.location_lat.toFixed(6)}, {updateData.location_lng.toFixed(6)}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -1039,8 +1274,15 @@ export function SalesPlanDashboard({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsUpdateOpen(false)}>Cancel</Button>
-            <Button onClick={handleUpdateRealization} disabled={loading}>
-              {loading ? 'Saving...' : 'Complete Activity'}
+            <Button onClick={handleUpdateRealization} disabled={loading || isUploading || isGettingLocation}>
+              {loading || isUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {isUploading ? 'Uploading...' : 'Saving...'}
+                </>
+              ) : (
+                'Complete Activity'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1265,6 +1507,17 @@ export function SalesPlanDashboard({
                         <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                         {selectedPlan.location_address}
                       </p>
+                      {selectedPlan.location_lat && selectedPlan.location_lng && (
+                        <a
+                          href={`https://www.google.com/maps?q=${selectedPlan.location_lat},${selectedPlan.location_lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm text-brand hover:underline mt-2"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          View in Google Maps
+                        </a>
+                      )}
                     </div>
                   )}
 
