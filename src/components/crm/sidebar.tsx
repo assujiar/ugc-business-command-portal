@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData } from '@/lib/permissions'
+import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -42,8 +42,9 @@ const navigation = [
   { name: 'My Leads', href: '/my-leads', icon: Users, permission: 'salesInbox' },
   { name: 'Pipeline', href: '/pipeline', icon: TrendingUp, permission: 'pipeline' },
   { name: 'Accounts', href: '/accounts', icon: Building2, permission: 'pipeline' },
-  { name: 'Activities', href: '/activities', icon: Calendar, roles: 'all' },
-  { name: 'Sales Plan', href: '/targets', icon: Target, permission: 'salesInbox' },
+  { name: 'Sales Plan', href: '/sales-plan', icon: Target, permission: 'salesPlan' },
+  { name: 'Activities', href: '/activities', icon: Calendar, permission: 'activities' },
+  { name: 'Targets', href: '/targets', icon: Users, permission: 'salesInbox' },
   { name: 'Imports', href: '/imports', icon: Upload, permission: 'import' },
 ]
 
@@ -56,6 +57,8 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
     if (item.permission === 'salesInbox') return canAccessSalesInbox(profile.role)
     if (item.permission === 'pipeline') return canAccessPipeline(profile.role)
     if (item.permission === 'import') return canImportData(profile.role)
+    if (item.permission === 'salesPlan') return canAccessSalesPlan(profile.role)
+    if (item.permission === 'activities') return canAccessActivities(profile.role)
     return true
   })
 

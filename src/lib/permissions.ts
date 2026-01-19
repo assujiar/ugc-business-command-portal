@@ -276,3 +276,45 @@ export function isMarketingPipelineViewer(role: UserRole | null | undefined): bo
   if (!role) return false
   return role === 'Marketing Manager' || role === 'Marcomm' || role === 'DGO' || role === 'MACX' || role === 'VSDO'
 }
+
+// =====================================================
+// Sales Plan & Activities Permissions
+// =====================================================
+
+// Can user access Sales Plan page?
+export function canAccessSalesPlan(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isSales(role) || role === 'Marketing Manager' || role === 'MACX'
+}
+
+// Can user access Activities page?
+export function canAccessActivities(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isSales(role) || role === 'Marketing Manager' || role === 'MACX'
+}
+
+// Can user create sales plans?
+export function canCreateSalesPlan(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || role === 'salesperson'
+}
+
+// Can user edit sales plans?
+export function canEditSalesPlan(
+  role: UserRole | null | undefined,
+  userId: string,
+  plan: { owner_user_id?: string | null }
+): boolean {
+  if (!role) return false
+  // Admin can edit all
+  if (isAdmin(role)) return true
+  // Salesperson can edit own plans
+  if (role === 'salesperson' && plan.owner_user_id === userId) return true
+  return false
+}
+
+// Can user delete sales plans?
+export function canDeleteSalesPlan(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || role === 'sales manager' || role === 'sales support'
+}
