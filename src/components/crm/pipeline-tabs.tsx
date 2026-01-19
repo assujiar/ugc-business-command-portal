@@ -77,6 +77,8 @@ export function PipelineTabs({ opportunities, currentUserId, userRole, canUpdate
     competitor_price: opp.competitor_price,
     customer_budget: opp.customer_budget,
     lead_source: opp.lead_source || null,
+    created_at: opp.created_at,
+    closed_at: opp.closed_at,
   }))
 
   return (

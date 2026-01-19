@@ -17,9 +17,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { LOST_REASONS } from '@/lib/constants'
 import type { OpportunityStage, LostReason } from '@/types/database'
+import { PipelineDetailDialog } from './pipeline-detail-dialog'
 import {
   TrendingUp,
   TrendingDown,
@@ -32,6 +33,7 @@ import {
   AlertTriangle,
   Calculator,
   Loader,
+  Eye,
 } from 'lucide-react'
 
 interface Opportunity {
@@ -45,6 +47,8 @@ interface Opportunity {
   competitor_price: number | null
   customer_budget: number | null
   lead_source: string | null
+  created_at: string | null
+  closed_at: string | null
 }
 
 interface OpportunityTabProps {
@@ -55,6 +59,13 @@ type FilterType = 'all' | 'lost_rev' | 'won_rev' | 'on_progress_rev' | 'total_re
 
 export function OpportunityTab({ opportunities }: OpportunityTabProps) {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null)
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false)
+
+  const handleViewPipeline = (opportunityId: string) => {
+    setSelectedOpportunityId(opportunityId)
+    setDetailDialogOpen(true)
+  }
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -462,9 +473,12 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
                     <TableHead>Account Name</TableHead>
                     <TableHead className="text-right">Value</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Create Date</TableHead>
+                    <TableHead>Closed Date</TableHead>
                     <TableHead>Reason Lost</TableHead>
                     <TableHead className="text-right">Competitor Price</TableHead>
                     <TableHead className="text-right">Customer Budget</TableHead>
+                    <TableHead className="text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -492,6 +506,12 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
                           {opp.stage}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-xs">
+                        {opp.created_at ? formatDate(opp.created_at) : '-'}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {opp.closed_at ? formatDate(opp.closed_at) : '-'}
+                      </TableCell>
                       <TableCell>
                         {opp.stage === 'Closed Lost' ? (
                           <span className="text-xs text-red-600">
@@ -505,6 +525,16 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
                       <TableCell className="text-right">
                         {opp.customer_budget ? formatCurrency(opp.customer_budget) : '-'}
                       </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewPipeline(opp.opportunity_id)}
+                          title="View Pipeline"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -517,6 +547,13 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Pipeline Detail Dialog */}
+      <PipelineDetailDialog
+        opportunityId={selectedOpportunityId}
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+      />
     </div>
   )
 }
