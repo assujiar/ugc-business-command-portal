@@ -61,6 +61,7 @@ export default async function PipelinePage() {
 
   // Step 2: Filter opportunities based on user role
   // Using original_creator_id from view for efficient visibility check
+  // The view now has COALESCE(original_creator_id, lead.created_by) as fallback
   let filteredOpportunities = allOpportunities || []
 
   if (!isAdmin(profile.role)) {
@@ -71,6 +72,8 @@ export default async function PipelinePage() {
         if (opp.created_by === profile.user_id) return true
         // Also check if they are the original creator (created the lead)
         if (opp.original_creator_id === profile.user_id) return true
+        // Fallback: check lead_created_by for legacy data
+        if (opp.lead_created_by === profile.user_id) return true
         return false
       }
 
@@ -87,30 +90,42 @@ export default async function PipelinePage() {
         if (opp.owner_user_id === profile.user_id) return true
         if (opp.created_by === profile.user_id) return true
         if (opp.original_creator_id === profile.user_id) return true
+        if (opp.lead_created_by === profile.user_id) return true
         return false
       }
 
       // Individual Marketing (Marcomm, VSDO, DGO): Only pipelines from leads they created
       // Uses original_creator_id which is preserved across retries
+      // Also checks lead_marketing_owner and lead_created_by as fallbacks
       if (isIndividualMarketingRole(profile.role)) {
+        // Check original_creator_id (set on new records)
         if (opp.original_creator_id === profile.user_id) return true
+        // Fallback: check lead_created_by (for legacy data without original_creator_id)
+        if (opp.lead_created_by === profile.user_id) return true
+        // Fallback: check lead_marketing_owner (if they were assigned as marketing owner)
+        if (opp.lead_marketing_owner === profile.user_id) return true
         return false
       }
 
       // Marketing Manager/MACX: All pipelines from marketing department leads
       // Uses original_creator_is_marketing computed field from view
+      // The view now has fallback logic built-in
       if (isMarketingManagerRole(profile.role)) {
+        // Check computed field from view (has fallback logic)
         if (opp.original_creator_is_marketing === true) return true
-        // Fallback: if original_creator_id is null, check lead_created_by
-        // This handles legacy data where original_creator_id wasn't set
-        if (!opp.original_creator_id && opp.lead_created_by) {
-          // For legacy, we'd need to check the creator's role
-          // But with the view, we already have original_creator_role
-          if (opp.original_creator_role) {
-            const marketingRoles: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
-            if (marketingRoles.includes(opp.original_creator_role)) return true
-          }
+
+        // Additional fallback: check original_creator_role directly
+        if (opp.original_creator_role) {
+          const marketingRoles: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+          if (marketingRoles.includes(opp.original_creator_role)) return true
         }
+
+        // Additional fallback: check original_creator_department
+        if (opp.original_creator_department &&
+            opp.original_creator_department.toLowerCase().includes('marketing')) {
+          return true
+        }
+
         return false
       }
 
@@ -189,7 +204,12 @@ export default async function PipelinePage() {
     // Original creator info for client-side permission checks if needed
     original_creator_id: opp.original_creator_id,
     original_creator_name: opp.original_creator_name,
+    original_creator_role: opp.original_creator_role,
+    original_creator_department: opp.original_creator_department,
     original_creator_is_marketing: opp.original_creator_is_marketing,
+    // Lead info for fallback visibility checks
+    lead_created_by: opp.lead_created_by,
+    lead_marketing_owner: opp.lead_marketing_owner,
     // Attempt number for retry tracking
     attempt_number: opp.attempt_number,
   }))
