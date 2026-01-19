@@ -2,9 +2,10 @@
 // Pipeline Page - Sales Pipeline with Card View
 // Shows opportunities grouped by stage with update dialog
 // Uses original_creator_id for marketing visibility (efficient)
+// Now includes Pipeline and Opportunity tabs
 // =====================================================
 
-import { PipelineDashboard } from '@/components/crm/pipeline-dashboard'
+import { PipelineTabs } from '@/components/crm/pipeline-tabs'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -49,6 +50,7 @@ export default async function PipelinePage() {
   // - original_creator_id, original_creator_name, original_creator_role, original_creator_department
   // - original_creator_is_marketing (computed boolean)
   // - account_name, owner_name, lead_created_by
+  // - lead_source, competitor_price, customer_budget (added in migration 030)
   // This eliminates the need for separate lead and creator profile queries
   const { data: allOpportunities, error: oppError } = await (adminClient as any)
     .from('v_pipeline_with_updates')
@@ -197,6 +199,8 @@ export default async function PipelinePage() {
     account_name: opp.account_name,
     account_status: opp.account_status,
     owner_name: opp.owner_name,
+    // Lead source for Opportunity tab
+    lead_source: opp.lead_source,
     // is_overdue calculation (client will also check for hydration safety)
     is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() &&
                 !['Closed Won', 'Closed Lost'].includes(opp.stage),
@@ -223,7 +227,7 @@ export default async function PipelinePage() {
         </p>
       </div>
 
-      <PipelineDashboard
+      <PipelineTabs
         opportunities={transformedOpportunities}
         currentUserId={profile.user_id}
         userRole={profile.role}
