@@ -1,14 +1,16 @@
 -- =====================================================
--- Migration 029: Add Revenue Opportunity Columns to Accounts View
+-- Migration 029: Add DSO/AR Revenue Columns to Accounts View
 --
--- Adds columns to track revenue from opportunities:
--- - lost_rev_opp: Revenue from lost opportunities
--- - won_rev_opp: Revenue from won opportunities
--- - on_progress_rev_opp: Revenue from in-progress opportunities
--- - total_rev_opp: Total revenue from all opportunities
+-- Adds columns to track revenue from DSO/AR module:
+-- - actual_revenue: Actual revenue from invoices
+-- - total_payment: Total payments received
+-- - total_outstanding: Outstanding balance (actual_revenue - total_payment)
+--
+-- Note: These are placeholder columns that will be populated
+-- from the DSO/AR module in future development
 -- =====================================================
 
--- Update v_accounts_enriched to include revenue opportunity columns
+-- Update v_accounts_enriched to include DSO/AR revenue columns
 DROP VIEW IF EXISTS v_accounts_enriched CASCADE;
 
 CREATE VIEW v_accounts_enriched (
@@ -17,7 +19,7 @@ CREATE VIEW v_accounts_enriched (
   first_deal_date, last_transaction_date, is_active, tags, notes, dedupe_key, created_by, created_at, updated_at,
   lead_id, retry_count,
   owner_name, owner_email, open_opportunities, pipeline_value, contact_count, planned_activities, overdue_activities,
-  revenue_total, lost_rev_opp, won_rev_opp, on_progress_rev_opp, total_rev_opp
+  revenue_total, actual_revenue, total_payment, total_outstanding
 ) AS
 SELECT
   a.account_id,
@@ -58,11 +60,10 @@ SELECT
   COALESCE(activity_stats.overdue_activities, 0) AS overdue_activities,
   -- Revenue Total placeholder - will be populated from DSO/AR module later
   0::DECIMAL(15,2) AS revenue_total,
-  -- Revenue from opportunities by status
-  COALESCE(rev_opp.lost_rev, 0)::DECIMAL(15,2) AS lost_rev_opp,
-  COALESCE(rev_opp.won_rev, 0)::DECIMAL(15,2) AS won_rev_opp,
-  COALESCE(rev_opp.on_progress_rev, 0)::DECIMAL(15,2) AS on_progress_rev_opp,
-  COALESCE(rev_opp.total_rev, 0)::DECIMAL(15,2) AS total_rev_opp
+  -- DSO/AR Revenue columns (placeholder for future development)
+  0::DECIMAL(15,2) AS actual_revenue,
+  0::DECIMAL(15,2) AS total_payment,
+  0::DECIMAL(15,2) AS total_outstanding
 FROM accounts a
 LEFT JOIN profiles p ON a.owner_user_id = p.user_id
 LEFT JOIN (
@@ -88,16 +89,6 @@ LEFT JOIN (
   WHERE related_account_id IS NOT NULL
   GROUP BY related_account_id
 ) activity_stats ON a.account_id = activity_stats.related_account_id
-LEFT JOIN (
-  SELECT
-    account_id,
-    SUM(estimated_value) FILTER (WHERE stage = 'Closed Lost') AS lost_rev,
-    SUM(estimated_value) FILTER (WHERE stage = 'Closed Won') AS won_rev,
-    SUM(estimated_value) FILTER (WHERE stage NOT IN ('Closed Won', 'Closed Lost')) AS on_progress_rev,
-    SUM(estimated_value) AS total_rev
-  FROM opportunities
-  GROUP BY account_id
-) rev_opp ON a.account_id = rev_opp.account_id
 ORDER BY a.company_name;
 
-COMMENT ON VIEW v_accounts_enriched IS 'Accounts with computed badges, stats, status info, retry tracking, and revenue opportunity breakdown';
+COMMENT ON VIEW v_accounts_enriched IS 'Accounts with computed badges, stats, status info, retry tracking, and DSO/AR revenue placeholders';
