@@ -1,20 +1,17 @@
 // =====================================================
 // Sales Plan Page
-// Schedule and manage sales activities
+// Target planning for maintenance, hunting, winback
 // =====================================================
 
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { canAccessSalesPlan, canCreateSalesPlan, canDeleteSalesPlan, isAdmin } from '@/lib/permissions'
+import { canAccessSalesPlan, canCreateSalesPlan, canDeleteSalesPlan } from '@/lib/permissions'
 import { SalesPlanDashboard } from '@/components/crm/sales-plan-dashboard'
-import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
 export default async function SalesPlanPage() {
-  const supabase = await createClient()
   const adminClient = createAdminClient()
   const { profile } = await getSessionAndProfile()
 
@@ -26,16 +23,15 @@ export default async function SalesPlanPage() {
     redirect('/dashboard')
   }
 
-  // Fetch sales plans
-  let query = adminClient
+  // Fetch sales plans with new structure
+  let query = (adminClient as any)
     .from('sales_plans')
     .select(`
       *,
       profiles:owner_user_id(name, email),
-      accounts(company_name),
-      opportunities(name)
+      source_account:source_account_id(company_name)
     `)
-    .order('scheduled_date', { ascending: true })
+    .order('planned_date', { ascending: true })
 
   // Filter based on role
   if (profile.role === 'salesperson') {
@@ -48,31 +44,43 @@ export default async function SalesPlanPage() {
     console.error('Error fetching sales plans:', error)
   }
 
-  // Transform data
+  // Transform data to match dashboard interface
   const transformedPlans = (plans || []).map((plan: any) => ({
     plan_id: plan.plan_id,
-    activity_type: plan.activity_type,
-    subject: plan.subject,
-    description: plan.description,
-    scheduled_date: plan.scheduled_date,
-    scheduled_time: plan.scheduled_time,
+    plan_type: plan.plan_type,
+    company_name: plan.company_name,
+    pic_name: plan.pic_name,
+    pic_phone: plan.pic_phone,
+    pic_email: plan.pic_email,
+    source_account_id: plan.source_account_id,
+    planned_date: plan.planned_date,
+    planned_activity_method: plan.planned_activity_method,
+    plan_notes: plan.plan_notes,
     status: plan.status,
-    completed_at: plan.completed_at,
-    account_id: plan.account_id,
-    opportunity_id: plan.opportunity_id,
+    realized_at: plan.realized_at,
+    actual_activity_method: plan.actual_activity_method,
+    method_change_reason: plan.method_change_reason,
+    realization_notes: plan.realization_notes,
+    evidence_url: plan.evidence_url,
+    evidence_file_name: plan.evidence_file_name,
+    location_lat: plan.location_lat,
+    location_lng: plan.location_lng,
+    location_address: plan.location_address,
+    potential_status: plan.potential_status || 'pending',
+    not_potential_reason: plan.not_potential_reason,
+    created_lead_id: plan.created_lead_id,
+    created_account_id: plan.created_account_id,
+    created_opportunity_id: plan.created_opportunity_id,
     owner_user_id: plan.owner_user_id,
     created_at: plan.created_at,
     owner_name: plan.profiles?.name || null,
-    account_name: plan.accounts?.company_name || null,
-    opportunity_name: plan.opportunities?.name || null,
-    evidence_url: plan.evidence_url,
-    location_address: plan.location_address,
+    account_name: plan.source_account?.company_name || plan.company_name || null,
   }))
 
-  // Fetch accounts for dropdown
-  const { data: accounts } = await adminClient
+  // Fetch accounts with status for dropdown (need status to filter existing/lost)
+  const { data: accounts } = await (adminClient as any)
     .from('accounts')
-    .select('account_id, company_name')
+    .select('account_id, company_name, pic_name, pic_phone, pic_email, account_status')
     .order('company_name')
 
   // Determine permissions
@@ -84,7 +92,7 @@ export default async function SalesPlanPage() {
       <div>
         <h1 className="text-xl lg:text-2xl font-bold">Sales Plan</h1>
         <p className="text-sm text-muted-foreground">
-          Schedule and manage your sales activities
+          Create target lists for maintenance, hunting, and winback activities
         </p>
       </div>
 

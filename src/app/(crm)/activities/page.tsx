@@ -4,18 +4,15 @@
 // Data from sales_plans and pipeline_updates
 // =====================================================
 
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { canAccessActivities, isAdmin } from '@/lib/permissions'
+import { canAccessActivities } from '@/lib/permissions'
 import { ActivitiesTabs } from '@/components/crm/activities-tabs'
-import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ActivitiesPage() {
-  const supabase = await createClient()
   const adminClient = createAdminClient()
   const { profile } = await getSessionAndProfile()
 
@@ -30,31 +27,38 @@ export default async function ActivitiesPage() {
   // Fetch activities from both sales_plans and pipeline_updates
   // We'll fetch separately and combine for better control
 
-  // 1. Fetch from sales_plans
-  let salesPlansQuery = adminClient
+  // 1. Fetch from sales_plans (new structure)
+  let salesPlansQuery = (adminClient as any)
     .from('sales_plans')
     .select(`
       plan_id,
-      activity_type,
-      subject,
-      description,
+      plan_type,
+      company_name,
+      pic_name,
+      pic_phone,
+      pic_email,
+      planned_activity_method,
+      actual_activity_method,
+      plan_notes,
+      realization_notes,
       status,
-      scheduled_date,
-      scheduled_time,
-      completed_at,
+      planned_date,
+      realized_at,
       evidence_url,
       evidence_file_name,
       location_lat,
       location_lng,
       location_address,
       owner_user_id,
-      account_id,
-      opportunity_id,
+      potential_status,
+      created_lead_id,
+      created_account_id,
+      created_opportunity_id,
       created_at,
       profiles:owner_user_id(name),
-      accounts(company_name)
+      source_account:source_account_id(company_name)
     `)
-    .order('scheduled_date', { ascending: false })
+    .order('planned_date', { ascending: false })
 
   // Filter based on role
   if (profile.role === 'salesperson') {
@@ -64,7 +68,7 @@ export default async function ActivitiesPage() {
   const { data: salesPlans } = await salesPlansQuery
 
   // 2. Fetch from pipeline_updates with opportunity/account info
-  let pipelineUpdatesQuery = adminClient
+  let pipelineUpdatesQuery = (adminClient as any)
     .from('pipeline_updates')
     .select(`
       update_id,
@@ -100,32 +104,37 @@ export default async function ActivitiesPage() {
   const salesPlanActivities = (salesPlans || []).map((sp: any) => ({
     activity_id: sp.plan_id,
     source_type: 'sales_plan' as const,
-    activity_type: sp.activity_type,
-    activity_detail: sp.subject,
-    notes: sp.description,
+    plan_type: sp.plan_type,
+    activity_type: sp.actual_activity_method || sp.planned_activity_method,
+    activity_detail: sp.company_name,
+    notes: sp.realization_notes || sp.plan_notes,
     status: sp.status,
-    scheduled_on: sp.scheduled_date,
-    scheduled_time: sp.scheduled_time,
-    completed_on: sp.completed_at,
+    scheduled_on: sp.planned_date,
+    scheduled_time: null,
+    completed_on: sp.realized_at,
     evidence_url: sp.evidence_url,
     evidence_file_name: sp.evidence_file_name,
     location_lat: sp.location_lat,
     location_lng: sp.location_lng,
     location_address: sp.location_address,
     owner_user_id: sp.owner_user_id,
-    account_id: sp.account_id,
-    opportunity_id: sp.opportunity_id,
+    account_id: sp.created_account_id,
+    opportunity_id: sp.created_opportunity_id,
     created_at: sp.created_at,
     sales_name: sp.profiles?.name || null,
-    account_name: sp.accounts?.company_name || null,
+    account_name: sp.source_account?.company_name || sp.company_name || null,
+    potential_status: sp.potential_status,
+    pic_name: sp.pic_name,
+    pic_phone: sp.pic_phone,
   }))
 
   // Transform pipeline_updates to unified format
   const pipelineActivities = (pipelineUpdates || []).map((pu: any) => ({
     activity_id: pu.update_id,
     source_type: 'pipeline_update' as const,
+    plan_type: 'pipeline',
     activity_type: pu.approach_method,
-    activity_detail: `Pipeline Update: ${pu.old_stage || 'New'} → ${pu.new_stage}`,
+    activity_detail: `Pipeline: ${pu.old_stage || 'New'} → ${pu.new_stage}`,
     notes: pu.notes,
     status: 'completed' as const,
     scheduled_on: pu.updated_at,
@@ -142,6 +151,9 @@ export default async function ActivitiesPage() {
     created_at: pu.updated_at,
     sales_name: pu.profiles?.name || null,
     account_name: pu.opportunities?.accounts?.company_name || null,
+    potential_status: null,
+    pic_name: null,
+    pic_phone: null,
   }))
 
   // Combine all activities

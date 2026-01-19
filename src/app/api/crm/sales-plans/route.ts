@@ -1,6 +1,6 @@
 // =====================================================
 // API Route: /api/crm/sales-plans
-// CRUD operations for sales plans
+// CRUD operations for sales plans (target planning)
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -41,10 +41,9 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         profiles:owner_user_id(name, email),
-        accounts(company_name),
-        opportunities(name)
+        source_account:source_account_id(company_name)
       `)
-      .order('scheduled_date', { ascending: true })
+      .order('planned_date', { ascending: true })
 
     // Filter based on role
     if (profile.role === 'salesperson') {
@@ -64,8 +63,7 @@ export async function GET(request: NextRequest) {
     const transformedPlans = (plans || []).map((plan: any) => ({
       ...plan,
       owner_name: plan.profiles?.name || null,
-      account_name: plan.accounts?.company_name || null,
-      opportunity_name: plan.opportunities?.name || null,
+      account_name: plan.source_account?.company_name || plan.company_name || null,
     }))
 
     return NextResponse.json({ data: transformedPlans })
@@ -79,6 +77,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const adminClient = createAdminClient()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -101,22 +100,31 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Validate required fields
-    if (!body.activity_type || !body.subject || !body.scheduled_date) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    if (!body.plan_type || !body.company_name || !body.planned_date || !body.planned_activity_method) {
+      return NextResponse.json({ error: 'Missing required fields: plan_type, company_name, planned_date, planned_activity_method' }, { status: 400 })
     }
 
-    // Create the sales plan
-    const { data: plan, error } = await (supabase as any)
+    // Validate plan_type
+    const validPlanTypes = ['maintenance_existing', 'hunting_new', 'winback_lost']
+    if (!validPlanTypes.includes(body.plan_type)) {
+      return NextResponse.json({ error: 'Invalid plan_type' }, { status: 400 })
+    }
+
+    // Create the sales plan using admin client to bypass RLS issues
+    const { data: plan, error } = await (adminClient as any)
       .from('sales_plans')
       .insert({
-        activity_type: body.activity_type,
-        subject: body.subject,
-        description: body.description || null,
-        scheduled_date: body.scheduled_date,
-        scheduled_time: body.scheduled_time || null,
-        account_id: body.account_id || null,
-        opportunity_id: body.opportunity_id || null,
-        lead_id: body.lead_id || null,
+        plan_type: body.plan_type,
+        company_name: body.company_name,
+        pic_name: body.pic_name || null,
+        pic_phone: body.pic_phone || null,
+        pic_email: body.pic_email || null,
+        source_account_id: body.source_account_id || null,
+        planned_date: body.planned_date,
+        planned_activity_method: body.planned_activity_method,
+        plan_notes: body.plan_notes || null,
+        status: 'planned',
+        potential_status: body.plan_type === 'hunting_new' ? 'pending' : null,
         owner_user_id: user.id,
         created_by: user.id,
       })

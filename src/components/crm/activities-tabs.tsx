@@ -4,11 +4,12 @@
 // Activities Tabs Component
 // Shows Planned and Completed activities in tabs
 // Data from sales_plans and pipeline_updates
+// With analytics summary cards
 // =====================================================
 
 import { useState, useMemo } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -39,11 +40,22 @@ import {
   Eye,
   Building2,
   User,
+  Activity,
+  Phone,
+  Video,
+  MessageSquare,
+  UserPlus,
+  RotateCcw,
+  Target,
+  TrendingUp,
 } from 'lucide-react'
 
-interface Activity {
+type PlanType = 'maintenance_existing' | 'hunting_new' | 'winback_lost' | 'pipeline'
+
+interface ActivityItem {
   activity_id: string
   source_type: 'sales_plan' | 'pipeline_update'
+  plan_type: PlanType
   activity_type: ApproachMethod
   activity_detail: string
   notes: string | null
@@ -62,10 +74,13 @@ interface Activity {
   created_at: string
   sales_name: string | null
   account_name: string | null
+  potential_status: string | null
+  pic_name: string | null
+  pic_phone: string | null
 }
 
 interface ActivitiesTabsProps {
-  activities: Activity[]
+  activities: ActivityItem[]
   currentUserId: string
   userRole: UserRole
 }
@@ -80,7 +95,7 @@ function isImageUrl(url: string | null): boolean {
 
 export function ActivitiesTabs({ activities, currentUserId, userRole }: ActivitiesTabsProps) {
   const [activeTab, setActiveTab] = useState<'planned' | 'completed'>('planned')
-  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
+  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
   // Split activities by status
@@ -98,16 +113,69 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
     [activities]
   )
 
+  // Analytics calculations
+  const stats = useMemo(() => {
+    const total = activities.length
+    const planned = plannedActivities.length
+    const completed = completedActivities.length
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0
+
+    // Activity by type
+    const byMethod = activities.reduce((acc, a) => {
+      const method = a.activity_type || 'unknown'
+      acc[method] = (acc[method] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+
+    const visits = byMethod['visit'] || 0
+    const calls = byMethod['phone_call'] || 0
+    const meetings = byMethod['online_meeting'] || 0
+    const whatsapp = byMethod['whatsapp'] || 0
+
+    // Activity by plan type
+    const maintenance = activities.filter(a => a.plan_type === 'maintenance_existing').length
+    const hunting = activities.filter(a => a.plan_type === 'hunting_new').length
+    const winback = activities.filter(a => a.plan_type === 'winback_lost').length
+    const pipeline = activities.filter(a => a.plan_type === 'pipeline').length
+
+    // Potential from hunting
+    const huntingPotential = activities.filter(a =>
+      a.plan_type === 'hunting_new' && a.potential_status === 'potential'
+    ).length
+
+    return {
+      total, planned, completed, completionRate,
+      visits, calls, meetings, whatsapp,
+      maintenance, hunting, winback, pipeline,
+      huntingPotential,
+    }
+  }, [activities, plannedActivities, completedActivities])
+
   const getActivityTypeLabel = (type: ApproachMethod) => {
     return APPROACH_METHODS.find(m => m.value === type)?.label || type
   }
 
-  const handleViewDetail = (activity: Activity) => {
+  const handleViewDetail = (activity: ActivityItem) => {
     setSelectedActivity(activity)
     setDetailOpen(true)
   }
 
-  const renderActivityTable = (activityList: Activity[], showCompleted: boolean) => (
+  const getPlanTypeBadge = (planType: PlanType) => {
+    switch (planType) {
+      case 'maintenance_existing':
+        return <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">Maintenance</Badge>
+      case 'hunting_new':
+        return <Badge variant="outline" className="text-xs bg-green-50 text-green-700">Hunting</Badge>
+      case 'winback_lost':
+        return <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700">Winback</Badge>
+      case 'pipeline':
+        return <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">Pipeline</Badge>
+      default:
+        return null
+    }
+  }
+
+  const renderActivityTable = (activityList: ActivityItem[], showCompleted: boolean) => (
     <Card>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
@@ -229,6 +297,133 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
 
   return (
     <div className="space-y-4">
+      {/* Analytics Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <Activity className="h-5 w-5 text-gray-500" />
+              <p className="text-xl font-bold">{stats.total}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Total</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <Clock className="h-5 w-5 text-yellow-500" />
+              <p className="text-xl font-bold text-yellow-600">{stats.planned}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Planned</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              <p className="text-xl font-bold text-green-600">{stats.completed}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Completed</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              <p className="text-xl font-bold text-blue-600">{stats.completionRate}%</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Complete Rate</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <MapPin className="h-5 w-5 text-orange-500" />
+              <p className="text-xl font-bold text-orange-600">{stats.visits}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Visits</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <Phone className="h-5 w-5 text-indigo-500" />
+              <p className="text-xl font-bold text-indigo-600">{stats.calls}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Calls</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <Video className="h-5 w-5 text-purple-500" />
+              <p className="text-xl font-bold text-purple-600">{stats.meetings}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Meetings</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <Target className="h-5 w-5 text-emerald-500" />
+              <p className="text-xl font-bold text-emerald-600">{stats.huntingPotential}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">New Leads</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Activity Type Breakdown */}
+      <div className="grid grid-cols-4 gap-3">
+        <Card className="col-span-1">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <Building2 className="h-5 w-5 text-blue-500" />
+              <p className="text-xl font-bold text-blue-600">{stats.maintenance}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Maintenance</p>
+          </CardContent>
+        </Card>
+
+        <Card className="col-span-1">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <UserPlus className="h-5 w-5 text-green-500" />
+              <p className="text-xl font-bold text-green-600">{stats.hunting}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Hunting</p>
+          </CardContent>
+        </Card>
+
+        <Card className="col-span-1">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <RotateCcw className="h-5 w-5 text-orange-500" />
+              <p className="text-xl font-bold text-orange-600">{stats.winback}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Winback</p>
+          </CardContent>
+        </Card>
+
+        <Card className="col-span-1">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <TrendingUp className="h-5 w-5 text-purple-500" />
+              <p className="text-xl font-bold text-purple-600">{stats.pipeline}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Pipeline</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'planned' | 'completed')}>
         <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="planned" className="flex items-center gap-2">
