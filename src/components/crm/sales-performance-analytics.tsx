@@ -76,12 +76,14 @@ interface Account {
   first_transaction_date: string | null
 }
 
-interface PipelineUpdate {
-  update_id: string
-  opportunity_id: string
-  approach_method: ApproachMethod
-  updated_by: string | null
+// Activity from activities table (combined from pipeline and sales plan)
+interface Activity {
+  activity_id: string
+  activity_type: string // ActivityTypeV2
+  status: string // ActivityStatus
+  owner_user_id: string
   created_at: string
+  completed_at: string | null
 }
 
 interface OpportunityStageHistory {
@@ -94,7 +96,7 @@ interface OpportunityStageHistory {
 interface SalesPerformanceAnalyticsProps {
   opportunities: Opportunity[]
   accounts: Account[]
-  pipelineUpdates: PipelineUpdate[]
+  activities: Activity[]
   stageHistory: OpportunityStageHistory[]
   salesProfiles: SalesProfile[]
   currentUserId?: string
@@ -106,7 +108,8 @@ type MetricType =
   | 'revenue'
   | 'pipeline_value'
   | 'win_rate'
-  | 'won_deals'
+  | 'won_deals_qty'
+  | 'won_deals_value'
   | 'active_customers_qty'
   | 'active_customers_rev'
   | 'new_customers_qty'
@@ -156,11 +159,11 @@ const METRIC_CONFIGS: MetricConfig[] = [
     icon: <DollarSign className="h-4 w-4" />,
     format: formatCurrency,
     higherIsBetter: true,
-    description: 'Total closed won revenue',
+    description: 'Total revenue from invoices (DSO/AR module)',
   },
   {
     key: 'pipeline_value',
-    title: 'Pipeline Value',
+    title: 'Pipeline Opportunity',
     topTitle: 'Largest Pipeline Opportunity',
     bottomTitle: 'Smallest Pipeline Opportunity',
     icon: <TrendingUp className="h-4 w-4" />,
@@ -179,14 +182,24 @@ const METRIC_CONFIGS: MetricConfig[] = [
     description: 'Won / (Won + Lost) percentage',
   },
   {
-    key: 'won_deals',
-    title: 'Won Deals',
+    key: 'won_deals_qty',
+    title: 'Won Deals (Qty)',
     topTitle: 'Most Won Deals',
     bottomTitle: 'Fewest Won Deals',
     icon: <Trophy className="h-4 w-4" />,
     format: (v) => v.toString(),
     higherIsBetter: true,
     description: 'Number of closed won deals',
+  },
+  {
+    key: 'won_deals_value',
+    title: 'Won Deals (Value)',
+    topTitle: 'Highest Won Value',
+    bottomTitle: 'Lowest Won Value',
+    icon: <Trophy className="h-4 w-4" />,
+    format: formatCurrency,
+    higherIsBetter: true,
+    description: 'Total value of closed won deals',
   },
   {
     key: 'active_customers_qty',
@@ -255,10 +268,11 @@ interface SalesPerformance {
   userId: string
   name: string
   metrics: {
-    revenue: number
+    revenue: number // Placeholder - will come from DSO/AR module
     pipeline_value: number
     win_rate: number
-    won_deals: number
+    won_deals_qty: number
+    won_deals_value: number
     lost_deals: number
     active_customers_qty: number
     active_customers_rev: number
@@ -272,7 +286,8 @@ interface SalesPerformance {
       phone_call: number
       whatsapp: number
       email: number
-      texting: number
+      call: number
+      meeting: number
     }
   }
 }
@@ -283,13 +298,15 @@ function ActivityBreakdownContent({ breakdown }: { breakdown: SalesPerformance['
     { label: 'Site Visit', value: breakdown.site_visit, icon: <MapPin className="h-4 w-4 text-orange-500" /> },
     { label: 'Online Meeting', value: breakdown.online_meeting, icon: <Video className="h-4 w-4 text-purple-500" /> },
     { label: 'Phone Call', value: breakdown.phone_call, icon: <Phone className="h-4 w-4 text-blue-500" /> },
+    { label: 'Call', value: breakdown.call, icon: <Phone className="h-4 w-4 text-cyan-500" /> },
+    { label: 'Meeting', value: breakdown.meeting, icon: <Users className="h-4 w-4 text-indigo-500" /> },
     { label: 'WhatsApp', value: breakdown.whatsapp, icon: <MessageSquare className="h-4 w-4 text-green-500" /> },
     { label: 'Email', value: breakdown.email, icon: <Mail className="h-4 w-4 text-gray-500" /> },
   ]
 
   return (
     <div className="flex flex-wrap gap-2 mt-1">
-      {items.map((item) => (
+      {items.filter(item => item.value > 0).map((item) => (
         <div key={item.label} className="flex items-center gap-1 text-xs text-muted-foreground">
           {item.icon}
           <span>{item.value}</span>
@@ -302,7 +319,7 @@ function ActivityBreakdownContent({ breakdown }: { breakdown: SalesPerformance['
 export function SalesPerformanceAnalytics({
   opportunities,
   accounts,
-  pipelineUpdates,
+  activities,
   stageHistory,
   salesProfiles,
   currentUserId,
@@ -370,39 +387,44 @@ export function SalesPerformanceAnalytics({
       }
       const avgSalesCycle = salesCycleCount > 0 ? totalSalesCycleDays / salesCycleCount : 0
 
-      // Activities from pipeline updates
-      const userUpdates = pipelineUpdates.filter(u => u.updated_by === userId)
+      // Activities from activities table (combined from pipeline and sales plan)
+      const userActivities = activities.filter(a => a.owner_user_id === userId)
       const activitiesBreakdown = {
-        site_visit: userUpdates.filter(u => u.approach_method === 'Site Visit').length,
-        online_meeting: userUpdates.filter(u => u.approach_method === 'Online Meeting').length,
-        phone_call: userUpdates.filter(u => u.approach_method === 'Phone Call').length,
-        whatsapp: userUpdates.filter(u => u.approach_method === 'WhatsApp').length,
-        email: userUpdates.filter(u => u.approach_method === 'Email').length,
-        texting: userUpdates.filter(u => u.approach_method === 'Texting').length,
+        site_visit: userActivities.filter(a => a.activity_type === 'Site Visit').length,
+        online_meeting: userActivities.filter(a => a.activity_type === 'Online Meeting').length,
+        phone_call: userActivities.filter(a => a.activity_type === 'Phone Call').length,
+        call: userActivities.filter(a => a.activity_type === 'Call').length,
+        meeting: userActivities.filter(a => a.activity_type === 'Meeting').length,
+        whatsapp: userActivities.filter(a => a.activity_type === 'WhatsApp').length,
+        email: userActivities.filter(a => a.activity_type === 'Email').length,
       }
+
+      // Won deals value
+      const wonDealsValue = wonOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
 
       performances.push({
         userId,
         name: user.name,
         metrics: {
-          revenue,
+          revenue: 0, // Placeholder - will come from DSO/AR module invoices
           pipeline_value: pipelineValue,
           win_rate: winRate,
-          won_deals: wonOpps.length,
+          won_deals_qty: wonOpps.length,
+          won_deals_value: wonDealsValue,
           lost_deals: lostOpps.length,
           active_customers_qty: activeAccounts.length,
           active_customers_rev: activeCustomerRev,
           new_customers_qty: newAccounts.length,
           new_customers_rev: newCustomerRev,
           sales_cycle: avgSalesCycle,
-          activities: userUpdates.length,
+          activities: userActivities.length,
           activities_breakdown: activitiesBreakdown,
         },
       })
     }
 
     return performances
-  }, [opportunities, accounts, pipelineUpdates, salesProfiles])
+  }, [opportunities, accounts, activities, salesProfiles])
 
   // Get top 3 and bottom 3 for a metric
   const getTopAndBottom = (metricKey: MetricType, higherIsBetter: boolean) => {
@@ -416,7 +438,7 @@ export function SalesPerformanceAnalytics({
 
     // For win rate, only include users who have closed deals
     if (metricKey === 'win_rate') {
-      filtered = filtered.filter(p => p.metrics.won_deals + p.metrics.lost_deals > 0)
+      filtered = filtered.filter(p => p.metrics.won_deals_qty + p.metrics.lost_deals > 0)
     }
 
     // Sort based on metric value
@@ -441,7 +463,7 @@ export function SalesPerformanceAnalytics({
     }
 
     if (metricKey === 'win_rate') {
-      filtered = filtered.filter(p => p.metrics.won_deals + p.metrics.lost_deals > 0)
+      filtered = filtered.filter(p => p.metrics.won_deals_qty + p.metrics.lost_deals > 0)
     }
 
     return filtered.sort((a, b) => {
@@ -645,7 +667,7 @@ export function SalesPerformanceAnalytics({
                     )}
                     {selectedMetric.key === 'win_rate' && (
                       <TableCell className="text-right text-sm text-muted-foreground">
-                        {perf.metrics.won_deals}W / {perf.metrics.lost_deals}L
+                        {perf.metrics.won_deals_qty}W / {perf.metrics.lost_deals}L
                       </TableCell>
                     )}
                   </TableRow>
@@ -667,7 +689,7 @@ export function SalesPerformanceAnalytics({
 interface SalespersonPerformanceCardProps {
   opportunities: Opportunity[]
   accounts: Account[]
-  pipelineUpdates: PipelineUpdate[]
+  activities: Activity[]
   salesProfiles: SalesProfile[]
   currentUserId: string
   currentUserName: string
@@ -676,7 +698,7 @@ interface SalespersonPerformanceCardProps {
 export function SalespersonPerformanceCard({
   opportunities,
   accounts,
-  pipelineUpdates,
+  activities,
   salesProfiles,
   currentUserId,
   currentUserName,
@@ -696,7 +718,6 @@ export function SalespersonPerformanceCard({
       const lostOpps = userOpps.filter(o => o.stage === 'Closed Lost')
       const activeOpps = userOpps.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
 
-      const revenue = wonOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
       const pipelineValue = activeOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
       const totalClosed = wonOpps.length + lostOpps.length
       const winRate = totalClosed > 0 ? (wonOpps.length / totalClosed) * 100 : 0
@@ -728,38 +749,44 @@ export function SalespersonPerformanceCard({
       }
       const avgSalesCycle = salesCycleCount > 0 ? totalSalesCycleDays / salesCycleCount : 0
 
-      const userUpdates = pipelineUpdates.filter(u => u.updated_by === userId)
+      // Activities from activities table
+      const userActivities = activities.filter(a => a.owner_user_id === userId)
       const activitiesBreakdown = {
-        site_visit: userUpdates.filter(u => u.approach_method === 'Site Visit').length,
-        online_meeting: userUpdates.filter(u => u.approach_method === 'Online Meeting').length,
-        phone_call: userUpdates.filter(u => u.approach_method === 'Phone Call').length,
-        whatsapp: userUpdates.filter(u => u.approach_method === 'WhatsApp').length,
-        email: userUpdates.filter(u => u.approach_method === 'Email').length,
-        texting: userUpdates.filter(u => u.approach_method === 'Texting').length,
+        site_visit: userActivities.filter(a => a.activity_type === 'Site Visit').length,
+        online_meeting: userActivities.filter(a => a.activity_type === 'Online Meeting').length,
+        phone_call: userActivities.filter(a => a.activity_type === 'Phone Call').length,
+        call: userActivities.filter(a => a.activity_type === 'Call').length,
+        meeting: userActivities.filter(a => a.activity_type === 'Meeting').length,
+        whatsapp: userActivities.filter(a => a.activity_type === 'WhatsApp').length,
+        email: userActivities.filter(a => a.activity_type === 'Email').length,
       }
+
+      // Won deals value
+      const wonDealsValue = wonOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
 
       performances.push({
         userId,
         name: user.name,
         metrics: {
-          revenue,
+          revenue: 0, // Placeholder - will come from DSO/AR module
           pipeline_value: pipelineValue,
           win_rate: winRate,
-          won_deals: wonOpps.length,
+          won_deals_qty: wonOpps.length,
+          won_deals_value: wonDealsValue,
           lost_deals: lostOpps.length,
           active_customers_qty: activeAccounts.length,
           active_customers_rev: activeCustomerRev,
           new_customers_qty: newAccounts.length,
           new_customers_rev: newCustomerRev,
           sales_cycle: avgSalesCycle,
-          activities: userUpdates.length,
+          activities: userActivities.length,
           activities_breakdown: activitiesBreakdown,
         },
       })
     }
 
     return performances
-  }, [opportunities, accounts, pipelineUpdates, salesProfiles])
+  }, [opportunities, accounts, activities, salesProfiles])
 
   // Get current user's performance
   const myPerformance = allPerformances.find(p => p.userId === currentUserId)
@@ -773,7 +800,7 @@ export function SalespersonPerformanceCard({
     }
 
     if (metricKey === 'win_rate') {
-      filtered = filtered.filter(p => p.metrics.won_deals + p.metrics.lost_deals > 0)
+      filtered = filtered.filter(p => p.metrics.won_deals_qty + p.metrics.lost_deals > 0)
     }
 
     const sorted = filtered.sort((a, b) => {
@@ -837,7 +864,7 @@ export function SalespersonPerformanceCard({
                 Rank #{getRanking('win_rate', true)} of {totalSales}
               </Badge>
               <span className="text-xs text-muted-foreground">
-                {myPerformance.metrics.won_deals}W/{myPerformance.metrics.lost_deals}L
+                {myPerformance.metrics.won_deals_qty}W/{myPerformance.metrics.lost_deals}L
               </span>
             </div>
           </div>
@@ -848,9 +875,10 @@ export function SalespersonPerformanceCard({
               <Trophy className="h-4 w-4 text-amber-600" />
               <span className="text-xs text-muted-foreground">Won Deals</span>
             </div>
-            <p className="text-lg font-bold text-amber-600">{myPerformance.metrics.won_deals}</p>
+            <p className="text-lg font-bold text-amber-600">{myPerformance.metrics.won_deals_qty}</p>
+            <p className="text-xs text-muted-foreground">{formatCurrency(myPerformance.metrics.won_deals_value)}</p>
             <Badge variant="outline" className="text-xs mt-1">
-              Rank #{getRanking('won_deals', true)} of {totalSales}
+              Rank #{getRanking('won_deals_qty', true)} of {totalSales}
             </Badge>
           </div>
 

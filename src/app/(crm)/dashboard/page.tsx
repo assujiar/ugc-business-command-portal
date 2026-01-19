@@ -103,6 +103,11 @@ export default async function DashboardPage() {
     .from('opportunity_stage_history')
     .select('opportunity_id, old_stage, new_stage, changed_at')
 
+  // Query activities for performance analytics (from activities table - combined from pipeline and sales plan)
+  const activitiesQuery = (adminClient as any)
+    .from('activities')
+    .select('activity_id, activity_type, status, owner_user_id, created_at, completed_at')
+
   // Execute queries
   const [
     { data: leads },
@@ -112,6 +117,7 @@ export default async function DashboardPage() {
     { data: pipelineUpdates },
     { data: salesProfiles },
     { data: stageHistory },
+    { data: activitiesData },
   ] = await Promise.all([
     leadsQuery,
     opportunitiesQuery,
@@ -120,6 +126,7 @@ export default async function DashboardPage() {
     pipelineUpdatesQuery,
     salesProfilesQuery,
     stageHistoryQuery,
+    activitiesQuery,
   ])
 
   // =====================================================
@@ -475,12 +482,13 @@ export default async function DashboardPage() {
             created_at: a.created_at,
             first_transaction_date: a.first_transaction_date,
           }))}
-          pipelineUpdates={(pipelineUpdates || []).map((u: any) => ({
-            update_id: u.update_id,
-            opportunity_id: u.opportunity_id,
-            approach_method: u.approach_method,
-            updated_by: u.updated_by,
-            created_at: u.created_at,
+          activities={(activitiesData || []).map((a: any) => ({
+            activity_id: a.activity_id,
+            activity_type: a.activity_type,
+            status: a.status,
+            owner_user_id: a.owner_user_id,
+            created_at: a.created_at,
+            completed_at: a.completed_at,
           }))}
           stageHistory={(stageHistory || []).map((h: any) => ({
             opportunity_id: h.opportunity_id,
@@ -520,12 +528,13 @@ export default async function DashboardPage() {
             created_at: a.created_at,
             first_transaction_date: a.first_transaction_date,
           }))}
-          pipelineUpdates={(pipelineUpdates || []).map((u: any) => ({
-            update_id: u.update_id,
-            opportunity_id: u.opportunity_id,
-            approach_method: u.approach_method,
-            updated_by: u.updated_by,
-            created_at: u.created_at,
+          activities={(activitiesData || []).map((a: any) => ({
+            activity_id: a.activity_id,
+            activity_type: a.activity_type,
+            status: a.status,
+            owner_user_id: a.owner_user_id,
+            created_at: a.created_at,
+            completed_at: a.completed_at,
           }))}
           salesProfiles={(salesProfiles || []).map((p: any) => ({
             user_id: p.user_id,
