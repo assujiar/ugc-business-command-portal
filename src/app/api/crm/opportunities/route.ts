@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/crm/opportunities - Create opportunity
+// Sets original_creator_id from account for marketing visibility tracking
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -64,12 +65,35 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
+    // Determine original_creator_id for marketing visibility
+    // Priority: body.original_creator_id > account.original_creator_id > account.created_by > user.id
+    let originalCreatorId = body.original_creator_id || null
+
+    if (!originalCreatorId && body.account_id) {
+      // Fetch account to get original_creator_id
+      const { data: account } = await (supabase as any)
+        .from('accounts')
+        .select('original_creator_id, created_by')
+        .eq('account_id', body.account_id)
+        .single()
+
+      if (account) {
+        originalCreatorId = account.original_creator_id || account.created_by
+      }
+    }
+
+    // If still no original_creator_id, use current user (for self-created pipelines)
+    if (!originalCreatorId) {
+      originalCreatorId = user.id
+    }
+
     const { data, error } = await (supabase as any)
       .from('opportunities' as any as any)
       .insert({
         ...body,
         owner_user_id: body.owner_user_id || user.id,
         created_by: user.id,
+        original_creator_id: originalCreatorId,
       })
       .select()
       .single()

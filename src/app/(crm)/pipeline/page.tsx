@@ -1,6 +1,7 @@
 // =====================================================
 // Pipeline Page - Sales Pipeline with Card View
 // Shows opportunities grouped by stage with update dialog
+// Uses original_creator_id for marketing visibility (efficient)
 // =====================================================
 
 import { PipelineDashboard } from '@/components/crm/pipeline-dashboard'
@@ -43,8 +44,12 @@ export default async function PipelinePage() {
     redirect('/dashboard')
   }
 
-  // Step 1: Fetch opportunities from view (includes computed is_overdue)
-  // Using v_pipeline_with_updates view which has is_overdue calculated by database
+  // Step 1: Fetch opportunities from view
+  // v_pipeline_with_updates already includes:
+  // - original_creator_id, original_creator_name, original_creator_role, original_creator_department
+  // - original_creator_is_marketing (computed boolean)
+  // - account_name, owner_name, lead_created_by
+  // This eliminates the need for separate lead and creator profile queries
   const { data: allOpportunities, error: oppError } = await (adminClient as any)
     .from('v_pipeline_with_updates')
     .select('*')
@@ -54,105 +59,57 @@ export default async function PipelinePage() {
     console.error('Pipeline ERROR:', oppError)
   }
 
-  // Step 2: Fetch lead info for all opportunities with lead_id (from view)
-  const leadIds = Array.from(new Set((allOpportunities || [])
-    .map((o: any) => o.lead_id)
-    .filter(Boolean))) as string[]
-
-  let leadsMap: Record<string, {
-    created_by: string | null
-    sales_owner_user_id: string | null
-    marketing_owner_user_id: string | null
-  }> = {}
-
-  if (leadIds.length > 0) {
-    const { data: leads } = await (adminClient as any)
-      .from('leads')
-      .select('lead_id, created_by, sales_owner_user_id, marketing_owner_user_id')
-      .in('lead_id', leadIds)
-
-    leadsMap = (leads || []).reduce((acc: any, l: any) => {
-      acc[l.lead_id] = {
-        created_by: l.created_by,
-        sales_owner_user_id: l.sales_owner_user_id,
-        marketing_owner_user_id: l.marketing_owner_user_id,
-      }
-      return acc
-    }, {})
-  }
-
-  // Step 3: Fetch creator profiles to determine their department (for marketing manager/macx)
-  let creatorProfilesMap: Record<string, { department: string | null; role: UserRole | null }> = {}
-
-  if (isMarketingManagerRole(profile.role) || profile.role === 'sales manager') {
-    const creatorIds = Array.from(new Set(Object.values(leadsMap)
-      .map((l: any) => l.created_by)
-      .filter(Boolean))) as string[]
-
-    if (creatorIds.length > 0) {
-      const { data: creators } = await supabase
-        .from('profiles')
-        .select('user_id, department, role')
-        .in('user_id', creatorIds)
-
-      creatorProfilesMap = (creators || []).reduce((acc: any, c: any) => {
-        acc[c.user_id] = { department: c.department, role: c.role }
-        return acc
-      }, {})
-    }
-  }
-
-  // Step 4: Filter opportunities based on user role
+  // Step 2: Filter opportunities based on user role
+  // Using original_creator_id from view for efficient visibility check
   let filteredOpportunities = allOpportunities || []
 
   if (!isAdmin(profile.role)) {
     filteredOpportunities = (allOpportunities || []).filter((opp: any) => {
-      const leadInfo = leadsMap[opp.lead_id]
-
-      // Salesperson: Pipeline from leads they created OR claimed
+      // Salesperson: Pipeline they own OR created
       if (profile.role === 'salesperson') {
-        if (leadInfo?.created_by === profile.user_id) return true
-        if (leadInfo?.sales_owner_user_id === profile.user_id) return true
         if (opp.owner_user_id === profile.user_id) return true
+        if (opp.created_by === profile.user_id) return true
+        // Also check if they are the original creator (created the lead)
+        if (opp.original_creator_id === profile.user_id) return true
         return false
       }
 
-      // Sales Manager: Pipeline from all sales department leads
+      // Sales Manager: All pipelines owned/created by sales department
       if (profile.role === 'sales manager') {
-        // Check if lead creator is in sales department
-        if (leadInfo?.created_by) {
-          const creatorProfile = creatorProfilesMap[leadInfo.created_by]
-          if (creatorProfile?.department?.toLowerCase().includes('sales')) return true
-          if (creatorProfile?.role && isSalesRole(creatorProfile.role)) return true
-        }
-        // Also include if sales_owner is set (lead was claimed by sales)
-        if (leadInfo?.sales_owner_user_id) return true
+        // Check if owner is in sales (via owner check) or if original creator is sales
+        // For now, sales manager sees all pipelines that have a sales owner
+        if (opp.owner_user_id) return true
         return false
       }
 
       // Sales Support: Same as salesperson
       if (profile.role === 'sales support') {
-        if (leadInfo?.created_by === profile.user_id) return true
-        if (leadInfo?.sales_owner_user_id === profile.user_id) return true
         if (opp.owner_user_id === profile.user_id) return true
+        if (opp.created_by === profile.user_id) return true
+        if (opp.original_creator_id === profile.user_id) return true
         return false
       }
 
-      // Individual Marketing (Marcomm, VSDO, DGO): Only leads they created
+      // Individual Marketing (Marcomm, VSDO, DGO): Only pipelines from leads they created
+      // Uses original_creator_id which is preserved across retries
       if (isIndividualMarketingRole(profile.role)) {
-        if (leadInfo?.created_by === profile.user_id) return true
-        if (leadInfo?.marketing_owner_user_id === profile.user_id) return true
+        if (opp.original_creator_id === profile.user_id) return true
         return false
       }
 
-      // Marketing Manager/MACX: All marketing department leads
+      // Marketing Manager/MACX: All pipelines from marketing department leads
+      // Uses original_creator_is_marketing computed field from view
       if (isMarketingManagerRole(profile.role)) {
-        if (leadInfo?.created_by) {
-          const creatorProfile = creatorProfilesMap[leadInfo.created_by]
-          if (creatorProfile?.department?.toLowerCase().includes('marketing')) return true
-          // Check if creator role is marketing
-          const marketingRoles: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
-          if (creatorProfile?.role && marketingRoles.includes(creatorProfile.role)) return true
+        if (opp.original_creator_is_marketing === true) return true
+        // Fallback: if original_creator_id is null, check lead_created_by
+        // This handles legacy data where original_creator_id wasn't set
+        if (!opp.original_creator_id && opp.lead_created_by) {
+          // For legacy, we'd need to check the creator's role
+          // But with the view, we already have original_creator_role
+          if (opp.original_creator_role) {
+            const marketingRoles: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+            if (marketingRoles.includes(opp.original_creator_role)) return true
+          }
         }
         return false
       }
@@ -161,40 +118,7 @@ export default async function PipelinePage() {
     })
   }
 
-  // Step 5: Fetch account data for filtered opportunities
-  const accountIds = Array.from(new Set(filteredOpportunities.map((o: any) => o.account_id).filter(Boolean))) as string[]
-  let accountsMap: Record<string, { company_name: string; account_status: string | null }> = {}
-
-  if (accountIds.length > 0) {
-    const { data: accounts } = await supabase
-      .from('accounts')
-      .select('account_id, company_name, account_status')
-      .in('account_id', accountIds)
-
-    accountsMap = (accounts || []).reduce((acc: any, a: any) => {
-      acc[a.account_id] = { company_name: a.company_name, account_status: a.account_status }
-      return acc
-    }, {})
-  }
-
-  // Step 6: Fetch owner profiles for filtered opportunities
-  const ownerIds = Array.from(new Set(filteredOpportunities.map((o: any) => o.owner_user_id).filter(Boolean))) as string[]
-  let ownersMap: Record<string, string> = {}
-
-  if (ownerIds.length > 0) {
-    const { data: owners } = await supabase
-      .from('profiles')
-      .select('user_id, name')
-      .in('user_id', ownerIds)
-
-    ownersMap = (owners || []).reduce((acc: any, o: any) => {
-      acc[o.user_id] = o.name
-      return acc
-    }, {})
-  }
-
-  // Step 7: Fetch stage history from pipeline_updates table
-  // This table always has the stage change data (inserted successfully by API)
+  // Step 3: Fetch stage history from pipeline_updates table
   const opportunityIds: string[] = filteredOpportunities.map((o: any) => o.opportunity_id)
   const stageHistoryMap: Record<string, Array<{ new_stage: string; changed_at: string }>> = {}
 
@@ -232,7 +156,7 @@ export default async function PipelinePage() {
   const userCanUpdate = isAdmin(profile.role) || profile.role === 'salesperson'
 
   // Transform data - use values from v_pipeline_with_updates view
-  // View already has: account_name, owner_name, is_overdue, lead_id (from source_lead_id)
+  // View already has all the joined data we need
   const transformedOpportunities = filteredOpportunities.map((opp: any) => ({
     opportunity_id: opp.opportunity_id,
     name: opp.name,
@@ -240,10 +164,10 @@ export default async function PipelinePage() {
     estimated_value: opp.estimated_value,
     currency: opp.currency,
     probability: opp.probability,
-    expected_close_date: opp.expected_close_date,
+    expected_close_date: opp.next_step_due_date, // Using next_step_due_date as expected_close_date
     next_step: opp.next_step,
     next_step_due_date: opp.next_step_due_date,
-    close_reason: opp.close_reason,
+    close_reason: opp.outcome,
     lost_reason: opp.lost_reason,
     competitor_price: opp.competitor_price,
     customer_budget: opp.customer_budget,
@@ -251,20 +175,23 @@ export default async function PipelinePage() {
     notes: opp.notes,
     owner_user_id: opp.owner_user_id,
     account_id: opp.account_id,
-    lead_id: opp.lead_id,
+    lead_id: opp.source_lead_id,
     created_at: opp.created_at,
     updated_at: opp.updated_at,
-    // From view (pre-calculated)
-    account_name: opp.account_name || accountsMap[opp.account_id]?.company_name || null,
-    account_status: opp.account_status || accountsMap[opp.account_id]?.account_status || null,
-    owner_name: opp.owner_name || ownersMap[opp.owner_user_id] || null,
-    // is_overdue from database (NOW() calculated at query time)
-    // Client will still use mounted check for hydration safety
-    is_overdue: opp.is_overdue || false,
+    // From view (pre-joined)
+    account_name: opp.account_name,
+    account_status: opp.account_status,
+    owner_name: opp.owner_name,
+    // is_overdue calculation (client will also check for hydration safety)
+    is_overdue: opp.next_step_due_date && new Date(opp.next_step_due_date) < new Date() &&
+                !['Closed Won', 'Closed Lost'].includes(opp.stage),
     stage_history: stageHistoryMap[opp.opportunity_id] || [],
-    // Include lead info for permission checks in client
-    lead_created_by: leadsMap[opp.lead_id]?.created_by || null,
-    lead_sales_owner: leadsMap[opp.lead_id]?.sales_owner_user_id || null,
+    // Original creator info for client-side permission checks if needed
+    original_creator_id: opp.original_creator_id,
+    original_creator_name: opp.original_creator_name,
+    original_creator_is_marketing: opp.original_creator_is_marketing,
+    // Attempt number for retry tracking
+    attempt_number: opp.attempt_number,
   }))
 
   return (

@@ -129,6 +129,10 @@ export interface Database {
           first_transaction_date: string | null
           last_transaction_date: string | null
           lead_id: string | null
+          // Marketing visibility tracking
+          original_lead_id: string | null
+          original_creator_id: string | null
+          retry_count: number | null
         }
         Insert: {
           account_id?: string
@@ -155,6 +159,10 @@ export interface Database {
           first_transaction_date?: string | null
           last_transaction_date?: string | null
           lead_id?: string | null
+          // Marketing visibility tracking
+          original_lead_id?: string | null
+          original_creator_id?: string | null
+          retry_count?: number | null
         }
         Update: {
           account_id?: string
@@ -181,6 +189,10 @@ export interface Database {
           first_transaction_date?: string | null
           last_transaction_date?: string | null
           lead_id?: string | null
+          // Marketing visibility tracking
+          original_lead_id?: string | null
+          original_creator_id?: string | null
+          retry_count?: number | null
         }
       }
       contacts: {
@@ -382,6 +394,10 @@ export interface Database {
           lost_reason: LostReason | null
           competitor_price: number | null
           customer_budget: number | null
+          // Marketing visibility tracking
+          original_creator_id: string | null
+          attempt_number: number | null
+          source_lead_id: string | null
         }
         Insert: {
           opportunity_id?: string
@@ -405,6 +421,10 @@ export interface Database {
           lost_reason?: LostReason | null
           competitor_price?: number | null
           customer_budget?: number | null
+          // Marketing visibility tracking
+          original_creator_id?: string | null
+          attempt_number?: number | null
+          source_lead_id?: string | null
         }
         Update: {
           opportunity_id?: string
@@ -428,6 +448,10 @@ export interface Database {
           lost_reason?: LostReason | null
           competitor_price?: number | null
           customer_budget?: number | null
+          // Marketing visibility tracking
+          original_creator_id?: string | null
+          attempt_number?: number | null
+          source_lead_id?: string | null
         }
       }
       pipeline_updates: {
