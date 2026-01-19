@@ -79,6 +79,9 @@ export function PipelineTabs({ opportunities, currentUserId, userRole, canUpdate
     lead_source: opp.lead_source || null,
     created_at: opp.created_at,
     closed_at: opp.closed_at,
+    // Lead creator info for Lead Source display
+    original_creator_name: opp.original_creator_name || null,
+    original_creator_department: opp.original_creator_department || null,
   }))
 
   return (
