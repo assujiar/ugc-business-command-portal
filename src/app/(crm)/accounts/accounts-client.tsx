@@ -2,16 +2,23 @@
 
 // =====================================================
 // Accounts Client Component
-// Interactive features: filtering, modals, retry prospect
+// Interactive features: filtering, modals, retry prospect, edit account
 // =====================================================
 
-import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -49,14 +56,17 @@ import {
   AlertCircle,
   Clock,
   UserX,
-  Users,
-  Loader2
+  Loader2,
+  Pencil,
+  Save
 } from 'lucide-react'
+import type { UserRole } from '@/types/database'
 
 interface AccountEnriched {
   account_id: string
   company_name: string
   owner_name: string | null
+  owner_user_id: string | null
   pic_name: string | null
   pic_email: string | null
   pic_phone: string | null
@@ -64,6 +74,11 @@ interface AccountEnriched {
   address: string | null
   city: string | null
   province: string | null
+  country: string | null
+  postal_code: string | null
+  phone: string | null
+  domain: string | null
+  npwp: string | null
   notes: string | null
   activity_status: string | null
   account_status: string | null
@@ -80,9 +95,21 @@ interface AccountEnriched {
   total_rev_opp: number
 }
 
+interface SalesUser {
+  user_id: string
+  name: string
+  email: string
+  role: string
+  department: string | null
+}
+
 interface AccountsClientProps {
   accounts: AccountEnriched[]
+  userRole: UserRole | null
 }
+
+// Roles that can edit accounts
+const EDIT_ACCOUNT_ROLES: UserRole[] = ['sales support', 'super admin', 'MACX', 'Director']
 
 // Status configurations
 const ACCOUNT_STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -108,13 +135,15 @@ function getAttemptLabel(attemptNumber: number): string {
   return `Attempt #${attemptNumber} Pipeline`
 }
 
-export default function AccountsClient({ accounts }: AccountsClientProps) {
+export default function AccountsClient({ accounts, userRole }: AccountsClientProps) {
   const [filterAccountStatus, setFilterAccountStatus] = useState<string | null>(null)
   const [filterActivityStatus, setFilterActivityStatus] = useState<string | null>(null)
   const [selectedAccount, setSelectedAccount] = useState<AccountEnriched | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showRetryModal, setShowRetryModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [salesUsers, setSalesUsers] = useState<SalesUser[]>([])
   const [retryFormData, setRetryFormData] = useState({
     company_name: '',
     pic_name: '',
@@ -124,6 +153,39 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
     notes: '',
     potential_revenue: 0
   })
+  const [editFormData, setEditFormData] = useState({
+    company_name: '',
+    domain: '',
+    npwp: '',
+    industry: '',
+    address: '',
+    city: '',
+    province: '',
+    country: '',
+    postal_code: '',
+    phone: '',
+    pic_name: '',
+    pic_email: '',
+    pic_phone: '',
+    owner_user_id: ''
+  })
+
+  // Check if current user can edit accounts
+  const canEditAccounts = userRole && EDIT_ACCOUNT_ROLES.includes(userRole)
+
+  // Fetch sales users when edit modal is opened
+  useEffect(() => {
+    if (showEditModal && salesUsers.length === 0) {
+      fetch('/api/crm/users/sales')
+        .then(res => res.json())
+        .then(data => {
+          if (data.data) {
+            setSalesUsers(data.data)
+          }
+        })
+        .catch(err => console.error('Error fetching sales users:', err))
+    }
+  }, [showEditModal, salesUsers.length])
 
   // Calculate status counts
   const accountStatusCounts = accounts.reduce((acc, account) => {
@@ -149,6 +211,74 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
   const handleViewDetail = (account: AccountEnriched) => {
     setSelectedAccount(account)
     setShowDetailModal(true)
+  }
+
+  // Handle edit account
+  const handleOpenEditModal = async (account: AccountEnriched) => {
+    try {
+      // Fetch fresh account data
+      const response = await fetch(`/api/crm/accounts/${account.account_id}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        alert('Failed to fetch account data')
+        return
+      }
+
+      const freshAccount = result.data
+
+      setSelectedAccount(account)
+      setEditFormData({
+        company_name: freshAccount.company_name || '',
+        domain: freshAccount.domain || '',
+        npwp: freshAccount.npwp || '',
+        industry: freshAccount.industry || '',
+        address: freshAccount.address || '',
+        city: freshAccount.city || '',
+        province: freshAccount.province || '',
+        country: freshAccount.country || '',
+        postal_code: freshAccount.postal_code || '',
+        phone: freshAccount.phone || '',
+        pic_name: freshAccount.pic_name || '',
+        pic_email: freshAccount.pic_email || '',
+        pic_phone: freshAccount.pic_phone || '',
+        owner_user_id: freshAccount.owner_user_id || ''
+      })
+      setShowEditModal(true)
+    } catch (error) {
+      console.error('Error fetching account:', error)
+      alert('Failed to load account data')
+    }
+  }
+
+  // Submit edit account
+  const handleSubmitEdit = async () => {
+    if (!selectedAccount) return
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch(`/api/crm/accounts/${selectedAccount.account_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editFormData)
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert('Account updated successfully')
+        setShowEditModal(false)
+        // Refresh page to show updated data
+        window.location.reload()
+      } else {
+        alert(result.error || 'Failed to update account')
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      alert('An error occurred')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   // Handle retry prospect - fetch fresh data first
@@ -512,6 +642,12 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
                                 <Eye className="h-4 w-4 mr-2" />
                                 View Detail
                               </DropdownMenuItem>
+                              {canEditAccounts && (
+                                <DropdownMenuItem onClick={() => handleOpenEditModal(account)}>
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  Edit Account
+                                </DropdownMenuItem>
+                              )}
                               {account.account_status === 'failed_account' && (
                                 <DropdownMenuItem onClick={() => handleOpenRetryModal(account)}>
                                   <RotateCcw className="h-4 w-4 mr-2" />
@@ -569,6 +705,12 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
                                 <Eye className="h-4 w-4 mr-2" />
                                 View Detail
                               </DropdownMenuItem>
+                              {canEditAccounts && (
+                                <DropdownMenuItem onClick={() => handleOpenEditModal(account)}>
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  Edit Account
+                                </DropdownMenuItem>
+                              )}
                               {account.account_status === 'failed_account' && (
                                 <DropdownMenuItem onClick={() => handleOpenRetryModal(account)}>
                                   <RotateCcw className="h-4 w-4 mr-2" />
@@ -801,6 +943,15 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
             <Button variant="outline" onClick={() => setShowDetailModal(false)}>
               Close
             </Button>
+            {canEditAccounts && selectedAccount && (
+              <Button variant="secondary" onClick={() => {
+                setShowDetailModal(false)
+                handleOpenEditModal(selectedAccount)
+              }}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            )}
             {selectedAccount?.account_status === 'failed_account' && (
               <Button onClick={() => {
                 setShowDetailModal(false)
@@ -814,6 +965,195 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Account Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Edit Account
+            </DialogTitle>
+            <DialogDescription>
+              Update account information. Only Sales Support, Admin, and MACX can edit accounts.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Company Information */}
+            <div>
+              <h4 className="font-medium mb-3 text-sm text-muted-foreground">Company Information</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label htmlFor="edit_company_name">Company Name *</Label>
+                  <Input
+                    id="edit_company_name"
+                    value={editFormData.company_name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, company_name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_domain">Domain</Label>
+                  <Input
+                    id="edit_domain"
+                    value={editFormData.domain}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, domain: e.target.value }))}
+                    placeholder="example.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_npwp">NPWP</Label>
+                  <Input
+                    id="edit_npwp"
+                    value={editFormData.npwp}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, npwp: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_industry">Industry</Label>
+                  <Input
+                    id="edit_industry"
+                    value={editFormData.industry}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, industry: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_phone">Phone</Label>
+                  <Input
+                    id="edit_phone"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Address Information */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3 text-sm text-muted-foreground">Address</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label htmlFor="edit_address">Address</Label>
+                  <Input
+                    id="edit_address"
+                    value={editFormData.address}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, address: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_city">City</Label>
+                  <Input
+                    id="edit_city"
+                    value={editFormData.city}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_province">Province</Label>
+                  <Input
+                    id="edit_province"
+                    value={editFormData.province}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, province: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_country">Country</Label>
+                  <Input
+                    id="edit_country"
+                    value={editFormData.country}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, country: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_postal_code">Postal Code</Label>
+                  <Input
+                    id="edit_postal_code"
+                    value={editFormData.postal_code}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, postal_code: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* PIC Information */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3 text-sm text-muted-foreground">PIC Information</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit_pic_name">PIC Name</Label>
+                  <Input
+                    id="edit_pic_name"
+                    value={editFormData.pic_name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, pic_name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_pic_email">PIC Email</Label>
+                  <Input
+                    id="edit_pic_email"
+                    type="email"
+                    value={editFormData.pic_email}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, pic_email: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_pic_phone">PIC Phone</Label>
+                  <Input
+                    id="edit_pic_phone"
+                    value={editFormData.pic_phone}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, pic_phone: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Owner Assignment */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3 text-sm text-muted-foreground">Account Owner</h4>
+              <div>
+                <Label htmlFor="edit_owner">Owner (Sales)</Label>
+                <Select
+                  value={editFormData.owner_user_id}
+                  onValueChange={(value) => setEditFormData(prev => ({ ...prev, owner_user_id: value }))}
+                >
+                  <SelectTrigger id="edit_owner">
+                    <SelectValue placeholder="Select owner..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {salesUsers.map((user) => (
+                      <SelectItem key={user.user_id} value={user.user_id}>
+                        {user.name} ({user.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Change owner when a sales person resigns and the account needs to be reassigned.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditModal(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitEdit} disabled={isSubmitting || !editFormData.company_name}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Retry Prospect Modal */}
       <Dialog open={showRetryModal} onOpenChange={setShowRetryModal}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -823,7 +1163,7 @@ export default function AccountsClient({ accounts }: AccountsClientProps) {
               Retry Prospect
             </DialogTitle>
             <DialogDescription>
-              Create a new lead and pipeline for this failed account. This will be attempt #{(selectedAccount?.retry_count || 0) + 2}.
+              Create a new pipeline for this failed account. This will be attempt #{(selectedAccount?.retry_count || 0) + 2}.
             </DialogDescription>
           </DialogHeader>
 
