@@ -3,7 +3,7 @@
 --
 -- Adds missing columns for Opportunity tab:
 -- - competitor_price, customer_budget (from opportunities)
--- - lead_source (from leads)
+-- - lead_source (from leads.source column)
 -- =====================================================
 
 -- Update v_pipeline_with_updates view with additional columns
@@ -47,16 +47,18 @@ SELECT
   l.company_name AS lead_company_name,
   l.created_by AS lead_created_by,
   l.marketing_owner_user_id AS lead_marketing_owner,
-  l.lead_source AS lead_source,
+  -- Lead source - using 'source' column from leads table
+  l.source AS lead_source,
   -- Get creator info (fallback to lead creator if original_creator_id is NULL)
   COALESCE(creator.name, lead_creator.name) AS original_creator_name,
-  COALESCE(creator.role, lead_creator.role)::text AS original_creator_role,
+  -- Cast role enum to text to avoid type mismatch
+  COALESCE(creator.role::text, lead_creator.role::text) AS original_creator_role,
   COALESCE(creator.department, lead_creator.department) AS original_creator_department,
   -- Check if original creator is marketing (with fallback)
   CASE
     WHEN COALESCE(creator.department, lead_creator.department) IS NOT NULL
          AND LOWER(COALESCE(creator.department, lead_creator.department)) LIKE '%marketing%' THEN TRUE
-    WHEN COALESCE(creator.role, lead_creator.role) IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN TRUE
+    WHEN COALESCE(creator.role::text, lead_creator.role::text) IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN TRUE
     ELSE FALSE
   END AS original_creator_is_marketing,
   (SELECT COUNT(*) FROM pipeline_updates pu WHERE pu.opportunity_id = o.opportunity_id) AS update_count,
@@ -71,7 +73,9 @@ LEFT JOIN accounts a ON o.account_id = a.account_id
 LEFT JOIN profiles p ON o.owner_user_id = p.user_id
 LEFT JOIN leads l ON o.source_lead_id = l.lead_id
 LEFT JOIN profiles creator ON o.original_creator_id = creator.user_id
-LEFT JOIN profiles lead_creator ON l.created_by = lead_creator.user_id
-ORDER BY o.next_step_due_date ASC;
+LEFT JOIN profiles lead_creator ON l.created_by = lead_creator.user_id;
+
+-- Add index for better performance on pipeline_updates subqueries
+CREATE INDEX IF NOT EXISTS idx_pipeline_updates_opportunity_id ON pipeline_updates(opportunity_id);
 
 COMMENT ON VIEW v_pipeline_with_updates IS 'Pipeline/opportunities with update counts, creator info, opportunity details for Pipeline and Opportunity tabs';
