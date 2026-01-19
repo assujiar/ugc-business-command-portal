@@ -505,29 +505,24 @@ export function SalesPlanDashboard({
       return
     }
 
-    // For Site Visit, evidence photo is mandatory
-    if (updateData.actual_activity_method === 'Site Visit' && !evidenceFile) {
-      alert('Evidence photo is required for Site Visit')
+    // Evidence is mandatory for all activity methods
+    if (!evidenceFile) {
+      alert('Evidence photo is required')
       return
     }
 
     setLoading(true)
     try {
-      // Upload evidence file if selected
+      // Upload evidence file (mandatory)
       let evidenceUrl = updateData.evidence_url
-      if (evidenceFile) {
-        const uploadedUrl = await uploadEvidenceFile()
-        if (uploadedUrl) {
-          evidenceUrl = uploadedUrl
-        } else if (!updateData.evidence_url) {
-          // Upload failed and no URL provided
-          if (updateData.actual_activity_method === 'Site Visit') {
-            alert('Failed to upload evidence. Please try again.')
-            setLoading(false)
-            return
-          }
-          console.warn('Evidence upload failed, continuing without evidence')
-        }
+      const uploadedUrl = await uploadEvidenceFile()
+      if (uploadedUrl) {
+        evidenceUrl = uploadedUrl
+      } else {
+        // Upload failed
+        alert('Failed to upload evidence. Please try again.')
+        setLoading(false)
+        return
       }
 
       const response = await fetch(`/api/crm/sales-plans/${selectedPlan.plan_id}`, {
@@ -1174,10 +1169,7 @@ export function SalesPlanDashboard({
 
             <div className="space-y-2">
               <Label>
-                Evidence Photo
-                {updateData.actual_activity_method === 'Site Visit' && (
-                  <span className="text-red-500 ml-1">* (Required)</span>
-                )}
+                Evidence Photo <span className="text-red-500">*</span>
               </Label>
               {/* Hidden file inputs */}
               <input
@@ -1196,7 +1188,7 @@ export function SalesPlanDashboard({
                 onChange={handleCameraCapture}
               />
 
-              {/* Upload buttons - Site Visit: camera only */}
+              {/* Upload buttons - Site Visit: camera only, others: camera + gallery */}
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -1206,7 +1198,7 @@ export function SalesPlanDashboard({
                   disabled={isUploading}
                 >
                   <Camera className="h-4 w-4 mr-2" />
-                  {updateData.actual_activity_method === 'Site Visit' ? 'Take Photo (Camera)' : 'Camera'}
+                  {updateData.actual_activity_method === 'Site Visit' ? 'Take Photo (Camera Only)' : 'Camera'}
                 </Button>
                 {updateData.actual_activity_method !== 'Site Visit' && (
                   <Button
@@ -1222,10 +1214,12 @@ export function SalesPlanDashboard({
                 )}
               </div>
 
-              {/* Site Visit notice */}
-              {updateData.actual_activity_method === 'Site Visit' && !evidenceFile && (
+              {/* Notice based on method */}
+              {!evidenceFile && (
                 <p className="text-xs text-orange-600">
-                  Site Visit requires photo evidence taken directly from camera
+                  {updateData.actual_activity_method === 'Site Visit'
+                    ? 'Site Visit requires photo taken directly from camera'
+                    : 'Evidence photo is required'}
                 </p>
               )}
 
