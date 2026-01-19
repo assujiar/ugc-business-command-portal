@@ -49,6 +49,9 @@ interface Opportunity {
   lead_source: string | null
   created_at: string | null
   closed_at: string | null
+  // Lead creator info for Lead Source display
+  original_creator_name: string | null
+  original_creator_department: string | null
 }
 
 interface OpportunityTabProps {
@@ -488,11 +491,23 @@ export function OpportunityTab({ opportunities }: OpportunityTabProps) {
                         {opp.opportunity_id.substring(0, 8)}...
                       </TableCell>
                       <TableCell>{opp.owner_name || '-'}</TableCell>
-                      <TableCell>
-                        {opp.lead_source ? (
-                          <Badge variant="outline" className="text-xs">
-                            {opp.lead_source}
-                          </Badge>
+                      <TableCell className="min-w-[150px]">
+                        {opp.original_creator_name || opp.lead_source ? (
+                          <div className="space-y-0.5">
+                            {opp.original_creator_name && (
+                              <p className="text-sm font-medium">
+                                {opp.original_creator_name}
+                                {opp.original_creator_department && (
+                                  <span className="text-muted-foreground"> - {opp.original_creator_department}</span>
+                                )}
+                              </p>
+                            )}
+                            {opp.lead_source && (
+                              <p className="text-xs text-muted-foreground">
+                                via {opp.lead_source}
+                              </p>
+                            )}
+                          </div>
                         ) : '-'}
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate">
