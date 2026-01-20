@@ -158,7 +158,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
 
     setLoadingContacts(true)
     try {
-      // Fetch primary contact for the account
+      // First try to fetch primary contact for the account
       const { data: contacts } = await (supabase as any)
         .from('contacts')
         .select('first_name, last_name, email, phone, mobile, is_primary')
@@ -174,6 +174,16 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
         setSenderName(fullName)
         setSenderEmail(contact.email || '')
         setSenderPhone(contact.phone || contact.mobile || '')
+      } else {
+        // No contacts found for this account
+        setSenderName('')
+        setSenderEmail('')
+        setSenderPhone('')
+        toast({
+          title: 'No contact found',
+          description: 'Account ini tidak punya contact tersimpan. Silakan isi manual.',
+          variant: 'default',
+        })
       }
     } catch (err) {
       console.error('Error fetching contact:', err)
