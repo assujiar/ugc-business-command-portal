@@ -54,8 +54,8 @@ CREATE TABLE IF NOT EXISTS public.tickets (
     department ticketing_department NOT NULL,
 
     -- Link to CRM accounts (optional but recommended)
-    account_id UUID REFERENCES public.accounts(account_id) ON DELETE SET NULL,
-    contact_id UUID REFERENCES public.contacts(contact_id) ON DELETE SET NULL,
+    account_id TEXT REFERENCES public.accounts(account_id) ON DELETE SET NULL,
+    contact_id TEXT REFERENCES public.contacts(contact_id) ON DELETE SET NULL,
 
     -- User references (using CRM profiles)
     created_by UUID NOT NULL REFERENCES public.profiles(user_id),

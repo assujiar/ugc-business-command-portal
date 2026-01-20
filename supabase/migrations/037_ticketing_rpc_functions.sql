@@ -89,8 +89,8 @@ CREATE OR REPLACE FUNCTION public.rpc_ticket_create(
     p_description TEXT,
     p_department ticketing_department,
     p_priority ticket_priority DEFAULT 'medium',
-    p_account_id UUID DEFAULT NULL,
-    p_contact_id UUID DEFAULT NULL,
+    p_account_id TEXT DEFAULT NULL,
+    p_contact_id TEXT DEFAULT NULL,
     p_rfq_data JSONB DEFAULT NULL
 )
 RETURNS JSONB AS $$
