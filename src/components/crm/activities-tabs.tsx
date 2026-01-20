@@ -181,7 +181,8 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
   const renderActivityTable = (activityList: ActivityItem[], showCompleted: boolean) => (
     <Card>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden lg:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -294,134 +295,208 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
             </TableBody>
           </Table>
         </div>
+
+        {/* Mobile Card View */}
+        <div className="lg:hidden divide-y">
+          {activityList.length > 0 ? (
+            activityList.map((activity) => (
+              <div key={activity.activity_id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-xs">
+                        {getActivityTypeLabel(activity.activity_type)}
+                      </Badge>
+                      {getPlanTypeBadge(activity.plan_type)}
+                    </div>
+                    <h4 className="font-medium text-sm truncate">{activity.account_name || '-'}</h4>
+                    <p className="text-xs text-muted-foreground truncate">{activity.activity_detail}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleViewDetail(activity)}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <User className="h-3 w-3" />
+                    {activity.sales_name || '-'}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3 text-muted-foreground" />
+                    {formatDate(activity.scheduled_on)}
+                  </div>
+                  {showCompleted && activity.completed_on && (
+                    <div className="flex items-center gap-1 text-green-600">
+                      <CheckCircle className="h-3 w-3" />
+                      {formatDate(activity.completed_on)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 text-xs">
+                  {activity.evidence_url && (
+                    <a
+                      href={activity.evidence_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-brand hover:underline"
+                    >
+                      {isImageUrl(activity.evidence_url) ? (
+                        <Image className="h-3 w-3" />
+                      ) : (
+                        <FileText className="h-3 w-3" />
+                      )}
+                      Evidence
+                    </a>
+                  )}
+                  {activity.location_address && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <MapPin className="h-3 w-3" />
+                      <span className="truncate max-w-[120px]">{activity.location_address.split(',')[0]}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-8 text-center text-muted-foreground">
+              No activities found
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   )
 
   return (
     <div className="space-y-4">
-      {/* Analytics Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+      {/* Analytics Summary Cards - Primary Stats */}
+      <div className="grid grid-cols-4 lg:grid-cols-8 gap-2 lg:gap-3">
         <Card>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <Activity className="h-5 w-5 text-gray-500" />
-              <p className="text-xl font-bold">{stats.total}</p>
+              <Activity className="h-4 w-4 lg:h-5 lg:w-5 text-gray-500" />
+              <p className="text-lg lg:text-xl font-bold">{stats.total}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Total</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Total</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <Clock className="h-5 w-5 text-yellow-500" />
-              <p className="text-xl font-bold text-yellow-600">{stats.planned}</p>
+              <Clock className="h-4 w-4 lg:h-5 lg:w-5 text-yellow-500" />
+              <p className="text-lg lg:text-xl font-bold text-yellow-600">{stats.planned}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Planned</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Planned</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              <p className="text-xl font-bold text-green-600">{stats.completed}</p>
+              <CheckCircle className="h-4 w-4 lg:h-5 lg:w-5 text-green-500" />
+              <p className="text-lg lg:text-xl font-bold text-green-600">{stats.completed}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Completed</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Done</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <TrendingUp className="h-5 w-5 text-blue-500" />
-              <p className="text-xl font-bold text-blue-600">{stats.completionRate}%</p>
+              <TrendingUp className="h-4 w-4 lg:h-5 lg:w-5 text-blue-500" />
+              <p className="text-lg lg:text-xl font-bold text-blue-600">{stats.completionRate}%</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Complete Rate</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Rate</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <MapPin className="h-5 w-5 text-orange-500" />
-              <p className="text-xl font-bold text-orange-600">{stats.visits}</p>
+              <MapPin className="h-4 w-4 lg:h-5 lg:w-5 text-orange-500" />
+              <p className="text-lg lg:text-xl font-bold text-orange-600">{stats.visits}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Visits</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Visits</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <Phone className="h-5 w-5 text-indigo-500" />
-              <p className="text-xl font-bold text-indigo-600">{stats.calls}</p>
+              <Phone className="h-4 w-4 lg:h-5 lg:w-5 text-indigo-500" />
+              <p className="text-lg lg:text-xl font-bold text-indigo-600">{stats.calls}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Phone Calls</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Calls</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <MessageSquare className="h-5 w-5 text-green-500" />
-              <p className="text-xl font-bold text-green-600">{stats.whatsapp}</p>
+              <MessageSquare className="h-4 w-4 lg:h-5 lg:w-5 text-green-500" />
+              <p className="text-lg lg:text-xl font-bold text-green-600">{stats.whatsapp}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">WhatsApp</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">WA</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <Target className="h-5 w-5 text-emerald-500" />
-              <p className="text-xl font-bold text-emerald-600">{stats.huntingPotential}</p>
+              <Target className="h-4 w-4 lg:h-5 lg:w-5 text-emerald-500" />
+              <p className="text-lg lg:text-xl font-bold text-emerald-600">{stats.huntingPotential}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">New Leads</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Leads</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Activity Type Breakdown */}
-      <div className="grid grid-cols-4 gap-3">
-        <Card className="col-span-1">
-          <CardContent className="p-3">
+      <div className="grid grid-cols-4 gap-2 lg:gap-3">
+        <Card>
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <Building2 className="h-5 w-5 text-blue-500" />
-              <p className="text-xl font-bold text-blue-600">{stats.maintenance}</p>
+              <Building2 className="h-4 w-4 lg:h-5 lg:w-5 text-blue-500" />
+              <p className="text-lg lg:text-xl font-bold text-blue-600">{stats.maintenance}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Maintenance</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Maintain</p>
           </CardContent>
         </Card>
 
-        <Card className="col-span-1">
-          <CardContent className="p-3">
+        <Card>
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <UserPlus className="h-5 w-5 text-green-500" />
-              <p className="text-xl font-bold text-green-600">{stats.hunting}</p>
+              <UserPlus className="h-4 w-4 lg:h-5 lg:w-5 text-green-500" />
+              <p className="text-lg lg:text-xl font-bold text-green-600">{stats.hunting}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Hunting</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Hunting</p>
           </CardContent>
         </Card>
 
-        <Card className="col-span-1">
-          <CardContent className="p-3">
+        <Card>
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <RotateCcw className="h-5 w-5 text-orange-500" />
-              <p className="text-xl font-bold text-orange-600">{stats.winback}</p>
+              <RotateCcw className="h-4 w-4 lg:h-5 lg:w-5 text-orange-500" />
+              <p className="text-lg lg:text-xl font-bold text-orange-600">{stats.winback}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Winback</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Winback</p>
           </CardContent>
         </Card>
 
-        <Card className="col-span-1">
-          <CardContent className="p-3">
+        <Card>
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <TrendingUp className="h-5 w-5 text-purple-500" />
-              <p className="text-xl font-bold text-purple-600">{stats.pipeline}</p>
+              <TrendingUp className="h-4 w-4 lg:h-5 lg:w-5 text-purple-500" />
+              <p className="text-lg lg:text-xl font-bold text-purple-600">{stats.pipeline}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Pipeline</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Pipeline</p>
           </CardContent>
         </Card>
       </div>

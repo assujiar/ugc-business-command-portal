@@ -117,79 +117,114 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
     )
   }
 
+  // Render action menu (reusable for both desktop and mobile)
+  const renderActionMenu = (lead: Lead) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className="h-8 w-8 p-0"
+          disabled={isLoading === lead.lead_id}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Triage Actions</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {lead.triage_status === 'New' && (
+          <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'In Review', lead.company_name)}>
+            <CheckCircle className="mr-2 h-4 w-4" />
+            Mark In Review
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Qualified', lead.company_name)}>
+          <Send className="mr-2 h-4 w-4 text-green-500" />
+          Mark Qualified
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Nurture', lead.company_name)}>
+          <Leaf className="mr-2 h-4 w-4 text-purple-500" />
+          Move to Nurture
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Disqualified', lead.company_name)}>
+          <XCircle className="mr-2 h-4 w-4 text-red-500" />
+          Disqualify
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Leads Awaiting Triage ({leads.length})</CardTitle>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base lg:text-lg">Leads Awaiting Triage ({leads.length})</CardTitle>
       </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Company</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead>Owner</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="w-[70px]">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {leads.map((lead) => (
-              <TableRow key={lead.lead_id}>
-                <TableCell className="font-medium">{lead.company_name}</TableCell>
-                <TableCell>
-                  <div>
-                    <p>{lead.pic_name || '-'}</p>
-                    <p className="text-xs text-muted-foreground">{lead.pic_email}</p>
-                  </div>
-                </TableCell>
-                <TableCell>{getStatusBadge(lead.triage_status)}</TableCell>
-                <TableCell>{lead.source}</TableCell>
-                <TableCell>{getPriorityBadge(lead.priority)}</TableCell>
-                <TableCell>{lead.marketing_owner_name || '-'}</TableCell>
-                <TableCell>{formatDate(lead.created_at)}</TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="h-8 w-8 p-0"
-                        disabled={isLoading === lead.lead_id}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Triage Actions</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {lead.triage_status === 'New' && (
-                        <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'In Review', lead.company_name)}>
-                          <CheckCircle className="mr-2 h-4 w-4" />
-                          Mark In Review
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Qualified', lead.company_name)}>
-                        <Send className="mr-2 h-4 w-4 text-green-500" />
-                        Mark Qualified
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Nurture', lead.company_name)}>
-                        <Leaf className="mr-2 h-4 w-4 text-purple-500" />
-                        Move to Nurture
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Disqualified', lead.company_name)}>
-                        <XCircle className="mr-2 h-4 w-4 text-red-500" />
-                        Disqualify
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
+      <CardContent className="p-0 lg:p-6 lg:pt-0">
+        {/* Desktop Table View */}
+        <div className="hidden lg:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Company</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="w-[70px]">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {leads.map((lead) => (
+                <TableRow key={lead.lead_id}>
+                  <TableCell className="font-medium">{lead.company_name}</TableCell>
+                  <TableCell>
+                    <div>
+                      <p>{lead.pic_name || '-'}</p>
+                      <p className="text-xs text-muted-foreground">{lead.pic_email}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell>{getStatusBadge(lead.triage_status)}</TableCell>
+                  <TableCell>{lead.source}</TableCell>
+                  <TableCell>{getPriorityBadge(lead.priority)}</TableCell>
+                  <TableCell>{lead.marketing_owner_name || '-'}</TableCell>
+                  <TableCell>{formatDate(lead.created_at)}</TableCell>
+                  <TableCell>{renderActionMenu(lead)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="lg:hidden divide-y">
+          {leads.map((lead) => (
+            <div key={lead.lead_id} className="p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-medium text-sm truncate">{lead.company_name}</h4>
+                  <p className="text-xs text-muted-foreground truncate">{lead.pic_name || '-'}</p>
+                  {lead.pic_email && (
+                    <p className="text-xs text-muted-foreground truncate">{lead.pic_email}</p>
+                  )}
+                </div>
+                {renderActionMenu(lead)}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {getStatusBadge(lead.triage_status)}
+                {getPriorityBadge(lead.priority)}
+                <Badge variant="outline" className="text-xs">{lead.source}</Badge>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{lead.marketing_owner_name || 'No owner'}</span>
+                <span>{formatDate(lead.created_at)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   )

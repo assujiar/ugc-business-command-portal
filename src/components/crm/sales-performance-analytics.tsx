@@ -46,7 +46,12 @@ import {
   MessageSquare,
   Mail,
   BarChart3,
+  ArrowUp,
+  ArrowDown,
+  Minus,
 } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts'
 import type { UserRole, OpportunityStage, ApproachMethod, AccountStatus } from '@/types/database'
 
 // Types for the component
@@ -777,6 +782,87 @@ function getCurrentWeekRange(): { start: Date; end: Date } {
   return { start, end }
 }
 
+// Helper to get week number of year
+function getWeekNumber(date: Date): number {
+  const firstDayOfYear = new Date(date.getFullYear(), 0, 1)
+  const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000
+  return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7)
+}
+
+// Helper to get start of week (Monday)
+function getWeekStart(date: Date): Date {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  d.setDate(diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+// Helper to get end of week (Sunday)
+function getWeekEnd(date: Date): Date {
+  const start = getWeekStart(date)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+  return end
+}
+
+// Interface for weekly data point
+interface WeeklyDataPoint {
+  week: string
+  weekNumber: number
+  activities: number
+  pipeline: number
+  revenueOpp: number
+  actualRevenue: number
+  startDate: Date
+  endDate: Date
+}
+
+// Interface for growth metrics
+interface GrowthMetrics {
+  wow: number | null // Week over Week
+  mom: number | null // Month over Month
+  yoy: number | null // Year over Year
+  mtd: number // Month to Date
+  ytd: number // Year to Date
+}
+
+// Calculate growth percentage
+function calcGrowth(current: number, previous: number): number | null {
+  if (previous === 0) return current > 0 ? 100 : null
+  return ((current - previous) / previous) * 100
+}
+
+// Growth indicator component
+function GrowthIndicator({ value, label }: { value: number | null; label: string }) {
+  if (value === null) {
+    return (
+      <div className="flex items-center gap-1 text-xs">
+        <Minus className="h-3 w-3 text-muted-foreground" />
+        <span className="text-muted-foreground">{label}: N/A</span>
+      </div>
+    )
+  }
+  const isPositive = value > 0
+  const isNeutral = value === 0
+  return (
+    <div className="flex items-center gap-1 text-xs">
+      {isPositive ? (
+        <ArrowUp className="h-3 w-3 text-green-600" />
+      ) : isNeutral ? (
+        <Minus className="h-3 w-3 text-muted-foreground" />
+      ) : (
+        <ArrowDown className="h-3 w-3 text-red-600" />
+      )}
+      <span className={isPositive ? 'text-green-600' : isNeutral ? 'text-muted-foreground' : 'text-red-600'}>
+        {label}: {isPositive ? '+' : ''}{value.toFixed(1)}%
+      </span>
+    </div>
+  )
+}
+
 export function WeeklyAnalytics({
   opportunities,
   activities,
@@ -784,26 +870,161 @@ export function WeeklyAnalytics({
   currentUserRole,
   isAggregate,
 }: WeeklyAnalyticsProps) {
-  const weeklyData = useMemo(() => {
-    const { start, end } = getCurrentWeekRange()
+  const [activeTab, setActiveTab] = useState<'activities' | 'pipeline' | 'revenue'>('activities')
+
+  // Calculate historical weekly data for the year
+  const historicalData = useMemo(() => {
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentWeekNum = getWeekNumber(now)
 
     // Filter data based on role
     let filteredActivities = activities
     let filteredOpportunities = opportunities
 
     if (!isAggregate && currentUserId) {
-      // Salesperson: only their own data
       filteredActivities = activities.filter(a => a.owner_user_id === currentUserId)
       filteredOpportunities = opportunities.filter(o => o.owner_user_id === currentUserId)
     }
 
-    // Weekly activities (created this week)
+    // Build weekly data from week 1 to current week
+    const weeklyData: WeeklyDataPoint[] = []
+
+    for (let weekNum = 1; weekNum <= currentWeekNum; weekNum++) {
+      // Calculate the date range for this week
+      const jan1 = new Date(currentYear, 0, 1)
+      const daysToAdd = (weekNum - 1) * 7 - jan1.getDay() + 1 // Start from Monday of week 1
+      const weekStartDate = new Date(jan1)
+      weekStartDate.setDate(jan1.getDate() + daysToAdd)
+      const weekStart = getWeekStart(weekStartDate)
+      const weekEnd = getWeekEnd(weekStartDate)
+
+      // Count activities in this week
+      const weekActivities = filteredActivities.filter(a => {
+        const createdAt = new Date(a.created_at)
+        return createdAt >= weekStart && createdAt <= weekEnd
+      }).length
+
+      // Sum pipeline value for new opportunities this week
+      const weekOpps = filteredOpportunities.filter(o => {
+        const createdAt = new Date(o.created_at)
+        return createdAt >= weekStart && createdAt <= weekEnd
+      })
+      const weekPipeline = weekOpps
+        .filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
+        .reduce((sum, o) => sum + (o.estimated_value || 0), 0)
+      const weekRevenueOpp = weekOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
+
+      weeklyData.push({
+        week: `W${weekNum}`,
+        weekNumber: weekNum,
+        activities: weekActivities,
+        pipeline: weekPipeline,
+        revenueOpp: weekRevenueOpp,
+        actualRevenue: 0, // Placeholder for DSO/AR
+        startDate: weekStart,
+        endDate: weekEnd,
+      })
+    }
+
+    return weeklyData
+  }, [opportunities, activities, currentUserId, isAggregate])
+
+  // Calculate growth metrics for each metric type
+  const growthMetrics = useMemo(() => {
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth()
+    const currentWeekNum = getWeekNumber(now)
+
+    // Get current week data
+    const currentWeekData = historicalData.find(d => d.weekNumber === currentWeekNum)
+    const lastWeekData = historicalData.find(d => d.weekNumber === currentWeekNum - 1)
+
+    // Get current month weeks
+    const currentMonthWeeks = historicalData.filter(d => {
+      return d.startDate.getMonth() === currentMonth
+    })
+
+    // Get last month weeks (for MoM comparison)
+    const lastMonthWeeks = historicalData.filter(d => {
+      return d.startDate.getMonth() === (currentMonth - 1 + 12) % 12 &&
+        (currentMonth > 0 || d.startDate.getFullYear() === currentYear - 1)
+    })
+
+    // MTD: Sum of current month
+    const mtdActivities = currentMonthWeeks.reduce((sum, d) => sum + d.activities, 0)
+    const mtdPipeline = currentMonthWeeks.reduce((sum, d) => sum + d.pipeline, 0)
+    const mtdRevenueOpp = currentMonthWeeks.reduce((sum, d) => sum + d.revenueOpp, 0)
+
+    // Last month total (for MoM)
+    const lastMonthActivities = lastMonthWeeks.reduce((sum, d) => sum + d.activities, 0)
+    const lastMonthPipeline = lastMonthWeeks.reduce((sum, d) => sum + d.pipeline, 0)
+    const lastMonthRevenueOpp = lastMonthWeeks.reduce((sum, d) => sum + d.revenueOpp, 0)
+
+    // YTD: Sum of all weeks this year
+    const ytdActivities = historicalData.reduce((sum, d) => sum + d.activities, 0)
+    const ytdPipeline = historicalData.reduce((sum, d) => sum + d.pipeline, 0)
+    const ytdRevenueOpp = historicalData.reduce((sum, d) => sum + d.revenueOpp, 0)
+
+    // WoW calculations
+    const wowActivities = currentWeekData && lastWeekData
+      ? calcGrowth(currentWeekData.activities, lastWeekData.activities)
+      : null
+    const wowPipeline = currentWeekData && lastWeekData
+      ? calcGrowth(currentWeekData.pipeline, lastWeekData.pipeline)
+      : null
+    const wowRevenueOpp = currentWeekData && lastWeekData
+      ? calcGrowth(currentWeekData.revenueOpp, lastWeekData.revenueOpp)
+      : null
+
+    // MoM calculations
+    const momActivities = lastMonthActivities > 0 ? calcGrowth(mtdActivities, lastMonthActivities) : null
+    const momPipeline = lastMonthPipeline > 0 ? calcGrowth(mtdPipeline, lastMonthPipeline) : null
+    const momRevenueOpp = lastMonthRevenueOpp > 0 ? calcGrowth(mtdRevenueOpp, lastMonthRevenueOpp) : null
+
+    return {
+      activities: {
+        wow: wowActivities,
+        mom: momActivities,
+        yoy: null, // Would need last year's data
+        mtd: mtdActivities,
+        ytd: ytdActivities,
+      },
+      pipeline: {
+        wow: wowPipeline,
+        mom: momPipeline,
+        yoy: null,
+        mtd: mtdPipeline,
+        ytd: ytdPipeline,
+      },
+      revenueOpp: {
+        wow: wowRevenueOpp,
+        mom: momRevenueOpp,
+        yoy: null,
+        mtd: mtdRevenueOpp,
+        ytd: ytdRevenueOpp,
+      },
+    }
+  }, [historicalData])
+
+  // Current week data for summary
+  const currentWeekData = useMemo(() => {
+    const { start, end } = getCurrentWeekRange()
+
+    let filteredActivities = activities
+    let filteredOpportunities = opportunities
+
+    if (!isAggregate && currentUserId) {
+      filteredActivities = activities.filter(a => a.owner_user_id === currentUserId)
+      filteredOpportunities = opportunities.filter(o => o.owner_user_id === currentUserId)
+    }
+
     const weeklyActivities = filteredActivities.filter(a => {
       const createdAt = new Date(a.created_at)
       return createdAt >= start && createdAt <= end
     })
 
-    // Activities breakdown for the week
     const weeklyActivitiesBreakdown = {
       site_visit: weeklyActivities.filter(a => a.activity_type === 'Site Visit').length,
       online_meeting: weeklyActivities.filter(a => a.activity_type === 'Online Meeting').length,
@@ -814,7 +1035,6 @@ export function WeeklyAnalytics({
       email: weeklyActivities.filter(a => a.activity_type === 'Email').length,
     }
 
-    // Weekly pipeline (active opportunities created this week)
     const weeklyNewOpportunities = filteredOpportunities.filter(o => {
       const createdAt = new Date(o.created_at)
       return createdAt >= start && createdAt <= end
@@ -823,11 +1043,9 @@ export function WeeklyAnalytics({
       .filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
       .reduce((sum, o) => sum + (o.estimated_value || 0), 0)
 
-    // Weekly revenue opportunity (total value of new opportunities this week)
     const weeklyRevenueOpportunity = weeklyNewOpportunities
       .reduce((sum, o) => sum + (o.estimated_value || 0), 0)
 
-    // Total active pipeline (not just this week)
     const totalActivePipeline = filteredOpportunities
       .filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
       .reduce((sum, o) => sum + (o.estimated_value || 0), 0)
@@ -842,9 +1060,11 @@ export function WeeklyAnalytics({
     }
   }, [opportunities, activities, currentUserId, isAggregate])
 
-  // Format week range for display
   const { start, end } = getCurrentWeekRange()
   const weekRangeText = `${start.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+
+  // Chart data limited to last 12 weeks for better readability
+  const chartData = historicalData.slice(-12)
 
   return (
     <Card>
@@ -858,112 +1078,191 @@ export function WeeklyAnalytics({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        {/* Summary Cards */}
+        <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-4">
           {/* Weekly Activities */}
-          <div className="p-3 rounded-lg bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-950 dark:to-gray-950 border">
+          <div className="p-2 lg:p-3 rounded-lg bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-950 dark:to-gray-950 border">
             <div className="flex items-center gap-2 mb-1">
               <Activity className="h-4 w-4 text-slate-600" />
-              <span className="text-xs text-muted-foreground">Weekly Activities</span>
+              <span className="text-[10px] lg:text-xs text-muted-foreground">Activities</span>
             </div>
-            {weeklyData.weeklyActivitiesCount > 0 ? (
-              <>
-                <p className="text-lg font-bold text-slate-600">{weeklyData.weeklyActivitiesCount}</p>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {weeklyData.weeklyActivitiesBreakdown.site_visit > 0 && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                      <MapPin className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.site_visit}
-                    </span>
-                  )}
-                  {weeklyData.weeklyActivitiesBreakdown.online_meeting > 0 && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                      <Video className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.online_meeting}
-                    </span>
-                  )}
-                  {weeklyData.weeklyActivitiesBreakdown.phone_call > 0 && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                      <Phone className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.phone_call}
-                    </span>
-                  )}
-                  {weeklyData.weeklyActivitiesBreakdown.call > 0 && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                      <Phone className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.call}
-                    </span>
-                  )}
-                  {weeklyData.weeklyActivitiesBreakdown.meeting > 0 && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                      <Users className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.meeting}
-                    </span>
-                  )}
-                  {weeklyData.weeklyActivitiesBreakdown.whatsapp > 0 && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                      <MessageSquare className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.whatsapp}
-                    </span>
-                  )}
-                  {weeklyData.weeklyActivitiesBreakdown.email > 0 && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                      <Mail className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.email}
-                    </span>
-                  )}
-                </div>
-              </>
-            ) : (
-              <p className="text-lg font-bold text-muted-foreground">N/A</p>
-            )}
+            <p className="text-base lg:text-lg font-bold text-slate-600">{currentWeekData.weeklyActivitiesCount}</p>
+            <div className="hidden lg:flex flex-wrap gap-1 mt-1">
+              {currentWeekData.weeklyActivitiesBreakdown.site_visit > 0 && (
+                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                  <MapPin className="h-3 w-3" />{currentWeekData.weeklyActivitiesBreakdown.site_visit}
+                </span>
+              )}
+              {currentWeekData.weeklyActivitiesBreakdown.phone_call > 0 && (
+                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                  <Phone className="h-3 w-3" />{currentWeekData.weeklyActivitiesBreakdown.phone_call}
+                </span>
+              )}
+              {currentWeekData.weeklyActivitiesBreakdown.whatsapp > 0 && (
+                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                  <MessageSquare className="h-3 w-3" />{currentWeekData.weeklyActivitiesBreakdown.whatsapp}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Weekly Pipeline */}
-          <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border">
+          <div className="p-2 lg:p-3 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="h-4 w-4 text-blue-600" />
-              <span className="text-xs text-muted-foreground">Weekly Pipeline</span>
+              <span className="text-[10px] lg:text-xs text-muted-foreground">Pipeline</span>
             </div>
-            {weeklyData.weeklyPipelineValue > 0 ? (
-              <>
-                <p className="text-lg font-bold text-blue-600">{formatCurrency(weeklyData.weeklyPipelineValue)}</p>
-                <p className="text-xs text-muted-foreground">{weeklyData.weeklyNewOpportunitiesCount} new opp</p>
-              </>
-            ) : (
-              <>
-                <p className="text-lg font-bold text-muted-foreground">N/A</p>
-                <p className="text-xs text-muted-foreground">No new pipeline this week</p>
-              </>
-            )}
+            <p className="text-base lg:text-lg font-bold text-blue-600">{formatCurrency(currentWeekData.weeklyPipelineValue)}</p>
+            <p className="text-[10px] text-muted-foreground">{currentWeekData.weeklyNewOpportunitiesCount} new opp</p>
           </div>
 
-          {/* Weekly Revenue Opportunity */}
-          <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border">
+          {/* Revenue Opportunity */}
+          <div className="p-2 lg:p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border">
             <div className="flex items-center gap-2 mb-1">
               <Target className="h-4 w-4 text-green-600" />
-              <span className="text-xs text-muted-foreground">Revenue Opportunity</span>
+              <span className="text-[10px] lg:text-xs text-muted-foreground">Revenue Opp</span>
             </div>
-            {weeklyData.weeklyRevenueOpportunity > 0 ? (
-              <>
-                <p className="text-lg font-bold text-green-600">{formatCurrency(weeklyData.weeklyRevenueOpportunity)}</p>
-                <p className="text-xs text-muted-foreground">New opportunities</p>
-              </>
-            ) : (
-              <>
-                <p className="text-lg font-bold text-muted-foreground">N/A</p>
-                <p className="text-xs text-muted-foreground">No new opportunity</p>
-              </>
-            )}
+            <p className="text-base lg:text-lg font-bold text-green-600">{formatCurrency(currentWeekData.weeklyRevenueOpportunity)}</p>
+            <p className="text-[10px] text-muted-foreground">New opportunities</p>
           </div>
 
-          {/* Weekly Actual Revenue - Placeholder for DSO/AR */}
-          <div className="p-3 rounded-lg bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950 dark:to-yellow-950 border">
+          {/* Actual Revenue - Placeholder */}
+          <div className="p-2 lg:p-3 rounded-lg bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950 dark:to-yellow-950 border">
             <div className="flex items-center gap-2 mb-1">
               <DollarSign className="h-4 w-4 text-amber-600" />
-              <span className="text-xs text-muted-foreground">Actual Revenue</span>
+              <span className="text-[10px] lg:text-xs text-muted-foreground">Actual Rev</span>
             </div>
-            <p className="text-lg font-bold text-muted-foreground">N/A</p>
-            <p className="text-xs text-muted-foreground">From DSO/AR module</p>
+            <p className="text-base lg:text-lg font-bold text-muted-foreground">N/A</p>
+            <p className="text-[10px] text-muted-foreground">DSO/AR module</p>
           </div>
         </div>
 
+        {/* Chart Tabs */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="w-full">
+          <TabsList className="grid w-full grid-cols-3 h-8">
+            <TabsTrigger value="activities" className="text-xs">Activities</TabsTrigger>
+            <TabsTrigger value="pipeline" className="text-xs">Pipeline</TabsTrigger>
+            <TabsTrigger value="revenue" className="text-xs">Revenue Opp</TabsTrigger>
+          </TabsList>
+
+          {/* Activities Tab */}
+          <TabsContent value="activities" className="mt-3">
+            <div className="space-y-3">
+              {/* Growth Metrics */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 p-2 bg-muted/50 rounded-lg">
+                <GrowthIndicator value={growthMetrics.activities.wow} label="WoW" />
+                <GrowthIndicator value={growthMetrics.activities.mom} label="MoM" />
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground">MTD: <span className="font-medium text-foreground">{growthMetrics.activities.mtd}</span></span>
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground">YTD: <span className="font-medium text-foreground">{growthMetrics.activities.ytd}</span></span>
+                </div>
+              </div>
+
+              {/* Chart */}
+              <div className="h-48 lg:h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="week" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                    <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                    <Tooltip
+                      contentStyle={{ fontSize: 12 }}
+                      formatter={(value: number) => [value, 'Activities']}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="activities"
+                      stroke="#6366f1"
+                      fill="#6366f1"
+                      fillOpacity={0.2}
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Pipeline Tab */}
+          <TabsContent value="pipeline" className="mt-3">
+            <div className="space-y-3">
+              {/* Growth Metrics */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 p-2 bg-muted/50 rounded-lg">
+                <GrowthIndicator value={growthMetrics.pipeline.wow} label="WoW" />
+                <GrowthIndicator value={growthMetrics.pipeline.mom} label="MoM" />
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground">MTD: <span className="font-medium text-foreground">{formatCurrency(growthMetrics.pipeline.mtd)}</span></span>
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground">YTD: <span className="font-medium text-foreground">{formatCurrency(growthMetrics.pipeline.ytd)}</span></span>
+                </div>
+              </div>
+
+              {/* Chart */}
+              <div className="h-48 lg:h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="week" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                    <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatCurrency(v)} className="text-muted-foreground" />
+                    <Tooltip
+                      contentStyle={{ fontSize: 12 }}
+                      formatter={(value: number) => [formatCurrency(value), 'Pipeline']}
+                    />
+                    <Bar dataKey="pipeline" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Revenue Opportunity Tab */}
+          <TabsContent value="revenue" className="mt-3">
+            <div className="space-y-3">
+              {/* Growth Metrics */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 p-2 bg-muted/50 rounded-lg">
+                <GrowthIndicator value={growthMetrics.revenueOpp.wow} label="WoW" />
+                <GrowthIndicator value={growthMetrics.revenueOpp.mom} label="MoM" />
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground">MTD: <span className="font-medium text-foreground">{formatCurrency(growthMetrics.revenueOpp.mtd)}</span></span>
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground">YTD: <span className="font-medium text-foreground">{formatCurrency(growthMetrics.revenueOpp.ytd)}</span></span>
+                </div>
+              </div>
+
+              {/* Chart */}
+              <div className="h-48 lg:h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="week" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                    <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatCurrency(v)} className="text-muted-foreground" />
+                    <Tooltip
+                      contentStyle={{ fontSize: 12 }}
+                      formatter={(value: number) => [formatCurrency(value), 'Revenue Opportunity']}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="revenueOpp"
+                      stroke="#10b981"
+                      fill="#10b981"
+                      fillOpacity={0.2}
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+
         {/* Total Active Pipeline Summary */}
         <div className="mt-3 pt-3 border-t flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Total Active Pipeline:</span>
-          <span className="font-semibold text-blue-600">{formatCurrency(weeklyData.totalActivePipeline)}</span>
+          <span className="text-xs lg:text-sm text-muted-foreground">Total Active Pipeline:</span>
+          <span className="font-semibold text-blue-600">{formatCurrency(currentWeekData.totalActivePipeline)}</span>
         </div>
       </CardContent>
     </Card>
