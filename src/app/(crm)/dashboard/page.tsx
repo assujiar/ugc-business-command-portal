@@ -6,6 +6,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -33,6 +34,8 @@ import {
 } from 'lucide-react'
 import { isAdmin, isMarketing, isSales } from '@/lib/permissions'
 import { SalesPerformanceAnalytics, SalespersonPerformanceCard, WeeklyAnalytics } from '@/components/crm/sales-performance-analytics'
+import { AnalyticsFilter, filterByDateAndSalesperson } from '@/components/crm/analytics-filter'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +53,11 @@ function formatCurrency(value: number): string {
   return `Rp ${value.toLocaleString('id-ID')}`
 }
 
-export default async function DashboardPage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function DashboardPage({ searchParams }: PageProps) {
   const adminClient = createAdminClient()
   const { profile } = await getSessionAndProfile()
 
@@ -61,6 +68,12 @@ export default async function DashboardPage() {
   const role = profile.role
   const userId = profile.user_id
   const userName = profile.name || 'User'
+
+  // Get filter params
+  const params = await searchParams
+  const startDate = typeof params.startDate === 'string' ? params.startDate : null
+  const endDate = typeof params.endDate === 'string' ? params.endDate : null
+  const salespersonId = typeof params.salespersonId === 'string' ? params.salespersonId : null
 
   // =====================================================
   // Fetch data based on role
@@ -130,23 +143,65 @@ export default async function DashboardPage() {
   ])
 
   // =====================================================
-  // Calculate Analytics
+  // Apply Filters to Data
   // =====================================================
 
-  const totalLeads = (leads || []).length
+  // Helper function to filter by date range
+  const filterByDate = (data: any[]): any[] => {
+    if (!startDate && !endDate) return data
+    return data.filter((item) => {
+      const itemDate = item.created_at ? new Date(item.created_at) : null
+      if (!itemDate) return true
+      if (startDate && itemDate < new Date(startDate)) return false
+      if (endDate) {
+        const endOfDay = new Date(endDate)
+        endOfDay.setHours(23, 59, 59, 999)
+        if (itemDate > endOfDay) return false
+      }
+      return true
+    })
+  }
+
+  // Helper function to filter by salesperson
+  const filterBySalesperson = (
+    data: any[],
+    ownerField: 'owner_user_id' | 'sales_owner_user_id' = 'owner_user_id'
+  ): any[] => {
+    if (!salespersonId) return data
+    return data.filter((item) => {
+      const ownerId = ownerField === 'owner_user_id' ? item.owner_user_id : item.sales_owner_user_id
+      return ownerId === salespersonId
+    })
+  }
+
+  // Apply filters to all data sets
+  const filteredLeads = filterBySalesperson(filterByDate(leads || []), 'sales_owner_user_id')
+  const filteredOpportunities = filterBySalesperson(filterByDate(opportunities || []))
+  const filteredAccounts = filterBySalesperson(filterByDate(accounts || []))
+  const filteredSalesPlans = filterBySalesperson(filterByDate(salesPlans || []))
+  const filteredPipelineUpdates = filterByDate(pipelineUpdates || []).filter((u: any) =>
+    !salespersonId || u.updated_by === salespersonId
+  )
+  const filteredActivities = filterBySalesperson(filterByDate(activitiesData || []))
+
+  // =====================================================
+  // Calculate Analytics (using filtered data)
+  // =====================================================
+
+  const totalLeads = filteredLeads.length
 
   // Lead Analytics
   const leadsByStatus = {
-    new: (leads || []).filter((l: any) => l.triage_status === 'New').length,
-    inReview: (leads || []).filter((l: any) => l.triage_status === 'In Review').length,
-    qualified: (leads || []).filter((l: any) => l.triage_status === 'Qualified').length,
-    assignToSales: (leads || []).filter((l: any) => l.triage_status === 'Assign to Sales').length,
-    nurture: (leads || []).filter((l: any) => l.triage_status === 'Nurture').length,
-    disqualified: (leads || []).filter((l: any) => l.triage_status === 'Disqualified').length,
+    new: filteredLeads.filter((l: any) => l.triage_status === 'New').length,
+    inReview: filteredLeads.filter((l: any) => l.triage_status === 'In Review').length,
+    qualified: filteredLeads.filter((l: any) => l.triage_status === 'Qualified').length,
+    assignToSales: filteredLeads.filter((l: any) => l.triage_status === 'Assign to Sales').length,
+    nurture: filteredLeads.filter((l: any) => l.triage_status === 'Nurture').length,
+    disqualified: filteredLeads.filter((l: any) => l.triage_status === 'Disqualified').length,
   }
 
   // Opportunity Analytics
-  const opps = opportunities || []
+  const opps = filteredOpportunities
   const oppByStage = {
     prospecting: opps.filter((o: any) => o.stage === 'Prospecting').length,
     discovery: opps.filter((o: any) => o.stage === 'Discovery').length,
@@ -167,7 +222,7 @@ export default async function DashboardPage() {
   const winRate = closedOpps > 0 ? Math.round((oppByStage.closedWon / closedOpps) * 100) : 0
 
   // Account Analytics
-  const accts = accounts || []
+  const accts = filteredAccounts
   const totalAccounts = accts.length
   const accountsByStatus = {
     calon: accts.filter((a: any) => a.account_status === 'calon_account').length,
@@ -178,7 +233,7 @@ export default async function DashboardPage() {
   }
 
   // Sales Plan Analytics
-  const plans = salesPlans || []
+  const plans = filteredSalesPlans
   const plansByStatus = {
     planned: plans.filter((p: any) => p.status === 'planned').length,
     completed: plans.filter((p: any) => p.status === 'completed').length,
@@ -191,7 +246,7 @@ export default async function DashboardPage() {
   const huntingPotential = plans.filter((p: any) => p.plan_type === 'hunting_new' && p.potential_status === 'potential').length
 
   // Activity Analytics (from pipeline updates)
-  const updates = pipelineUpdates || []
+  const updates = filteredPipelineUpdates
   const activityByMethod = {
     siteVisit: updates.filter((u: any) => u.approach_method === 'Site Visit').length,
     phoneCall: updates.filter((u: any) => u.approach_method === 'Phone Call').length,
@@ -202,7 +257,7 @@ export default async function DashboardPage() {
   const totalActivities = updates.length
 
   // Lead conversion rate
-  const convertedLeads = (leads || []).filter((l: any) => l.opportunity_id).length
+  const convertedLeads = filteredLeads.filter((l: any) => l.opportunity_id).length
   const leadConversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0
 
   // =====================================================
@@ -225,6 +280,21 @@ export default async function DashboardPage() {
            'Business overview dashboard'}
         </p>
       </div>
+
+      {/* Analytics Filter - For roles that can filter by salesperson */}
+      {(isAdmin(role) || role === 'sales manager' || role === 'Marketing Manager' || role === 'MACX') && (
+        <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+          <AnalyticsFilter
+            salesProfiles={(salesProfiles || []).map((p: any) => ({
+              user_id: p.user_id,
+              name: p.name,
+              email: p.email,
+              role: p.role,
+            }))}
+            showSalespersonFilter={true}
+          />
+        </Suspense>
+      )}
 
       {/* Key Metrics - First Row */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
@@ -277,10 +347,10 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Weekly Analytics - For Management Roles (aggregate) */}
+      {/* Weekly Analytics - For Management Roles (aggregate or filtered by salesperson) */}
       {(isAdmin(role) || role === 'sales manager' || role === 'Marketing Manager' || role === 'MACX') && (
         <WeeklyAnalytics
-          opportunities={(opportunities || []).map((o: any) => ({
+          opportunities={filteredOpportunities.map((o: any) => ({
             opportunity_id: o.opportunity_id,
             name: o.name,
             account_id: o.account_id,
@@ -290,7 +360,7 @@ export default async function DashboardPage() {
             created_at: o.created_at,
             closed_at: o.closed_at,
           }))}
-          activities={(activitiesData || []).map((a: any) => ({
+          activities={filteredActivities.map((a: any) => ({
             activity_id: a.activity_id,
             activity_type: a.activity_type,
             status: a.status,
@@ -298,16 +368,16 @@ export default async function DashboardPage() {
             created_at: a.created_at,
             completed_at: a.completed_at,
           }))}
-          currentUserId={userId}
+          currentUserId={salespersonId || userId}
           currentUserRole={role}
-          isAggregate={true}
+          isAggregate={!salespersonId}
         />
       )}
 
       {/* Weekly Analytics - For Salesperson (personal data only) */}
       {role === 'salesperson' && (
         <WeeklyAnalytics
-          opportunities={(opportunities || []).map((o: any) => ({
+          opportunities={filteredOpportunities.map((o: any) => ({
             opportunity_id: o.opportunity_id,
             name: o.name,
             account_id: o.account_id,
@@ -317,7 +387,7 @@ export default async function DashboardPage() {
             created_at: o.created_at,
             closed_at: o.closed_at,
           }))}
-          activities={(activitiesData || []).map((a: any) => ({
+          activities={filteredActivities.map((a: any) => ({
             activity_id: a.activity_id,
             activity_type: a.activity_type,
             status: a.status,
@@ -515,10 +585,10 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Sales Performance Analytics - For Management Roles */}
+      {/* Sales Performance Analytics - For Management Roles (date-filtered, shows all salespeople) */}
       {(isAdmin(role) || role === 'sales manager' || role === 'Marketing Manager' || role === 'MACX') && (
         <SalesPerformanceAnalytics
-          opportunities={(opportunities || []).map((o: any) => ({
+          opportunities={filterByDate(opportunities || []).map((o: any) => ({
             opportunity_id: o.opportunity_id,
             name: o.name,
             account_id: o.account_id,
@@ -528,7 +598,7 @@ export default async function DashboardPage() {
             created_at: o.created_at,
             closed_at: o.closed_at,
           }))}
-          accounts={(accounts || []).map((a: any) => ({
+          accounts={filterByDate(accounts || []).map((a: any) => ({
             account_id: a.account_id,
             company_name: a.company_name,
             account_status: a.account_status,
@@ -536,7 +606,7 @@ export default async function DashboardPage() {
             created_at: a.created_at,
             first_transaction_date: a.first_transaction_date,
           }))}
-          activities={(activitiesData || []).map((a: any) => ({
+          activities={filterByDate(activitiesData || []).map((a: any) => ({
             activity_id: a.activity_id,
             activity_type: a.activity_type,
             status: a.status,
@@ -564,7 +634,7 @@ export default async function DashboardPage() {
       {/* Salesperson Performance Card - For Individual Salesperson */}
       {role === 'salesperson' && (
         <SalespersonPerformanceCard
-          opportunities={(opportunities || []).map((o: any) => ({
+          opportunities={filterByDate(opportunities || []).map((o: any) => ({
             opportunity_id: o.opportunity_id,
             name: o.name,
             account_id: o.account_id,
@@ -574,7 +644,7 @@ export default async function DashboardPage() {
             created_at: o.created_at,
             closed_at: o.closed_at,
           }))}
-          accounts={(accounts || []).map((a: any) => ({
+          accounts={filterByDate(accounts || []).map((a: any) => ({
             account_id: a.account_id,
             company_name: a.company_name,
             account_status: a.account_status,
@@ -582,7 +652,7 @@ export default async function DashboardPage() {
             created_at: a.created_at,
             first_transaction_date: a.first_transaction_date,
           }))}
-          activities={(activitiesData || []).map((a: any) => ({
+          activities={filterByDate(activitiesData || []).map((a: any) => ({
             activity_id: a.activity_id,
             activity_type: a.activity_type,
             status: a.status,
