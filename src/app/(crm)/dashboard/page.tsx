@@ -36,6 +36,7 @@ import { isAdmin, isMarketing, isSales } from '@/lib/permissions'
 import { SalesPerformanceAnalytics, SalespersonPerformanceCard, WeeklyAnalytics } from '@/components/crm/sales-performance-analytics'
 import { AnalyticsFilter, filterByDateAndSalesperson } from '@/components/crm/analytics-filter'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DashboardInsightsSection } from '@/components/crm/dashboard-insights-section'
 
 export const dynamic = 'force-dynamic'
 
@@ -295,6 +296,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           />
         </Suspense>
       )}
+
+      {/* AI Insights Section - Available for all roles */}
+      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+        <DashboardInsightsSection />
+      </Suspense>
 
       {/* Key Metrics - First Row */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">

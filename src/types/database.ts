@@ -847,6 +847,68 @@ export interface Database {
           created_at?: string
         }
       }
+      insights_growth: {
+        Row: {
+          id: string
+          scope_key: string
+          filters_hash: string
+          filters: Json
+          role_view: string
+          generated_by_user_id: string | null
+          generated_at: string
+          metrics_snapshot: Json
+          insight_json: Json
+          model: string | null
+          latency_ms: number | null
+          tokens_in: number | null
+          tokens_out: number | null
+          is_latest: boolean
+          status: 'pending' | 'generating' | 'completed' | 'failed'
+          error_message: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          scope_key: string
+          filters_hash: string
+          filters?: Json
+          role_view: string
+          generated_by_user_id?: string | null
+          generated_at?: string
+          metrics_snapshot?: Json
+          insight_json?: Json
+          model?: string | null
+          latency_ms?: number | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          is_latest?: boolean
+          status?: 'pending' | 'generating' | 'completed' | 'failed'
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          scope_key?: string
+          filters_hash?: string
+          filters?: Json
+          role_view?: string
+          generated_by_user_id?: string | null
+          generated_at?: string
+          metrics_snapshot?: Json
+          insight_json?: Json
+          model?: string | null
+          latency_ms?: number | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          is_latest?: boolean
+          status?: 'pending' | 'generating' | 'completed' | 'failed'
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       v_lead_inbox: {
