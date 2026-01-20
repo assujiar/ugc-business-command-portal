@@ -65,35 +65,28 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
     try {
       const params = `?period=${period}`
 
-      // Fetch all data in parallel
+      // Fetch all data in parallel - all roles can see performance data (filtered by RBAC on API)
       const [summaryRes, slaRes, responseRes, deptRes, userRes] = await Promise.all([
         fetch(`/api/ticketing/dashboard/summary${params}`),
         fetch(`/api/ticketing/dashboard/sla-metrics${params}`),
         fetch(`/api/ticketing/dashboard/response-time${params}`),
-        canViewAll ? fetch(`/api/ticketing/performance/departments${params}`) : Promise.resolve(null),
-        canViewAll ? fetch(`/api/ticketing/performance/users${params}`) : Promise.resolve(null),
+        fetch(`/api/ticketing/performance/departments${params}`),
+        fetch(`/api/ticketing/performance/users${params}`),
       ])
 
-      const [summaryData, slaData, responseData] = await Promise.all([
+      const [summaryData, slaData, responseData, deptData, userData] = await Promise.all([
         summaryRes.json(),
         slaRes.json(),
         responseRes.json(),
+        deptRes.json(),
+        userRes.json(),
       ])
 
       if (summaryData.success) setSummary(summaryData.data)
       if (slaData.success) setSlaMetrics(slaData.data)
       if (responseData.success) setResponseTime(responseData.data)
-
-      if (canViewAll) {
-        if (deptRes) {
-          const deptData = await deptRes.json()
-          if (deptData.success) setDeptPerformance(deptData.data)
-        }
-        if (userRes) {
-          const userData = await userRes.json()
-          if (userData.success) setUserPerformance(userData.data)
-        }
-      }
+      if (deptData.success) setDeptPerformance(deptData.data)
+      if (userData.success) setUserPerformance(userData.data)
     } catch (err) {
       console.error('Error fetching dashboard data:', err)
     } finally {
@@ -227,8 +220,8 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
         <TabsList>
           <TabsTrigger value="sla">SLA Compliance</TabsTrigger>
           <TabsTrigger value="response">Response Times</TabsTrigger>
-          {canViewAll && <TabsTrigger value="departments">Departments</TabsTrigger>}
-          {canViewAll && <TabsTrigger value="users">Team Performance</TabsTrigger>}
+          <TabsTrigger value="departments">Departments</TabsTrigger>
+          <TabsTrigger value="users">Team Performance</TabsTrigger>
         </TabsList>
 
         {/* SLA Compliance Tab */}
@@ -306,7 +299,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
               </div>
 
               {/* SLA by Department */}
-              {canViewAll && slaMetrics.by_department && (
+              {slaMetrics.by_department && (
                 <Card>
                   <CardHeader>
                     <CardTitle>SLA by Department</CardTitle>
@@ -413,7 +406,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
               </Card>
 
               {/* Top Responders */}
-              {canViewAll && responseTime.top_responders && responseTime.top_responders.length > 0 && (
+              {responseTime.top_responders && responseTime.top_responders.length > 0 && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -445,9 +438,8 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
         </TabsContent>
 
         {/* Departments Tab */}
-        {canViewAll && (
-          <TabsContent value="departments" className="space-y-4">
-            {deptPerformance && (
+        <TabsContent value="departments" className="space-y-4">
+          {deptPerformance && (
               <>
                 {/* Department Rankings */}
                 <div className="grid gap-4 md:grid-cols-2">
@@ -527,13 +519,11 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                 </Card>
               </>
             )}
-          </TabsContent>
-        )}
+        </TabsContent>
 
         {/* Users Tab */}
-        {canViewAll && (
-          <TabsContent value="users" className="space-y-4">
-            {userPerformance && (
+        <TabsContent value="users" className="space-y-4">
+          {userPerformance && (
               <>
                 {/* Leaderboard */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -622,17 +612,9 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
 
                 {/* User Performance List */}
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle>Team Performance</CardTitle>
-                      <CardDescription>{userPerformance.total_users || 0} team members</CardDescription>
-                    </div>
-                    <Link href="/performance">
-                      <Button variant="outline" size="sm">
-                        View Details
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </Link>
+                  <CardHeader>
+                    <CardTitle>Team Performance</CardTitle>
+                    <CardDescription>{userPerformance.total_users || 0} team members</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
@@ -668,8 +650,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                 </Card>
               </>
             )}
-          </TabsContent>
-        )}
+        </TabsContent>
       </Tabs>
 
       {/* Quick Links */}

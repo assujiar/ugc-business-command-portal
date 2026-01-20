@@ -25,6 +25,9 @@ import {
   ChevronRight,
   FolderKanban,
   Ticket,
+  FileText,
+  BarChart3,
+  PlusCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities, canAccessTicketing, canAssignTickets } from '@/lib/permissions'
@@ -171,17 +174,43 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
             {isTicketingModuleExpanded && (
               <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3">
                 <Link
+                  href="/overview"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/overview'
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Overview</span>
+                </Link>
+                <Link
                   href="/tickets"
                   onClick={handleNavClick}
                   className={cn(
                     'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                    pathname === '/tickets'
+                    pathname === '/tickets' || pathname.startsWith('/tickets/')
                       ? 'bg-brand text-white'
                       : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
                   <Ticket className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">All Tickets</span>
+                  <span className="truncate">Tickets</span>
+                </Link>
+                <Link
+                  href="/quotations"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/quotations' || pathname.startsWith('/quotations/')
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <FileText className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Quotations</span>
                 </Link>
                 <Link
                   href="/tickets/new"
@@ -193,7 +222,7 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
                       : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
-                  <Inbox className="h-4 w-4 flex-shrink-0" />
+                  <PlusCircle className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">Create Ticket</span>
                 </Link>
               </div>
