@@ -190,10 +190,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         .from('ticket_events')
         .insert({
           ticket_id: quotation.ticket_id,
-          event_type: status === 'sent' ? 'quote_sent' : 'quote_updated',
-          actor_id: user.id,
+          event_type: status === 'sent' ? 'quote_sent' : 'status_changed',
+          actor_user_id: user.id,
           old_value: { status: quotation.status },
           new_value: { status, quote_number: quotation.quote_number },
+          notes: `Quotation status updated to ${status}`,
         })
     }
 
