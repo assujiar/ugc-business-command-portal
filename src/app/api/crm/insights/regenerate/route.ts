@@ -188,6 +188,7 @@ export async function POST(request: NextRequest) {
 
       // Check if Gemini API key is configured
       const apiKey = process.env.GEMINI_API_KEY
+      console.log('[Insights] GEMINI_API_KEY configured:', apiKey ? 'YES (length: ' + apiKey.length + ')' : 'NO')
       if (!apiKey) {
         // No API key - save snapshot only with fallback insight
         const fallbackInsight: InsightOutput = {
