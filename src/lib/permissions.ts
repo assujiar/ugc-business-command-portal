@@ -382,6 +382,16 @@ export function canViewAllTickets(role: UserRole | null | undefined): boolean {
   return isAdmin(role) || isOps(role)
 }
 
+// Can user view CRM accounts (for account links in ticketing)?
+// Ops roles don't have RLS access to accounts table
+export function canViewCRMAccounts(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  // Ops roles cannot view accounts directly
+  if (isOps(role)) return false
+  // Admin, Sales, Marketing can view accounts
+  return isAdmin(role) || isSales(role) || isMarketing(role)
+}
+
 // Map user role to ticketing department
 export function getUserTicketingDepartment(role: UserRole | null | undefined): string | null {
   if (!role) return null

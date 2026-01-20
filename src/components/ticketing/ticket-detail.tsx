@@ -66,6 +66,7 @@ import {
   canCloseTickets,
   canCreateInternalComments,
   canViewAllTickets,
+  canViewCRMAccounts,
 } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 import type {
@@ -149,6 +150,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const canClose = canCloseTickets(profile.role)
   const canInternalComment = canCreateInternalComments(profile.role)
   const canViewAll = canViewAllTickets(profile.role)
+  const canViewAccounts = canViewCRMAccounts(profile.role)
 
   // Role-based UI
   const isCreator = ticket.created_by === profile.user_id
@@ -1182,13 +1184,20 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Account</p>
                 {ticket.account ? (
-                  <Link
-                    href={`/accounts/${ticket.account.account_id}`}
-                    className="flex items-center gap-2 hover:underline"
-                  >
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-brand">{ticket.account.company_name}</span>
-                  </Link>
+                  canViewAccounts ? (
+                    <Link
+                      href={`/accounts/${ticket.account.account_id}`}
+                      className="flex items-center gap-2 hover:underline"
+                    >
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-brand">{ticket.account.company_name}</span>
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span>{ticket.account.company_name}</span>
+                    </div>
+                  )
                 ) : (
                   <p className="text-muted-foreground">—</p>
                 )}
