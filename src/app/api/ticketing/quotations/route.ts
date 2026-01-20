@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { canAccessTicketing, canViewAllTickets, canCreateQuotes } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
+export const dynamic = 'force-dynamic'
+
 interface ProfileData {
   user_id: string
   role: UserRole
