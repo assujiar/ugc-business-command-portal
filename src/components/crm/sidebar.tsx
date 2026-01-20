@@ -27,7 +27,7 @@ import {
   Ticket,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities } from '@/lib/permissions'
+import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities, canAccessTicketing, canAssignTickets } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -147,34 +147,59 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
         </div>
 
         {/* Ticketing Module Parent Menu */}
-        <div>
-          <button
-            onClick={() => setIsTicketingModuleExpanded(!isTicketingModuleExpanded)}
-            className={cn(
-              'w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm transition-colors',
-              'text-foreground hover:bg-accent hover:text-accent-foreground font-medium'
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <Ticket className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate">Ticketing Module</span>
-            </div>
-            {isTicketingModuleExpanded ? (
-              <ChevronDown className="h-4 w-4 flex-shrink-0" />
-            ) : (
-              <ChevronRight className="h-4 w-4 flex-shrink-0" />
-            )}
-          </button>
-
-          {/* Ticketing Submenu Items - Coming Soon */}
-          {isTicketingModuleExpanded && (
-            <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3">
-              <div className="px-3 py-2 text-sm text-muted-foreground italic">
-                Coming soon...
+        {canAccessTicketing(profile.role) && (
+          <div>
+            <button
+              onClick={() => setIsTicketingModuleExpanded(!isTicketingModuleExpanded)}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm transition-colors',
+                'text-foreground hover:bg-accent hover:text-accent-foreground font-medium'
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Ticket className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">Ticketing Module</span>
               </div>
-            </div>
-          )}
-        </div>
+              {isTicketingModuleExpanded ? (
+                <ChevronDown className="h-4 w-4 flex-shrink-0" />
+              ) : (
+                <ChevronRight className="h-4 w-4 flex-shrink-0" />
+              )}
+            </button>
+
+            {/* Ticketing Submenu Items */}
+            {isTicketingModuleExpanded && (
+              <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3">
+                <Link
+                  href="/tickets"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/tickets'
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <Ticket className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">All Tickets</span>
+                </Link>
+                <Link
+                  href="/tickets/new"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/tickets/new'
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <Inbox className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Create Ticket</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
       </nav>
 
       <div className="p-4 border-t">

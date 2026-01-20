@@ -1052,6 +1052,216 @@ export interface Database {
       cadence_enrollment_status: CadenceEnrollmentStatus
       prospecting_target_status: ProspectingTargetStatus
       user_role: UserRole
+      // Ticketing enums
+      ticket_type: TicketType
+      ticket_status: TicketStatus
+      ticket_priority: TicketPriority
+      ticket_close_outcome: TicketCloseOutcome
+      quote_status: QuoteStatus
+      ticket_event_type: TicketEventType
+      ticketing_department: TicketingDepartment
     }
   }
+}
+
+// =====================================================
+// Ticketing Module Types
+// =====================================================
+
+// Ticketing Enums
+export type TicketType = 'RFQ' | 'GEN'
+export type TicketStatus = 'open' | 'need_response' | 'in_progress' | 'waiting_customer' | 'need_adjustment' | 'pending' | 'resolved' | 'closed'
+export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent'
+export type TicketCloseOutcome = 'won' | 'lost'
+export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected'
+export type TicketEventType = 'created' | 'assigned' | 'reassigned' | 'status_changed' | 'priority_changed' | 'comment_added' | 'attachment_added' | 'quote_created' | 'quote_sent' | 'resolved' | 'closed' | 'reopened'
+export type TicketingDepartment = 'MKT' | 'SAL' | 'DOM' | 'EXI' | 'DTD' | 'TRF'
+
+// RFQ Data structure
+export interface RFQData {
+  customer_name: string
+  customer_email: string | null
+  customer_phone: string | null
+  service_type: string
+  cargo_category: 'DG' | 'Genco'
+  cargo_description: string
+  origin_address: string
+  origin_city: string
+  origin_country: string
+  destination_address: string
+  destination_city: string
+  destination_country: string
+  quantity: number
+  unit_of_measure: string
+  weight_per_unit: number
+  packaging_type: string | null
+  weight_with_packaging: number | null
+  hs_code: string | null
+  length: number
+  width: number
+  height: number
+  volume_per_unit: number
+  total_volume: number
+  fleet_requirement: string | null
+  scope_of_work: string
+  additional_notes: string | null
+  estimated_project_date: string | null
+}
+
+// Ticket interface
+export interface Ticket {
+  id: string
+  ticket_code: string
+  ticket_type: TicketType
+  status: TicketStatus
+  priority: TicketPriority
+  subject: string
+  description: string | null
+  department: TicketingDepartment
+  account_id: string | null
+  contact_id: string | null
+  created_by: string
+  assigned_to: string | null
+  rfq_data: RFQData | null
+  created_at: string
+  updated_at: string
+  first_response_at: string | null
+  resolved_at: string | null
+  closed_at: string | null
+  close_outcome: TicketCloseOutcome | null
+  close_reason: string | null
+  competitor_name: string | null
+  competitor_cost: number | null
+  // Relations (when joined)
+  creator?: {
+    user_id: string
+    name: string
+    email: string
+  }
+  assignee?: {
+    user_id: string
+    name: string
+    email: string
+  } | null
+  account?: {
+    account_id: string
+    company_name: string
+  } | null
+}
+
+// Ticket Event (audit trail)
+export interface TicketEvent {
+  id: string
+  ticket_id: string
+  event_type: TicketEventType
+  actor_user_id: string
+  old_value: Json | null
+  new_value: Json | null
+  notes: string | null
+  ip_address: string | null
+  created_at: string
+  actor?: {
+    user_id: string
+    name: string
+  }
+}
+
+// Ticket Comment
+export interface TicketComment {
+  id: string
+  ticket_id: string
+  user_id: string
+  content: string
+  is_internal: boolean
+  response_time_seconds: number | null
+  response_direction: string | null
+  created_at: string
+  updated_at: string
+  user?: {
+    user_id: string
+    name: string
+    email: string
+  }
+}
+
+// Ticket Attachment
+export interface TicketAttachment {
+  id: string
+  ticket_id: string
+  comment_id: string | null
+  file_name: string
+  file_url: string
+  file_type: string
+  file_size: number
+  uploaded_by: string
+  created_at: string
+  uploader?: {
+    user_id: string
+    name: string
+  }
+}
+
+// Ticket Assignment
+export interface TicketAssignment {
+  id: string
+  ticket_id: string
+  assigned_to: string
+  assigned_by: string
+  assigned_at: string
+  notes: string | null
+  assignee?: {
+    user_id: string
+    name: string
+    email: string
+  }
+  assigner?: {
+    user_id: string
+    name: string
+  }
+}
+
+// Ticket Rate Quote
+export interface TicketRateQuote {
+  id: string
+  ticket_id: string
+  quote_number: string
+  amount: number
+  currency: string
+  valid_until: string
+  terms: string | null
+  status: QuoteStatus
+  created_by: string
+  created_at: string
+  updated_at: string
+  creator?: {
+    user_id: string
+    name: string
+  }
+}
+
+// SLA Tracking
+export interface TicketSLATracking {
+  id: string
+  ticket_id: string
+  first_response_at: string | null
+  first_response_sla_hours: number
+  first_response_met: boolean | null
+  resolution_at: string | null
+  resolution_sla_hours: number
+  resolution_met: boolean | null
+  created_at: string
+  updated_at: string
+}
+
+// Ticketing Dashboard Summary
+export interface TicketingDashboardSummary {
+  total_tickets: number
+  open_tickets: number
+  in_progress_tickets: number
+  pending_tickets: number
+  resolved_tickets: number
+  closed_tickets: number
+  tickets_by_department: Array<{ department: string; count: number }>
+  tickets_by_status: Array<{ status: string; count: number }>
+  tickets_by_priority: Array<{ priority: string; count: number }>
 }
