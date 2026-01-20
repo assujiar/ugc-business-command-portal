@@ -10,7 +10,10 @@ import { getSessionAndProfile } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import { canAccessPipeline, isAdmin } from '@/lib/permissions'
+import { AnalyticsFilter } from '@/components/crm/analytics-filter'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { UserRole } from '@/types/database'
 
 // Force dynamic rendering - required for authenticated pages
@@ -31,7 +34,11 @@ function isMarketingManagerRole(role: UserRole): boolean {
   return role === 'Marketing Manager' || role === 'MACX'
 }
 
-export default async function PipelinePage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function PipelinePage({ searchParams }: PageProps) {
   const supabase = await createClient()
   const adminClient = createAdminClient()
   const { profile } = await getSessionAndProfile()
@@ -44,6 +51,18 @@ export default async function PipelinePage() {
   if (!canAccessPipeline(profile.role)) {
     redirect('/dashboard')
   }
+
+  // Get filter params
+  const params = await searchParams
+  const startDate = typeof params.startDate === 'string' ? params.startDate : null
+  const endDate = typeof params.endDate === 'string' ? params.endDate : null
+  const salespersonId = typeof params.salespersonId === 'string' ? params.salespersonId : null
+
+  // Fetch sales profiles for filter dropdown
+  const { data: salesProfiles } = await (adminClient as any)
+    .from('profiles')
+    .select('user_id, name, email, role')
+    .in('role', ['salesperson', 'sales manager', 'sales support'])
 
   // Step 1: Fetch opportunities from view
   // v_pipeline_with_updates already includes:
@@ -135,6 +154,29 @@ export default async function PipelinePage() {
     })
   }
 
+  // Step 2.5: Apply date and salesperson filters
+  if (startDate || endDate || salespersonId) {
+    filteredOpportunities = filteredOpportunities.filter((opp: any) => {
+      // Date filter
+      if (startDate || endDate) {
+        const oppDate = opp.created_at ? new Date(opp.created_at) : null
+        if (oppDate) {
+          if (startDate && oppDate < new Date(startDate)) return false
+          if (endDate) {
+            const endOfDay = new Date(endDate)
+            endOfDay.setHours(23, 59, 59, 999)
+            if (oppDate > endOfDay) return false
+          }
+        }
+      }
+      // Salesperson filter
+      if (salespersonId && opp.owner_user_id !== salespersonId) {
+        return false
+      }
+      return true
+    })
+  }
+
   // Step 3: Fetch stage history from pipeline_updates table
   const opportunityIds: string[] = filteredOpportunities.map((o: any) => o.opportunity_id)
   const stageHistoryMap: Record<string, Array<{ new_stage: string; changed_at: string }>> = {}
@@ -218,6 +260,10 @@ export default async function PipelinePage() {
     attempt_number: opp.attempt_number,
   }))
 
+  // Determine if user can see salesperson filter (management roles only)
+  const showSalespersonFilter = isAdmin(profile.role) || profile.role === 'sales manager' ||
+    profile.role === 'Marketing Manager' || profile.role === 'MACX'
+
   return (
     <div className="space-y-4 lg:space-y-6">
       <div>
@@ -226,6 +272,19 @@ export default async function PipelinePage() {
           Manage your sales pipeline and opportunities
         </p>
       </div>
+
+      {/* Filter Section */}
+      <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+        <AnalyticsFilter
+          salesProfiles={(salesProfiles || []).map((p: any) => ({
+            user_id: p.user_id,
+            name: p.name,
+            email: p.email,
+            role: p.role,
+          }))}
+          showSalespersonFilter={showSalespersonFilter}
+        />
+      </Suspense>
 
       <PipelineTabs
         opportunities={transformedOpportunities}
