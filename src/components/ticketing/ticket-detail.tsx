@@ -66,6 +66,7 @@ import {
   canCloseTickets,
   canCreateInternalComments,
   canViewAllTickets,
+  canViewCRMAccounts,
 } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 import type {
@@ -149,6 +150,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const canClose = canCloseTickets(profile.role)
   const canInternalComment = canCreateInternalComments(profile.role)
   const canViewAll = canViewAllTickets(profile.role)
+  const canViewAccounts = canViewCRMAccounts(profile.role)
 
   // Role-based UI
   const isCreator = ticket.created_by === profile.user_id
@@ -495,6 +497,36 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     })
   }
 
+  // Format duration from seconds
+  const formatDuration = (seconds: number | null | undefined): string => {
+    if (seconds === null || seconds === undefined) return 'N/A'
+    const days = Math.floor(seconds / 86400)
+    const hours = Math.floor((seconds % 86400) / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+
+    let result = ''
+    if (days > 0) result += `${days}d `
+    if (hours > 0 || days > 0) result += `${hours}h `
+    result += `${minutes}m`
+    return result.trim()
+  }
+
+  // Get first response time from exchanges or metrics
+  const getFirstResponseFormatted = (): string => {
+    // First try metrics
+    if (slaDetails?.metrics?.assignee?.first_response_formatted) {
+      return slaDetails.metrics.assignee.first_response_formatted
+    }
+    // Fallback to exchanges - find first assignee response
+    const firstAssigneeExchange = slaDetails?.exchanges?.find(
+      (ex) => ex.responder_type === 'assignee' && ex.exchange_number === 1
+    )
+    if (firstAssigneeExchange?.business_response_seconds) {
+      return formatDuration(firstAssigneeExchange.business_response_seconds)
+    }
+    return 'N/A'
+  }
+
   // Get available status transitions
   const getAvailableTransitions = (): TicketStatus[] => {
     const currentStatus = ticket.status as TicketStatus
@@ -622,7 +654,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                 <p className="text-sm font-medium text-muted-foreground">First Response</p>
                 {slaDetails.sla?.first_response_at ? (
                   <p className="text-sm mt-1">
-                    {slaDetails.metrics?.assignee?.first_response_formatted || 'N/A'}
+                    {getFirstResponseFormatted()}
                     {slaDetails.sla?.first_response_met !== null && (
                       <span className={slaDetails.sla.first_response_met ? 'text-green-600 ml-1' : 'text-red-600 ml-1'}>
                         ({slaDetails.sla.first_response_met ? 'Met' : 'Missed'})
@@ -827,8 +859,10 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
               <CardContent className="space-y-4">
                 {/* Comment Form */}
                 <div className="space-y-3">
-                  <Label>Add Comment</Label>
+                  <Label htmlFor="ticket-comment">Add Comment</Label>
                   <Textarea
+                    id="ticket-comment"
+                    name="ticket-comment"
                     placeholder="Write your message..."
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
@@ -937,24 +971,30 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                               </DialogHeader>
                               <div className="space-y-4">
                                 <div>
-                                  <Label>Reason</Label>
+                                  <Label htmlFor="lost-reason">Reason</Label>
                                   <Textarea
+                                    id="lost-reason"
+                                    name="lost-reason"
                                     placeholder="Why was this lost?"
                                     value={lostReason}
                                     onChange={(e) => setLostReason(e.target.value)}
                                   />
                                 </div>
                                 <div>
-                                  <Label>Competitor Name (optional)</Label>
+                                  <Label htmlFor="lost-competitor">Competitor Name (optional)</Label>
                                   <Input
+                                    id="lost-competitor"
+                                    name="lost-competitor"
                                     placeholder="Who won the deal?"
                                     value={lostCompetitor}
                                     onChange={(e) => setLostCompetitor(e.target.value)}
                                   />
                                 </div>
                                 <div>
-                                  <Label>Competitor Cost (optional)</Label>
+                                  <Label htmlFor="lost-competitor-cost">Competitor Cost (optional)</Label>
                                   <Input
+                                    id="lost-competitor-cost"
+                                    name="lost-competitor-cost"
                                     type="number"
                                     placeholder="Competitor's price"
                                     value={lostCompetitorCost}
@@ -1005,8 +1045,10 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                             </DialogHeader>
                             <div className="space-y-4">
                               <div>
-                                <Label>Amount *</Label>
+                                <Label htmlFor="quote-amount">Amount *</Label>
                                 <Input
+                                  id="quote-amount"
+                                  name="quote-amount"
                                   type="number"
                                   placeholder="Enter amount"
                                   value={quoteAmount}
@@ -1014,9 +1056,9 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                 />
                               </div>
                               <div>
-                                <Label>Currency</Label>
+                                <Label htmlFor="quote-currency">Currency</Label>
                                 <Select value={quoteCurrency} onValueChange={setQuoteCurrency}>
-                                  <SelectTrigger>
+                                  <SelectTrigger id="quote-currency">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -1027,8 +1069,10 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                 </Select>
                               </div>
                               <div>
-                                <Label>Terms & Conditions (optional)</Label>
+                                <Label htmlFor="quote-terms">Terms & Conditions (optional)</Label>
                                 <Textarea
+                                  id="quote-terms"
+                                  name="quote-terms"
                                   placeholder="Enter any terms or conditions"
                                   value={quoteTerms}
                                   onChange={(e) => setQuoteTerms(e.target.value)}
@@ -1140,13 +1184,20 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Account</p>
                 {ticket.account ? (
-                  <Link
-                    href={`/accounts/${ticket.account.account_id}`}
-                    className="flex items-center gap-2 hover:underline"
-                  >
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-brand">{ticket.account.company_name}</span>
-                  </Link>
+                  canViewAccounts ? (
+                    <Link
+                      href={`/accounts/${ticket.account.account_id}`}
+                      className="flex items-center gap-2 hover:underline"
+                    >
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-brand">{ticket.account.company_name}</span>
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span>{ticket.account.company_name}</span>
+                    </div>
+                  )
                 ) : (
                   <p className="text-muted-foreground">—</p>
                 )}
@@ -1220,12 +1271,12 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                 {/* Assign */}
                 {canAssign && (
                   <div className="space-y-2">
-                    <Label>Assign To</Label>
+                    <Label htmlFor="assign-to">Assign To</Label>
                     <Select
                       value={ticket.assigned_to || ''}
                       onValueChange={handleAssign}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="assign-to">
                         <SelectValue placeholder="Select assignee" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1242,12 +1293,12 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                 {/* Status Transition */}
                 {canTransition && getAvailableTransitions().length > 0 && (
                   <div className="space-y-2">
-                    <Label>Change Status</Label>
+                    <Label htmlFor="change-status">Change Status</Label>
                     <Select
                       value=""
                       onValueChange={(value) => handleTransition(value as TicketStatus)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="change-status">
                         <SelectValue placeholder="Select new status" />
                       </SelectTrigger>
                       <SelectContent>
