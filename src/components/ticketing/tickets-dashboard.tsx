@@ -103,7 +103,7 @@ export function TicketsDashboard({ profile }: TicketsDashboardProps) {
   const fetchTickets = async () => {
     setLoading(true)
     try {
-      let query = supabase
+      let query = (supabase as any)
         .from('tickets')
         .select(`
           *,
@@ -142,10 +142,11 @@ export function TicketsDashboard({ profile }: TicketsDashboardProps) {
         return
       }
 
-      setTickets(data || [])
+      const ticketData = (data || []) as TicketType[]
+      setTickets(ticketData)
 
       // Calculate stats
-      const allTickets = data || []
+      const allTickets = ticketData
       setStats({
         total: allTickets.length,
         open: allTickets.filter(t => t.status === 'open' || t.status === 'need_response').length,

@@ -5,10 +5,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, canTransitionTickets, canViewAllTickets } from '@/lib/permissions'
+import { canAccessTicketing, canTransitionTickets } from '@/lib/permissions'
+import type { UserRole } from '@/types/database'
 
 interface RouteParams {
   params: Promise<{ id: string }>
+}
+
+interface ProfileData {
+  user_id: string
+  role: UserRole
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -23,22 +29,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get user profile
-    const { data: profile } = await supabase
+    const { data: profileData } = await (supabase as any)
       .from('profiles')
-      .select('*')
+      .select('user_id, role')
       .eq('user_id', user.id)
-      .single()
+      .single() as { data: ProfileData | null }
+
+    const profile = profileData
 
     if (!profile || !canAccessTicketing(profile.role)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
     // Get current ticket to check access
-    const { data: ticket } = await supabase
+    const { data: ticket } = await (supabase as any)
       .from('tickets')
       .select('created_by, assigned_to')
       .eq('id', id)
-      .single()
+      .single() as { data: { created_by: string; assigned_to: string | null } | null }
 
     if (!ticket) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
@@ -74,7 +82,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Call RPC to transition ticket atomically
-    const { data: result, error } = await supabase.rpc('rpc_ticket_transition', {
+    const { data: result, error } = await (supabase as any).rpc('rpc_ticket_transition', {
       p_ticket_id: id,
       p_new_status: new_status,
       p_notes: notes || null,

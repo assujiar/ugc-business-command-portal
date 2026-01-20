@@ -7,6 +7,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccessTicketing, canViewAllTickets } from '@/lib/permissions'
+import type { UserRole } from '@/types/database'
+
+interface ProfileData {
+  user_id: string
+  role: UserRole
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,11 +25,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile
-    const { data: profile } = await supabase
+    const { data: profileData } = await (supabase as any)
       .from('profiles')
-      .select('*')
+      .select('user_id, role')
       .eq('user_id', user.id)
-      .single()
+      .single() as { data: ProfileData | null }
+
+    const profile = profileData
 
     if (!profile || !canAccessTicketing(profile.role)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -41,7 +49,7 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0')
 
     // Build query
-    let query = supabase
+    let query = (supabase as any)
       .from('tickets')
       .select(`
         *,
@@ -100,11 +108,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user profile
-    const { data: profile } = await supabase
+    const { data: profileData } = await (supabase as any)
       .from('profiles')
-      .select('*')
+      .select('user_id, role')
       .eq('user_id', user.id)
-      .single()
+      .single() as { data: ProfileData | null }
+
+    const profile = profileData
 
     if (!profile || !canAccessTicketing(profile.role)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -132,7 +142,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Call RPC to create ticket atomically
-    const { data: result, error } = await supabase.rpc('rpc_ticket_create', {
+    const { data: result, error } = await (supabase as any).rpc('rpc_ticket_create', {
       p_ticket_type: ticket_type,
       p_subject: subject,
       p_description: description || null,

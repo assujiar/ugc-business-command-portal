@@ -7,9 +7,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccessTicketing, canViewAllTickets } from '@/lib/permissions'
+import type { UserRole } from '@/types/database'
 
 interface RouteParams {
   params: Promise<{ id: string }>
+}
+
+interface ProfileData {
+  user_id: string
+  role: UserRole
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -24,18 +30,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get user profile
-    const { data: profile } = await supabase
+    const { data: profileData } = await (supabase as any)
       .from('profiles')
-      .select('*')
+      .select('user_id, role')
       .eq('user_id', user.id)
-      .single()
+      .single() as { data: ProfileData | null }
+
+    const profile = profileData
 
     if (!profile || !canAccessTicketing(profile.role)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
     // Fetch ticket with relations
-    const { data: ticket, error } = await supabase
+    const { data: ticket, error } = await (supabase as any)
       .from('tickets')
       .select(`
         *,
@@ -63,7 +71,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Fetch SLA tracking
-    const { data: slaTracking } = await supabase
+    const { data: slaTracking } = await (supabase as any)
       .from('ticket_sla_tracking')
       .select('*')
       .eq('ticket_id', id)
@@ -94,18 +102,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get user profile
-    const { data: profile } = await supabase
+    const { data: profileData } = await (supabase as any)
       .from('profiles')
-      .select('*')
+      .select('user_id, role')
       .eq('user_id', user.id)
-      .single()
+      .single() as { data: ProfileData | null }
+
+    const profile = profileData
 
     if (!profile || !canAccessTicketing(profile.role)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
     // Get current ticket
-    const { data: ticket, error: fetchError } = await supabase
+    const { data: ticket, error: fetchError } = await (supabase as any)
       .from('tickets')
       .select('*')
       .eq('id', id)
@@ -138,7 +148,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // Update ticket
-    const { data: updatedTicket, error } = await supabase
+    const { data: updatedTicket, error } = await (supabase as any)
       .from('tickets')
       .update(updates)
       .eq('id', id)
