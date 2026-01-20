@@ -7,7 +7,7 @@
 import type { GrowthSnapshot, InsightOutput } from '@/types/insights'
 import { validateInsightOutput, sanitizeOutput } from './quality-gates'
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
 
 interface GeminiResponse {
   candidates?: Array<{
