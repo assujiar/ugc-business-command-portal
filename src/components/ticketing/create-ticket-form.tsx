@@ -85,7 +85,7 @@ interface FormData {
   account_id?: string
 }
 
-// Department options
+// Department options for General Request
 const departments: { value: TicketingDepartment; label: string }[] = [
   { value: 'MKT', label: 'Marketing' },
   { value: 'SAL', label: 'Sales' },
@@ -94,6 +94,13 @@ const departments: { value: TicketingDepartment; label: string }[] = [
   { value: 'DTD', label: 'Import DTD Operations' },
   { value: 'TRF', label: 'Traffic & Warehouse' },
 ]
+
+// Service Department to Ticketing Department mapping (for RFQ auto-mapping)
+const serviceDepartmentToTicketingDept: Record<string, TicketingDepartment> = {
+  'Domestics Operations': 'DOM',
+  'Exim Operations': 'EXI',
+  'Import DTD Operations': 'DTD',
+}
 
 export function CreateTicketForm({ profile }: CreateTicketFormProps) {
   const router = useRouter()
@@ -170,6 +177,16 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     (s) => s.code === shipmentData.service_type_code
   )
 
+  // Auto-map department based on service type for RFQ tickets
+  useEffect(() => {
+    if (ticketType === 'RFQ' && selectedService?.department) {
+      const mappedDept = serviceDepartmentToTicketingDept[selectedService.department]
+      if (mappedDept) {
+        setValue('department', mappedDept)
+      }
+    }
+  }, [ticketType, selectedService, setValue])
+
   // Auto-calculate weight total
   useEffect(() => {
     if (shipmentData.quantity && shipmentData.weight_per_unit_kg) {
@@ -235,7 +252,26 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     try {
       // Build RFQ data if ticket type is RFQ
       let rfq_data = null
+      let finalDepartment = data.department
+
       if (ticketType === 'RFQ') {
+        // Validate service type is selected
+        if (!shipmentData.service_type_code || !selectedService) {
+          toast({
+            title: 'Error',
+            description: 'Pilih Service Type terlebih dahulu',
+            variant: 'destructive',
+          })
+          setLoading(false)
+          return
+        }
+
+        // Auto-determine department from service type
+        const mappedDept = serviceDepartmentToTicketingDept[selectedService.department]
+        if (mappedDept) {
+          finalDepartment = mappedDept
+        }
+
         rfq_data = {
           service_type_code: shipmentData.service_type_code,
           service_type: selectedService?.name || null,
@@ -272,7 +308,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
           ticket_type: ticketType,
           subject: data.subject,
           description: data.description,
-          department: data.department,
+          department: finalDepartment,
           priority: data.priority,
           account_id: data.account_id || null,
           rfq_data,
@@ -357,24 +393,39 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="department">Department *</Label>
-              <Select
-                defaultValue={watch('department')}
-                onValueChange={(value) => setValue('department', value as TicketingDepartment)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((dept) => (
-                    <SelectItem key={dept.value} value={dept.value}>
-                      {dept.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Department - only show for General Request */}
+            {ticketType === 'GEN' ? (
+              <div className="space-y-2">
+                <Label htmlFor="department">Department Tujuan *</Label>
+                <Select
+                  defaultValue={watch('department')}
+                  onValueChange={(value) => setValue('department', value as TicketingDepartment)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.value} value={dept.value}>
+                        {dept.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Department Tujuan</Label>
+                <Input
+                  value={selectedService?.department || 'Pilih Service Type di bawah'}
+                  disabled
+                  className="bg-muted"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Auto dari Service Type yang dipilih
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="priority">Priority *</Label>
               <Select

@@ -164,19 +164,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: rpcResult.error || 'Failed to create ticket' }, { status: 400 })
     }
 
-    // Auto-assign to department manager
+    // Auto-assign to department ops/manager
+    // Department to Role mapping based on actual UserRole enum
     const departmentRoleMap: Record<string, string> = {
-      MKT: 'ops_mkt',
-      SAL: 'ops_sal',
-      DOM: 'ops_dom',
-      EXI: 'ops_exi',
-      DTD: 'ops_dtd',
-      TRF: 'ops_trf',
+      MKT: 'Marketing Manager',
+      SAL: 'sales manager',
+      DOM: 'domestics Ops',
+      EXI: 'EXIM Ops',
+      DTD: 'Import DTD Ops',
+      TRF: 'traffic & warehous',
     }
 
     const targetRole = departmentRoleMap[department]
     if (targetRole && rpcResult.ticket_id) {
-      // Find the department manager (ops role user)
+      // Find the department manager/ops user
       const { data: deptManager } = await (supabase as any)
         .from('profiles')
         .select('user_id, name')
@@ -186,7 +187,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (deptManager) {
-        // Assign ticket to department manager
+        // Assign ticket to department manager/ops
         await (supabase as any)
           .from('tickets')
           .update({ assigned_to: deptManager.user_id })
@@ -201,7 +202,7 @@ export async function POST(request: NextRequest) {
             actor_user_id: user.id,
             old_value: null,
             new_value: deptManager.user_id,
-            notes: `Auto-assigned to ${deptManager.name} (${department} department manager)`,
+            notes: `Auto-assigned to ${deptManager.name} (${department} department)`,
           })
       }
     }

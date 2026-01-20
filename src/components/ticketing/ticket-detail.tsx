@@ -692,10 +692,13 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Account</p>
                 {ticket.account ? (
-                  <div className="flex items-center gap-2">
+                  <Link
+                    href={`/accounts/${ticket.account.account_id}`}
+                    className="flex items-center gap-2 hover:underline"
+                  >
                     <Building2 className="h-4 w-4 text-muted-foreground" />
                     <span className="text-brand">{ticket.account.company_name}</span>
-                  </div>
+                  </Link>
                 ) : (
                   <p className="text-muted-foreground">—</p>
                 )}

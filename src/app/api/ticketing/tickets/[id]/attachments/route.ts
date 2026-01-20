@@ -208,7 +208,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .insert({
         ticket_id: id,
         event_type: 'attachment_added',
-        actor_id: user.id,
+        actor_user_id: user.id,
         new_value: { file_name: file.name, file_size: file.size },
       })
 
@@ -290,14 +290,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Failed to delete attachment' }, { status: 500 })
     }
 
-    // Record event
+    // Record event (use attachment_added with notes to indicate removal)
     await (supabase as any)
       .from('ticket_events')
       .insert({
         ticket_id: id,
-        event_type: 'attachment_removed',
-        actor_id: user.id,
-        old_value: { file_name: attachment.file_name },
+        event_type: 'attachment_added',
+        actor_user_id: user.id,
+        old_value: { file_name: attachment.file_name, action: 'removed' },
+        new_value: null,
+        notes: `Attachment removed: ${attachment.file_name}`,
       })
 
     return NextResponse.json({
