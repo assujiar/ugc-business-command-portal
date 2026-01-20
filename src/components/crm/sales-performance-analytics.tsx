@@ -45,6 +45,7 @@ import {
   Phone,
   MessageSquare,
   Mail,
+  BarChart3,
 } from 'lucide-react'
 import type { UserRole, OpportunityStage, ApproachMethod, AccountStatus } from '@/types/database'
 
@@ -749,6 +750,231 @@ interface SalespersonPerformanceCardProps {
   salesProfiles: SalesProfile[]
   currentUserId: string
   currentUserName: string
+}
+
+// =====================================================
+// Weekly Analytics Component
+// Shows weekly activities, pipeline, revenue opportunity
+// For management roles: aggregate all sales data
+// For salesperson: only their own data
+// =====================================================
+
+interface WeeklyAnalyticsProps {
+  opportunities: Opportunity[]
+  activities: Activity[]
+  currentUserId?: string
+  currentUserRole?: UserRole
+  isAggregate: boolean // true for management roles, false for salesperson
+}
+
+// Get start and end of current week (Monday to Sunday)
+function getCurrentWeekRange(): { start: Date; end: Date } {
+  const now = new Date()
+  const dayOfWeek = now.getDay()
+  const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+
+  const start = new Date(now)
+  start.setDate(now.getDate() - diffToMonday)
+  start.setHours(0, 0, 0, 0)
+
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+
+  return { start, end }
+}
+
+export function WeeklyAnalytics({
+  opportunities,
+  activities,
+  currentUserId,
+  currentUserRole,
+  isAggregate,
+}: WeeklyAnalyticsProps) {
+  const weeklyData = useMemo(() => {
+    const { start, end } = getCurrentWeekRange()
+
+    // Filter data based on role
+    let filteredActivities = activities
+    let filteredOpportunities = opportunities
+
+    if (!isAggregate && currentUserId) {
+      // Salesperson: only their own data
+      filteredActivities = activities.filter(a => a.owner_user_id === currentUserId)
+      filteredOpportunities = opportunities.filter(o => o.owner_user_id === currentUserId)
+    }
+
+    // Weekly activities (created this week)
+    const weeklyActivities = filteredActivities.filter(a => {
+      const createdAt = new Date(a.created_at)
+      return createdAt >= start && createdAt <= end
+    })
+
+    // Activities breakdown for the week
+    const weeklyActivitiesBreakdown = {
+      site_visit: weeklyActivities.filter(a => a.activity_type === 'Site Visit').length,
+      online_meeting: weeklyActivities.filter(a => a.activity_type === 'Online Meeting').length,
+      phone_call: weeklyActivities.filter(a => a.activity_type === 'Phone Call').length,
+      call: weeklyActivities.filter(a => a.activity_type === 'Call').length,
+      meeting: weeklyActivities.filter(a => a.activity_type === 'Meeting').length,
+      whatsapp: weeklyActivities.filter(a => a.activity_type === 'WhatsApp').length,
+      email: weeklyActivities.filter(a => a.activity_type === 'Email').length,
+    }
+
+    // Weekly pipeline (active opportunities created this week)
+    const weeklyNewOpportunities = filteredOpportunities.filter(o => {
+      const createdAt = new Date(o.created_at)
+      return createdAt >= start && createdAt <= end
+    })
+    const weeklyPipelineValue = weeklyNewOpportunities
+      .filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
+      .reduce((sum, o) => sum + (o.estimated_value || 0), 0)
+
+    // Weekly revenue opportunity (total value of new opportunities this week)
+    const weeklyRevenueOpportunity = weeklyNewOpportunities
+      .reduce((sum, o) => sum + (o.estimated_value || 0), 0)
+
+    // Total active pipeline (not just this week)
+    const totalActivePipeline = filteredOpportunities
+      .filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
+      .reduce((sum, o) => sum + (o.estimated_value || 0), 0)
+
+    return {
+      weeklyActivitiesCount: weeklyActivities.length,
+      weeklyActivitiesBreakdown,
+      weeklyPipelineValue,
+      weeklyNewOpportunitiesCount: weeklyNewOpportunities.length,
+      weeklyRevenueOpportunity,
+      totalActivePipeline,
+    }
+  }, [opportunities, activities, currentUserId, isAggregate])
+
+  // Format week range for display
+  const { start, end } = getCurrentWeekRange()
+  const weekRangeText = `${start.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 text-indigo-500" />
+          Weekly Analytics
+          <Badge variant="outline" className="ml-auto text-xs font-normal">
+            {weekRangeText}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+          {/* Weekly Activities */}
+          <div className="p-3 rounded-lg bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-950 dark:to-gray-950 border">
+            <div className="flex items-center gap-2 mb-1">
+              <Activity className="h-4 w-4 text-slate-600" />
+              <span className="text-xs text-muted-foreground">Weekly Activities</span>
+            </div>
+            {weeklyData.weeklyActivitiesCount > 0 ? (
+              <>
+                <p className="text-lg font-bold text-slate-600">{weeklyData.weeklyActivitiesCount}</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {weeklyData.weeklyActivitiesBreakdown.site_visit > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <MapPin className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.site_visit}
+                    </span>
+                  )}
+                  {weeklyData.weeklyActivitiesBreakdown.online_meeting > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Video className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.online_meeting}
+                    </span>
+                  )}
+                  {weeklyData.weeklyActivitiesBreakdown.phone_call > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Phone className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.phone_call}
+                    </span>
+                  )}
+                  {weeklyData.weeklyActivitiesBreakdown.call > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Phone className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.call}
+                    </span>
+                  )}
+                  {weeklyData.weeklyActivitiesBreakdown.meeting > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Users className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.meeting}
+                    </span>
+                  )}
+                  {weeklyData.weeklyActivitiesBreakdown.whatsapp > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <MessageSquare className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.whatsapp}
+                    </span>
+                  )}
+                  {weeklyData.weeklyActivitiesBreakdown.email > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Mail className="h-3 w-3" />{weeklyData.weeklyActivitiesBreakdown.email}
+                    </span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            )}
+          </div>
+
+          {/* Weekly Pipeline */}
+          <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="h-4 w-4 text-blue-600" />
+              <span className="text-xs text-muted-foreground">Weekly Pipeline</span>
+            </div>
+            {weeklyData.weeklyPipelineValue > 0 ? (
+              <>
+                <p className="text-lg font-bold text-blue-600">{formatCurrency(weeklyData.weeklyPipelineValue)}</p>
+                <p className="text-xs text-muted-foreground">{weeklyData.weeklyNewOpportunitiesCount} new opp</p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-bold text-muted-foreground">N/A</p>
+                <p className="text-xs text-muted-foreground">No new pipeline this week</p>
+              </>
+            )}
+          </div>
+
+          {/* Weekly Revenue Opportunity */}
+          <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border">
+            <div className="flex items-center gap-2 mb-1">
+              <Target className="h-4 w-4 text-green-600" />
+              <span className="text-xs text-muted-foreground">Revenue Opportunity</span>
+            </div>
+            {weeklyData.weeklyRevenueOpportunity > 0 ? (
+              <>
+                <p className="text-lg font-bold text-green-600">{formatCurrency(weeklyData.weeklyRevenueOpportunity)}</p>
+                <p className="text-xs text-muted-foreground">New opportunities</p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-bold text-muted-foreground">N/A</p>
+                <p className="text-xs text-muted-foreground">No new opportunity</p>
+              </>
+            )}
+          </div>
+
+          {/* Weekly Actual Revenue - Placeholder for DSO/AR */}
+          <div className="p-3 rounded-lg bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950 dark:to-yellow-950 border">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="h-4 w-4 text-amber-600" />
+              <span className="text-xs text-muted-foreground">Actual Revenue</span>
+            </div>
+            <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            <p className="text-xs text-muted-foreground">From DSO/AR module</p>
+          </div>
+        </div>
+
+        {/* Total Active Pipeline Summary */}
+        <div className="mt-3 pt-3 border-t flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Total Active Pipeline:</span>
+          <span className="font-semibold text-blue-600">{formatCurrency(weeklyData.totalActivePipeline)}</span>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export function SalespersonPerformanceCard({

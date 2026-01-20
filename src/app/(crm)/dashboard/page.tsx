@@ -32,7 +32,7 @@ import {
   Video,
 } from 'lucide-react'
 import { isAdmin, isMarketing, isSales } from '@/lib/permissions'
-import { SalesPerformanceAnalytics, SalespersonPerformanceCard } from '@/components/crm/sales-performance-analytics'
+import { SalesPerformanceAnalytics, SalespersonPerformanceCard, WeeklyAnalytics } from '@/components/crm/sales-performance-analytics'
 
 export const dynamic = 'force-dynamic'
 
@@ -276,6 +276,60 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Weekly Analytics - For Management Roles (aggregate) */}
+      {(isAdmin(role) || role === 'sales manager' || role === 'Marketing Manager' || role === 'MACX') && (
+        <WeeklyAnalytics
+          opportunities={(opportunities || []).map((o: any) => ({
+            opportunity_id: o.opportunity_id,
+            name: o.name,
+            account_id: o.account_id,
+            stage: o.stage,
+            estimated_value: o.estimated_value,
+            owner_user_id: o.owner_user_id,
+            created_at: o.created_at,
+            closed_at: o.closed_at,
+          }))}
+          activities={(activitiesData || []).map((a: any) => ({
+            activity_id: a.activity_id,
+            activity_type: a.activity_type,
+            status: a.status,
+            owner_user_id: a.owner_user_id,
+            created_at: a.created_at,
+            completed_at: a.completed_at,
+          }))}
+          currentUserId={userId}
+          currentUserRole={role}
+          isAggregate={true}
+        />
+      )}
+
+      {/* Weekly Analytics - For Salesperson (personal data only) */}
+      {role === 'salesperson' && (
+        <WeeklyAnalytics
+          opportunities={(opportunities || []).map((o: any) => ({
+            opportunity_id: o.opportunity_id,
+            name: o.name,
+            account_id: o.account_id,
+            stage: o.stage,
+            estimated_value: o.estimated_value,
+            owner_user_id: o.owner_user_id,
+            created_at: o.created_at,
+            closed_at: o.closed_at,
+          }))}
+          activities={(activitiesData || []).map((a: any) => ({
+            activity_id: a.activity_id,
+            activity_type: a.activity_type,
+            status: a.status,
+            owner_user_id: a.owner_user_id,
+            created_at: a.created_at,
+            completed_at: a.completed_at,
+          }))}
+          currentUserId={userId}
+          currentUserRole={role}
+          isAggregate={false}
+        />
+      )}
 
       {/* Pipeline Funnel & Lead Status */}
       <div className="grid gap-4 md:grid-cols-2">
