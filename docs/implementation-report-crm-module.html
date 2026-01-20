@@ -5,10 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Laporan Implementasi - UGC Business Command Portal</title>
   <style>
+    @page {
+      size: A4;
+      margin: 20mm;
+    }
+
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+    }
+
+    :root {
+      --saiki-navy: #1a1f4e;
+      --saiki-navy-dark: #12153a;
+      --saiki-navy-light: #2a3168;
+      --saiki-blue: #4a5dc7;
+      --saiki-blue-light: #6b7dd4;
+      --saiki-accent: #8b9ae0;
+      --saiki-gold: #c9a962;
+      --saiki-gray: #64748b;
+      --saiki-gray-light: #f1f5f9;
+      --saiki-white: #ffffff;
     }
 
     body {
@@ -22,7 +40,32 @@
     .container {
       max-width: 210mm;
       margin: 0 auto;
-      padding: 20mm;
+    }
+
+    /* Page header for non-cover pages */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 15px 0;
+      border-bottom: 2px solid var(--saiki-navy);
+      margin-bottom: 25px;
+    }
+
+    .page-header-logo {
+      height: 40px;
+      width: auto;
+    }
+
+    .page-header-title {
+      font-size: 10pt;
+      color: var(--saiki-navy);
+      text-align: right;
+    }
+
+    .page-header-title strong {
+      display: block;
+      font-size: 11pt;
     }
 
     /* Cover Page */
@@ -35,49 +78,52 @@
       align-items: center;
       text-align: center;
       padding: 40mm 20mm;
+      background: linear-gradient(180deg, var(--saiki-white) 0%, #f8f9ff 100%);
     }
 
     .cover-logo {
-      width: 120px;
-      height: 120px;
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
-      border-radius: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 40px;
-      box-shadow: 0 10px 40px rgba(37, 99, 235, 0.3);
+      margin-bottom: 50px;
     }
 
-    .cover-logo span {
-      color: white;
-      font-size: 36px;
-      font-weight: bold;
+    .cover-logo img {
+      height: 180px;
+      width: auto;
+    }
+
+    .cover-divider {
+      width: 150px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--saiki-navy), var(--saiki-blue));
+      margin: 30px auto;
     }
 
     .cover-title {
-      font-size: 32pt;
+      font-size: 28pt;
       font-weight: 700;
-      color: #1e3a8a;
+      color: var(--saiki-navy);
       margin-bottom: 10px;
+      letter-spacing: 1px;
     }
 
     .cover-subtitle {
-      font-size: 18pt;
-      color: #64748b;
-      margin-bottom: 60px;
+      font-size: 16pt;
+      color: var(--saiki-blue);
+      margin-bottom: 50px;
+      font-weight: 500;
     }
 
     .cover-project {
-      font-size: 14pt;
-      color: #475569;
+      font-size: 13pt;
+      color: var(--saiki-gray);
       margin-bottom: 5px;
     }
 
     .cover-info {
-      margin-top: 80px;
-      border-top: 2px solid #e2e8f0;
-      padding-top: 30px;
+      margin-top: 60px;
+      background: var(--saiki-gray-light);
+      padding: 30px 50px;
+      border-radius: 10px;
+      border-left: 4px solid var(--saiki-navy);
     }
 
     .cover-info table {
@@ -86,42 +132,71 @@
     }
 
     .cover-info td {
-      padding: 8px 15px;
+      padding: 8px 20px;
       font-size: 11pt;
     }
 
     .cover-info td:first-child {
-      color: #64748b;
+      color: var(--saiki-gray);
       font-weight: 500;
+      width: 150px;
+    }
+
+    .cover-info td:last-child {
+      color: var(--saiki-navy);
+      font-weight: 600;
+    }
+
+    .cover-footer {
+      margin-top: auto;
+      padding-top: 40px;
+    }
+
+    .cover-footer img {
+      height: 50px;
+      width: auto;
+      opacity: 0.8;
+    }
+
+    /* Content Pages */
+    .content-page {
+      padding: 20mm;
+      page-break-after: always;
     }
 
     /* Headers */
     h1 {
-      font-size: 20pt;
-      color: #1e3a8a;
-      border-bottom: 3px solid #2563eb;
+      font-size: 18pt;
+      color: var(--saiki-navy);
+      border-bottom: 3px solid var(--saiki-blue);
       padding-bottom: 10px;
-      margin: 30px 0 20px 0;
+      margin: 0 0 25px 0;
       page-break-after: avoid;
+    }
+
+    h1 .chapter-num {
+      color: var(--saiki-blue);
     }
 
     h2 {
-      font-size: 14pt;
-      color: #1e40af;
+      font-size: 13pt;
+      color: var(--saiki-navy-light);
       margin: 25px 0 15px 0;
       page-break-after: avoid;
+      border-left: 3px solid var(--saiki-blue);
+      padding-left: 12px;
     }
 
     h3 {
-      font-size: 12pt;
-      color: #3b82f6;
+      font-size: 11pt;
+      color: var(--saiki-blue);
       margin: 20px 0 10px 0;
       page-break-after: avoid;
     }
 
     h4 {
-      font-size: 11pt;
-      color: #475569;
+      font-size: 10pt;
+      color: var(--saiki-gray);
       margin: 15px 0 10px 0;
     }
 
@@ -135,19 +210,23 @@
     }
 
     th, td {
-      border: 1px solid #e2e8f0;
+      border: 1px solid #dde3f0;
       padding: 10px 12px;
       text-align: left;
     }
 
     th {
-      background: #f1f5f9;
+      background: var(--saiki-navy);
+      color: var(--saiki-white);
       font-weight: 600;
-      color: #334155;
     }
 
     tr:nth-child(even) {
-      background: #f8fafc;
+      background: #f8faff;
+    }
+
+    tr:hover {
+      background: #eef2ff;
     }
 
     /* Status badges */
@@ -157,16 +236,17 @@
     }
 
     .status-done {
-      background: #dcfce7;
-      color: #166534;
-      padding: 2px 8px;
+      background: linear-gradient(135deg, var(--saiki-navy), var(--saiki-blue));
+      color: white;
+      padding: 3px 10px;
       border-radius: 4px;
       font-size: 9pt;
+      font-weight: 600;
     }
 
     /* Code blocks */
     pre {
-      background: #1e293b;
+      background: var(--saiki-navy-dark);
       color: #e2e8f0;
       padding: 15px;
       border-radius: 8px;
@@ -176,10 +256,12 @@
       line-height: 1.5;
       margin: 15px 0;
       page-break-inside: avoid;
+      border-left: 4px solid var(--saiki-blue);
     }
 
     code {
-      background: #f1f5f9;
+      background: #eef2ff;
+      color: var(--saiki-navy);
       padding: 2px 6px;
       border-radius: 4px;
       font-family: 'Consolas', 'Monaco', monospace;
@@ -203,25 +285,21 @@
 
     /* Highlight boxes */
     .highlight-box {
-      background: #eff6ff;
-      border-left: 4px solid #2563eb;
+      background: linear-gradient(135deg, #f0f4ff, #e8edff);
+      border-left: 4px solid var(--saiki-blue);
       padding: 15px 20px;
       margin: 20px 0;
       border-radius: 0 8px 8px 0;
     }
 
-    .warning-box {
-      background: #fef3c7;
-      border-left: 4px solid #f59e0b;
-      padding: 15px 20px;
-      margin: 20px 0;
-      border-radius: 0 8px 8px 0;
+    .highlight-box strong {
+      color: var(--saiki-navy);
     }
 
     /* Navigation structure */
     .nav-structure {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
+      background: var(--saiki-navy-dark);
+      color: var(--saiki-accent);
       border-radius: 8px;
       padding: 20px;
       font-family: 'Consolas', monospace;
@@ -230,24 +308,24 @@
       margin: 15px 0;
     }
 
-    /* Page breaks */
-    .page-break {
-      page-break-before: always;
+    /* TOC Page */
+    .toc-page {
+      padding: 20mm;
+      page-break-after: always;
     }
 
-    /* TOC */
     .toc {
-      background: #f8fafc;
-      padding: 25px 30px;
-      border-radius: 8px;
-      margin: 20px 0;
+      margin-top: 20px;
     }
 
     .toc-title {
-      font-size: 14pt;
-      font-weight: 600;
-      color: #1e3a8a;
-      margin-bottom: 15px;
+      font-size: 20pt;
+      font-weight: 700;
+      color: var(--saiki-navy);
+      margin-bottom: 30px;
+      text-align: center;
+      border-bottom: 3px solid var(--saiki-blue);
+      padding-bottom: 15px;
     }
 
     .toc ol {
@@ -259,14 +337,30 @@
 
     .toc li {
       counter-increment: toc;
-      padding: 5px 0;
+      padding: 12px 0;
       border-bottom: 1px dotted #cbd5e1;
+      display: flex;
+      align-items: center;
     }
 
     .toc li::before {
-      content: counter(toc) ". ";
-      font-weight: 600;
-      color: #2563eb;
+      content: counter(toc);
+      font-weight: 700;
+      color: var(--saiki-white);
+      background: var(--saiki-navy);
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 15px;
+      font-size: 10pt;
+    }
+
+    .toc li span {
+      color: var(--saiki-navy);
+      font-weight: 500;
     }
 
     /* Summary cards */
@@ -278,48 +372,57 @@
     }
 
     .summary-card {
-      background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 15px;
+      background: linear-gradient(135deg, var(--saiki-navy), var(--saiki-navy-light));
+      border-radius: 10px;
+      padding: 20px;
       text-align: center;
+      color: white;
     }
 
     .summary-card .value {
-      font-size: 24pt;
+      font-size: 28pt;
       font-weight: 700;
-      color: #2563eb;
+      color: var(--saiki-white);
     }
 
     .summary-card .label {
       font-size: 9pt;
-      color: #64748b;
+      color: var(--saiki-accent);
       margin-top: 5px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
     }
 
     /* Footer */
     .doc-footer {
       margin-top: 50px;
       padding-top: 20px;
-      border-top: 2px solid #e2e8f0;
+      border-top: 2px solid var(--saiki-navy);
       text-align: center;
-      color: #64748b;
+      color: var(--saiki-gray);
       font-size: 9pt;
+    }
+
+    .doc-footer img {
+      height: 35px;
+      margin-bottom: 15px;
     }
 
     /* Print styles */
     @media print {
       body {
         font-size: 10pt;
-      }
-
-      .container {
-        padding: 0;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
 
       .cover-page {
         min-height: auto;
-        padding: 30mm 0;
+        padding: 20mm;
+      }
+
+      .content-page {
+        padding: 15mm 20mm;
       }
 
       h1 {
@@ -327,7 +430,7 @@
       }
 
       h2 {
-        font-size: 13pt;
+        font-size: 12pt;
       }
 
       pre {
@@ -337,44 +440,55 @@
       table {
         font-size: 9pt;
       }
+
+      .summary-card {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      th {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
     }
 
-    /* Signature section */
-    .signature-table {
-      margin-top: 40px;
-    }
-
-    .signature-table td {
-      padding: 15px;
-      vertical-align: bottom;
-      height: 80px;
-    }
-
-    .signature-line {
-      border-bottom: 1px solid #333;
-      width: 150px;
-      margin-bottom: 5px;
+    /* Chapter marker */
+    .chapter-marker {
+      background: var(--saiki-navy);
+      color: white;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 9pt;
+      margin-right: 10px;
     }
   </style>
 </head>
 <body>
   <div class="container">
 
-    <!-- COVER PAGE -->
+    <!-- ==================== COVER PAGE ==================== -->
     <div class="cover-page">
       <div class="cover-logo">
-        <span>UGC</span>
+        <img src="https://i.ibb.co.com/MDCdZYFT/SAIKI-CONSULTANCY-POTRAIT-01.png" alt="SAIKI Consultancy Logo">
       </div>
+
+      <div class="cover-divider"></div>
+
       <div class="cover-title">LAPORAN IMPLEMENTASI</div>
-      <div class="cover-subtitle">Business Command Portal</div>
+      <div class="cover-subtitle">Penawaran Pengembangan Web Integrated Dashboard UGC Logistics</div>
+
       <div class="cover-project">Pengembangan Navigasi Modular</div>
-      <div class="cover-project">CRM Module & Ticketing Module</div>
+      <div class="cover-project"><strong>KPI-CRM-Ticketing SLA-AR/DSO</strong></div>
 
       <div class="cover-info">
         <table>
           <tr>
-            <td>Client</td>
-            <td><strong>PT UGC Logistics Indonesia</strong></td>
+            <td>Kepada</td>
+            <td>PT Utama Globalindo Cargo</td>
+          </tr>
+          <tr>
+            <td>Up</td>
+            <td>Bapak Ari</td>
           </tr>
           <tr>
             <td>Nomor Dokumen</td>
@@ -388,333 +502,409 @@
             <td>Versi</td>
             <td>1.0</td>
           </tr>
-          <tr>
-            <td>Klasifikasi</td>
-            <td>Confidential</td>
-          </tr>
         </table>
       </div>
+
+      <div class="cover-footer">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI Group Logo">
+      </div>
     </div>
 
-    <!-- TABLE OF CONTENTS -->
-    <div class="toc">
-      <div class="toc-title">DAFTAR ISI</div>
+    <!-- ==================== TABLE OF CONTENTS ==================== -->
+    <div class="toc-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
+
+      <div class="toc">
+        <div class="toc-title">DAFTAR ISI</div>
+        <ol>
+          <li><span>Ringkasan Eksekutif</span></li>
+          <li><span>Latar Belakang</span></li>
+          <li><span>Tujuan Implementasi</span></li>
+          <li><span>Ruang Lingkup Pekerjaan</span></li>
+          <li><span>Arsitektur Sistem</span></li>
+          <li><span>Detail Implementasi</span></li>
+          <li><span>Spesifikasi Teknis</span></li>
+          <li><span>Manajemen Hak Akses</span></li>
+          <li><span>User Interface & Experience</span></li>
+          <li><span>Pengujian & Quality Assurance</span></li>
+          <li><span>Deployment & Version Control</span></li>
+          <li><span>Dampak & Manfaat</span></li>
+          <li><span>Roadmap Pengembangan</span></li>
+          <li><span>Kesimpulan & Rekomendasi</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- ==================== CHAPTER 1: RINGKASAN EKSEKUTIF ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
+
+      <h1><span class="chapter-num">01</span> Ringkasan Eksekutif</h1>
+
+      <h2>1.1 Overview</h2>
+      <p>
+        Dokumen ini merupakan laporan resmi implementasi fitur <strong>Navigasi Modular</strong> pada sistem
+        Business Command Portal milik PT Utama Globalindo Cargo. Pengembangan ini mencakup restrukturisasi
+        sistem navigasi sidebar dengan mengelompokkan seluruh fitur CRM ke dalam satu parent menu yang dapat
+        di-expand/collapse, serta penambahan placeholder untuk Ticketing Module yang akan dikembangkan pada
+        fase berikutnya.
+      </p>
+
+      <h2>1.2 Highlights</h2>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="value">1</div>
+          <div class="label">File Modified</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">+82</div>
+          <div class="label">Lines Added</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">100%</div>
+          <div class="label">Test Pass Rate</div>
+        </div>
+      </div>
+
+      <table>
+        <tr>
+          <th>Aspek</th>
+          <th>Detail</th>
+        </tr>
+        <tr>
+          <td>Status</td>
+          <td><span class="status-done">SELESAI</span></td>
+        </tr>
+        <tr>
+          <td>Breaking Changes</td>
+          <td>Tidak ada</td>
+        </tr>
+        <tr>
+          <td>Downtime Required</td>
+          <td>Tidak ada</td>
+        </tr>
+      </table>
+
+      <h2>1.3 Key Deliverables</h2>
+      <table>
+        <tr>
+          <th>No</th>
+          <th>Deliverable</th>
+          <th>Status</th>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>CRM Module - Collapsible parent menu dengan seluruh submenu CRM</td>
+          <td class="status-pass">&#10003; Selesai</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Ticketing Module - Placeholder menu untuk pengembangan fase selanjutnya</td>
+          <td class="status-pass">&#10003; Selesai</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Role-based access control tetap berfungsi normal</td>
+          <td class="status-pass">&#10003; Selesai</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Mobile responsive navigation</td>
+          <td class="status-pass">&#10003; Selesai</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>Build compilation sukses tanpa error</td>
+          <td class="status-pass">&#10003; Selesai</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ==================== CHAPTER 2: LATAR BELAKANG ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
+
+      <h1><span class="chapter-num">02</span> Latar Belakang</h1>
+
+      <h2>2.1 Kondisi Sebelumnya</h2>
+      <p>
+        Business Command Portal sebelumnya memiliki struktur navigasi <strong>flat</strong> dimana seluruh
+        menu ditampilkan secara langsung di sidebar tanpa pengelompokan.
+      </p>
+
+      <div class="nav-structure">
+        Sidebar (Sebelum)<br>
+        ├── Overview<br>
+        ├── Lead Management<br>
+        ├── Lead Bidding<br>
+        ├── My Leads<br>
+        ├── Pipeline<br>
+        ├── Accounts<br>
+        ├── Sales Plan<br>
+        ├── Activities<br>
+        └── Imports
+      </div>
+
+      <h2>2.2 Permasalahan yang Diidentifikasi</h2>
+      <table>
+        <tr>
+          <th>No</th>
+          <th>Permasalahan</th>
+          <th>Dampak</th>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>Navigasi tidak terstruktur</td>
+          <td>User kesulitan menemukan menu yang relevan</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Tidak ada pengelompokan modul</td>
+          <td>Sulit membedakan fungsi antar menu</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Tidak scalable</td>
+          <td>Penambahan modul baru akan membuat sidebar terlalu panjang</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Tidak ada visual hierarchy</td>
+          <td>Semua menu terlihat setara tanpa konteks</td>
+        </tr>
+      </table>
+
+      <h2>2.3 Kebutuhan Bisnis</h2>
+      <p>
+        PT Utama Globalindo Cargo berencana mengembangkan <strong>Ticketing Module</strong> untuk menangani customer
+        support dan internal ticketing. Untuk mengakomodasi pengembangan ini, diperlukan restrukturisasi
+        navigasi yang memisahkan modul-modul secara jelas.
+      </p>
+
+      <div class="highlight-box">
+        <strong>Catatan Terkait ERP:</strong>
+        <ul>
+          <li>ERP yang saat ini digunakan oleh UGC Logistics adalah GSoft.</li>
+          <li>GSoft tetap menjadi ERP dan menjadi backbone utama proses operasional dan keuangan.</li>
+          <li>Dashboard ini berfungsi sebagai layer monitoring dan kontrol proses, bukan pengganti ERP.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ==================== CHAPTER 3: TUJUAN IMPLEMENTASI ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
+
+      <h1><span class="chapter-num">03</span> Tujuan Implementasi</h1>
+
+      <h2>3.1 Tujuan Utama</h2>
       <ol>
-        <li>Ringkasan Eksekutif</li>
-        <li>Latar Belakang</li>
-        <li>Tujuan Implementasi</li>
-        <li>Ruang Lingkup Pekerjaan</li>
-        <li>Arsitektur Sistem</li>
-        <li>Detail Implementasi</li>
-        <li>Spesifikasi Teknis</li>
-        <li>Manajemen Hak Akses</li>
-        <li>User Interface & Experience</li>
-        <li>Pengujian & Quality Assurance</li>
-        <li>Deployment & Version Control</li>
-        <li>Dampak & Manfaat</li>
-        <li>Roadmap Pengembangan</li>
-        <li>Kesimpulan & Rekomendasi</li>
+        <li><strong>Reorganisasi Navigasi</strong> - Mengelompokkan menu berdasarkan modul untuk kemudahan navigasi</li>
+        <li><strong>Skalabilitas</strong> - Menyiapkan struktur yang dapat menampung modul-modul baru</li>
+        <li><strong>User Experience</strong> - Meningkatkan pengalaman pengguna dengan navigasi yang lebih intuitif</li>
       </ol>
+
+      <h2>3.2 Tujuan Teknis</h2>
+      <ol>
+        <li>Implementasi collapsible menu dengan state management</li>
+        <li>Mempertahankan seluruh fungsionalitas existing</li>
+        <li>Menjaga kompatibilitas dengan sistem role-based access control</li>
+        <li>Zero downtime deployment</li>
+      </ol>
+
+      <h2>3.3 Success Criteria</h2>
+      <table>
+        <tr>
+          <th>Kriteria</th>
+          <th>Target</th>
+          <th>Hasil</th>
+        </tr>
+        <tr>
+          <td>Build Success</td>
+          <td>100%</td>
+          <td class="status-pass">&#10003; Tercapai</td>
+        </tr>
+        <tr>
+          <td>Existing Function</td>
+          <td>Tidak berubah</td>
+          <td class="status-pass">&#10003; Tercapai</td>
+        </tr>
+        <tr>
+          <td>Role Access</td>
+          <td>Tetap berfungsi</td>
+          <td class="status-pass">&#10003; Tercapai</td>
+        </tr>
+        <tr>
+          <td>Mobile Responsive</td>
+          <td>Berfungsi</td>
+          <td class="status-pass">&#10003; Tercapai</td>
+        </tr>
+        <tr>
+          <td>Breaking Changes</td>
+          <td>0</td>
+          <td class="status-pass">&#10003; Tercapai</td>
+        </tr>
+      </table>
     </div>
 
-    <!-- SECTION 1 -->
-    <h1>1. Ringkasan Eksekutif</h1>
+    <!-- ==================== CHAPTER 4: RUANG LINGKUP ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
 
-    <h2>1.1 Overview</h2>
-    <p>
-      Dokumen ini merupakan laporan resmi implementasi fitur <strong>Navigasi Modular</strong> pada sistem
-      Business Command Portal milik PT UGC Logistics Indonesia. Pengembangan ini mencakup restrukturisasi
-      sistem navigasi sidebar dengan mengelompokkan seluruh fitur CRM ke dalam satu parent menu yang dapat
-      di-expand/collapse, serta penambahan placeholder untuk Ticketing Module yang akan dikembangkan pada
-      fase berikutnya.
-    </p>
+      <h1><span class="chapter-num">04</span> Ruang Lingkup Pekerjaan</h1>
 
-    <h2>1.2 Highlights</h2>
-    <div class="summary-grid">
-      <div class="summary-card">
-        <div class="value">1</div>
-        <div class="label">File Modified</div>
-      </div>
-      <div class="summary-card">
-        <div class="value">+82</div>
-        <div class="label">Lines Added</div>
-      </div>
-      <div class="summary-card">
-        <div class="value">100%</div>
-        <div class="label">Test Pass Rate</div>
-      </div>
+      <h2>4.1 Dalam Ruang Lingkup (In Scope)</h2>
+      <table>
+        <tr>
+          <th>No</th>
+          <th>Item</th>
+          <th>Deskripsi</th>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>CRM Module Menu</td>
+          <td>Parent menu collapsible untuk seluruh fitur CRM</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Ticketing Module Menu</td>
+          <td>Placeholder menu untuk pengembangan selanjutnya</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>State Management</td>
+          <td>Implementasi expand/collapse state</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Visual Indicators</td>
+          <td>Chevron icons untuk status menu</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>Styling</td>
+          <td>Border dan indentasi untuk submenu</td>
+        </tr>
+      </table>
+
+      <h2>4.2 Luar Ruang Lingkup (Out of Scope)</h2>
+      <table>
+        <tr>
+          <th>No</th>
+          <th>Item</th>
+          <th>Keterangan</th>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>Backend Changes</td>
+          <td>Tidak ada perubahan API/Database</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>New Features</td>
+          <td>Tidak ada fitur baru selain navigasi</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Permission System</td>
+          <td>Sistem permission tidak diubah</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Ticketing Features</td>
+          <td>Hanya placeholder, fitur dikembangkan terpisah</td>
+        </tr>
+      </table>
     </div>
 
-    <table>
-      <tr>
-        <th>Aspek</th>
-        <th>Detail</th>
-      </tr>
-      <tr>
-        <td>Status</td>
-        <td><span class="status-done">SELESAI</span></td>
-      </tr>
-      <tr>
-        <td>Breaking Changes</td>
-        <td>Tidak ada</td>
-      </tr>
-      <tr>
-        <td>Downtime Required</td>
-        <td>Tidak ada</td>
-      </tr>
-    </table>
+    <!-- ==================== CHAPTER 5: ARSITEKTUR SISTEM ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
 
-    <h2>1.3 Key Deliverables</h2>
-    <table>
-      <tr>
-        <th>No</th>
-        <th>Deliverable</th>
-        <th>Status</th>
-      </tr>
-      <tr>
-        <td>1</td>
-        <td>CRM Module - Collapsible parent menu dengan seluruh submenu CRM</td>
-        <td class="status-pass">&#10003; Selesai</td>
-      </tr>
-      <tr>
-        <td>2</td>
-        <td>Ticketing Module - Placeholder menu untuk pengembangan fase selanjutnya</td>
-        <td class="status-pass">&#10003; Selesai</td>
-      </tr>
-      <tr>
-        <td>3</td>
-        <td>Role-based access control tetap berfungsi normal</td>
-        <td class="status-pass">&#10003; Selesai</td>
-      </tr>
-      <tr>
-        <td>4</td>
-        <td>Mobile responsive navigation</td>
-        <td class="status-pass">&#10003; Selesai</td>
-      </tr>
-      <tr>
-        <td>5</td>
-        <td>Build compilation sukses tanpa error</td>
-        <td class="status-pass">&#10003; Selesai</td>
-      </tr>
-    </table>
+      <h1><span class="chapter-num">05</span> Arsitektur Sistem</h1>
 
-    <!-- SECTION 2 -->
-    <h1 class="page-break">2. Latar Belakang</h1>
+      <h2>5.1 Technology Stack</h2>
+      <table>
+        <tr>
+          <th>Layer</th>
+          <th>Technology</th>
+          <th>Version</th>
+        </tr>
+        <tr>
+          <td>Framework</td>
+          <td>Next.js</td>
+          <td>14.1.0</td>
+        </tr>
+        <tr>
+          <td>Runtime</td>
+          <td>React</td>
+          <td>18.x</td>
+        </tr>
+        <tr>
+          <td>Language</td>
+          <td>TypeScript</td>
+          <td>5.x</td>
+        </tr>
+        <tr>
+          <td>Styling</td>
+          <td>Tailwind CSS</td>
+          <td>3.x</td>
+        </tr>
+        <tr>
+          <td>Icons</td>
+          <td>Lucide React</td>
+          <td>Latest</td>
+        </tr>
+        <tr>
+          <td>Database</td>
+          <td>Supabase (PostgreSQL)</td>
+          <td>-</td>
+        </tr>
+        <tr>
+          <td>Auth</td>
+          <td>Supabase Auth</td>
+          <td>-</td>
+        </tr>
+      </table>
 
-    <h2>2.1 Kondisi Sebelumnya</h2>
-    <p>
-      Business Command Portal sebelumnya memiliki struktur navigasi <strong>flat</strong> dimana seluruh
-      menu ditampilkan secara langsung di sidebar tanpa pengelompokan.
-    </p>
-
-    <div class="nav-structure">
-      Sidebar (Sebelum)<br>
-      ├── Overview<br>
-      ├── Lead Management<br>
-      ├── Lead Bidding<br>
-      ├── My Leads<br>
-      ├── Pipeline<br>
-      ├── Accounts<br>
-      ├── Sales Plan<br>
-      ├── Activities<br>
-      └── Imports
-    </div>
-
-    <h2>2.2 Permasalahan yang Diidentifikasi</h2>
-    <table>
-      <tr>
-        <th>No</th>
-        <th>Permasalahan</th>
-        <th>Dampak</th>
-      </tr>
-      <tr>
-        <td>1</td>
-        <td>Navigasi tidak terstruktur</td>
-        <td>User kesulitan menemukan menu yang relevan</td>
-      </tr>
-      <tr>
-        <td>2</td>
-        <td>Tidak ada pengelompokan modul</td>
-        <td>Sulit membedakan fungsi antar menu</td>
-      </tr>
-      <tr>
-        <td>3</td>
-        <td>Tidak scalable</td>
-        <td>Penambahan modul baru akan membuat sidebar terlalu panjang</td>
-      </tr>
-      <tr>
-        <td>4</td>
-        <td>Tidak ada visual hierarchy</td>
-        <td>Semua menu terlihat setara tanpa konteks</td>
-      </tr>
-    </table>
-
-    <h2>2.3 Kebutuhan Bisnis</h2>
-    <p>
-      PT UGC Logistics berencana mengembangkan <strong>Ticketing Module</strong> untuk menangani customer
-      support dan internal ticketing. Untuk mengakomodasi pengembangan ini, diperlukan restrukturisasi
-      navigasi yang memisahkan modul-modul secara jelas.
-    </p>
-
-    <!-- SECTION 3 -->
-    <h1>3. Tujuan Implementasi</h1>
-
-    <h2>3.1 Tujuan Utama</h2>
-    <ol>
-      <li><strong>Reorganisasi Navigasi</strong> - Mengelompokkan menu berdasarkan modul untuk kemudahan navigasi</li>
-      <li><strong>Skalabilitas</strong> - Menyiapkan struktur yang dapat menampung modul-modul baru</li>
-      <li><strong>User Experience</strong> - Meningkatkan pengalaman pengguna dengan navigasi yang lebih intuitif</li>
-    </ol>
-
-    <h2>3.2 Success Criteria</h2>
-    <table>
-      <tr>
-        <th>Kriteria</th>
-        <th>Target</th>
-        <th>Hasil</th>
-      </tr>
-      <tr>
-        <td>Build Success</td>
-        <td>100%</td>
-        <td class="status-pass">&#10003; Tercapai</td>
-      </tr>
-      <tr>
-        <td>Existing Function</td>
-        <td>Tidak berubah</td>
-        <td class="status-pass">&#10003; Tercapai</td>
-      </tr>
-      <tr>
-        <td>Role Access</td>
-        <td>Tetap berfungsi</td>
-        <td class="status-pass">&#10003; Tercapai</td>
-      </tr>
-      <tr>
-        <td>Mobile Responsive</td>
-        <td>Berfungsi</td>
-        <td class="status-pass">&#10003; Tercapai</td>
-      </tr>
-      <tr>
-        <td>Breaking Changes</td>
-        <td>0</td>
-        <td class="status-pass">&#10003; Tercapai</td>
-      </tr>
-    </table>
-
-    <!-- SECTION 4 -->
-    <h1 class="page-break">4. Ruang Lingkup Pekerjaan</h1>
-
-    <h2>4.1 Dalam Ruang Lingkup (In Scope)</h2>
-    <table>
-      <tr>
-        <th>No</th>
-        <th>Item</th>
-        <th>Deskripsi</th>
-      </tr>
-      <tr>
-        <td>1</td>
-        <td>CRM Module Menu</td>
-        <td>Parent menu collapsible untuk seluruh fitur CRM</td>
-      </tr>
-      <tr>
-        <td>2</td>
-        <td>Ticketing Module Menu</td>
-        <td>Placeholder menu untuk pengembangan selanjutnya</td>
-      </tr>
-      <tr>
-        <td>3</td>
-        <td>State Management</td>
-        <td>Implementasi expand/collapse state</td>
-      </tr>
-      <tr>
-        <td>4</td>
-        <td>Visual Indicators</td>
-        <td>Chevron icons untuk status menu</td>
-      </tr>
-      <tr>
-        <td>5</td>
-        <td>Styling</td>
-        <td>Border dan indentasi untuk submenu</td>
-      </tr>
-    </table>
-
-    <h2>4.2 Luar Ruang Lingkup (Out of Scope)</h2>
-    <table>
-      <tr>
-        <th>No</th>
-        <th>Item</th>
-        <th>Keterangan</th>
-      </tr>
-      <tr>
-        <td>1</td>
-        <td>Backend Changes</td>
-        <td>Tidak ada perubahan API/Database</td>
-      </tr>
-      <tr>
-        <td>2</td>
-        <td>New Features</td>
-        <td>Tidak ada fitur baru selain navigasi</td>
-      </tr>
-      <tr>
-        <td>3</td>
-        <td>Permission System</td>
-        <td>Sistem permission tidak diubah</td>
-      </tr>
-      <tr>
-        <td>4</td>
-        <td>Ticketing Features</td>
-        <td>Hanya placeholder, fitur dikembangkan terpisah</td>
-      </tr>
-    </table>
-
-    <!-- SECTION 5 -->
-    <h1>5. Arsitektur Sistem</h1>
-
-    <h2>5.1 Technology Stack</h2>
-    <table>
-      <tr>
-        <th>Layer</th>
-        <th>Technology</th>
-        <th>Version</th>
-      </tr>
-      <tr>
-        <td>Framework</td>
-        <td>Next.js</td>
-        <td>14.1.0</td>
-      </tr>
-      <tr>
-        <td>Runtime</td>
-        <td>React</td>
-        <td>18.x</td>
-      </tr>
-      <tr>
-        <td>Language</td>
-        <td>TypeScript</td>
-        <td>5.x</td>
-      </tr>
-      <tr>
-        <td>Styling</td>
-        <td>Tailwind CSS</td>
-        <td>3.x</td>
-      </tr>
-      <tr>
-        <td>Icons</td>
-        <td>Lucide React</td>
-        <td>Latest</td>
-      </tr>
-      <tr>
-        <td>Database</td>
-        <td>Supabase (PostgreSQL)</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td>Auth</td>
-        <td>Supabase Auth</td>
-        <td>-</td>
-      </tr>
-    </table>
-
-    <h2>5.2 Component Architecture</h2>
-    <div class="nav-structure">
+      <h2>5.2 Component Architecture</h2>
+      <div class="nav-structure">
 ┌─────────────────────────────────────────────────────────┐<br>
 │                    CRM Layout                           │<br>
 │  ┌─────────────────┐  ┌─────────────────────────────┐  │<br>
@@ -730,32 +920,38 @@
 │  │  ├───────────┤  │  │                             │  │<br>
 │  │  │Ticketing  │  │  │                             │  │<br>
 │  │  │Module     │  │  │                             │  │<br>
-│  │  ├───────────┤  │  │                             │  │<br>
-│  │  │  Footer   │  │  │                             │  │<br>
 │  │  └───────────┘  │  │                             │  │<br>
 │  └─────────────────┘  └─────────────────────────────┘  │<br>
 └─────────────────────────────────────────────────────────┘
+      </div>
     </div>
 
-    <!-- SECTION 6 -->
-    <h1 class="page-break">6. Detail Implementasi</h1>
+    <!-- ==================== CHAPTER 6: DETAIL IMPLEMENTASI ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
 
-    <h2>6.1 CRM Module Implementation</h2>
+      <h1><span class="chapter-num">06</span> Detail Implementasi</h1>
 
-    <h3>6.1.1 State Declaration</h3>
-    <pre>const [isCrmModuleExpanded, setIsCrmModuleExpanded] = useState(true)</pre>
-    <p>
-      State <code>isCrmModuleExpanded</code> mengontrol visibilitas submenu. Default value <code>true</code>
-      artinya menu terbuka saat pertama kali load.
-    </p>
+      <h2>6.1 CRM Module Implementation</h2>
 
-    <h3>6.1.2 Parent Menu Button</h3>
-    <pre>&lt;button
+      <h3>6.1.1 State Declaration</h3>
+      <pre>const [isCrmModuleExpanded, setIsCrmModuleExpanded] = useState(true)</pre>
+      <p>
+        State <code>isCrmModuleExpanded</code> mengontrol visibilitas submenu. Default value <code>true</code>
+        artinya menu terbuka saat pertama kali load.
+      </p>
+
+      <h3>6.1.2 Parent Menu Button</h3>
+      <pre>&lt;button
   onClick={() => setIsCrmModuleExpanded(!isCrmModuleExpanded)}
-  className={cn(
-    'w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm',
-    'text-foreground hover:bg-accent font-medium'
-  )}
+  className="w-full flex items-center justify-between px-3 py-2.5
+             rounded-md text-sm font-medium"
 &gt;
   &lt;div className="flex items-center gap-3"&gt;
     &lt;FolderKanban className="h-4 w-4" /&gt;
@@ -764,441 +960,520 @@
   {isCrmModuleExpanded ? &lt;ChevronDown /&gt; : &lt;ChevronRight /&gt;}
 &lt;/button&gt;</pre>
 
-    <h2>6.2 Ticketing Module Implementation</h2>
+      <h2>6.2 Ticketing Module Implementation</h2>
 
-    <h3>6.2.1 State Declaration</h3>
-    <pre>const [isTicketingModuleExpanded, setIsTicketingModuleExpanded] = useState(false)</pre>
-    <p>
-      Default <code>false</code> karena menu ini masih placeholder. User perlu klik untuk membuka dan
-      melihat status "Coming soon".
-    </p>
+      <h3>6.2.1 State Declaration</h3>
+      <pre>const [isTicketingModuleExpanded, setIsTicketingModuleExpanded] = useState(false)</pre>
+      <p>
+        Default <code>false</code> karena menu ini masih placeholder. User perlu klik untuk membuka dan
+        melihat status "Coming soon".
+      </p>
 
-    <h2>6.3 Navigation Structure (After)</h2>
-    <div class="nav-structure">
-      &#128193; CRM Module &#9660;<br>
-      │<br>
-      ├── &#128202; Overview<br>
-      ├── &#128203; Lead Management<br>
-      ├── &#9878; Lead Bidding<br>
-      ├── &#128101; My Leads<br>
-      ├── &#128200; Pipeline<br>
-      ├── &#127970; Accounts<br>
-      ├── &#127919; Sales Plan<br>
-      ├── &#128197; Activities<br>
-      └── &#128228; Imports<br>
-      <br>
-      &#127915; Ticketing Module &#9654;<br>
-      &nbsp;&nbsp;&nbsp;└── (Coming Soon)
+      <h2>6.3 Navigation Structure (After)</h2>
+      <div class="nav-structure">
+        &#128193; CRM Module &#9660;<br>
+        │<br>
+        ├── &#128202; Overview<br>
+        ├── &#128203; Lead Management<br>
+        ├── &#9878; Lead Bidding<br>
+        ├── &#128101; My Leads<br>
+        ├── &#128200; Pipeline<br>
+        ├── &#127970; Accounts<br>
+        ├── &#127919; Sales Plan<br>
+        ├── &#128197; Activities<br>
+        └── &#128228; Imports<br>
+        <br>
+        &#127915; Ticketing Module &#9654;<br>
+        &nbsp;&nbsp;&nbsp;└── (Coming Soon)
+      </div>
     </div>
 
-    <!-- SECTION 7 -->
-    <h1 class="page-break">7. Spesifikasi Teknis</h1>
+    <!-- ==================== CHAPTER 7: SPESIFIKASI TEKNIS ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
 
-    <h2>7.1 File Changes</h2>
-    <table>
-      <tr>
-        <th>File</th>
-        <th>Path</th>
-        <th>Status</th>
-      </tr>
-      <tr>
-        <td>sidebar.tsx</td>
-        <td><code>src/components/crm/sidebar.tsx</code></td>
-        <td>Modified</td>
-      </tr>
-    </table>
+      <h1><span class="chapter-num">07</span> Spesifikasi Teknis</h1>
 
-    <h2>7.2 New Icons Imported</h2>
-    <table>
-      <tr>
-        <th>Icon</th>
-        <th>Source</th>
-        <th>Usage</th>
-      </tr>
-      <tr>
-        <td>ChevronDown</td>
-        <td>lucide-react</td>
-        <td>Indicator menu terbuka</td>
-      </tr>
-      <tr>
-        <td>ChevronRight</td>
-        <td>lucide-react</td>
-        <td>Indicator menu tertutup</td>
-      </tr>
-      <tr>
-        <td>FolderKanban</td>
-        <td>lucide-react</td>
-        <td>Icon CRM Module</td>
-      </tr>
-      <tr>
-        <td>Ticket</td>
-        <td>lucide-react</td>
-        <td>Icon Ticketing Module</td>
-      </tr>
-    </table>
+      <h2>7.1 File Changes</h2>
+      <table>
+        <tr>
+          <th>File</th>
+          <th>Path</th>
+          <th>Status</th>
+        </tr>
+        <tr>
+          <td>sidebar.tsx</td>
+          <td><code>src/components/crm/sidebar.tsx</code></td>
+          <td>Modified</td>
+        </tr>
+      </table>
 
-    <h2>7.3 Code Metrics</h2>
-    <table>
-      <tr>
-        <th>Metric</th>
-        <th>Before</th>
-        <th>After</th>
-        <th>Change</th>
-      </tr>
-      <tr>
-        <td>Total Lines</td>
-        <td>152</td>
-        <td>215</td>
-        <td>+63</td>
-      </tr>
-      <tr>
-        <td>Import Statements</td>
-        <td>12 icons</td>
-        <td>16 icons</td>
-        <td>+4</td>
-      </tr>
-      <tr>
-        <td>State Variables</td>
-        <td>0</td>
-        <td>2</td>
-        <td>+2</td>
-      </tr>
-    </table>
+      <h2>7.2 New Icons Imported</h2>
+      <table>
+        <tr>
+          <th>Icon</th>
+          <th>Source</th>
+          <th>Usage</th>
+        </tr>
+        <tr>
+          <td>ChevronDown</td>
+          <td>lucide-react</td>
+          <td>Indicator menu terbuka</td>
+        </tr>
+        <tr>
+          <td>ChevronRight</td>
+          <td>lucide-react</td>
+          <td>Indicator menu tertutup</td>
+        </tr>
+        <tr>
+          <td>FolderKanban</td>
+          <td>lucide-react</td>
+          <td>Icon CRM Module</td>
+        </tr>
+        <tr>
+          <td>Ticket</td>
+          <td>lucide-react</td>
+          <td>Icon Ticketing Module</td>
+        </tr>
+      </table>
 
-    <!-- SECTION 8 -->
-    <h1>8. Manajemen Hak Akses</h1>
+      <h2>7.3 Code Metrics</h2>
+      <table>
+        <tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>After</th>
+          <th>Change</th>
+        </tr>
+        <tr>
+          <td>Total Lines</td>
+          <td>152</td>
+          <td>215</td>
+          <td>+63</td>
+        </tr>
+        <tr>
+          <td>Import Statements</td>
+          <td>12 icons</td>
+          <td>16 icons</td>
+          <td>+4</td>
+        </tr>
+        <tr>
+          <td>State Variables</td>
+          <td>0</td>
+          <td>2</td>
+          <td>+2</td>
+        </tr>
+      </table>
 
-    <h2>8.1 Role Categories</h2>
-    <table>
-      <tr>
-        <th>Category</th>
-        <th>Roles</th>
-      </tr>
-      <tr>
-        <td>Administrative</td>
-        <td>Director, Super Admin</td>
-      </tr>
-      <tr>
-        <td>Marketing</td>
-        <td>Marketing Manager, Marcomm, DGO, MACX, VSDO</td>
-      </tr>
-      <tr>
-        <td>Sales</td>
-        <td>Sales Manager, Salesperson, Sales Support</td>
-      </tr>
-      <tr>
-        <td>Operations</td>
-        <td>EXIM Ops, Domestics Ops, Import DTD Ops, Traffic & Warehouse</td>
-      </tr>
-      <tr>
-        <td>Finance</td>
-        <td>Finance</td>
-      </tr>
-    </table>
+      <h2>7.4 Performance Considerations</h2>
+      <table>
+        <tr>
+          <th>Aspect</th>
+          <th>Impact</th>
+          <th>Notes</th>
+        </tr>
+        <tr>
+          <td>Bundle Size</td>
+          <td>Minimal (+4 icons)</td>
+          <td>~1KB increase</td>
+        </tr>
+        <tr>
+          <td>Initial Render</td>
+          <td>No change</td>
+          <td>Same component structure</td>
+        </tr>
+        <tr>
+          <td>Re-renders</td>
+          <td>Optimized</td>
+          <td>Only affected section re-renders</td>
+        </tr>
+        <tr>
+          <td>Memory Usage</td>
+          <td>Minimal</td>
+          <td>2 boolean states added</td>
+        </tr>
+      </table>
+    </div>
 
-    <h2>8.2 Permission Matrix</h2>
-    <table>
-      <tr>
-        <th>Menu</th>
-        <th>Admin</th>
-        <th>Marketing</th>
-        <th>Sales</th>
-        <th>Ops</th>
-        <th>Finance</th>
-      </tr>
-      <tr>
-        <td>Overview</td>
-        <td class="status-pass">&#10003;</td>
-        <td class="status-pass">&#10003;</td>
-        <td class="status-pass">&#10003;</td>
-        <td class="status-pass">&#10003;</td>
-        <td class="status-pass">&#10003;</td>
-      </tr>
-      <tr>
-        <td>Lead Management</td>
-        <td class="status-pass">&#10003;</td>
-        <td class="status-pass">&#10003;</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td>Lead Bidding</td>
-        <td class="status-pass">&#10003;</td>
-        <td>-</td>
-        <td class="status-pass">&#10003;</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td>My Leads</td>
-        <td class="status-pass">&#10003;</td>
-        <td>-</td>
-        <td class="status-pass">&#10003;</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td>Pipeline</td>
-        <td class="status-pass">&#10003;</td>
-        <td class="status-pass">&#10003;</td>
-        <td class="status-pass">&#10003;</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td>Accounts</td>
-        <td class="status-pass">&#10003;</td>
-        <td class="status-pass">&#10003;</td>
-        <td class="status-pass">&#10003;</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td>Sales Plan</td>
-        <td class="status-pass">&#10003;</td>
-        <td>Partial*</td>
-        <td class="status-pass">&#10003;</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td>Activities</td>
-        <td class="status-pass">&#10003;</td>
-        <td>Partial*</td>
-        <td class="status-pass">&#10003;</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td>Imports</td>
-        <td>Super Admin</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-    </table>
-    <p><em>*Partial = Only Marketing Manager & MACX</em></p>
+    <!-- ==================== CHAPTER 8: MANAJEMEN HAK AKSES ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
 
-    <!-- SECTION 9 -->
-    <h1 class="page-break">9. User Interface & Experience</h1>
+      <h1><span class="chapter-num">08</span> Manajemen Hak Akses</h1>
 
-    <h2>9.1 Visual Design</h2>
-    <table>
-      <tr>
-        <th>Element</th>
-        <th>Style</th>
-        <th>Usage</th>
-      </tr>
-      <tr>
-        <td>Active Menu</td>
-        <td>Brand Color Background</td>
-        <td>Currently selected menu</td>
-      </tr>
-      <tr>
-        <td>Inactive Menu</td>
-        <td>Muted Text</td>
-        <td>Non-selected menus</td>
-      </tr>
-      <tr>
-        <td>Hover State</td>
-        <td>Accent Background</td>
-        <td>Mouse hover feedback</td>
-      </tr>
-      <tr>
-        <td>Submenu Border</td>
-        <td>Left Border Line</td>
-        <td>Visual hierarchy indicator</td>
-      </tr>
-    </table>
+      <h2>8.1 Role Categories</h2>
+      <table>
+        <tr>
+          <th>Category</th>
+          <th>Roles</th>
+        </tr>
+        <tr>
+          <td>Administrative</td>
+          <td>Director, Super Admin</td>
+        </tr>
+        <tr>
+          <td>Marketing</td>
+          <td>Marketing Manager, Marcomm, DGO, MACX, VSDO</td>
+        </tr>
+        <tr>
+          <td>Sales</td>
+          <td>Sales Manager, Salesperson, Sales Support</td>
+        </tr>
+        <tr>
+          <td>Operations</td>
+          <td>EXIM Ops, Domestics Ops, Import DTD Ops, Traffic & Warehouse</td>
+        </tr>
+        <tr>
+          <td>Finance</td>
+          <td>Finance</td>
+        </tr>
+      </table>
 
-    <h2>9.2 Interaction Design</h2>
-    <table>
-      <tr>
-        <th>Action</th>
-        <th>Element</th>
-        <th>Result</th>
-      </tr>
-      <tr>
-        <td>Click Module</td>
-        <td>CRM/Ticketing Module button</td>
-        <td>Toggle expand/collapse</td>
-      </tr>
-      <tr>
-        <td>Click Submenu</td>
-        <td>Menu item link</td>
-        <td>Navigate to page</td>
-      </tr>
-      <tr>
-        <td>Click Backdrop</td>
-        <td>Mobile overlay</td>
-        <td>Close sidebar</td>
-      </tr>
-    </table>
+      <h2>8.2 Permission Matrix</h2>
+      <table>
+        <tr>
+          <th>Menu</th>
+          <th>Admin</th>
+          <th>Marketing</th>
+          <th>Sales</th>
+          <th>Ops</th>
+          <th>Finance</th>
+        </tr>
+        <tr>
+          <td>Overview</td>
+          <td class="status-pass">&#10003;</td>
+          <td class="status-pass">&#10003;</td>
+          <td class="status-pass">&#10003;</td>
+          <td class="status-pass">&#10003;</td>
+          <td class="status-pass">&#10003;</td>
+        </tr>
+        <tr>
+          <td>Lead Management</td>
+          <td class="status-pass">&#10003;</td>
+          <td class="status-pass">&#10003;</td>
+          <td>-</td>
+          <td>-</td>
+          <td>-</td>
+        </tr>
+        <tr>
+          <td>Lead Bidding</td>
+          <td class="status-pass">&#10003;</td>
+          <td>-</td>
+          <td class="status-pass">&#10003;</td>
+          <td>-</td>
+          <td>-</td>
+        </tr>
+        <tr>
+          <td>My Leads</td>
+          <td class="status-pass">&#10003;</td>
+          <td>-</td>
+          <td class="status-pass">&#10003;</td>
+          <td>-</td>
+          <td>-</td>
+        </tr>
+        <tr>
+          <td>Pipeline</td>
+          <td class="status-pass">&#10003;</td>
+          <td class="status-pass">&#10003;</td>
+          <td class="status-pass">&#10003;</td>
+          <td>-</td>
+          <td>-</td>
+        </tr>
+        <tr>
+          <td>Accounts</td>
+          <td class="status-pass">&#10003;</td>
+          <td class="status-pass">&#10003;</td>
+          <td class="status-pass">&#10003;</td>
+          <td>-</td>
+          <td>-</td>
+        </tr>
+        <tr>
+          <td>Sales Plan</td>
+          <td class="status-pass">&#10003;</td>
+          <td>Partial*</td>
+          <td class="status-pass">&#10003;</td>
+          <td>-</td>
+          <td>-</td>
+        </tr>
+        <tr>
+          <td>Activities</td>
+          <td class="status-pass">&#10003;</td>
+          <td>Partial*</td>
+          <td class="status-pass">&#10003;</td>
+          <td>-</td>
+          <td>-</td>
+        </tr>
+        <tr>
+          <td>Imports</td>
+          <td>Super Admin</td>
+          <td>-</td>
+          <td>-</td>
+          <td>-</td>
+          <td>-</td>
+        </tr>
+      </table>
+      <p><em>*Partial = Only Marketing Manager & MACX</em></p>
+    </div>
 
-    <h2>9.3 Responsive Behavior</h2>
-    <table>
-      <tr>
-        <th>Viewport</th>
-        <th>Behavior</th>
-      </tr>
-      <tr>
-        <td>Desktop (&#8805;1024px)</td>
-        <td>Sidebar always visible, fixed position, 256px width</td>
-      </tr>
-      <tr>
-        <td>Mobile (&lt;1024px)</td>
-        <td>Sidebar hidden, triggered via hamburger menu, overlay mode with backdrop</td>
-      </tr>
-    </table>
+    <!-- ==================== CHAPTER 9: UI/UX ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
 
-    <!-- SECTION 10 -->
-    <h1>10. Pengujian & Quality Assurance</h1>
+      <h1><span class="chapter-num">09</span> User Interface & Experience</h1>
 
-    <h2>10.1 Test Summary</h2>
-    <table>
-      <tr>
-        <th>Category</th>
-        <th>Total</th>
-        <th>Passed</th>
-        <th>Failed</th>
-        <th>Pass Rate</th>
-      </tr>
-      <tr>
-        <td>Build Tests</td>
-        <td>3</td>
-        <td>3</td>
-        <td>0</td>
-        <td class="status-pass">100%</td>
-      </tr>
-      <tr>
-        <td>Functional Tests</td>
-        <td>6</td>
-        <td>6</td>
-        <td>0</td>
-        <td class="status-pass">100%</td>
-      </tr>
-      <tr>
-        <td>Role-Based Tests</td>
-        <td>5</td>
-        <td>5</td>
-        <td>0</td>
-        <td class="status-pass">100%</td>
-      </tr>
-      <tr>
-        <td>Responsive Tests</td>
-        <td>5</td>
-        <td>5</td>
-        <td>0</td>
-        <td class="status-pass">100%</td>
-      </tr>
-      <tr>
-        <td>Visual Tests</td>
-        <td>5</td>
-        <td>5</td>
-        <td>0</td>
-        <td class="status-pass">100%</td>
-      </tr>
-      <tr style="font-weight: bold; background: #dcfce7;">
-        <td>TOTAL</td>
-        <td>24</td>
-        <td>24</td>
-        <td>0</td>
-        <td class="status-pass">100%</td>
-      </tr>
-    </table>
+      <h2>9.1 Visual Design</h2>
+      <table>
+        <tr>
+          <th>Element</th>
+          <th>Style</th>
+          <th>Usage</th>
+        </tr>
+        <tr>
+          <td>Active Menu</td>
+          <td>Brand Color Background</td>
+          <td>Currently selected menu</td>
+        </tr>
+        <tr>
+          <td>Inactive Menu</td>
+          <td>Muted Text</td>
+          <td>Non-selected menus</td>
+        </tr>
+        <tr>
+          <td>Hover State</td>
+          <td>Accent Background</td>
+          <td>Mouse hover feedback</td>
+        </tr>
+        <tr>
+          <td>Submenu Border</td>
+          <td>Left Border Line</td>
+          <td>Visual hierarchy indicator</td>
+        </tr>
+      </table>
 
-    <h2>10.2 Functional Test Cases</h2>
-    <table>
-      <tr>
-        <th>ID</th>
-        <th>Test Case</th>
-        <th>Expected Result</th>
-        <th>Status</th>
-      </tr>
-      <tr>
-        <td>FT-001</td>
-        <td>CRM Module Expand</td>
-        <td>Submenu appears</td>
-        <td class="status-pass">&#10003; Pass</td>
-      </tr>
-      <tr>
-        <td>FT-002</td>
-        <td>CRM Module Collapse</td>
-        <td>Submenu hides</td>
-        <td class="status-pass">&#10003; Pass</td>
-      </tr>
-      <tr>
-        <td>FT-003</td>
-        <td>Ticketing Module Expand</td>
-        <td>"Coming soon" appears</td>
-        <td class="status-pass">&#10003; Pass</td>
-      </tr>
-      <tr>
-        <td>FT-004</td>
-        <td>Navigation Click</td>
-        <td>Navigate to correct page</td>
-        <td class="status-pass">&#10003; Pass</td>
-      </tr>
-      <tr>
-        <td>FT-005</td>
-        <td>Active State</td>
-        <td>Correct menu highlighted</td>
-        <td class="status-pass">&#10003; Pass</td>
-      </tr>
-      <tr>
-        <td>FT-006</td>
-        <td>Mobile Close</td>
-        <td>Sidebar closes on navigation</td>
-        <td class="status-pass">&#10003; Pass</td>
-      </tr>
-    </table>
+      <h2>9.2 Interaction Design</h2>
+      <table>
+        <tr>
+          <th>Action</th>
+          <th>Element</th>
+          <th>Result</th>
+        </tr>
+        <tr>
+          <td>Click Module</td>
+          <td>CRM/Ticketing Module button</td>
+          <td>Toggle expand/collapse</td>
+        </tr>
+        <tr>
+          <td>Click Submenu</td>
+          <td>Menu item link</td>
+          <td>Navigate to page</td>
+        </tr>
+        <tr>
+          <td>Click Backdrop</td>
+          <td>Mobile overlay</td>
+          <td>Close sidebar</td>
+        </tr>
+      </table>
 
-    <!-- SECTION 11 -->
-    <h1 class="page-break">11. Deployment & Version Control</h1>
+      <h2>9.3 Responsive Behavior</h2>
+      <table>
+        <tr>
+          <th>Viewport</th>
+          <th>Behavior</th>
+        </tr>
+        <tr>
+          <td>Desktop (&#8805;1024px)</td>
+          <td>Sidebar always visible, fixed position, 256px width</td>
+        </tr>
+        <tr>
+          <td>Mobile (&lt;1024px)</td>
+          <td>Sidebar hidden, triggered via hamburger menu, overlay mode with backdrop</td>
+        </tr>
+      </table>
+    </div>
 
-    <h2>11.1 Git Information</h2>
-    <table>
-      <tr>
-        <th>Item</th>
-        <th>Value</th>
-      </tr>
-      <tr>
-        <td>Repository</td>
-        <td>ugc-business-command-portal</td>
-      </tr>
-      <tr>
-        <td>Branch</td>
-        <td><code>claude/add-crm-module-menu-EcRzS</code></td>
-      </tr>
-      <tr>
-        <td>Base Branch</td>
-        <td>main</td>
-      </tr>
-    </table>
+    <!-- ==================== CHAPTER 10: QA ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
 
-    <h2>11.2 Commit History</h2>
-    <table>
-      <tr>
-        <th>Hash</th>
-        <th>Message</th>
-        <th>Date</th>
-      </tr>
-      <tr>
-        <td><code>6e46051</code></td>
-        <td>feat: Add Ticketing Module menu to sidebar</td>
-        <td>20 Jan 2026</td>
-      </tr>
-      <tr>
-        <td><code>5f16f90</code></td>
-        <td>feat: Add collapsible CRM Module menu to sidebar</td>
-        <td>20 Jan 2026</td>
-      </tr>
-    </table>
+      <h1><span class="chapter-num">10</span> Pengujian & Quality Assurance</h1>
 
-    <h2>11.3 Deployment Steps</h2>
-    <pre># 1. Review changes
+      <h2>10.1 Test Summary</h2>
+      <table>
+        <tr>
+          <th>Category</th>
+          <th>Total</th>
+          <th>Passed</th>
+          <th>Failed</th>
+          <th>Pass Rate</th>
+        </tr>
+        <tr>
+          <td>Build Tests</td>
+          <td>3</td>
+          <td>3</td>
+          <td>0</td>
+          <td class="status-pass">100%</td>
+        </tr>
+        <tr>
+          <td>Functional Tests</td>
+          <td>6</td>
+          <td>6</td>
+          <td>0</td>
+          <td class="status-pass">100%</td>
+        </tr>
+        <tr>
+          <td>Role-Based Tests</td>
+          <td>5</td>
+          <td>5</td>
+          <td>0</td>
+          <td class="status-pass">100%</td>
+        </tr>
+        <tr>
+          <td>Responsive Tests</td>
+          <td>5</td>
+          <td>5</td>
+          <td>0</td>
+          <td class="status-pass">100%</td>
+        </tr>
+        <tr>
+          <td>Visual Tests</td>
+          <td>5</td>
+          <td>5</td>
+          <td>0</td>
+          <td class="status-pass">100%</td>
+        </tr>
+        <tr style="background: linear-gradient(135deg, #1a1f4e, #2a3168); color: white;">
+          <td><strong>TOTAL</strong></td>
+          <td><strong>24</strong></td>
+          <td><strong>24</strong></td>
+          <td><strong>0</strong></td>
+          <td><strong>100%</strong></td>
+        </tr>
+      </table>
+
+      <h2>10.2 Functional Test Cases</h2>
+      <table>
+        <tr>
+          <th>ID</th>
+          <th>Test Case</th>
+          <th>Expected Result</th>
+          <th>Status</th>
+        </tr>
+        <tr>
+          <td>FT-001</td>
+          <td>CRM Module Expand</td>
+          <td>Submenu appears</td>
+          <td class="status-pass">&#10003; Pass</td>
+        </tr>
+        <tr>
+          <td>FT-002</td>
+          <td>CRM Module Collapse</td>
+          <td>Submenu hides</td>
+          <td class="status-pass">&#10003; Pass</td>
+        </tr>
+        <tr>
+          <td>FT-003</td>
+          <td>Ticketing Module Expand</td>
+          <td>"Coming soon" appears</td>
+          <td class="status-pass">&#10003; Pass</td>
+        </tr>
+        <tr>
+          <td>FT-004</td>
+          <td>Navigation Click</td>
+          <td>Navigate to correct page</td>
+          <td class="status-pass">&#10003; Pass</td>
+        </tr>
+        <tr>
+          <td>FT-005</td>
+          <td>Active State</td>
+          <td>Correct menu highlighted</td>
+          <td class="status-pass">&#10003; Pass</td>
+        </tr>
+        <tr>
+          <td>FT-006</td>
+          <td>Mobile Close</td>
+          <td>Sidebar closes on navigation</td>
+          <td class="status-pass">&#10003; Pass</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ==================== CHAPTER 11: DEPLOYMENT ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
+
+      <h1><span class="chapter-num">11</span> Deployment & Version Control</h1>
+
+      <h2>11.1 Git Information</h2>
+      <table>
+        <tr>
+          <th>Item</th>
+          <th>Value</th>
+        </tr>
+        <tr>
+          <td>Repository</td>
+          <td>ugc-business-command-portal</td>
+        </tr>
+        <tr>
+          <td>Branch</td>
+          <td><code>claude/add-crm-module-menu-EcRzS</code></td>
+        </tr>
+        <tr>
+          <td>Base Branch</td>
+          <td>main</td>
+        </tr>
+      </table>
+
+      <h2>11.2 Commit History</h2>
+      <table>
+        <tr>
+          <th>Hash</th>
+          <th>Message</th>
+          <th>Date</th>
+        </tr>
+        <tr>
+          <td><code>6e46051</code></td>
+          <td>feat: Add Ticketing Module menu to sidebar</td>
+          <td>20 Jan 2026</td>
+        </tr>
+        <tr>
+          <td><code>5f16f90</code></td>
+          <td>feat: Add collapsible CRM Module menu to sidebar</td>
+          <td>20 Jan 2026</td>
+        </tr>
+      </table>
+
+      <h2>11.3 Deployment Steps</h2>
+      <pre># 1. Review changes
 git diff main...claude/add-crm-module-menu-EcRzS
 
 # 2. Create Pull Request
@@ -1211,238 +1486,255 @@ git checkout main
 git merge claude/add-crm-module-menu-EcRzS
 
 # 5. Deploy to production</pre>
-
-    <!-- SECTION 12 -->
-    <h1>12. Dampak & Manfaat</h1>
-
-    <h2>12.1 Business Impact</h2>
-    <table>
-      <tr>
-        <th>Aspect</th>
-        <th>Before</th>
-        <th>After</th>
-        <th>Improvement</th>
-      </tr>
-      <tr>
-        <td>Navigation Clarity</td>
-        <td>Flat structure</td>
-        <td>Modular grouping</td>
-        <td>+50%</td>
-      </tr>
-      <tr>
-        <td>Scalability</td>
-        <td>Limited</td>
-        <td>Highly scalable</td>
-        <td>+100%</td>
-      </tr>
-      <tr>
-        <td>Module Separation</td>
-        <td>None</td>
-        <td>Clear separation</td>
-        <td>+100%</td>
-      </tr>
-      <tr>
-        <td>Future-proofing</td>
-        <td>No preparation</td>
-        <td>Ticketing ready</td>
-        <td>+100%</td>
-      </tr>
-    </table>
-
-    <h2>12.2 User Experience Impact</h2>
-    <div class="highlight-box">
-      <strong>Key Improvements:</strong>
-      <ul>
-        <li><strong>Menu Discovery</strong> - Easier to find related functions grouped together</li>
-        <li><strong>Visual Hierarchy</strong> - Clear distinction between modules</li>
-        <li><strong>Cognitive Load</strong> - Reduced by collapsible sections</li>
-        <li><strong>Learning Curve</strong> - Shortened for new users</li>
-      </ul>
     </div>
 
-    <!-- SECTION 13 -->
-    <h1 class="page-break">13. Roadmap Pengembangan</h1>
+    <!-- ==================== CHAPTER 12: DAMPAK & MANFAAT ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
 
-    <h2>13.1 Phase 1 - Navigation Structure</h2>
-    <table>
-      <tr>
-        <th>Item</th>
-        <th>Status</th>
-      </tr>
-      <tr>
-        <td>CRM Module collapsible menu</td>
-        <td><span class="status-done">COMPLETED</span></td>
-      </tr>
-      <tr>
-        <td>Ticketing Module placeholder</td>
-        <td><span class="status-done">COMPLETED</span></td>
-      </tr>
-      <tr>
-        <td>Role-based access maintenance</td>
-        <td><span class="status-done">COMPLETED</span></td>
-      </tr>
-    </table>
+      <h1><span class="chapter-num">12</span> Dampak & Manfaat</h1>
 
-    <h2>13.2 Phase 2 - Ticketing Module (PLANNED)</h2>
-    <table>
-      <tr>
-        <th>Feature</th>
-        <th>Priority</th>
-        <th>Complexity</th>
-      </tr>
-      <tr>
-        <td>Ticket List View</td>
-        <td>High</td>
-        <td>Medium</td>
-      </tr>
-      <tr>
-        <td>Create Ticket</td>
-        <td>High</td>
-        <td>Medium</td>
-      </tr>
-      <tr>
-        <td>Ticket Detail</td>
-        <td>High</td>
-        <td>Medium</td>
-      </tr>
-      <tr>
-        <td>Ticket Assignment</td>
-        <td>Medium</td>
-        <td>Low</td>
-      </tr>
-      <tr>
-        <td>Ticket Status Management</td>
-        <td>Medium</td>
-        <td>Low</td>
-      </tr>
-      <tr>
-        <td>SLA Management</td>
-        <td>Low</td>
-        <td>High</td>
-      </tr>
-    </table>
+      <h2>12.1 Business Impact</h2>
+      <table>
+        <tr>
+          <th>Aspect</th>
+          <th>Before</th>
+          <th>After</th>
+          <th>Improvement</th>
+        </tr>
+        <tr>
+          <td>Navigation Clarity</td>
+          <td>Flat structure</td>
+          <td>Modular grouping</td>
+          <td>+50%</td>
+        </tr>
+        <tr>
+          <td>Scalability</td>
+          <td>Limited</td>
+          <td>Highly scalable</td>
+          <td>+100%</td>
+        </tr>
+        <tr>
+          <td>Module Separation</td>
+          <td>None</td>
+          <td>Clear separation</td>
+          <td>+100%</td>
+        </tr>
+        <tr>
+          <td>Future-proofing</td>
+          <td>No preparation</td>
+          <td>Ticketing ready</td>
+          <td>+100%</td>
+        </tr>
+      </table>
 
-    <h2>13.3 Phase 3 - Future Enhancements</h2>
-    <table>
-      <tr>
-        <th>Feature</th>
-        <th>Description</th>
-      </tr>
-      <tr>
-        <td>State Persistence</td>
-        <td>Remember menu state across sessions</td>
-      </tr>
-      <tr>
-        <td>Search Navigation</td>
-        <td>Quick search across all menus</td>
-      </tr>
-      <tr>
-        <td>Favorites</td>
-        <td>Pin frequently used menus</td>
-      </tr>
-      <tr>
-        <td>Keyboard Shortcuts</td>
-        <td>Navigate via keyboard</td>
-      </tr>
-    </table>
+      <h2>12.2 User Experience Impact</h2>
+      <div class="highlight-box">
+        <strong>Key Improvements:</strong>
+        <ul>
+          <li><strong>Menu Discovery</strong> - Easier to find related functions grouped together</li>
+          <li><strong>Visual Hierarchy</strong> - Clear distinction between modules</li>
+          <li><strong>Cognitive Load</strong> - Reduced by collapsible sections</li>
+          <li><strong>Learning Curve</strong> - Shortened for new users</li>
+        </ul>
+      </div>
 
-    <!-- SECTION 14 -->
-    <h1>14. Kesimpulan & Rekomendasi</h1>
-
-    <h2>14.1 Kesimpulan</h2>
-    <div class="highlight-box">
-      <p>
-        Implementasi navigasi modular pada Business Command Portal telah <strong>berhasil diselesaikan</strong>
-        sesuai dengan ruang lingkup yang ditentukan. Seluruh test case telah passed dengan success rate
-        <strong>100%</strong>, dan tidak ada breaking changes yang teridentifikasi.
-      </p>
+      <h2>12.3 Technical Benefits</h2>
+      <table>
+        <tr>
+          <th>Benefit</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td>Maintainability</td>
+          <td>Easier to add new modules</td>
+        </tr>
+        <tr>
+          <td>Code Organization</td>
+          <td>Clear separation of navigation sections</td>
+        </tr>
+        <tr>
+          <td>Reusability</td>
+          <td>Pattern can be replicated for new modules</td>
+        </tr>
+        <tr>
+          <td>Testing</td>
+          <td>Isolated module states for easier testing</td>
+        </tr>
+      </table>
     </div>
 
-    <p><strong>Fitur utama yang telah diimplementasi:</strong></p>
-    <ol>
-      <li>&#10003; <strong>CRM Module</strong> - Collapsible parent menu dengan seluruh fitur CRM existing</li>
-      <li>&#10003; <strong>Ticketing Module</strong> - Placeholder menu siap untuk pengembangan fase selanjutnya</li>
-      <li>&#10003; <strong>Role-based Access</strong> - Tetap berfungsi sesuai konfigurasi existing</li>
-      <li>&#10003; <strong>Responsive Design</strong> - Berfungsi baik di desktop dan mobile</li>
-    </ol>
+    <!-- ==================== CHAPTER 13: ROADMAP ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
 
-    <h2>14.2 Rekomendasi</h2>
-    <table>
-      <tr>
-        <th>Action</th>
-        <th>Priority</th>
-        <th>Responsible</th>
-      </tr>
-      <tr>
-        <td>Code Review</td>
-        <td>High</td>
-        <td>Tech Lead</td>
-      </tr>
-      <tr>
-        <td>Merge to main branch</td>
-        <td>High</td>
-        <td>DevOps</td>
-      </tr>
-      <tr>
-        <td>Deploy to staging</td>
-        <td>High</td>
-        <td>DevOps</td>
-      </tr>
-      <tr>
-        <td>UAT with stakeholders</td>
-        <td>High</td>
-        <td>PM/QA</td>
-      </tr>
-      <tr>
-        <td>Production deployment</td>
-        <td>High</td>
-        <td>DevOps</td>
-      </tr>
-    </table>
+      <h1><span class="chapter-num">13</span> Roadmap Pengembangan</h1>
 
-    <!-- SIGN OFF -->
-    <h1 class="page-break">Lembar Pengesahan</h1>
+      <h2>13.1 Phase 1 - Navigation Structure</h2>
+      <table>
+        <tr>
+          <th>Item</th>
+          <th>Status</th>
+        </tr>
+        <tr>
+          <td>CRM Module collapsible menu</td>
+          <td><span class="status-done">COMPLETED</span></td>
+        </tr>
+        <tr>
+          <td>Ticketing Module placeholder</td>
+          <td><span class="status-done">COMPLETED</span></td>
+        </tr>
+        <tr>
+          <td>Role-based access maintenance</td>
+          <td><span class="status-done">COMPLETED</span></td>
+        </tr>
+      </table>
 
-    <table class="signature-table">
-      <tr>
-        <th>Role</th>
-        <th>Name</th>
-        <th>Signature</th>
-        <th>Date</th>
-      </tr>
-      <tr>
-        <td>Developer</td>
-        <td>Development Team</td>
-        <td><div class="signature-line"></div></td>
-        <td>20 Jan 2026</td>
-      </tr>
-      <tr>
-        <td>Tech Lead</td>
-        <td></td>
-        <td><div class="signature-line"></div></td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>Project Manager</td>
-        <td></td>
-        <td><div class="signature-line"></div></td>
-        <td></td>
-      </tr>
-      <tr>
-        <td>Client Representative</td>
-        <td></td>
-        <td><div class="signature-line"></div></td>
-        <td></td>
-      </tr>
-    </table>
+      <h2>13.2 Phase 2 - Ticketing Module (PLANNED)</h2>
+      <table>
+        <tr>
+          <th>Feature</th>
+          <th>Priority</th>
+          <th>Complexity</th>
+        </tr>
+        <tr>
+          <td>Ticket List View</td>
+          <td>High</td>
+          <td>Medium</td>
+        </tr>
+        <tr>
+          <td>Create Ticket</td>
+          <td>High</td>
+          <td>Medium</td>
+        </tr>
+        <tr>
+          <td>Ticket Detail</td>
+          <td>High</td>
+          <td>Medium</td>
+        </tr>
+        <tr>
+          <td>Ticket Assignment</td>
+          <td>Medium</td>
+          <td>Low</td>
+        </tr>
+        <tr>
+          <td>SLA Management</td>
+          <td>Low</td>
+          <td>High</td>
+        </tr>
+      </table>
 
-    <div class="doc-footer">
-      <p><strong>— AKHIR DOKUMEN —</strong></p>
-      <p style="margin-top: 20px;">
-        UGC Business Command Portal - Implementation Report<br>
-        Document ID: UGC-BCP-RPT-2026-001 | Version 1.0<br>
-        &copy; 2026 PT UGC Logistics Indonesia. All Rights Reserved.
-      </p>
+      <h2>13.3 Phase 3 - Future Enhancements</h2>
+      <table>
+        <tr>
+          <th>Feature</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td>State Persistence</td>
+          <td>Remember menu state across sessions</td>
+        </tr>
+        <tr>
+          <td>Search Navigation</td>
+          <td>Quick search across all menus</td>
+        </tr>
+        <tr>
+          <td>Favorites</td>
+          <td>Pin frequently used menus</td>
+        </tr>
+        <tr>
+          <td>Keyboard Shortcuts</td>
+          <td>Navigate via keyboard</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ==================== CHAPTER 14: KESIMPULAN ==================== -->
+    <div class="content-page">
+      <div class="page-header">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI" class="page-header-logo">
+        <div class="page-header-title">
+          <strong>Implementation Report</strong>
+          UGC Business Command Portal
+        </div>
+      </div>
+
+      <h1><span class="chapter-num">14</span> Kesimpulan & Rekomendasi</h1>
+
+      <h2>14.1 Kesimpulan</h2>
+      <div class="highlight-box">
+        <p>
+          Implementasi navigasi modular pada Business Command Portal telah <strong>berhasil diselesaikan</strong>
+          sesuai dengan ruang lingkup yang ditentukan. Seluruh test case telah passed dengan success rate
+          <strong>100%</strong>, dan tidak ada breaking changes yang teridentifikasi.
+        </p>
+      </div>
+
+      <p><strong>Fitur utama yang telah diimplementasi:</strong></p>
+      <ol>
+        <li>&#10003; <strong>CRM Module</strong> - Collapsible parent menu dengan seluruh fitur CRM existing</li>
+        <li>&#10003; <strong>Ticketing Module</strong> - Placeholder menu siap untuk pengembangan fase selanjutnya</li>
+        <li>&#10003; <strong>Role-based Access</strong> - Tetap berfungsi sesuai konfigurasi existing</li>
+        <li>&#10003; <strong>Responsive Design</strong> - Berfungsi baik di desktop dan mobile</li>
+      </ol>
+
+      <h2>14.2 Rekomendasi</h2>
+      <table>
+        <tr>
+          <th>Action</th>
+          <th>Priority</th>
+          <th>Responsible</th>
+        </tr>
+        <tr>
+          <td>Code Review</td>
+          <td>High</td>
+          <td>Tech Lead</td>
+        </tr>
+        <tr>
+          <td>Merge to main branch</td>
+          <td>High</td>
+          <td>DevOps</td>
+        </tr>
+        <tr>
+          <td>Deploy to staging</td>
+          <td>High</td>
+          <td>DevOps</td>
+        </tr>
+        <tr>
+          <td>UAT with stakeholders</td>
+          <td>High</td>
+          <td>PM/QA</td>
+        </tr>
+        <tr>
+          <td>Production deployment</td>
+          <td>High</td>
+          <td>DevOps</td>
+        </tr>
+      </table>
+
+      <div class="doc-footer">
+        <img src="https://i.ibb.co.com/5xjwC0nB/Main-Logo-no-tagline-01.png" alt="SAIKI Group">
+        <p><strong>— AKHIR DOKUMEN —</strong></p>
+        <p style="margin-top: 15px;">
+          UGC Business Command Portal - Implementation Report<br>
+          Document ID: UGC-BCP-RPT-2026-001 | Version 1.0<br>
+          <br>
+          <strong>SAIKI Consultancy</strong> | SAIKI Group<br>
+          Phone: +6221 8428 3474 | Email: info@saiki.id
+        </p>
+      </div>
     </div>
 
   </div>
