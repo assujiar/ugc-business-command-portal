@@ -1,15 +1,37 @@
 -- =====================================================
--- Migration: 042_fix_accounts_rls_for_ticketing.sql
--- Fix accounts RLS to allow ticketing users (Ops roles) to view accounts
+-- Migration: 043_fix_duplicate_is_ticketing_ops.sql
+-- Fix duplicate is_ticketing_ops function ambiguity
 -- =====================================================
--- Problem: Ops roles (EXIM Ops, domestics Ops, etc.) can access tickets
--- but cannot view linked accounts because accounts RLS only allows
--- is_admin(), is_sales(), and is_marketing()
--- Solution: Add is_ticketing_ops(auth.uid()) check to accounts_select policy
--- Note: We use the existing is_ticketing_ops(UUID) function from migration 036
+-- Problem: There were two is_ticketing_ops functions:
+--   1. is_ticketing_ops(UUID) from migration 036 (correct one)
+--   2. is_ticketing_ops() zero-arg from migration 042 (duplicate)
+-- This caused "function name is not unique" errors
+-- Solution: Drop the zero-arg version, keep only the UUID version
 -- =====================================================
 
--- Update accounts_select policy to include ticketing ops users
+-- Drop the zero-arg version if it exists (this was created by mistake in old 042)
+DROP FUNCTION IF EXISTS public.is_ticketing_ops();
+
+-- Verify the UUID version still exists (from migration 036)
+-- If somehow missing, recreate it
+CREATE OR REPLACE FUNCTION public.is_ticketing_ops(user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_role TEXT;
+BEGIN
+    SELECT role INTO v_role FROM profiles
+    WHERE profiles.user_id = is_ticketing_ops.user_id AND is_active = TRUE;
+
+    RETURN v_role IN ('EXIM Ops', 'domestics Ops', 'Import DTD Ops', 'traffic & warehous');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+COMMENT ON FUNCTION public.is_ticketing_ops(UUID) IS 'Check if specified user is a ticketing ops role';
+
+-- Ensure grants are correct
+GRANT EXECUTE ON FUNCTION public.is_ticketing_ops(UUID) TO authenticated;
+
+-- Also ensure the accounts_select policy uses the correct function signature
 DROP POLICY IF EXISTS accounts_select ON accounts;
 
 CREATE POLICY accounts_select ON accounts FOR SELECT
@@ -34,7 +56,7 @@ CREATE POLICY accounts_select ON accounts FOR SELECT
     OR (is_marketing() AND EXISTS (
       SELECT 1 FROM leads WHERE lead_id = accounts.lead_id AND marketing_owner_user_id = auth.uid()
     ))
-    -- NEW: Ticketing Ops users can view accounts linked to tickets they have access to
+    -- Ticketing Ops users can view accounts linked to tickets they have access to
     OR (public.is_ticketing_ops(auth.uid()) AND EXISTS (
       SELECT 1 FROM tickets t
       WHERE t.account_id = accounts.account_id

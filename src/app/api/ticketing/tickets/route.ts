@@ -131,6 +131,10 @@ export async function POST(request: NextRequest) {
       account_id,
       contact_id,
       rfq_data,
+      sender_name,
+      sender_email,
+      sender_phone,
+      show_sender_to_ops = true,
     } = body
 
     // Validate required fields
@@ -162,6 +166,19 @@ export async function POST(request: NextRequest) {
 
     if (!rpcResult.success) {
       return NextResponse.json({ error: rpcResult.error || 'Failed to create ticket' }, { status: 400 })
+    }
+
+    // Update sender info fields if provided
+    if (rpcResult.ticket_id && (sender_name || sender_email || sender_phone || show_sender_to_ops !== undefined)) {
+      await (supabase as any)
+        .from('tickets')
+        .update({
+          sender_name: sender_name || null,
+          sender_email: sender_email || null,
+          sender_phone: sender_phone || null,
+          show_sender_to_ops: show_sender_to_ops ?? true,
+        })
+        .eq('id', rpcResult.ticket_id)
     }
 
     // Auto-assign to department ops/manager
