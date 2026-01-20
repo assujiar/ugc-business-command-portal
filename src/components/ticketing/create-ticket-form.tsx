@@ -175,15 +175,28 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
         setSenderEmail(contact.email || '')
         setSenderPhone(contact.phone || contact.mobile || '')
       } else {
-        // No contacts found for this account
-        setSenderName('')
-        setSenderEmail('')
-        setSenderPhone('')
-        toast({
-          title: 'No contact found',
-          description: 'Account ini tidak punya contact tersimpan. Silakan isi manual.',
-          variant: 'default',
-        })
+        // No contacts in contacts table, try to get PIC info from account directly
+        const { data: account } = await (supabase as any)
+          .from('accounts')
+          .select('pic_name, pic_email, pic_phone')
+          .eq('account_id', accountId)
+          .single()
+
+        if (account && (account.pic_name || account.pic_email || account.pic_phone)) {
+          setSenderName(account.pic_name || '')
+          setSenderEmail(account.pic_email || '')
+          setSenderPhone(account.pic_phone || '')
+        } else {
+          // No contact info found at all
+          setSenderName('')
+          setSenderEmail('')
+          setSenderPhone('')
+          toast({
+            title: 'No contact found',
+            description: 'Account ini tidak punya contact tersimpan. Silakan isi manual.',
+            variant: 'default',
+          })
+        }
       }
     } catch (err) {
       console.error('Error fetching contact:', err)
