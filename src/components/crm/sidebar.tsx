@@ -44,7 +44,6 @@ const navigation = [
   { name: 'Accounts', href: '/accounts', icon: Building2, permission: 'pipeline' },
   { name: 'Sales Plan', href: '/sales-plan', icon: Target, permission: 'salesPlan' },
   { name: 'Activities', href: '/activities', icon: Calendar, permission: 'activities' },
-  { name: 'Targets', href: '/targets', icon: Users, permission: 'salesInbox' },
   { name: 'Imports', href: '/imports', icon: Upload, permission: 'import' },
 ]
 

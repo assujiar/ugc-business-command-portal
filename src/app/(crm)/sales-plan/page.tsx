@@ -36,11 +36,11 @@ export default async function SalesPlanPage({ searchParams }: PageProps) {
   const endDate = typeof params.endDate === 'string' ? params.endDate : null
   const salespersonId = typeof params.salespersonId === 'string' ? params.salespersonId : null
 
-  // Fetch sales profiles for filter dropdown
+  // Fetch sales profiles for filter dropdown (only salesperson role)
   const { data: salesProfiles } = await (adminClient as any)
     .from('profiles')
     .select('user_id, name, email, role')
-    .in('role', ['salesperson', 'sales manager', 'sales support'])
+    .eq('role', 'salesperson')
 
   // Fetch sales plans with new structure
   let query = (adminClient as any)

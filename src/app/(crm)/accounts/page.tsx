@@ -75,11 +75,11 @@ export default async function AccountsPage({ searchParams }: PageProps) {
     userRole = profile?.role ?? null
   }
 
-  // Fetch sales profiles for filter dropdown
+  // Fetch sales profiles for filter dropdown (only salesperson role)
   const { data: salesProfiles } = await (adminClient as any)
     .from('profiles')
     .select('user_id, name, email, role')
-    .in('role', ['salesperson', 'sales manager', 'sales support'])
+    .eq('role', 'salesperson')
 
   const { data: accounts } = await supabase
     .from('v_accounts_enriched')

@@ -106,11 +106,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   }
   // Admin/Director see all (no filter)
 
-  // Additional queries for sales performance analytics
+  // Additional queries for sales performance analytics (only salesperson role for analytics)
   const salesProfilesQuery = (adminClient as any)
     .from('profiles')
     .select('user_id, name, email, role')
-    .in('role', ['salesperson', 'sales manager', 'sales support'])
+    .eq('role', 'salesperson')
 
   const stageHistoryQuery = (adminClient as any)
     .from('opportunity_stage_history')
