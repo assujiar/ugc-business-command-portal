@@ -12,7 +12,7 @@ DO $$
 DECLARE
     v_first_user_id UUID;
     v_second_user_id UUID;
-    v_first_account_id UUID;
+    v_first_account_id TEXT;
     v_ticket_id_1 UUID;
     v_ticket_id_2 UUID;
     v_ticket_id_3 UUID;
