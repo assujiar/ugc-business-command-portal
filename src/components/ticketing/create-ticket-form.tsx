@@ -12,6 +12,10 @@ import {
   MapPin,
   Truck,
   Package,
+  Upload,
+  X,
+  File,
+  Paperclip,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -108,6 +112,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
   const [loading, setLoading] = useState(false)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [ticketType, setTicketType] = useState<TicketType>('GEN')
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     defaultValues: {
@@ -235,6 +240,42 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     }))
   }
 
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files) return
+
+    const newFiles: File[] = []
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      // Max 10MB per file
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: 'File terlalu besar',
+          description: `${file.name} melebihi batas 10MB`,
+          variant: 'destructive',
+        })
+        continue
+      }
+      newFiles.push(file)
+    }
+
+    setPendingFiles((prev) => [...prev, ...newFiles])
+    e.target.value = '' // Reset input
+  }
+
+  // Remove pending file
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // Format file size
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
   // Group services by department for the dropdown
   const domesticsServices = SERVICE_TYPES.filter(
     (s) => s.department === 'Domestics Operations'
@@ -321,9 +362,22 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
         throw new Error(result.error || 'Failed to create ticket')
       }
 
+      // Upload pending files if any
+      if (pendingFiles.length > 0 && result.ticket_id) {
+        for (const file of pendingFiles) {
+          const formData = new FormData()
+          formData.append('file', file)
+
+          await fetch(`/api/ticketing/tickets/${result.ticket_id}/attachments`, {
+            method: 'POST',
+            body: formData,
+          })
+        }
+      }
+
       toast({
         title: 'Ticket created',
-        description: `Ticket ${result.ticket_code} has been created successfully`,
+        description: `Ticket ${result.ticket_code} has been created successfully${pendingFiles.length > 0 ? ` with ${pendingFiles.length} attachment(s)` : ''}`,
       })
 
       router.push(`/tickets/${result.ticket_id}`)
@@ -486,6 +540,62 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
               rows={4}
               {...register('description')}
             />
+          </div>
+
+          {/* Attachments */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              Attachments (Optional)
+            </Label>
+            <div className="border-2 border-dashed rounded-lg p-4">
+              <input
+                type="file"
+                id="file-upload"
+                className="hidden"
+                multiple
+                onChange={handleFileSelect}
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar"
+              />
+              <label
+                htmlFor="file-upload"
+                className="flex flex-col items-center justify-center cursor-pointer py-4"
+              >
+                <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  Click to upload or drag and drop
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  PDF, DOC, XLS, Images (Max 10MB per file)
+                </p>
+              </label>
+            </div>
+            {pendingFiles.length > 0 && (
+              <div className="space-y-2 mt-3">
+                {pendingFiles.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-2 border rounded-lg bg-muted/50"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm truncate">{file.name}</span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0">
+                        ({formatFileSize(file.size)})
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removePendingFile(index)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
