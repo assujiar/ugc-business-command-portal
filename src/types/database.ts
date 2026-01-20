@@ -1076,6 +1076,7 @@ export type TicketCloseOutcome = 'won' | 'lost'
 export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected'
 export type TicketEventType = 'created' | 'assigned' | 'reassigned' | 'status_changed' | 'priority_changed' | 'comment_added' | 'attachment_added' | 'quote_created' | 'quote_sent' | 'resolved' | 'closed' | 'reopened'
 export type TicketingDepartment = 'MKT' | 'SAL' | 'DOM' | 'EXI' | 'DTD' | 'TRF'
+export type ResponseOwner = 'creator' | 'assignee'
 
 // RFQ Data structure
 export interface RFQData {
@@ -1132,6 +1133,7 @@ export interface Ticket {
   close_reason: string | null
   competitor_name: string | null
   competitor_cost: number | null
+  pending_response_from: ResponseOwner | null
   // Relations (when joined)
   creator?: {
     user_id: string
@@ -1264,4 +1266,124 @@ export interface TicketingDashboardSummary {
   tickets_by_department: Array<{ department: string; count: number }>
   tickets_by_status: Array<{ status: string; count: number }>
   tickets_by_priority: Array<{ priority: string; count: number }>
+}
+
+// SLA Business Hours Configuration
+export interface SLABusinessHours {
+  id: string
+  day_of_week: number // 0=Sunday, 6=Saturday
+  is_working_day: boolean
+  start_time: string // TIME format HH:mm:ss
+  end_time: string
+  created_at: string
+  updated_at: string
+}
+
+// SLA Holidays
+export interface SLAHoliday {
+  id: string
+  holiday_date: string
+  name: string
+  description: string | null
+  is_recurring: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  creator?: {
+    user_id: string
+    name: string
+  }
+}
+
+// Ticket Response Exchange
+export interface TicketResponseExchange {
+  id: string
+  ticket_id: string
+  responder_user_id: string
+  responder_type: ResponseOwner
+  comment_id: string | null
+  previous_response_at: string | null
+  responded_at: string
+  raw_response_seconds: number | null
+  business_response_seconds: number | null
+  exchange_number: number
+  created_at: string
+  responder?: {
+    user_id: string
+    name: string
+  }
+}
+
+// Ticket Response Metrics
+export interface TicketResponseMetrics {
+  id: string
+  ticket_id: string
+  creator_total_responses: number
+  creator_avg_response_seconds: number
+  creator_avg_business_response_seconds: number
+  assignee_total_responses: number
+  assignee_avg_response_seconds: number
+  assignee_avg_business_response_seconds: number
+  assignee_first_response_seconds: number | null
+  assignee_first_response_business_seconds: number | null
+  time_to_first_quote_seconds: number | null
+  time_to_first_quote_business_seconds: number | null
+  time_to_resolution_seconds: number | null
+  time_to_resolution_business_seconds: number | null
+  created_at: string
+  updated_at: string
+}
+
+// SLA Details Response (from RPC)
+export interface TicketSLADetails {
+  success: boolean
+  ticket_id: string
+  ticket_code: string
+  status: TicketStatus
+  pending_response_from: ResponseOwner | null
+  created_at: string
+  created_by: string
+  assigned_to: string | null
+  sla: {
+    first_response_sla_hours: number
+    first_response_at: string | null
+    first_response_met: boolean | null
+    resolution_sla_hours: number
+    resolution_at: string | null
+    resolution_met: boolean | null
+    is_breached: boolean
+  }
+  age: {
+    total_seconds: number
+    business_seconds: number
+    formatted: string
+  }
+  metrics: {
+    creator: {
+      total_responses: number
+      avg_response_seconds: number
+      avg_business_response_seconds: number
+      avg_formatted: string
+    }
+    assignee: {
+      total_responses: number
+      avg_response_seconds: number
+      avg_business_response_seconds: number
+      avg_formatted: string
+      first_response_seconds: number | null
+      first_response_business_seconds: number | null
+      first_response_formatted: string | null
+    }
+    quote: {
+      time_to_first_quote_seconds: number | null
+      time_to_first_quote_business_seconds: number | null
+      time_to_first_quote_formatted: string | null
+    }
+    resolution: {
+      time_to_resolution_seconds: number | null
+      time_to_resolution_business_seconds: number | null
+      time_to_resolution_formatted: string | null
+    }
+  } | null
+  exchanges: TicketResponseExchange[]
 }

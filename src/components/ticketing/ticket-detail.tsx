@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createBrowserClient } from '@supabase/ssr'
@@ -25,11 +25,21 @@ import {
   Download,
   File,
   Trash2,
+  DollarSign,
+  Timer,
+  AlertTriangle,
+  TrendingUp,
+  Award,
+  ThumbsDown,
+  ThumbsUp,
+  RotateCcw,
+  Forward,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import {
   Select,
@@ -55,6 +65,7 @@ import {
   canTransitionTickets,
   canCloseTickets,
   canCreateInternalComments,
+  canViewAllTickets,
 } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 import type {
@@ -64,6 +75,7 @@ import type {
   TicketStatus,
   TicketPriority,
   TicketingDepartment,
+  TicketSLADetails,
 } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -116,20 +128,53 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const [submittingComment, setSubmittingComment] = useState(false)
   const [attachments, setAttachments] = useState<any[]>([])
   const [uploadingFile, setUploadingFile] = useState(false)
+  const [slaDetails, setSlaDetails] = useState<TicketSLADetails | null>(null)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  // Quote dialog state
+  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false)
+  const [quoteAmount, setQuoteAmount] = useState('')
+  const [quoteCurrency, setQuoteCurrency] = useState('IDR')
+  const [quoteTerms, setQuoteTerms] = useState('')
+
+  // Lost dialog state
+  const [lostDialogOpen, setLostDialogOpen] = useState(false)
+  const [lostReason, setLostReason] = useState('')
+  const [lostCompetitor, setLostCompetitor] = useState('')
+  const [lostCompetitorCost, setLostCompetitorCost] = useState('')
 
   // Permission checks
   const canAssign = canAssignTickets(profile.role)
   const canTransition = canTransitionTickets(profile.role)
   const canClose = canCloseTickets(profile.role)
   const canInternalComment = canCreateInternalComments(profile.role)
+  const canViewAll = canViewAllTickets(profile.role)
+
+  // Role-based UI
+  const isCreator = ticket.created_by === profile.user_id
+  const isAssignee = ticket.assigned_to === profile.user_id
+  const isOpsOrAdmin = canViewAll
 
   const supabase = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  // Fetch SLA details
+  const fetchSLADetails = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/ticketing/tickets/${ticket.id}/sla`)
+      const result = await response.json()
+      if (result.success && result.data) {
+        setSlaDetails(result.data)
+      }
+    } catch (err) {
+      console.error('Error fetching SLA details:', err)
+    }
+  }, [ticket.id])
+
   // Fetch comments and events
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       // Fetch comments
@@ -173,16 +218,84 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       if (attachmentsData.success) {
         setAttachments(attachmentsData.data || [])
       }
+
+      // Fetch SLA details
+      await fetchSLADetails()
     } catch (err) {
       console.error('Error fetching data:', err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [ticket.id, canAssign, supabase, fetchSLADetails])
 
   useEffect(() => {
     fetchData()
-  }, [ticket.id])
+  }, [fetchData])
+
+  // Refresh ticket data
+  const refreshTicket = async () => {
+    const { data: updatedTicket } = await supabase
+      .from('tickets')
+      .select(`
+        *,
+        creator:profiles!tickets_created_by_fkey(user_id, name, email),
+        assignee:profiles!tickets_assigned_to_fkey(user_id, name, email),
+        account:accounts!tickets_account_id_fkey(account_id, company_name)
+      `)
+      .eq('id', ticket.id)
+      .single()
+
+    if (updatedTicket) {
+      setTicket(updatedTicket)
+    }
+  }
+
+  // Execute ticket action
+  const executeAction = async (action: string, data: any = {}) => {
+    setActionLoading(action)
+    try {
+      const response = await fetch(`/api/ticketing/tickets/${ticket.id}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...data }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `Failed to execute action: ${action}`)
+      }
+
+      toast({
+        title: 'Success',
+        description: getActionSuccessMessage(action),
+      })
+
+      await refreshTicket()
+      await fetchData()
+      return true
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to execute action',
+        variant: 'destructive',
+      })
+      return false
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const getActionSuccessMessage = (action: string): string => {
+    switch (action) {
+      case 'submit_quote': return 'Quote submitted successfully'
+      case 'request_adjustment': return 'Adjustment requested'
+      case 'quote_sent_to_customer': return 'Marked as sent to customer'
+      case 'mark_won': return 'Ticket marked as won!'
+      case 'mark_lost': return 'Ticket marked as lost'
+      default: return 'Action completed'
+    }
+  }
 
   // Upload attachment
   const handleUploadAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -229,7 +342,6 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     } finally {
       setUploadingFile(false)
-      // Reset file input
       e.target.value = ''
     }
   }
@@ -297,6 +409,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
 
       setNewComment('')
       setIsInternal(false)
+      await refreshTicket()
       fetchData()
     } catch (err) {
       toast({
@@ -329,21 +442,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         description: 'Ticket has been assigned successfully',
       })
 
-      // Refresh ticket data
-      const { data: updatedTicket } = await supabase
-        .from('tickets')
-        .select(`
-          *,
-          creator:profiles!tickets_created_by_fkey(user_id, name, email),
-          assignee:profiles!tickets_assigned_to_fkey(user_id, name, email),
-          account:accounts!tickets_account_id_fkey(account_id, company_name)
-        `)
-        .eq('id', ticket.id)
-        .single()
-
-      if (updatedTicket) {
-        setTicket(updatedTicket)
-      }
+      await refreshTicket()
       fetchData()
     } catch (err) {
       toast({
@@ -374,21 +473,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         description: `Ticket status changed to ${statusVariants[newStatus]?.label || newStatus}`,
       })
 
-      // Refresh ticket data
-      const { data: updatedTicket } = await supabase
-        .from('tickets')
-        .select(`
-          *,
-          creator:profiles!tickets_created_by_fkey(user_id, name, email),
-          assignee:profiles!tickets_assigned_to_fkey(user_id, name, email),
-          account:accounts!tickets_account_id_fkey(account_id, company_name)
-        `)
-        .eq('id', ticket.id)
-        .single()
-
-      if (updatedTicket) {
-        setTicket(updatedTicket)
-      }
+      await refreshTicket()
       fetchData()
     } catch (err) {
       toast({
@@ -426,6 +511,49 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     return transitions[currentStatus] || []
   }
 
+  // Handle submit quote
+  const handleSubmitQuote = async () => {
+    const amount = parseFloat(quoteAmount)
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a valid amount',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const success = await executeAction('submit_quote', {
+      amount,
+      currency: quoteCurrency,
+      terms: quoteTerms || null,
+    })
+
+    if (success) {
+      setQuoteDialogOpen(false)
+      setQuoteAmount('')
+      setQuoteTerms('')
+    }
+  }
+
+  // Handle mark lost
+  const handleMarkLost = async () => {
+    const success = await executeAction('mark_lost', {
+      reason: lostReason || null,
+      competitor_name: lostCompetitor || null,
+      competitor_cost: lostCompetitorCost ? parseFloat(lostCompetitorCost) : null,
+    })
+
+    if (success) {
+      setLostDialogOpen(false)
+      setLostReason('')
+      setLostCompetitor('')
+      setLostCompetitorCost('')
+    }
+  }
+
+  const isClosed = ticket.status === 'closed' || ticket.status === 'resolved'
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -451,6 +579,97 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
           <p className="text-muted-foreground mt-1">{ticket.subject}</p>
         </div>
       </div>
+
+      {/* SLA Tracking Card */}
+      {slaDetails && (
+        <Card className={slaDetails.sla?.is_breached ? 'border-destructive' : ''}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Timer className="h-4 w-4" />
+              SLA Tracking
+              {slaDetails.sla?.is_breached && (
+                <Badge variant="destructive" className="ml-2">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  Overdue
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Status */}
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Status</p>
+                <div className="flex items-center gap-2 mt-1">
+                  {slaDetails.sla?.is_breached ? (
+                    <Badge variant="destructive">Overdue</Badge>
+                  ) : slaDetails.sla?.first_response_met === true ? (
+                    <Badge variant="outline" className="border-green-500 text-green-600">On Track</Badge>
+                  ) : (
+                    <Badge variant="secondary">Awaiting...</Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Ticket Age */}
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Ticket Age</p>
+                <p className="text-lg font-semibold mt-1">{slaDetails.age?.formatted || 'N/A'}</p>
+              </div>
+
+              {/* First Response */}
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">First Response</p>
+                {slaDetails.sla?.first_response_at ? (
+                  <p className="text-sm mt-1">
+                    {slaDetails.metrics?.assignee?.first_response_formatted || 'N/A'}
+                    {slaDetails.sla?.first_response_met !== null && (
+                      <span className={slaDetails.sla.first_response_met ? 'text-green-600 ml-1' : 'text-red-600 ml-1'}>
+                        ({slaDetails.sla.first_response_met ? 'Met' : 'Missed'})
+                      </span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-1">Awaiting...</p>
+                )}
+              </div>
+
+              {/* Timeline */}
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Created</p>
+                <p className="text-sm mt-1">{formatDate(ticket.created_at)}</p>
+              </div>
+            </div>
+
+            {/* Response Metrics */}
+            {slaDetails.metrics && (
+              <>
+                <Separator className="my-4" />
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Creator Avg Response</p>
+                    <p className="text-sm font-medium">{slaDetails.metrics.creator?.avg_formatted || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Dept Avg Response</p>
+                    <p className="text-sm font-medium">{slaDetails.metrics.assignee?.avg_formatted || 'N/A'}</p>
+                  </div>
+                  {ticket.ticket_type === 'RFQ' && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Time to Quote</p>
+                      <p className="text-sm font-medium">{slaDetails.metrics.quote?.time_to_first_quote_formatted || 'N/A'}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Resolution Time</p>
+                    <p className="text-sm font-medium">{slaDetails.metrics.resolution?.time_to_resolution_formatted || 'N/A'}</p>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
@@ -518,23 +737,25 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   <Paperclip className="h-4 w-4" />
                   Attachments ({attachments.length})
                 </div>
-                <label htmlFor="file-upload">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={uploadingFile}
-                    asChild
-                  >
-                    <span>
-                      {uploadingFile ? (
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Upload className="mr-2 h-4 w-4" />
-                      )}
-                      Upload File
-                    </span>
-                  </Button>
-                </label>
+                {!isClosed && (
+                  <label htmlFor="file-upload">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={uploadingFile}
+                      asChild
+                    >
+                      <span>
+                        {uploadingFile ? (
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="mr-2 h-4 w-4" />
+                        )}
+                        Attach Files
+                      </span>
+                    </Button>
+                  </label>
+                )}
                 <input
                   id="file-upload"
                   type="file"
@@ -543,6 +764,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   disabled={uploadingFile}
                 />
               </CardTitle>
+              <p className="text-xs text-muted-foreground">Max 10MB per file. Allowed: PDF, DOC, XLS, JPG, PNG</p>
             </CardHeader>
             <CardContent>
               {attachments.length === 0 ? (
@@ -575,13 +797,15 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                             <Download className="h-4 w-4" />
                           </a>
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteAttachment(attachment.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {!isClosed && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteAttachment(attachment.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -589,6 +813,261 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
               )}
             </CardContent>
           </Card>
+
+          {/* Actions Card - Role Based */}
+          {!isClosed && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  Actions
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">Respond or update ticket status</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Comment Form */}
+                <div className="space-y-3">
+                  <Label>Add Comment</Label>
+                  <Textarea
+                    placeholder="Write your message..."
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    rows={3}
+                  />
+                  {canInternalComment && (
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="internal"
+                        checked={isInternal}
+                        onCheckedChange={(checked) => setIsInternal(checked as boolean)}
+                      />
+                      <Label htmlFor="internal" className="text-sm">
+                        Internal note (not visible to creator)
+                      </Label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="space-y-2">
+                  {/* Send Comment Button - Always visible */}
+                  <Button
+                    onClick={handleAddComment}
+                    disabled={!newComment.trim() || submittingComment}
+                    className="w-full"
+                    variant="secondary"
+                  >
+                    {submittingComment ? (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-4 w-4" />
+                    )}
+                    Send Comment
+                  </Button>
+
+                  {/* Creator Actions */}
+                  {isCreator && ticket.ticket_type === 'RFQ' && (
+                    <>
+                      {/* Request Adjustment - when waiting for creator response */}
+                      {(ticket.status === 'waiting_customer' || ticket.status === 'in_progress') && (
+                        <Button
+                          onClick={() => executeAction('request_adjustment')}
+                          disabled={actionLoading === 'request_adjustment'}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          {actionLoading === 'request_adjustment' ? (
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                          )}
+                          Request Adjustment / Nego Harga
+                        </Button>
+                      )}
+
+                      {/* Quote Sent to Customer */}
+                      {ticket.status === 'waiting_customer' && (
+                        <Button
+                          onClick={() => executeAction('quote_sent_to_customer')}
+                          disabled={actionLoading === 'quote_sent_to_customer'}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          {actionLoading === 'quote_sent_to_customer' ? (
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Forward className="mr-2 h-4 w-4" />
+                          )}
+                          Quote Sent to Customer
+                        </Button>
+                      )}
+
+                      {/* Won/Lost Buttons */}
+                      {(ticket.status === 'pending' || ticket.status === 'waiting_customer') && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            onClick={() => executeAction('mark_won')}
+                            disabled={actionLoading === 'mark_won'}
+                            className="w-full bg-green-600 hover:bg-green-700"
+                          >
+                            {actionLoading === 'mark_won' ? (
+                              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <ThumbsUp className="mr-2 h-4 w-4" />
+                            )}
+                            Won
+                          </Button>
+
+                          <Dialog open={lostDialogOpen} onOpenChange={setLostDialogOpen}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="destructive"
+                                className="w-full"
+                              >
+                                <ThumbsDown className="mr-2 h-4 w-4" />
+                                Lost
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Mark as Lost</DialogTitle>
+                                <DialogDescription>
+                                  Please provide details about why this ticket was lost.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div>
+                                  <Label>Reason</Label>
+                                  <Textarea
+                                    placeholder="Why was this lost?"
+                                    value={lostReason}
+                                    onChange={(e) => setLostReason(e.target.value)}
+                                  />
+                                </div>
+                                <div>
+                                  <Label>Competitor Name (optional)</Label>
+                                  <Input
+                                    placeholder="Who won the deal?"
+                                    value={lostCompetitor}
+                                    onChange={(e) => setLostCompetitor(e.target.value)}
+                                  />
+                                </div>
+                                <div>
+                                  <Label>Competitor Cost (optional)</Label>
+                                  <Input
+                                    type="number"
+                                    placeholder="Competitor's price"
+                                    value={lostCompetitorCost}
+                                    onChange={(e) => setLostCompetitorCost(e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setLostDialogOpen(false)}>
+                                  Cancel
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  onClick={handleMarkLost}
+                                  disabled={actionLoading === 'mark_lost'}
+                                >
+                                  {actionLoading === 'mark_lost' ? (
+                                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : null}
+                                  Confirm Lost
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Assignee/Ops Actions */}
+                  {(isAssignee || isOpsOrAdmin) && ticket.ticket_type === 'RFQ' && !isCreator && (
+                    <>
+                      {/* Submit Quote Button */}
+                      {(ticket.status === 'open' || ticket.status === 'in_progress' || ticket.status === 'need_adjustment') && (
+                        <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button className="w-full bg-green-600 hover:bg-green-700">
+                              <DollarSign className="mr-2 h-4 w-4" />
+                              Submit Quote
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Submit Quote</DialogTitle>
+                              <DialogDescription>
+                                Enter the quote details to send to the customer.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div>
+                                <Label>Amount *</Label>
+                                <Input
+                                  type="number"
+                                  placeholder="Enter amount"
+                                  value={quoteAmount}
+                                  onChange={(e) => setQuoteAmount(e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <Label>Currency</Label>
+                                <Select value={quoteCurrency} onValueChange={setQuoteCurrency}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="IDR">IDR</SelectItem>
+                                    <SelectItem value="USD">USD</SelectItem>
+                                    <SelectItem value="SGD">SGD</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <Label>Terms & Conditions (optional)</Label>
+                                <Textarea
+                                  placeholder="Enter any terms or conditions"
+                                  value={quoteTerms}
+                                  onChange={(e) => setQuoteTerms(e.target.value)}
+                                />
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setQuoteDialogOpen(false)}>
+                                Cancel
+                              </Button>
+                              <Button
+                                onClick={handleSubmitQuote}
+                                disabled={actionLoading === 'submit_quote' || !quoteAmount}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                {actionLoading === 'submit_quote' ? (
+                                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                ) : null}
+                                Submit Quote
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Status indicator */}
+                {ticket.pending_response_from && (
+                  <div className="text-center pt-2">
+                    <Badge variant={ticket.pending_response_from === 'creator' ? 'secondary' : 'default'}>
+                      Waiting for {ticket.pending_response_from === 'creator' ? 'Creator' : 'Department'} response
+                    </Badge>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Comments */}
           <Card>
@@ -599,7 +1078,6 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Comment List */}
               {comments.length === 0 ? (
                 <p className="text-muted-foreground text-sm text-center py-4">
                   No comments yet
@@ -612,7 +1090,9 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                       className={`rounded-lg p-4 ${
                         comment.is_internal
                           ? 'bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800'
-                          : 'bg-muted/50'
+                          : comment.user_id === ticket.created_by
+                            ? 'bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800'
+                            : 'bg-muted/50'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
@@ -626,6 +1106,11 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                               Internal
                             </Badge>
                           )}
+                          {comment.user_id === ticket.created_by && (
+                            <Badge variant="outline" className="text-xs border-blue-300">
+                              Creator
+                            </Badge>
+                          )}
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {formatDate(comment.created_at)}
@@ -636,43 +1121,6 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   ))}
                 </div>
               )}
-
-              <Separator />
-
-              {/* Add Comment Form */}
-              <div className="space-y-3">
-                <Textarea
-                  placeholder="Add a comment..."
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  rows={3}
-                />
-                <div className="flex items-center justify-between">
-                  {canInternalComment && (
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="internal"
-                        checked={isInternal}
-                        onCheckedChange={(checked) => setIsInternal(checked as boolean)}
-                      />
-                      <Label htmlFor="internal" className="text-sm">
-                        Internal note (not visible to creator)
-                      </Label>
-                    </div>
-                  )}
-                  <Button
-                    onClick={handleAddComment}
-                    disabled={!newComment.trim() || submittingComment}
-                  >
-                    {submittingComment ? (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="mr-2 h-4 w-4" />
-                    )}
-                    Send
-                  </Button>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -747,14 +1195,26 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   </div>
                 </div>
               )}
+              {ticket.close_outcome && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Outcome</p>
+                  <Badge variant={ticket.close_outcome === 'won' ? 'default' : 'destructive'}>
+                    {ticket.close_outcome === 'won' ? (
+                      <><Award className="h-3 w-3 mr-1" /> Won</>
+                    ) : (
+                      <><XCircle className="h-3 w-3 mr-1" /> Lost</>
+                    )}
+                  </Badge>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Actions Card */}
+          {/* Admin Actions Card */}
           {(canAssign || canTransition) && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Actions</CardTitle>
+                <CardTitle className="text-lg">Admin Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {/* Assign */}
