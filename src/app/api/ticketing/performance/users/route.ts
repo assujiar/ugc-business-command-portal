@@ -37,9 +37,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Only admin/ops can view user performance
+    // Non-ops users get empty performance data
     if (!canViewAllTickets(profile.role)) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+      return NextResponse.json({
+        success: true,
+        data: {
+          period_days: parseInt(period),
+          users: [],
+          leaderboard: {
+            most_tickets: [],
+            highest_completion_rate: [],
+            best_sla_compliance: [],
+            fastest_response: [],
+          },
+          total_users: 0,
+        },
+      })
     }
 
     // Calculate date range

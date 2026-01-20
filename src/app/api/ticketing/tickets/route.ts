@@ -164,6 +164,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: rpcResult.error || 'Failed to create ticket' }, { status: 400 })
     }
 
+    // Auto-assign to department manager
+    const departmentRoleMap: Record<string, string> = {
+      MKT: 'ops_mkt',
+      SAL: 'ops_sal',
+      DOM: 'ops_dom',
+      EXI: 'ops_exi',
+      DTD: 'ops_dtd',
+      TRF: 'ops_trf',
+    }
+
+    const targetRole = departmentRoleMap[department]
+    if (targetRole && rpcResult.ticket_id) {
+      // Find the department manager (ops role user)
+      const { data: deptManager } = await (supabase as any)
+        .from('profiles')
+        .select('user_id, name')
+        .eq('role', targetRole)
+        .eq('is_active', true)
+        .limit(1)
+        .single()
+
+      if (deptManager) {
+        // Assign ticket to department manager
+        await (supabase as any)
+          .from('tickets')
+          .update({ assigned_to: deptManager.user_id })
+          .eq('id', rpcResult.ticket_id)
+
+        // Create assignment event
+        await (supabase as any)
+          .from('ticket_events')
+          .insert({
+            ticket_id: rpcResult.ticket_id,
+            event_type: 'assigned',
+            actor_user_id: user.id,
+            old_value: null,
+            new_value: deptManager.user_id,
+            notes: `Auto-assigned to ${deptManager.name} (${department} department manager)`,
+          })
+      }
+    }
+
     return NextResponse.json({
       success: true,
       ticket_id: rpcResult.ticket_id,

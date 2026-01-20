@@ -238,6 +238,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
       if (ticketType === 'RFQ') {
         rfq_data = {
           service_type_code: shipmentData.service_type_code,
+          service_type: selectedService?.name || null,
           department: selectedService?.department || null,
           fleet_type: shipmentData.fleet_type || null,
           fleet_quantity: shipmentData.fleet_quantity || null,
@@ -258,6 +259,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
           width_cm: shipmentData.width_cm,
           height_cm: shipmentData.height_cm,
           volume_total_cbm: shipmentData.volume_total_cbm,
+          total_volume: shipmentData.volume_total_cbm,
           scope_of_work: shipmentData.scope_of_work,
           additional_services: shipmentData.additional_services,
         }
