@@ -497,8 +497,58 @@ export function SalesPerformanceAnalytics({
     setShowDetail(true)
   }
 
+  // Check if there's any data for a metric (skip if all values are 0 or metric is placeholder)
+  const hasDataForMetric = (metricKey: MetricType): boolean => {
+    // Skip revenue metric as it's a placeholder for DSO/AR module
+    if (metricKey === 'revenue') return false
+
+    const values = salesPerformances.map(p => p.metrics[metricKey as keyof typeof p.metrics] as number)
+    return values.some(v => v > 0)
+  }
+
+  // Show empty state if no sales profiles found
   if (salesPerformances.length === 0) {
-    return null
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-green-500" />
+            Sales Performance Analytics
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-muted-foreground">
+            <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+            <p>No sales data available</p>
+            <p className="text-sm">Performance analytics will appear once sales activities are recorded.</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Filter metrics that have data
+  const metricsWithData = METRIC_CONFIGS.filter(config => hasDataForMetric(config.key))
+
+  // If no metrics have data, show empty state
+  if (metricsWithData.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-green-500" />
+            Sales Performance Analytics
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-muted-foreground">
+            <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
+            <p>No performance data available yet</p>
+            <p className="text-sm">Analytics will appear once sales activities and deals are recorded.</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -513,7 +563,7 @@ export function SalesPerformanceAnalytics({
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {METRIC_CONFIGS.map((config) => {
+            {metricsWithData.map((config) => {
               const { top3 } = getTopAndBottom(config.key, config.higherIsBetter)
               if (top3.length === 0) return null
 
@@ -566,7 +616,7 @@ export function SalesPerformanceAnalytics({
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {METRIC_CONFIGS.map((config) => {
+            {metricsWithData.map((config) => {
               const { bottom3 } = getTopAndBottom(config.key, config.higherIsBetter)
               if (bottom3.length === 0) return null
 
@@ -813,10 +863,36 @@ export function SalespersonPerformanceCard({
   }
 
   if (!myPerformance) {
-    return null
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-yellow-500" />
+            My Performance Summary
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-muted-foreground">
+            <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
+            <p>No performance data available</p>
+            <p className="text-sm">Your performance metrics will appear once you start recording activities.</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   const totalSales = allPerformances.length
+
+  // Helper to check if ranking is available
+  const getRankingDisplay = (metricKey: MetricType, higherIsBetter: boolean) => {
+    const rank = getRanking(metricKey, higherIsBetter)
+    if (rank === 0) return 'N/A'
+    return `#${rank} of ${totalSales}`
+  }
+
+  // Check if user has any closed deals for win rate
+  const hasClosedDeals = myPerformance.metrics.won_deals_qty + myPerformance.metrics.lost_deals > 0
 
   return (
     <Card>
@@ -828,16 +904,14 @@ export function SalespersonPerformanceCard({
       </CardHeader>
       <CardContent>
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-          {/* Revenue */}
+          {/* Revenue - Placeholder for DSO/AR module */}
           <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border">
             <div className="flex items-center gap-2 mb-1">
               <DollarSign className="h-4 w-4 text-green-600" />
               <span className="text-xs text-muted-foreground">Revenue</span>
             </div>
-            <p className="text-lg font-bold text-green-600">{formatCurrency(myPerformance.metrics.revenue)}</p>
-            <Badge variant="outline" className="text-xs mt-1">
-              Rank #{getRanking('revenue', true)} of {totalSales}
-            </Badge>
+            <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            <p className="text-xs text-muted-foreground">From DSO/AR module</p>
           </div>
 
           {/* Pipeline Value */}
@@ -846,10 +920,16 @@ export function SalespersonPerformanceCard({
               <TrendingUp className="h-4 w-4 text-blue-600" />
               <span className="text-xs text-muted-foreground">Pipeline</span>
             </div>
-            <p className="text-lg font-bold text-blue-600">{formatCurrency(myPerformance.metrics.pipeline_value)}</p>
-            <Badge variant="outline" className="text-xs mt-1">
-              Rank #{getRanking('pipeline_value', true)} of {totalSales}
-            </Badge>
+            {myPerformance.metrics.pipeline_value > 0 ? (
+              <>
+                <p className="text-lg font-bold text-blue-600">{formatCurrency(myPerformance.metrics.pipeline_value)}</p>
+                <Badge variant="outline" className="text-xs mt-1">
+                  Rank {getRankingDisplay('pipeline_value', true)}
+                </Badge>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            )}
           </div>
 
           {/* Win Rate */}
@@ -858,15 +938,21 @@ export function SalespersonPerformanceCard({
               <Target className="h-4 w-4 text-purple-600" />
               <span className="text-xs text-muted-foreground">Win Rate</span>
             </div>
-            <p className="text-lg font-bold text-purple-600">{myPerformance.metrics.win_rate.toFixed(1)}%</p>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs mt-1">
-                Rank #{getRanking('win_rate', true)} of {totalSales}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
-                {myPerformance.metrics.won_deals_qty}W/{myPerformance.metrics.lost_deals}L
-              </span>
-            </div>
+            {hasClosedDeals ? (
+              <>
+                <p className="text-lg font-bold text-purple-600">{myPerformance.metrics.win_rate.toFixed(1)}%</p>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs mt-1">
+                    Rank {getRankingDisplay('win_rate', true)}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {myPerformance.metrics.won_deals_qty}W/{myPerformance.metrics.lost_deals}L
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            )}
           </div>
 
           {/* Won Deals */}
@@ -875,11 +961,17 @@ export function SalespersonPerformanceCard({
               <Trophy className="h-4 w-4 text-amber-600" />
               <span className="text-xs text-muted-foreground">Won Deals</span>
             </div>
-            <p className="text-lg font-bold text-amber-600">{myPerformance.metrics.won_deals_qty}</p>
-            <p className="text-xs text-muted-foreground">{formatCurrency(myPerformance.metrics.won_deals_value)}</p>
-            <Badge variant="outline" className="text-xs mt-1">
-              Rank #{getRanking('won_deals_qty', true)} of {totalSales}
-            </Badge>
+            {myPerformance.metrics.won_deals_qty > 0 ? (
+              <>
+                <p className="text-lg font-bold text-amber-600">{myPerformance.metrics.won_deals_qty}</p>
+                <p className="text-xs text-muted-foreground">{formatCurrency(myPerformance.metrics.won_deals_value)}</p>
+                <Badge variant="outline" className="text-xs mt-1">
+                  Rank {getRankingDisplay('won_deals_qty', true)}
+                </Badge>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            )}
           </div>
 
           {/* Active Customers */}
@@ -888,11 +980,17 @@ export function SalespersonPerformanceCard({
               <Users className="h-4 w-4 text-teal-600" />
               <span className="text-xs text-muted-foreground">Active Customers</span>
             </div>
-            <p className="text-lg font-bold text-teal-600">{myPerformance.metrics.active_customers_qty}</p>
-            <p className="text-xs text-muted-foreground">{formatCurrency(myPerformance.metrics.active_customers_rev)}</p>
-            <Badge variant="outline" className="text-xs mt-1">
-              Rank #{getRanking('active_customers_qty', true)} of {totalSales}
-            </Badge>
+            {myPerformance.metrics.active_customers_qty > 0 ? (
+              <>
+                <p className="text-lg font-bold text-teal-600">{myPerformance.metrics.active_customers_qty}</p>
+                <p className="text-xs text-muted-foreground">{formatCurrency(myPerformance.metrics.active_customers_rev)}</p>
+                <Badge variant="outline" className="text-xs mt-1">
+                  Rank {getRankingDisplay('active_customers_qty', true)}
+                </Badge>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            )}
           </div>
 
           {/* New Customers */}
@@ -901,11 +999,17 @@ export function SalespersonPerformanceCard({
               <UserPlus className="h-4 w-4 text-rose-600" />
               <span className="text-xs text-muted-foreground">New Customers</span>
             </div>
-            <p className="text-lg font-bold text-rose-600">{myPerformance.metrics.new_customers_qty}</p>
-            <p className="text-xs text-muted-foreground">{formatCurrency(myPerformance.metrics.new_customers_rev)}</p>
-            <Badge variant="outline" className="text-xs mt-1">
-              Rank #{getRanking('new_customers_qty', true)} of {totalSales}
-            </Badge>
+            {myPerformance.metrics.new_customers_qty > 0 ? (
+              <>
+                <p className="text-lg font-bold text-rose-600">{myPerformance.metrics.new_customers_qty}</p>
+                <p className="text-xs text-muted-foreground">{formatCurrency(myPerformance.metrics.new_customers_rev)}</p>
+                <Badge variant="outline" className="text-xs mt-1">
+                  Rank {getRankingDisplay('new_customers_qty', true)}
+                </Badge>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            )}
           </div>
 
           {/* Sales Cycle */}
@@ -914,10 +1018,16 @@ export function SalespersonPerformanceCard({
               <Clock className="h-4 w-4 text-orange-600" />
               <span className="text-xs text-muted-foreground">Avg Sales Cycle</span>
             </div>
-            <p className="text-lg font-bold text-orange-600">{formatDays(myPerformance.metrics.sales_cycle)}</p>
-            <Badge variant="outline" className="text-xs mt-1">
-              Rank #{getRanking('sales_cycle', false)} of {totalSales}
-            </Badge>
+            {myPerformance.metrics.sales_cycle > 0 ? (
+              <>
+                <p className="text-lg font-bold text-orange-600">{formatDays(myPerformance.metrics.sales_cycle)}</p>
+                <Badge variant="outline" className="text-xs mt-1">
+                  Rank {getRankingDisplay('sales_cycle', false)}
+                </Badge>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            )}
           </div>
 
           {/* Activities */}
@@ -926,21 +1036,53 @@ export function SalespersonPerformanceCard({
               <Activity className="h-4 w-4 text-slate-600" />
               <span className="text-xs text-muted-foreground">Activities</span>
             </div>
-            <p className="text-lg font-bold text-slate-600">{myPerformance.metrics.activities}</p>
-            <div className="flex flex-wrap gap-1 mt-1">
-              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                <MapPin className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.site_visit}
-              </span>
-              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                <Video className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.online_meeting}
-              </span>
-              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                <Phone className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.phone_call}
-              </span>
-            </div>
-            <Badge variant="outline" className="text-xs mt-1">
-              Rank #{getRanking('activities', true)} of {totalSales}
-            </Badge>
+            {myPerformance.metrics.activities > 0 ? (
+              <>
+                <p className="text-lg font-bold text-slate-600">{myPerformance.metrics.activities}</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {myPerformance.metrics.activities_breakdown.site_visit > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <MapPin className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.site_visit}
+                    </span>
+                  )}
+                  {myPerformance.metrics.activities_breakdown.online_meeting > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Video className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.online_meeting}
+                    </span>
+                  )}
+                  {myPerformance.metrics.activities_breakdown.phone_call > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Phone className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.phone_call}
+                    </span>
+                  )}
+                  {myPerformance.metrics.activities_breakdown.call > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Phone className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.call}
+                    </span>
+                  )}
+                  {myPerformance.metrics.activities_breakdown.meeting > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Users className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.meeting}
+                    </span>
+                  )}
+                  {myPerformance.metrics.activities_breakdown.whatsapp > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <MessageSquare className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.whatsapp}
+                    </span>
+                  )}
+                  {myPerformance.metrics.activities_breakdown.email > 0 && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Mail className="h-3 w-3" />{myPerformance.metrics.activities_breakdown.email}
+                    </span>
+                  )}
+                </div>
+                <Badge variant="outline" className="text-xs mt-1">
+                  Rank {getRankingDisplay('activities', true)}
+                </Badge>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">N/A</p>
+            )}
           </div>
         </div>
       </CardContent>
