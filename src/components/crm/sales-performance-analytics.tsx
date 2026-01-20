@@ -353,13 +353,6 @@ export function SalesPerformanceAnalytics({
       // Activities from activities table (combined from pipeline and sales plan)
       const userActivities = activities.filter(a => a.owner_user_id === userId)
 
-      // IMPORTANT: Only include salespeople who have at least some real data
-      // Skip users with no opportunities, no accounts, AND no activities
-      const hasAnyData = userOpps.length > 0 || userAccounts.length > 0 || userActivities.length > 0
-      if (!hasAnyData) {
-        continue // Skip this user - no real data
-      }
-
       // Pipeline value (from active opps)
       const pipelineValue = activeOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
 
@@ -1002,14 +995,6 @@ export function SalespersonPerformanceCard({
 
       const userAccounts = accounts.filter(a => a.owner_user_id === userId)
       const userActivities = activities.filter(a => a.owner_user_id === userId)
-
-      // IMPORTANT: Only include salespeople who have at least some real data
-      // Skip users with no opportunities, no accounts, AND no activities
-      // Exception: always include current user so they can see their card
-      const hasAnyData = userOpps.length > 0 || userAccounts.length > 0 || userActivities.length > 0
-      if (!hasAnyData && userId !== currentUserId) {
-        continue // Skip this user - no real data
-      }
 
       const pipelineValue = activeOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
       const totalClosed = wonOpps.length + lostOpps.length
