@@ -6,9 +6,32 @@
 -- ============================================
 -- DROP EXISTING FUNCTIONS (if signature changed)
 -- Required when changing parameter types (UUID → TEXT)
+-- Use exact PostgreSQL type names from error messages
 -- ============================================
-DROP FUNCTION IF EXISTS public.rpc_ticket_create(ticket_type, VARCHAR, TEXT, ticketing_department, ticket_priority, UUID, UUID, JSONB);
-DROP FUNCTION IF EXISTS public.rpc_ticket_create(ticket_type, VARCHAR, TEXT, ticketing_department, ticket_priority, TEXT, TEXT, JSONB);
+
+-- Drop with UUID parameters (old signature)
+DROP FUNCTION IF EXISTS public.rpc_ticket_create(
+    ticket_type,
+    character varying,
+    text,
+    ticketing_department,
+    ticket_priority,
+    uuid,
+    uuid,
+    jsonb
+);
+
+-- Drop with TEXT parameters (new signature, for idempotency)
+DROP FUNCTION IF EXISTS public.rpc_ticket_create(
+    ticket_type,
+    character varying,
+    text,
+    ticketing_department,
+    ticket_priority,
+    text,
+    text,
+    jsonb
+);
 
 -- ============================================
 -- TICKET CODE GENERATION FUNCTION
@@ -814,7 +837,7 @@ COMMENT ON FUNCTION public.rpc_ticketing_dashboard_summary IS 'Returns dashboard
 
 GRANT EXECUTE ON FUNCTION public.generate_ticket_code(ticket_type, ticketing_department) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.generate_ticket_quote_number(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.rpc_ticket_create(ticket_type, VARCHAR, TEXT, ticketing_department, ticket_priority, UUID, UUID, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_ticket_create(ticket_type, character varying, text, ticketing_department, ticket_priority, text, text, jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_ticket_assign(UUID, UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_ticket_transition(UUID, ticket_status, TEXT, ticket_close_outcome, TEXT, VARCHAR, DECIMAL) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_ticket_add_comment(UUID, TEXT, BOOLEAN) TO authenticated;
