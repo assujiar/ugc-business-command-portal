@@ -662,64 +662,64 @@ export function SalesPlanDashboard({
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 lg:gap-3">
         <Card className="cursor-pointer hover:shadow-md" onClick={() => setStatusFilter('planned')}>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <Clock className="h-5 w-5 text-yellow-600" />
-              <p className="text-xl font-bold text-yellow-600">{plannedCount}</p>
+              <Clock className="h-4 w-4 lg:h-5 lg:w-5 text-yellow-600" />
+              <p className="text-lg lg:text-xl font-bold text-yellow-600">{plannedCount}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Planned</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Planned</p>
           </CardContent>
         </Card>
 
         <Card className="cursor-pointer hover:shadow-md" onClick={() => setStatusFilter('completed')}>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <p className="text-xl font-bold text-green-600">{completedCount}</p>
+              <CheckCircle className="h-4 w-4 lg:h-5 lg:w-5 text-green-600" />
+              <p className="text-lg lg:text-xl font-bold text-green-600">{completedCount}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Completed</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Done</p>
           </CardContent>
         </Card>
 
         <Card className="cursor-pointer hover:shadow-md" onClick={() => setTypeFilter('maintenance_existing')}>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <Building2 className="h-5 w-5 text-blue-600" />
-              <p className="text-xl font-bold text-blue-600">{maintenanceCount}</p>
+              <Building2 className="h-4 w-4 lg:h-5 lg:w-5 text-blue-600" />
+              <p className="text-lg lg:text-xl font-bold text-blue-600">{maintenanceCount}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Maintenance</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Maintain</p>
           </CardContent>
         </Card>
 
         <Card className="cursor-pointer hover:shadow-md" onClick={() => setTypeFilter('hunting_new')}>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <UserPlus className="h-5 w-5 text-emerald-600" />
-              <p className="text-xl font-bold text-emerald-600">{huntingCount}</p>
+              <UserPlus className="h-4 w-4 lg:h-5 lg:w-5 text-emerald-600" />
+              <p className="text-lg lg:text-xl font-bold text-emerald-600">{huntingCount}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Hunting</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Hunting</p>
           </CardContent>
         </Card>
 
         <Card className="cursor-pointer hover:shadow-md" onClick={() => setTypeFilter('winback_lost')}>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <RotateCcw className="h-5 w-5 text-orange-600" />
-              <p className="text-xl font-bold text-orange-600">{winbackCount}</p>
+              <RotateCcw className="h-4 w-4 lg:h-5 lg:w-5 text-orange-600" />
+              <p className="text-lg lg:text-xl font-bold text-orange-600">{winbackCount}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Winback</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Winback</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-3">
+          <CardContent className="p-2 lg:p-3">
             <div className="flex items-center justify-between">
-              <Target className="h-5 w-5 text-purple-600" />
-              <p className="text-xl font-bold text-purple-600">{huntingPotentialCount}</p>
+              <Target className="h-4 w-4 lg:h-5 lg:w-5 text-purple-600" />
+              <p className="text-lg lg:text-xl font-bold text-purple-600">{huntingPotentialCount}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">New Potential</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground mt-1">Potential</p>
           </CardContent>
         </Card>
       </div>
@@ -762,7 +762,8 @@ export function SalesPlanDashboard({
       {/* Plans Table */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -868,6 +869,109 @@ export function SalesPlanDashboard({
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="lg:hidden divide-y">
+            {filteredPlans.length > 0 ? (
+              filteredPlans.map((plan) => (
+                <div key={plan.plan_id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        {getPlanTypeBadge(plan.plan_type)}
+                        {getStatusBadge(plan.status, plan.potential_status)}
+                      </div>
+                      <h4 className="font-medium text-sm truncate">{plan.company_name}</h4>
+                      <p className="text-xs text-muted-foreground">{plan.pic_name || 'No PIC'}</p>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleViewActivity(plan)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Activity
+                        </DropdownMenuItem>
+                        {canEditPlan(plan) && (
+                          <DropdownMenuItem onClick={() => handleEdit(plan)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                        )}
+                        {canUpdateRealization(plan) && (
+                          <DropdownMenuItem onClick={() => openUpdateRealization(plan)}>
+                            <Upload className="h-4 w-4 mr-2" />
+                            Update Realization
+                          </DropdownMenuItem>
+                        )}
+                        {plan.status === 'completed' && plan.plan_type === 'hunting_new' && plan.potential_status === 'pending' && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => { setSelectedPlan(plan); setIsPotentialOpen(true); }}>
+                              <Target className="h-4 w-4 mr-2" />
+                              Assess Potential
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        {canDelete && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(plan.plan_id)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <Calendar className="h-3 w-3" />
+                      {formatDate(plan.planned_date)}
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {APPROACH_METHODS.find(m => m.value === plan.planned_activity_method)?.label || plan.planned_activity_method}
+                    </Badge>
+                    {plan.owner_name && (
+                      <span className="text-muted-foreground">{plan.owner_name}</span>
+                    )}
+                  </div>
+
+                  {plan.realized_at && (
+                    <div className="flex items-center gap-1 text-xs text-green-600">
+                      <CheckCircle className="h-3 w-3" />
+                      Realized: {formatDate(plan.realized_at)}
+                    </div>
+                  )}
+
+                  {/* Quick Action Buttons for Mobile */}
+                  {canUpdateRealization(plan) && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="w-full"
+                      onClick={() => openUpdateRealization(plan)}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Update Realization
+                    </Button>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-muted-foreground">
+                No sales plans found
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
