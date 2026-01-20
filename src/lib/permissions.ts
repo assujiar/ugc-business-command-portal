@@ -317,3 +317,95 @@ export function canDeleteSalesPlan(role: UserRole | null | undefined): boolean {
   if (!role) return false
   return isAdmin(role) || role === 'sales manager' || role === 'sales support'
 }
+
+// =====================================================
+// Ticketing Module Permissions
+// RBAC Matrix:
+// - Director, super admin: Full access
+// - Marketing roles: Create/view tickets, comment
+// - Sales roles: Create/view tickets, comment
+// - Ops roles: Full ticketing access (assign/transition/close)
+// - finance: No access
+// =====================================================
+
+// Ops roles that have full ticketing access
+export const OPS_ROLES: UserRole[] = ['EXIM Ops', 'domestics Ops', 'Import DTD Ops', 'traffic & warehous']
+
+// Check if user is Ops role
+export function isOps(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return OPS_ROLES.includes(role)
+}
+
+// Can user access ticketing module?
+export function canAccessTicketing(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  // Finance role has no access
+  if (role === 'finance') return false
+  // All other roles can access
+  return true
+}
+
+// Can user assign tickets?
+export function canAssignTickets(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isOps(role)
+}
+
+// Can user transition ticket status?
+export function canTransitionTickets(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isOps(role)
+}
+
+// Can user close tickets?
+export function canCloseTickets(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isOps(role)
+}
+
+// Can user create rate quotes?
+export function canCreateQuotes(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isOps(role)
+}
+
+// Can user create internal comments?
+export function canCreateInternalComments(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isOps(role)
+}
+
+// Can user view all tickets (not just own)?
+export function canViewAllTickets(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isOps(role)
+}
+
+// Map user role to ticketing department
+export function getUserTicketingDepartment(role: UserRole | null | undefined): string | null {
+  if (!role) return null
+
+  switch (role) {
+    case 'Marketing Manager':
+    case 'Marcomm':
+    case 'DGO':
+    case 'MACX':
+    case 'VSDO':
+      return 'MKT'
+    case 'sales manager':
+    case 'salesperson':
+    case 'sales support':
+      return 'SAL'
+    case 'domestics Ops':
+      return 'DOM'
+    case 'EXIM Ops':
+      return 'EXI'
+    case 'Import DTD Ops':
+      return 'DTD'
+    case 'traffic & warehous':
+      return 'TRF'
+    default:
+      return null
+  }
+}

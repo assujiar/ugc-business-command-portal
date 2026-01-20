@@ -58,8 +58,11 @@ import {
   UserX,
   Loader2,
   Pencil,
-  Save
+  Save,
+  Ticket,
+  ExternalLink,
 } from 'lucide-react'
+import Link from 'next/link'
 import type { UserRole } from '@/types/database'
 
 interface AccountEnriched {
@@ -168,6 +171,15 @@ export default function AccountsClient({ accounts, userRole }: AccountsClientPro
     pic_phone: '',
     owner_user_id: ''
   })
+  const [accountTickets, setAccountTickets] = useState<Array<{
+    id: string
+    ticket_code: string
+    subject: string
+    status: string
+    priority: string
+    created_at: string
+  }>>([])
+  const [loadingTickets, setLoadingTickets] = useState(false)
 
   // Check if current user can edit accounts
   const canEditAccounts = userRole && EDIT_ACCOUNT_ROLES.includes(userRole)
@@ -207,9 +219,26 @@ export default function AccountsClient({ accounts, userRole }: AccountsClientPro
   })
 
   // Handle view detail
-  const handleViewDetail = (account: AccountEnriched) => {
+  const handleViewDetail = async (account: AccountEnriched) => {
     setSelectedAccount(account)
     setShowDetailModal(true)
+    setAccountTickets([])
+
+    // Fetch tickets for this account
+    setLoadingTickets(true)
+    try {
+      const response = await fetch(`/api/ticketing/tickets?account_id=${account.account_id}&limit=5`)
+      if (response.ok) {
+        const result = await response.json()
+        if (result.data) {
+          setAccountTickets(result.data)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching account tickets:', error)
+    } finally {
+      setLoadingTickets(false)
+    }
   }
 
   // Handle edit account
@@ -906,6 +935,64 @@ export default function AccountsClient({ accounts, userRole }: AccountsClientPro
                   <p className="text-sm text-muted-foreground">{selectedAccount.notes}</p>
                 </div>
               )}
+
+              {/* Tickets Section */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <Ticket className="h-4 w-4" />
+                    Recent Tickets
+                  </h4>
+                  <Link
+                    href={`/tickets?account_id=${selectedAccount.account_id}`}
+                    className="text-sm text-brand hover:underline flex items-center gap-1"
+                  >
+                    View All
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
+                {loadingTickets ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : accountTickets.length > 0 ? (
+                  <div className="space-y-2">
+                    {accountTickets.map((ticket) => (
+                      <Link
+                        key={ticket.id}
+                        href={`/tickets/${ticket.id}`}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {ticket.ticket_code}
+                            </span>
+                            <Badge
+                              variant={
+                                ticket.status === 'open' || ticket.status === 'need_response'
+                                  ? 'destructive'
+                                  : ticket.status === 'in_progress'
+                                  ? 'default'
+                                  : 'secondary'
+                              }
+                              className="text-xs"
+                            >
+                              {ticket.status.replace(/_/g, ' ')}
+                            </Badge>
+                          </div>
+                          <p className="text-sm truncate mt-1">{ticket.subject}</p>
+                        </div>
+                        <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0 ml-2" />
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No tickets found for this account
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
