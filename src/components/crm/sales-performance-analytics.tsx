@@ -338,10 +338,8 @@ export function SalesPerformanceAnalytics({
   const salesPerformances = useMemo(() => {
     const performances: SalesPerformance[] = []
 
-    // Filter only sales roles
-    const salesUsers = salesProfiles.filter(p =>
-      p.role === 'salesperson' || p.role === 'sales manager' || p.role === 'sales support'
-    )
+    // Filter only salesperson role (not sales manager or sales support)
+    const salesUsers = salesProfiles.filter(p => p.role === 'salesperson')
 
     for (const user of salesUsers) {
       const userId = user.user_id
@@ -1281,9 +1279,8 @@ export function SalespersonPerformanceCard({
   const allPerformances = useMemo(() => {
     const performances: SalesPerformance[] = []
 
-    const salesUsers = salesProfiles.filter(p =>
-      p.role === 'salesperson' || p.role === 'sales manager' || p.role === 'sales support'
-    )
+    // Filter only salesperson role (not sales manager or sales support)
+    const salesUsers = salesProfiles.filter(p => p.role === 'salesperson')
 
     for (const user of salesUsers) {
       const userId = user.user_id
