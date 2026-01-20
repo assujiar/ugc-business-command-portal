@@ -1,16 +1,16 @@
 // =====================================================
 // Analytics Filter Component
 // Reusable filter for date range and salesperson selection
+// Mobile-optimized compact design
 // =====================================================
 
 'use client'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Calendar, Users, Filter, X, RotateCcw } from 'lucide-react'
+import { Calendar, Users, Filter, X, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, subDays, subMonths } from 'date-fns'
 
 interface SalesProfile {
@@ -154,120 +154,167 @@ export function AnalyticsFilter({
   // Check if any filters are active
   const hasActiveFilters = startDate || endDate || (salespersonId && salespersonId !== 'all')
 
+  // State for showing custom date inputs on mobile
+  const [showCustomDates, setShowCustomDates] = useState(currentPreset === 'custom')
+
+  // Get display label for current filter
+  const getFilterSummary = () => {
+    const parts: string[] = []
+    if (currentPreset !== 'all_time' && currentPreset !== 'custom') {
+      parts.push(DATE_PRESETS.find(p => p.value === currentPreset)?.label || '')
+    } else if (startDate || endDate) {
+      if (startDate && endDate) {
+        parts.push(`${format(new Date(startDate), 'd MMM')} - ${format(new Date(endDate), 'd MMM')}`)
+      } else if (startDate) {
+        parts.push(`From ${format(new Date(startDate), 'd MMM')}`)
+      } else if (endDate) {
+        parts.push(`Until ${format(new Date(endDate), 'd MMM')}`)
+      }
+    }
+    if (salespersonId && salespersonId !== 'all') {
+      const name = salesProfiles.find(p => p.user_id === salespersonId)?.name
+      if (name) parts.push(name)
+    }
+    return parts.join(' | ')
+  }
+
   return (
     <Card className={className}>
-      <CardContent className="p-3 lg:p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
-          {/* Date Range Preset */}
-          <div className="flex-1 min-w-0">
-            <Label className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              Period
-            </Label>
-            <Select value={currentPreset} onValueChange={handlePresetChange}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Select period" />
-              </SelectTrigger>
-              <SelectContent>
-                {DATE_PRESETS.map((preset) => (
-                  <SelectItem key={preset.value} value={preset.value}>
-                    {preset.label}
-                  </SelectItem>
-                ))}
-                {currentPreset === 'custom' && (
-                  <SelectItem value="custom">Custom Range</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Custom Date Range */}
-          <div className="flex gap-2 flex-1 min-w-0">
-            <div className="flex-1">
-              <Label className="text-xs text-muted-foreground mb-1.5">Start Date</Label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => handleDateChange('startDate', e.target.value)}
-                className="h-9"
-              />
-            </div>
-            <div className="flex-1">
-              <Label className="text-xs text-muted-foreground mb-1.5">End Date</Label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => handleDateChange('endDate', e.target.value)}
-                className="h-9"
-              />
-            </div>
-          </div>
+      <CardContent className="p-2 sm:p-3 lg:p-4">
+        {/* Compact Mobile Layout */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Period Dropdown */}
+          <Select value={currentPreset} onValueChange={(value) => {
+            handlePresetChange(value)
+            setShowCustomDates(value === 'custom')
+          }}>
+            <SelectTrigger className="h-8 w-auto min-w-[110px] text-xs sm:text-sm">
+              <Calendar className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Period" />
+            </SelectTrigger>
+            <SelectContent>
+              {DATE_PRESETS.map((preset) => (
+                <SelectItem key={preset.value} value={preset.value}>
+                  {preset.label}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
 
           {/* Salesperson Filter */}
           {showSalespersonFilter && (
-            <div className="flex-1 min-w-0">
-              <Label className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
-                <Users className="h-3 w-3" />
-                Salesperson
-              </Label>
-              <Select value={salespersonId} onValueChange={handleSalespersonChange}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="All Salesperson" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Salesperson</SelectItem>
-                  {salesProfiles.map((profile) => (
-                    <SelectItem key={profile.user_id} value={profile.user_id}>
-                      {profile.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={salespersonId} onValueChange={handleSalespersonChange}>
+              <SelectTrigger className="h-8 w-auto min-w-[120px] text-xs sm:text-sm">
+                <Users className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                <SelectValue placeholder="Salesperson" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sales</SelectItem>
+                {salesProfiles.map((profile) => (
+                  <SelectItem key={profile.user_id} value={profile.user_id}>
+                    {profile.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
+
+          {/* Custom Date Toggle (Mobile) */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowCustomDates(!showCustomDates)}
+            className="h-8 px-2 text-xs text-muted-foreground lg:hidden"
+          >
+            <Calendar className="h-3.5 w-3.5 mr-1" />
+            Custom
+            {showCustomDates ? (
+              <ChevronUp className="h-3 w-3 ml-1" />
+            ) : (
+              <ChevronDown className="h-3 w-3 ml-1" />
+            )}
+          </Button>
+
+          {/* Custom Date Inputs - Desktop (always visible) */}
+          <div className="hidden lg:flex items-center gap-2">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => handleDateChange('startDate', e.target.value)}
+              className="h-8 w-[130px] text-sm"
+              placeholder="Start"
+            />
+            <span className="text-muted-foreground text-xs">-</span>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => handleDateChange('endDate', e.target.value)}
+              className="h-8 w-[130px] text-sm"
+              placeholder="End"
+            />
+          </div>
 
           {/* Reset Button */}
           {hasActiveFilters && (
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={resetFilters}
-              className="h-9 px-3"
+              className="h-8 px-2 text-xs text-muted-foreground ml-auto"
             >
-              <RotateCcw className="h-3.5 w-3.5 mr-1" />
-              Reset
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline ml-1">Reset</span>
             </Button>
           )}
         </div>
 
-        {/* Active Filters Summary */}
+        {/* Custom Date Inputs - Mobile (collapsible) */}
+        {showCustomDates && (
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t lg:hidden">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => handleDateChange('startDate', e.target.value)}
+              className="h-8 flex-1 text-sm"
+              placeholder="Start date"
+            />
+            <span className="text-muted-foreground text-xs">to</span>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => handleDateChange('endDate', e.target.value)}
+              className="h-8 flex-1 text-sm"
+              placeholder="End date"
+            />
+          </div>
+        )}
+
+        {/* Active Filter Tags */}
         {hasActiveFilters && (
-          <div className="mt-2 pt-2 border-t flex flex-wrap gap-1.5">
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Filter className="h-3 w-3" />
-              Active filters:
-            </span>
+          <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t">
+            <Filter className="h-3 w-3 text-muted-foreground" />
             {(startDate || endDate) && (
-              <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="text-[10px] sm:text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-1.5 py-0.5 rounded-full flex items-center gap-1">
                 {startDate && endDate
-                  ? `${format(new Date(startDate), 'd MMM yyyy')} - ${format(new Date(endDate), 'd MMM yyyy')}`
+                  ? `${format(new Date(startDate), 'd MMM')} - ${format(new Date(endDate), 'd MMM')}`
                   : startDate
-                  ? `From ${format(new Date(startDate), 'd MMM yyyy')}`
-                  : `Until ${format(new Date(endDate), 'd MMM yyyy')}`}
+                  ? `From ${format(new Date(startDate), 'd MMM')}`
+                  : `Until ${format(new Date(endDate), 'd MMM')}`}
                 <button
                   onClick={() => updateFilters({ startDate: null, endDate: null })}
-                  className="hover:bg-blue-200 dark:hover:bg-blue-800 rounded-full p-0.5"
+                  className="hover:bg-blue-200 dark:hover:bg-blue-800 rounded-full"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             )}
             {salespersonId && salespersonId !== 'all' && (
-              <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="text-[10px] sm:text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-1.5 py-0.5 rounded-full flex items-center gap-1">
                 {salesProfiles.find((p) => p.user_id === salespersonId)?.name || 'Unknown'}
                 <button
                   onClick={() => updateFilters({ salespersonId: null })}
-                  className="hover:bg-green-200 dark:hover:bg-green-800 rounded-full p-0.5"
+                  className="hover:bg-green-200 dark:hover:bg-green-800 rounded-full"
                 >
                   <X className="h-3 w-3" />
                 </button>
