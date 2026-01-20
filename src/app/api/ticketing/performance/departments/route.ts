@@ -36,9 +36,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Only admin/ops can view department performance
+    // Non-ops users get empty department performance data
     if (!canViewAllTickets(profile.role)) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+      return NextResponse.json({
+        success: true,
+        data: {
+          period_days: parseInt(period),
+          departments: [],
+          rankings: {
+            best_sla_compliance: [],
+            highest_win_rate: [],
+            most_tickets: [],
+          },
+          total_departments: 0,
+        },
+      })
     }
 
     // Calculate date range

@@ -20,6 +20,11 @@ import {
   XCircle,
   AlertCircle,
   RefreshCw,
+  Upload,
+  X,
+  Download,
+  File,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -109,6 +114,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const [newComment, setNewComment] = useState('')
   const [isInternal, setIsInternal] = useState(false)
   const [submittingComment, setSubmittingComment] = useState(false)
+  const [attachments, setAttachments] = useState<any[]>([])
+  const [uploadingFile, setUploadingFile] = useState(false)
 
   // Permission checks
   const canAssign = canAssignTickets(profile.role)
@@ -159,6 +166,13 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
 
         setUsers(usersData || [])
       }
+
+      // Fetch attachments
+      const attachmentsRes = await fetch(`/api/ticketing/tickets/${ticket.id}/attachments`)
+      const attachmentsData = await attachmentsRes.json()
+      if (attachmentsData.success) {
+        setAttachments(attachmentsData.data || [])
+      }
     } catch (err) {
       console.error('Error fetching data:', err)
     } finally {
@@ -169,6 +183,91 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   useEffect(() => {
     fetchData()
   }, [ticket.id])
+
+  // Upload attachment
+  const handleUploadAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Maximum file size is 10MB',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setUploadingFile(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch(`/api/ticketing/tickets/${ticket.id}/attachments`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to upload file')
+      }
+
+      toast({
+        title: 'File uploaded',
+        description: 'Attachment added successfully',
+      })
+
+      fetchData()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to upload file',
+        variant: 'destructive',
+      })
+    } finally {
+      setUploadingFile(false)
+      // Reset file input
+      e.target.value = ''
+    }
+  }
+
+  // Delete attachment
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    try {
+      const response = await fetch(`/api/ticketing/tickets/${ticket.id}/attachments?attachment_id=${attachmentId}`, {
+        method: 'DELETE',
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to delete attachment')
+      }
+
+      toast({
+        title: 'Attachment deleted',
+        description: 'File removed successfully',
+      })
+
+      fetchData()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to delete attachment',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Format file size
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
 
   // Add comment
   const handleAddComment = async () => {
@@ -411,6 +510,86 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
             </Card>
           )}
 
+          {/* Attachments */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-4 w-4" />
+                  Attachments ({attachments.length})
+                </div>
+                <label htmlFor="file-upload">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={uploadingFile}
+                    asChild
+                  >
+                    <span>
+                      {uploadingFile ? (
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-2 h-4 w-4" />
+                      )}
+                      Upload File
+                    </span>
+                  </Button>
+                </label>
+                <input
+                  id="file-upload"
+                  type="file"
+                  className="hidden"
+                  onChange={handleUploadAttachment}
+                  disabled={uploadingFile}
+                />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {attachments.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-4">
+                  No attachments yet
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {attachments.map((attachment) => (
+                    <div
+                      key={attachment.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <File className="h-8 w-8 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">{attachment.file_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatFileSize(attachment.file_size)} • {formatDate(attachment.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          asChild
+                        >
+                          <a href={attachment.file_url} target="_blank" rel="noopener noreferrer">
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteAttachment(attachment.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Comments */}
           <Card>
             <CardHeader>
@@ -515,12 +694,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                 {ticket.account ? (
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <Link
-                      href={`/accounts/${ticket.account.account_id}`}
-                      className="text-brand hover:underline"
-                    >
-                      {ticket.account.company_name}
-                    </Link>
+                    <span className="text-brand">{ticket.account.company_name}</span>
                   </div>
                 ) : (
                   <p className="text-muted-foreground">—</p>
