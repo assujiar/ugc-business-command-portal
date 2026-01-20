@@ -15,9 +15,12 @@ import { AddLeadDialog } from '@/components/crm/add-lead-dialog'
 import { Button } from '@/components/ui/button'
 import { FileSpreadsheet } from 'lucide-react'
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { canAccessLeadManagement, isAdmin, isMACX } from '@/lib/permissions'
+import { AnalyticsFilter } from '@/components/crm/analytics-filter'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { UserRole } from '@/types/database'
 
 // Helper to check if role is individual marketing (can only see own leads)
@@ -42,7 +45,11 @@ function isCreatorInSalesDepartment(creatorRole: string | null, creatorDepartmen
   return false
 }
 
-export default async function LeadManagementPage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function LeadManagementPage({ searchParams }: PageProps) {
   const supabase = await createClient()
   const adminClient = createAdminClient()
   const { profile } = await getSessionAndProfile()
@@ -55,6 +62,11 @@ export default async function LeadManagementPage() {
   if (!canAccessLeadManagement(profile.role)) {
     redirect('/dashboard')
   }
+
+  // Get filter params
+  const params = await searchParams
+  const startDate = typeof params.startDate === 'string' ? params.startDate : null
+  const endDate = typeof params.endDate === 'string' ? params.endDate : null
 
   // Determine user type for description
   const isManagerLevel = ['Director', 'super admin', 'Marketing Manager', 'sales manager'].includes(profile.role)
@@ -112,6 +124,21 @@ export default async function LeadManagementPage() {
     })
   }
 
+  // Apply date filter
+  if (startDate || endDate) {
+    leads = leads.filter((lead: any) => {
+      const leadDate = lead.created_at ? new Date(lead.created_at) : null
+      if (!leadDate) return true
+      if (startDate && leadDate < new Date(startDate)) return false
+      if (endDate) {
+        const endOfDay = new Date(endDate)
+        endOfDay.setHours(23, 59, 59, 999)
+        if (leadDate > endOfDay) return false
+      }
+      return true
+    })
+  }
+
   // Get status counts
   const statusCounts = {
     total: leads?.length || 0,
@@ -156,6 +183,14 @@ export default async function LeadManagementPage() {
           <AddLeadDialog />
         </div>
       </div>
+
+      {/* Date Filter */}
+      <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+        <AnalyticsFilter
+          salesProfiles={[]}
+          showSalespersonFilter={false}
+        />
+      </Suspense>
 
       <LeadManagementDashboard
         leads={leads || []}
