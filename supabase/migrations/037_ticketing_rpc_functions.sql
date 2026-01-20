@@ -4,6 +4,13 @@
 -- ============================================
 
 -- ============================================
+-- DROP EXISTING FUNCTIONS (if signature changed)
+-- Required when changing parameter types (UUID → TEXT)
+-- ============================================
+DROP FUNCTION IF EXISTS public.rpc_ticket_create(ticket_type, VARCHAR, TEXT, ticketing_department, ticket_priority, UUID, UUID, JSONB);
+DROP FUNCTION IF EXISTS public.rpc_ticket_create(ticket_type, VARCHAR, TEXT, ticketing_department, ticket_priority, TEXT, TEXT, JSONB);
+
+-- ============================================
 -- TICKET CODE GENERATION FUNCTION
 -- Format: [TYPE][DEPT]ddmmyyxxx
 -- Examples: RFQDOM200126001, GENMKT150126002
