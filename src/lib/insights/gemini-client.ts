@@ -80,15 +80,18 @@ Buat Growth Insight report untuk bisnis cargo/logistics, fokus pada:
 OWNER ROLE MAPPING UGC:
 - Salesperson: follow-up, qualification, pipeline hygiene, closing actions
 - Sales Manager: coaching, stage governance, SLA follow-up tim, realloc hot leads, approval bottleneck
-- Marketing Manager: source quality, campaign refinement, lead routing speed, nurture
-- MACX: marketing analytics, source effectiveness analysis
+- Marketing Manager: source quality, campaign refinement, lead routing speed, nurture strategy
+- MACX: marketing analytics, source effectiveness analysis, ROI tracking per campaign
+- Marcomm: content creation, brand messaging, campaign execution, social media management, event coordination
+- DGO (Digital Growth Officer): digital campaign optimization, SEO/SEM performance, website conversion, digital ads ROI
+- VSDO (Visual Design Officer): creative assets, visual branding, marketing collateral, presentation materials
 - Ops: pickup/dispatch readiness, exception handling, SLA reliability input ke sales
 - Director: pricing policy guardrails, resource allocation, cross-function blockers
 
 SETIAP RECOMMENDATION WAJIB PUNYA:
 - title: judul tindakan
 - rationale: alasan berbasis metrik snapshot
-- owner_role: siapa yang eksekusi (Salesperson / Sales Manager / Marketing Manager / MACX / Ops / Director)
+- owner_role: siapa yang eksekusi (Salesperson / Sales Manager / Marketing Manager / MACX / Marcomm / DGO / VSDO / Ops / Director)
 - effort: low/medium/high
 - impact: low/medium/high
 
@@ -142,7 +145,7 @@ const OUTPUT_SCHEMA = `{
       "rationale": "Alasan berbasis metrik snapshot",
       "effort": "low|medium|high",
       "impact": "low|medium|high",
-      "owner_role": "Salesperson|Sales Manager|Marketing Manager|MACX|Ops|Director"
+      "owner_role": "Salesperson|Sales Manager|Marketing Manager|MACX|Marcomm|DGO|VSDO|Ops|Director"
     }
   ],
   "next_steps": ["Tindakan segera 1", "Tindakan segera 2"],
