@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing } from '@/lib/permissions'
+import { canAccessTicketing, isAdmin } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -88,9 +88,9 @@ export async function POST(request: NextRequest) {
 
     const profile = profileData
 
-    // Only superadmin can add holidays
-    if (!profile || profile.role !== 'superadmin') {
-      return NextResponse.json({ error: 'Access denied: Superadmin only' }, { status: 403 })
+    // Only admin (Director, super admin) can add holidays
+    if (!profile || !isAdmin(profile.role)) {
+      return NextResponse.json({ error: 'Access denied: Admin only' }, { status: 403 })
     }
 
     // Parse request body
@@ -162,9 +162,9 @@ export async function DELETE(request: NextRequest) {
 
     const profile = profileData
 
-    // Only superadmin can delete holidays
-    if (!profile || profile.role !== 'superadmin') {
-      return NextResponse.json({ error: 'Access denied: Superadmin only' }, { status: 403 })
+    // Only admin (Director, super admin) can delete holidays
+    if (!profile || !isAdmin(profile.role)) {
+      return NextResponse.json({ error: 'Access denied: Admin only' }, { status: 403 })
     }
 
     // Delete holiday

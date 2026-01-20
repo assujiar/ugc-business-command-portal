@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing } from '@/lib/permissions'
+import { canAccessTicketing, isAdmin } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -87,9 +87,9 @@ export async function PUT(request: NextRequest) {
 
     const profile = profileData
 
-    // Only superadmin can update
-    if (!profile || profile.role !== 'superadmin') {
-      return NextResponse.json({ error: 'Access denied: Superadmin only' }, { status: 403 })
+    // Only admin (Director, super admin) can update
+    if (!profile || !isAdmin(profile.role)) {
+      return NextResponse.json({ error: 'Access denied: Admin only' }, { status: 403 })
     }
 
     // Parse request body
