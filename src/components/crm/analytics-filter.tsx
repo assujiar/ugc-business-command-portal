@@ -242,7 +242,7 @@ export function AnalyticsFilter({
               type="date"
               value={startDate}
               onChange={(e) => handleDateChange('startDate', e.target.value)}
-              className="h-8 w-[130px] text-sm"
+              className="h-8 w-[155px] text-sm"
               placeholder="Start"
             />
             <span className="text-muted-foreground text-xs">-</span>
@@ -250,7 +250,7 @@ export function AnalyticsFilter({
               type="date"
               value={endDate}
               onChange={(e) => handleDateChange('endDate', e.target.value)}
-              className="h-8 w-[130px] text-sm"
+              className="h-8 w-[155px] text-sm"
               placeholder="End"
             />
           </div>
