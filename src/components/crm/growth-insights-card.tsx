@@ -26,8 +26,9 @@ import {
   ArrowRight,
   AlertCircle,
   Clock,
+  CalendarClock,
 } from 'lucide-react'
-import type { InsightFilters, InsightOutput, InsightResponse, Recommendation, SummaryTableRow } from '@/types/insights'
+import type { InsightFilters, InsightOutput, InsightResponse, Recommendation, SummaryTableRow, YearEndOutlook } from '@/types/insights'
 
 interface GrowthInsightsCardProps {
   filters: InsightFilters
@@ -312,6 +313,11 @@ function InsightContent({ insight }: { insight: InsightOutput }) {
         </div>
       )}
 
+      {/* Year End Outlook */}
+      {insight.year_end_outlook && (
+        <YearEndOutlookSection outlook={insight.year_end_outlook} />
+      )}
+
       {/* Data Gaps */}
       {insight.data_gaps && insight.data_gaps.length > 0 && (
         <div className="border-t pt-4">
@@ -408,6 +414,105 @@ function RecommendationCard({ recommendation }: { recommendation: Recommendation
         <p className="text-xs text-muted-foreground">
           Owner: <span className="font-medium">{recommendation.owner_role}</span>
         </p>
+      )}
+    </div>
+  )
+}
+
+function YearEndOutlookSection({ outlook }: { outlook: YearEndOutlook }) {
+  const getScenarioBadge = (scenario: string) => {
+    switch (scenario) {
+      case 'optimistic':
+        return <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">Optimistic</Badge>
+      case 'pessimistic':
+        return <Badge variant="outline" className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">Pessimistic</Badge>
+      default:
+        return <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">Baseline</Badge>
+    }
+  }
+
+  return (
+    <div className="border-t pt-4">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="font-medium text-sm flex items-center gap-2">
+          <CalendarClock className="h-4 w-4 text-indigo-500" />
+          Year-End Outlook
+        </h4>
+        {getScenarioBadge(outlook.scenario)}
+      </div>
+
+      {/* Warning Banner */}
+      {outlook.warning && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+            <p className="text-sm text-amber-800 dark:text-amber-200">{outlook.warning}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Projected Metrics Table */}
+      {outlook.projected_metrics && outlook.projected_metrics.length > 0 && (
+        <div className="mb-4">
+          <h5 className="text-xs font-medium text-muted-foreground mb-2">Projected Metrics</h5>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-xs">
+                  <th className="text-left py-2 font-medium">Metric</th>
+                  <th className="text-right py-2 font-medium">Current Run Rate</th>
+                  <th className="text-right py-2 font-medium">Year-End Projection</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outlook.projected_metrics.map((metric, idx) => (
+                  <tr key={idx} className="border-b last:border-0">
+                    <td className="py-2">
+                      <div>
+                        <span className="font-medium">{metric.metric}</span>
+                        {metric.assumption && (
+                          <p className="text-xs text-muted-foreground">{metric.assumption}</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="text-right py-2">{metric.current_run_rate}</td>
+                    <td className="text-right py-2 font-medium">{metric.projected_year_end}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Key Assumptions */}
+      {outlook.key_assumptions && outlook.key_assumptions.length > 0 && (
+        <div className="mb-4">
+          <h5 className="text-xs font-medium text-muted-foreground mb-2">Key Assumptions</h5>
+          <ul className="space-y-1">
+            {outlook.key_assumptions.map((assumption, idx) => (
+              <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                <span className="text-gray-400">•</span>
+                <span>{assumption}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Improvement Opportunities */}
+      {outlook.improvement_opportunities && outlook.improvement_opportunities.length > 0 && (
+        <div>
+          <h5 className="text-xs font-medium text-muted-foreground mb-2">Improvement Opportunities</h5>
+          <ul className="space-y-1">
+            {outlook.improvement_opportunities.map((opportunity, idx) => (
+              <li key={idx} className="text-sm flex items-start gap-2">
+                <span className="text-green-500">+</span>
+                <span>{opportunity}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   )

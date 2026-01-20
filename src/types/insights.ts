@@ -134,6 +134,19 @@ export interface Recommendation {
   owner_role: string
 }
 
+export interface YearEndOutlook {
+  scenario: 'optimistic' | 'baseline' | 'pessimistic'
+  projected_metrics: {
+    metric: string
+    current_run_rate: string
+    projected_year_end: string
+    assumption: string
+  }[]
+  key_assumptions: string[]
+  improvement_opportunities: string[]
+  warning: string // Peringatan jika tidak ada perbaikan
+}
+
 export interface InsightOutput {
   executive_summary: string
   summary_table: SummaryTableRow[]
@@ -143,6 +156,7 @@ export interface InsightOutput {
   recommendations: Recommendation[]
   next_steps: string[]
   data_gaps: string[]
+  year_end_outlook?: YearEndOutlook // Outlook sampai akhir tahun
 }
 
 // =====================================================

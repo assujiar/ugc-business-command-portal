@@ -105,6 +105,20 @@ PIPELINE INTERPRETATION:
 - Source volume besar tapi conversion jelek = buang waktu; prioritaskan source yang menghasilkan booking
 - Win rate rendah bisa indikasi: pricing tidak kompetitif, sales cycle terlalu lama, atau qualification awal kurang ketat
 
+YEAR-END OUTLOOK (WAJIB):
+Hitung proyeksi akhir tahun berdasarkan run rate saat ini. SELALU sertakan year_end_outlook dengan:
+1. projected_metrics: Proyeksikan metric utama (pipeline value, leads, win rate, avg deal size) sampai akhir tahun
+   - current_run_rate: Run rate berdasarkan periode filter (contoh: "Rp 500M/bulan", "15 leads/minggu")
+   - projected_year_end: Proyeksi jika run rate tetap sama (extrapolate ke sisa bulan)
+   - assumption: Asumsi yang digunakan (contoh: "Berdasarkan 3 bulan terakhir")
+2. key_assumptions: Asumsi utama dalam proyeksi
+3. improvement_opportunities: Peluang perbaikan yang bisa meningkatkan proyeksi
+4. warning: WAJIB berikan peringatan jelas tentang konsekuensi JIKA TIDAK ADA PERBAIKAN
+   - Contoh: "Jika tidak ada perbaikan, pipeline hanya akan mencapai Rp 2B di akhir tahun - di bawah kapasitas tim."
+   - Warning harus spesifik dengan angka proyeksi dan dampak bisnis
+
+Scenario default adalah "baseline" (proyeksi jika performance tetap seperti sekarang tanpa perbaikan).
+
 Semua monetary values harus dalam format Indonesian Rupiah (Rp) dengan abbreviation (K, M, B).`
 
 // Output schema definition
@@ -132,7 +146,21 @@ const OUTPUT_SCHEMA = `{
     }
   ],
   "next_steps": ["Tindakan segera 1", "Tindakan segera 2"],
-  "data_gaps": ["Data yang tidak tersedia 1", "Limitasi 2"]
+  "data_gaps": ["Data yang tidak tersedia 1", "Limitasi 2"],
+  "year_end_outlook": {
+    "scenario": "baseline",
+    "projected_metrics": [
+      {
+        "metric": "Nama metric (contoh: Pipeline Value, Win Rate, dll)",
+        "current_run_rate": "Run rate saat ini berdasarkan data",
+        "projected_year_end": "Proyeksi akhir tahun jika tidak ada perbaikan",
+        "assumption": "Asumsi yang digunakan untuk proyeksi"
+      }
+    ],
+    "key_assumptions": ["Asumsi utama 1", "Asumsi utama 2"],
+    "improvement_opportunities": ["Peluang perbaikan 1", "Peluang perbaikan 2"],
+    "warning": "Peringatan konsekuensi jika tidak ada perbaikan sampai akhir tahun"
+  }
 }`
 
 /**
@@ -394,6 +422,7 @@ function ensureRequiredFields(insight: Partial<InsightOutput>): InsightOutput {
     recommendations: insight.recommendations || [],
     next_steps: insight.next_steps || [],
     data_gaps: insight.data_gaps || ['Unable to fully analyze due to data limitations'],
+    year_end_outlook: insight.year_end_outlook,
   }
 }
 
