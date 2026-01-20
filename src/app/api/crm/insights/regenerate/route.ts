@@ -29,6 +29,9 @@ const UNLIMITED_REGENERATE_ROLES = [
   'sales manager',
   'Marketing Manager',
   'MACX',
+  'Marcomm',
+  'DGO',
+  'VSDO',
 ]
 
 export async function POST(request: NextRequest) {
