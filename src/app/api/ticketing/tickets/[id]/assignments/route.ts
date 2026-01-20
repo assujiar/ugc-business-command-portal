@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { canAccessTicketing, canViewAllTickets } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
+export const dynamic = 'force-dynamic'
+
 interface RouteParams {
   params: Promise<{ id: string }>
 }
