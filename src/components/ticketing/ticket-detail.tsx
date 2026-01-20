@@ -67,6 +67,7 @@ import {
   canCreateInternalComments,
   canViewAllTickets,
   canViewCRMAccounts,
+  isOps,
 } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 import type {
@@ -151,11 +152,15 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const canInternalComment = canCreateInternalComments(profile.role)
   const canViewAll = canViewAllTickets(profile.role)
   const canViewAccounts = canViewCRMAccounts(profile.role)
+  const isOpsUser = isOps(profile.role)
 
   // Role-based UI
   const isCreator = ticket.created_by === profile.user_id
   const isAssignee = ticket.assigned_to === profile.user_id
   const isOpsOrAdmin = canViewAll
+
+  // Ops users can only see sender info if show_sender_to_ops is true
+  const canSeeSenderInfo = !isOpsUser || ticket.show_sender_to_ops
 
   const supabase = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1181,27 +1186,56 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                 <p className="text-sm font-medium text-muted-foreground">Department</p>
                 <p>{departmentLabels[ticket.department as TicketingDepartment] || ticket.department}</p>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Account</p>
-                {ticket.account ? (
-                  canViewAccounts ? (
-                    <Link
-                      href={`/accounts/${ticket.account.account_id}`}
-                      className="flex items-center gap-2 hover:underline"
-                    >
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-brand">{ticket.account.company_name}</span>
-                    </Link>
+              {/* Account - hidden for Ops if show_sender_to_ops is false */}
+              {canSeeSenderInfo && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Account</p>
+                  {ticket.account ? (
+                    canViewAccounts ? (
+                      <Link
+                        href={`/accounts/${ticket.account.account_id}`}
+                        className="flex items-center gap-2 hover:underline"
+                      >
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-brand">{ticket.account.company_name}</span>
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span>{ticket.account.company_name}</span>
+                      </div>
+                    )
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <span>{ticket.account.company_name}</span>
-                    </div>
-                  )
-                ) : (
-                  <p className="text-muted-foreground">—</p>
-                )}
-              </div>
+                    <p className="text-muted-foreground">—</p>
+                  )}
+                </div>
+              )}
+              {/* Sender Info - hidden for Ops if show_sender_to_ops is false */}
+              {canSeeSenderInfo && (ticket.sender_name || ticket.sender_email || ticket.sender_phone) && (
+                <div className="sm:col-span-2 p-3 border rounded-lg bg-muted/30">
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Sender Information</p>
+                  <div className="grid gap-2 sm:grid-cols-3 text-sm">
+                    {ticket.sender_name && (
+                      <div>
+                        <span className="text-muted-foreground">Name: </span>
+                        <span>{ticket.sender_name}</span>
+                      </div>
+                    )}
+                    {ticket.sender_email && (
+                      <div>
+                        <span className="text-muted-foreground">Email: </span>
+                        <span>{ticket.sender_email}</span>
+                      </div>
+                    )}
+                    {ticket.sender_phone && (
+                      <div>
+                        <span className="text-muted-foreground">Phone: </span>
+                        <span>{ticket.sender_phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Created By</p>
                 <div className="flex items-center gap-2">

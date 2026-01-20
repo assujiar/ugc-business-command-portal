@@ -1134,6 +1134,11 @@ export interface Ticket {
   competitor_name: string | null
   competitor_cost: number | null
   pending_response_from: ResponseOwner | null
+  // Sender info (copied from account/contact for Ops visibility control)
+  sender_name: string | null
+  sender_email: string | null
+  sender_phone: string | null
+  show_sender_to_ops: boolean
   // Relations (when joined)
   creator?: {
     user_id: string

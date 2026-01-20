@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Select,
@@ -87,6 +88,20 @@ interface FormData {
   department: TicketingDepartment
   priority: TicketPriority
   account_id?: string
+  sender_name?: string
+  sender_email?: string
+  sender_phone?: string
+  show_sender_to_ops: boolean
+}
+
+interface Contact {
+  contact_id: string
+  first_name: string
+  last_name: string | null
+  email: string | null
+  phone: string | null
+  mobile: string | null
+  is_primary: boolean
 }
 
 // Department options for General Request
@@ -113,14 +128,59 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [ticketType, setTicketType] = useState<TicketType>('GEN')
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [senderName, setSenderName] = useState('')
+  const [senderEmail, setSenderEmail] = useState('')
+  const [senderPhone, setSenderPhone] = useState('')
+  const [showSenderToOps, setShowSenderToOps] = useState(true)
+  const [loadingContacts, setLoadingContacts] = useState(false)
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     defaultValues: {
       ticket_type: 'GEN',
       priority: 'medium',
       department: (getUserTicketingDepartment(profile.role) as TicketingDepartment) || 'SAL',
+      show_sender_to_ops: true,
     },
   })
+
+  // Fetch contacts when account is selected
+  const handleAccountSelect = async (accountId: string) => {
+    setSelectedAccountId(accountId)
+    setValue('account_id', accountId)
+
+    if (!accountId) {
+      setSenderName('')
+      setSenderEmail('')
+      setSenderPhone('')
+      return
+    }
+
+    setLoadingContacts(true)
+    try {
+      // Fetch primary contact for the account
+      const { data: contacts } = await (supabase as any)
+        .from('contacts')
+        .select('first_name, last_name, email, phone, mobile, is_primary')
+        .eq('account_id', accountId)
+        .order('is_primary', { ascending: false })
+        .limit(1) as { data: Contact[] | null }
+
+      if (contacts && contacts.length > 0) {
+        const contact = contacts[0]
+        const fullName = contact.last_name
+          ? `${contact.first_name} ${contact.last_name}`
+          : contact.first_name
+        setSenderName(fullName)
+        setSenderEmail(contact.email || '')
+        setSenderPhone(contact.phone || contact.mobile || '')
+      }
+    } catch (err) {
+      console.error('Error fetching contact:', err)
+    } finally {
+      setLoadingContacts(false)
+    }
+  }
 
   // Shipment data state (same as create lead)
   const [shipmentData, setShipmentData] = useState<ShipmentData>({
@@ -353,6 +413,10 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
           priority: data.priority,
           account_id: data.account_id || null,
           rfq_data,
+          sender_name: senderName || null,
+          sender_email: senderEmail || null,
+          sender_phone: senderPhone || null,
+          show_sender_to_ops: showSenderToOps,
         }),
       })
 
@@ -502,7 +566,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
           <div className="space-y-2">
             <Label htmlFor="account_id">Link to Account (Optional)</Label>
             <Select
-              onValueChange={(value) => setValue('account_id', value)}
+              onValueChange={handleAccountSelect}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select account" />
@@ -519,6 +583,68 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Sender Info - shows when account is selected */}
+          {selectedAccountId && (
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium">Sender Information</h4>
+                {loadingContacts && (
+                  <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="sender_name">Name</Label>
+                  <Input
+                    id="sender_name"
+                    name="sender_name"
+                    value={senderName}
+                    onChange={(e) => setSenderName(e.target.value)}
+                    placeholder="Contact name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sender_email">Email</Label>
+                  <Input
+                    id="sender_email"
+                    name="sender_email"
+                    type="email"
+                    value={senderEmail}
+                    onChange={(e) => setSenderEmail(e.target.value)}
+                    placeholder="contact@company.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sender_phone">Phone</Label>
+                  <Input
+                    id="sender_phone"
+                    name="sender_phone"
+                    value={senderPhone}
+                    onChange={(e) => setSenderPhone(e.target.value)}
+                    placeholder="+62..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div className="space-y-0.5">
+                  <Label htmlFor="show_sender_to_ops" className="text-sm font-medium">
+                    Show Sender Info to Operations
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Jika dimatikan, Ops tidak bisa melihat nama, email, phone, dan account
+                  </p>
+                </div>
+                <Switch
+                  id="show_sender_to_ops"
+                  checked={showSenderToOps}
+                  onCheckedChange={setShowSenderToOps}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="subject">Subject *</Label>
