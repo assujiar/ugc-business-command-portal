@@ -64,7 +64,7 @@ CREATE POLICY accounts_select ON accounts FOR SELECT
         t.created_by = auth.uid()
         OR t.assigned_to = auth.uid()
         OR public.is_ticketing_admin(auth.uid())
-        OR public.get_ticketing_department(auth.uid()) = t.department
+        OR public.get_user_ticketing_department(auth.uid()) = t.department
       )
     ))
     -- Ticketing Ops can also see all accounts (for linking to tickets)
