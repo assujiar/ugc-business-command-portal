@@ -6,9 +6,32 @@
 -- ============================================
 -- DROP EXISTING FUNCTIONS (if signature changed)
 -- Required when changing parameter types (UUID → TEXT)
+-- Use exact PostgreSQL type names from error messages
 -- ============================================
-DROP FUNCTION IF EXISTS public.rpc_ticket_create(ticket_type, VARCHAR, TEXT, ticketing_department, ticket_priority, UUID, UUID, JSONB);
-DROP FUNCTION IF EXISTS public.rpc_ticket_create(ticket_type, VARCHAR, TEXT, ticketing_department, ticket_priority, TEXT, TEXT, JSONB);
+
+-- Drop with UUID parameters (old signature)
+DROP FUNCTION IF EXISTS public.rpc_ticket_create(
+    ticket_type,
+    character varying,
+    text,
+    ticketing_department,
+    ticket_priority,
+    uuid,
+    uuid,
+    jsonb
+);
+
+-- Drop with TEXT parameters (new signature, for idempotency)
+DROP FUNCTION IF EXISTS public.rpc_ticket_create(
+    ticket_type,
+    character varying,
+    text,
+    ticketing_department,
+    ticket_priority,
+    text,
+    text,
+    jsonb
+);
 
 -- ============================================
 -- TICKET CODE GENERATION FUNCTION
