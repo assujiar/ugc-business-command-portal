@@ -7,12 +7,19 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { canAccessActivities } from '@/lib/permissions'
+import { Suspense } from 'react'
+import { canAccessActivities, isAdmin } from '@/lib/permissions'
 import { ActivitiesTabs } from '@/components/crm/activities-tabs'
+import { AnalyticsFilter } from '@/components/crm/analytics-filter'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ActivitiesPage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function ActivitiesPage({ searchParams }: PageProps) {
   const adminClient = createAdminClient()
   const { profile } = await getSessionAndProfile()
 
@@ -23,6 +30,18 @@ export default async function ActivitiesPage() {
   if (!canAccessActivities(profile.role)) {
     redirect('/dashboard')
   }
+
+  // Get filter params
+  const params = await searchParams
+  const startDate = typeof params.startDate === 'string' ? params.startDate : null
+  const endDate = typeof params.endDate === 'string' ? params.endDate : null
+  const salespersonId = typeof params.salespersonId === 'string' ? params.salespersonId : null
+
+  // Fetch sales profiles for filter dropdown
+  const { data: salesProfiles } = await (adminClient as any)
+    .from('profiles')
+    .select('user_id, name, email, role')
+    .in('role', ['salesperson', 'sales manager', 'sales support'])
 
   // Fetch activities from both sales_plans and pipeline_updates
   // We'll fetch separately and combine for better control
@@ -157,7 +176,35 @@ export default async function ActivitiesPage() {
   }))
 
   // Combine all activities
-  const allActivities = [...salesPlanActivities, ...pipelineActivities]
+  let allActivities = [...salesPlanActivities, ...pipelineActivities]
+
+  // Apply date and salesperson filters
+  if (startDate || endDate || salespersonId) {
+    allActivities = allActivities.filter((activity) => {
+      // Date filter - use scheduled_on or completed_on
+      if (startDate || endDate) {
+        const activityDate = activity.completed_on || activity.scheduled_on
+        if (activityDate) {
+          const date = new Date(activityDate)
+          if (startDate && date < new Date(startDate)) return false
+          if (endDate) {
+            const endOfDay = new Date(endDate)
+            endOfDay.setHours(23, 59, 59, 999)
+            if (date > endOfDay) return false
+          }
+        }
+      }
+      // Salesperson filter
+      if (salespersonId && activity.owner_user_id !== salespersonId) {
+        return false
+      }
+      return true
+    })
+  }
+
+  // Determine if user can see salesperson filter (management roles only)
+  const showSalespersonFilter = isAdmin(profile.role) || profile.role === 'sales manager' ||
+    profile.role === 'Marketing Manager' || profile.role === 'MACX'
 
   return (
     <div className="space-y-4 lg:space-y-6">
@@ -167,6 +214,19 @@ export default async function ActivitiesPage() {
           View all sales activities from Sales Plan and Pipeline
         </p>
       </div>
+
+      {/* Filter Section */}
+      <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+        <AnalyticsFilter
+          salesProfiles={(salesProfiles || []).map((p: any) => ({
+            user_id: p.user_id,
+            name: p.name,
+            email: p.email,
+            role: p.role,
+          }))}
+          showSalespersonFilter={showSalespersonFilter}
+        />
+      </Suspense>
 
       <ActivitiesTabs
         activities={allActivities}

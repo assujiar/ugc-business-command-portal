@@ -5,7 +5,12 @@
 // =====================================================
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { Suspense } from 'react'
 import AccountsClient from './accounts-client'
+import { AnalyticsFilter } from '@/components/crm/analytics-filter'
+import { Skeleton } from '@/components/ui/skeleton'
+import { isAdmin } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 interface AccountEnriched {
@@ -38,16 +43,30 @@ interface AccountEnriched {
   actual_revenue: number
   total_payment: number
   total_outstanding: number
+  created_at?: string
 }
 
-export default async function AccountsPage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function AccountsPage({ searchParams }: PageProps) {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
+
+  // Get filter params
+  const params = await searchParams
+  const startDate = typeof params.startDate === 'string' ? params.startDate : null
+  const endDate = typeof params.endDate === 'string' ? params.endDate : null
+  const salespersonId = typeof params.salespersonId === 'string' ? params.salespersonId : null
 
   // Get user role
   const { data: { user } } = await supabase.auth.getUser()
   let userRole: UserRole | null = null
+  let userId: string | null = null
 
   if (user) {
+    userId = user.id
     const { data: profile } = await (supabase as any)
       .from('profiles')
       .select('role')
@@ -56,10 +75,30 @@ export default async function AccountsPage() {
     userRole = profile?.role ?? null
   }
 
+  // Fetch sales profiles for filter dropdown
+  const { data: salesProfiles } = await (adminClient as any)
+    .from('profiles')
+    .select('user_id, name, email, role')
+    .in('role', ['salesperson', 'sales manager', 'sales support'])
+
   const { data: accounts } = await supabase
     .from('v_accounts_enriched')
     .select('*')
     .order('company_name', { ascending: true }) as { data: AccountEnriched[] | null }
+
+  // Apply filters
+  let filteredAccounts = accounts || []
+  if (salespersonId) {
+    filteredAccounts = filteredAccounts.filter((account) => account.owner_user_id === salespersonId)
+  }
+  // Note: Date filter not applied to accounts as they don't have a relevant date field in the view
+  // If needed in future, can filter by created_at once added to the view
+
+  // Determine if user can see salesperson filter (management roles only)
+  const showSalespersonFilter = userRole ? (
+    isAdmin(userRole) || userRole === 'sales manager' ||
+    userRole === 'Marketing Manager' || userRole === 'MACX'
+  ) : false
 
   return (
     <div className="space-y-4 lg:space-y-6">
@@ -70,7 +109,22 @@ export default async function AccountsPage() {
         </p>
       </div>
 
-      <AccountsClient accounts={accounts || []} userRole={userRole} />
+      {/* Filter Section */}
+      {showSalespersonFilter && (
+        <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+          <AnalyticsFilter
+            salesProfiles={(salesProfiles || []).map((p: any) => ({
+              user_id: p.user_id,
+              name: p.name,
+              email: p.email,
+              role: p.role,
+            }))}
+            showSalespersonFilter={showSalespersonFilter}
+          />
+        </Suspense>
+      )}
+
+      <AccountsClient accounts={filteredAccounts} userRole={userRole} />
     </div>
   )
 }
