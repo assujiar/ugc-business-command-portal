@@ -10,14 +10,42 @@ import { AddLeadDialog } from '@/components/crm/add-lead-dialog'
 import { Button } from '@/components/ui/button'
 import { FileSpreadsheet } from 'lucide-react'
 import Link from 'next/link'
+import { Suspense } from 'react'
+import { AnalyticsFilter } from '@/components/crm/analytics-filter'
+import { Skeleton } from '@/components/ui/skeleton'
 
-export default async function LeadInboxPage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function LeadInboxPage({ searchParams }: PageProps) {
   const supabase = await createClient()
+
+  // Get filter params
+  const params = await searchParams
+  const startDate = typeof params.startDate === 'string' ? params.startDate : null
+  const endDate = typeof params.endDate === 'string' ? params.endDate : null
 
   const { data: leads, error } = await supabase
     .from('v_lead_inbox')
     .select('*')
     .order('created_at', { ascending: false })
+
+  // Apply date filter
+  let filteredLeads = leads || []
+  if (startDate || endDate) {
+    filteredLeads = filteredLeads.filter((lead: any) => {
+      const leadDate = lead.created_at ? new Date(lead.created_at) : null
+      if (!leadDate) return true
+      if (startDate && leadDate < new Date(startDate)) return false
+      if (endDate) {
+        const endOfDay = new Date(endDate)
+        endOfDay.setHours(23, 59, 59, 999)
+        if (leadDate > endOfDay) return false
+      }
+      return true
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -39,7 +67,15 @@ export default async function LeadInboxPage() {
         </div>
       </div>
 
-      <LeadInboxTable leads={leads || []} />
+      {/* Date Filter */}
+      <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+        <AnalyticsFilter
+          salesProfiles={[]}
+          showSalespersonFilter={false}
+        />
+      </Suspense>
+
+      <LeadInboxTable leads={filteredLeads} />
     </div>
   )
 }

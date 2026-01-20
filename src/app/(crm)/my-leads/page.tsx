@@ -8,9 +8,16 @@ import { MyLeadsDashboard } from '@/components/crm/my-leads-dashboard'
 import { AddLeadDialog } from '@/components/crm/add-lead-dialog'
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import { canAccessSalesInbox } from '@/lib/permissions'
+import { AnalyticsFilter } from '@/components/crm/analytics-filter'
+import { Skeleton } from '@/components/ui/skeleton'
 
-export default async function MyLeadsPage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function MyLeadsPage({ searchParams }: PageProps) {
   const supabase = await createClient()
   const { profile } = await getSessionAndProfile()
 
@@ -22,6 +29,11 @@ export default async function MyLeadsPage() {
   if (!canAccessSalesInbox(profile.role)) {
     redirect('/dashboard')
   }
+
+  // Get filter params
+  const params = await searchParams
+  const startDate = typeof params.startDate === 'string' ? params.startDate : null
+  const endDate = typeof params.endDate === 'string' ? params.endDate : null
 
   // Fetch leads owned by the sales person or created by them
   const { data: leads } = await supabase
@@ -49,7 +61,7 @@ export default async function MyLeadsPage() {
     .order('created_at', { ascending: false })
 
   // Transform data
-  const transformedLeads = (leads || []).map((lead: any) => ({
+  let transformedLeads = (leads || []).map((lead: any) => ({
     lead_id: lead.lead_id,
     company_name: lead.company_name,
     pic_name: lead.contact_name,
@@ -68,6 +80,21 @@ export default async function MyLeadsPage() {
     opportunity_id: lead.opportunity_id,
   }))
 
+  // Apply date filter
+  if (startDate || endDate) {
+    transformedLeads = transformedLeads.filter((lead: any) => {
+      const leadDate = lead.created_at ? new Date(lead.created_at) : null
+      if (!leadDate) return true
+      if (startDate && leadDate < new Date(startDate)) return false
+      if (endDate) {
+        const endOfDay = new Date(endDate)
+        endOfDay.setHours(23, 59, 59, 999)
+        if (leadDate > endOfDay) return false
+      }
+      return true
+    })
+  }
+
   return (
     <div className="space-y-4 lg:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -81,6 +108,14 @@ export default async function MyLeadsPage() {
           <AddLeadDialog />
         </div>
       </div>
+
+      {/* Date Filter */}
+      <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+        <AnalyticsFilter
+          salesProfiles={[]}
+          showSalespersonFilter={false}
+        />
+      </Suspense>
 
       <MyLeadsDashboard leads={transformedLeads} currentUserId={profile.user_id} userRole={profile.role} />
     </div>
