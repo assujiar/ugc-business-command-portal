@@ -346,8 +346,18 @@ export function SalesPerformanceAnalytics({
       const lostOpps = userOpps.filter(o => o.stage === 'Closed Lost')
       const activeOpps = userOpps.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
 
-      // Revenue (from closed won)
-      const revenue = wonOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
+      // Get accounts owned by this user
+      const userAccounts = accounts.filter(a => a.owner_user_id === userId)
+
+      // Activities from activities table (combined from pipeline and sales plan)
+      const userActivities = activities.filter(a => a.owner_user_id === userId)
+
+      // IMPORTANT: Only include salespeople who have at least some real data
+      // Skip users with no opportunities, no accounts, AND no activities
+      const hasAnyData = userOpps.length > 0 || userAccounts.length > 0 || userActivities.length > 0
+      if (!hasAnyData) {
+        continue // Skip this user - no real data
+      }
 
       // Pipeline value (from active opps)
       const pipelineValue = activeOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
@@ -356,8 +366,6 @@ export function SalesPerformanceAnalytics({
       const totalClosed = wonOpps.length + lostOpps.length
       const winRate = totalClosed > 0 ? (wonOpps.length / totalClosed) * 100 : 0
 
-      // Get accounts owned by this user
-      const userAccounts = accounts.filter(a => a.owner_user_id === userId)
       const activeAccounts = userAccounts.filter(a => a.account_status === 'active_account')
       const newAccounts = userAccounts.filter(a => a.account_status === 'new_account')
 
@@ -387,8 +395,6 @@ export function SalesPerformanceAnalytics({
       }
       const avgSalesCycle = salesCycleCount > 0 ? totalSalesCycleDays / salesCycleCount : 0
 
-      // Activities from activities table (combined from pipeline and sales plan)
-      const userActivities = activities.filter(a => a.owner_user_id === userId)
       const activitiesBreakdown = {
         site_visit: userActivities.filter(a => a.activity_type === 'Site Visit').length,
         online_meeting: userActivities.filter(a => a.activity_type === 'Online Meeting').length,
@@ -768,11 +774,21 @@ export function SalespersonPerformanceCard({
       const lostOpps = userOpps.filter(o => o.stage === 'Closed Lost')
       const activeOpps = userOpps.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
 
+      const userAccounts = accounts.filter(a => a.owner_user_id === userId)
+      const userActivities = activities.filter(a => a.owner_user_id === userId)
+
+      // IMPORTANT: Only include salespeople who have at least some real data
+      // Skip users with no opportunities, no accounts, AND no activities
+      // Exception: always include current user so they can see their card
+      const hasAnyData = userOpps.length > 0 || userAccounts.length > 0 || userActivities.length > 0
+      if (!hasAnyData && userId !== currentUserId) {
+        continue // Skip this user - no real data
+      }
+
       const pipelineValue = activeOpps.reduce((sum, o) => sum + (o.estimated_value || 0), 0)
       const totalClosed = wonOpps.length + lostOpps.length
       const winRate = totalClosed > 0 ? (wonOpps.length / totalClosed) * 100 : 0
 
-      const userAccounts = accounts.filter(a => a.owner_user_id === userId)
       const activeAccounts = userAccounts.filter(a => a.account_status === 'active_account')
       const newAccounts = userAccounts.filter(a => a.account_status === 'new_account')
 
@@ -799,8 +815,6 @@ export function SalespersonPerformanceCard({
       }
       const avgSalesCycle = salesCycleCount > 0 ? totalSalesCycleDays / salesCycleCount : 0
 
-      // Activities from activities table
-      const userActivities = activities.filter(a => a.owner_user_id === userId)
       const activitiesBreakdown = {
         site_visit: userActivities.filter(a => a.activity_type === 'Site Visit').length,
         online_meeting: userActivities.filter(a => a.activity_type === 'Online Meeting').length,
