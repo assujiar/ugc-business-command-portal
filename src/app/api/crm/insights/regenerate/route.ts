@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
           latency_ms: aiResult.latencyMs,
           tokens_in: aiResult.tokensIn,
           tokens_out: aiResult.tokensOut,
-          model: 'gemini-2.5-flash-preview-05-20',
+          model: 'gemini-3-flash-preview',
         })
         .eq('id', pendingRecord.id)
         .select()
