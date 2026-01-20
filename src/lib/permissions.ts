@@ -94,10 +94,9 @@ export function canManageCadences(role: UserRole | null | undefined): boolean {
   return isAdmin(role)
 }
 
-// Can user import data?
+// Can user import data? (Admin only)
 export function canImportData(role: UserRole | null | undefined): boolean {
-  if (!role) return false
-  return isAdmin(role) || role === 'Marketing Manager' || role === 'sales manager'
+  return isAdmin(role)
 }
 
 // Can user view audit logs?
