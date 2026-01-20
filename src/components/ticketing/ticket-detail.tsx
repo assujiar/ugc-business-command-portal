@@ -1295,7 +1295,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
             </CardContent>
           </Card>
 
-          {/* Admin Actions Card */}
+          {/* Admin Actions Card - only for Admin */}
           {(canAssign || canTransition) && (
             <Card>
               <CardHeader>
