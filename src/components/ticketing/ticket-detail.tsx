@@ -1295,11 +1295,11 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
             </CardContent>
           </Card>
 
-          {/* Ticket Management Card - for Admin and Ops */}
+          {/* Admin Actions Card - only for Admin */}
           {(canAssign || canTransition) && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Ticket Management</CardTitle>
+                <CardTitle className="text-lg">Admin Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {/* Assign */}

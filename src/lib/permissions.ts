@@ -349,13 +349,15 @@ export function canAccessTicketing(role: UserRole | null | undefined): boolean {
 // Can user assign tickets?
 export function canAssignTickets(role: UserRole | null | undefined): boolean {
   if (!role) return false
-  return isAdmin(role) || isOps(role)
+  // Only Admin can reassign tickets (auto-assignment happens on creation)
+  return isAdmin(role)
 }
 
-// Can user transition ticket status?
+// Can user manually transition ticket status?
 export function canTransitionTickets(role: UserRole | null | undefined): boolean {
   if (!role) return false
-  return isAdmin(role) || isOps(role)
+  // Only Admin can manually change status (status changes automatically based on responses)
+  return isAdmin(role)
 }
 
 // Can user close tickets?
