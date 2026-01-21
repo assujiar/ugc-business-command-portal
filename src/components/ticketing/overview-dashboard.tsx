@@ -318,10 +318,10 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                         <p className="text-sm font-medium">First Response</p>
                       </div>
                       <p className="text-2xl font-bold">
-                        {slaMetrics.by_type?.RFQ?.first_response?.compliance_rate || 100}%
+                        {slaMetrics.by_type?.RFQ?.first_response?.compliance_rate || 0}%
                       </p>
                       <Progress
-                        value={slaMetrics.by_type?.RFQ?.first_response?.compliance_rate || 100}
+                        value={slaMetrics.by_type?.RFQ?.first_response?.compliance_rate || 0}
                         className="h-1.5 mt-2"
                       />
                       <div className="flex justify-between mt-2 text-xs text-muted-foreground">
@@ -340,10 +340,10 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                         <p className="text-sm font-medium">First Quote</p>
                       </div>
                       <p className="text-2xl font-bold text-blue-600">
-                        {slaMetrics.by_type?.RFQ?.first_quote?.compliance_rate || 100}%
+                        {slaMetrics.by_type?.RFQ?.first_quote?.compliance_rate || 0}%
                       </p>
                       <Progress
-                        value={slaMetrics.by_type?.RFQ?.first_quote?.compliance_rate || 100}
+                        value={slaMetrics.by_type?.RFQ?.first_quote?.compliance_rate || 0}
                         className="h-1.5 mt-2"
                       />
                       <div className="flex justify-between mt-2 text-xs text-muted-foreground">
@@ -365,10 +365,10 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                         <p className="text-sm font-medium">Resolution</p>
                       </div>
                       <p className="text-2xl font-bold">
-                        {slaMetrics.by_type?.RFQ?.resolution?.compliance_rate || 100}%
+                        {slaMetrics.by_type?.RFQ?.resolution?.compliance_rate || 0}%
                       </p>
                       <Progress
-                        value={slaMetrics.by_type?.RFQ?.resolution?.compliance_rate || 100}
+                        value={slaMetrics.by_type?.RFQ?.resolution?.compliance_rate || 0}
                         className="h-1.5 mt-2"
                       />
                       <div className="flex justify-between mt-2 text-xs text-muted-foreground">
@@ -432,10 +432,10 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                         <p className="text-sm font-medium">First Response</p>
                       </div>
                       <p className="text-2xl font-bold">
-                        {slaMetrics.by_type?.GEN?.first_response?.compliance_rate || 100}%
+                        {slaMetrics.by_type?.GEN?.first_response?.compliance_rate || 0}%
                       </p>
                       <Progress
-                        value={slaMetrics.by_type?.GEN?.first_response?.compliance_rate || 100}
+                        value={slaMetrics.by_type?.GEN?.first_response?.compliance_rate || 0}
                         className="h-1.5 mt-2"
                       />
                       <div className="flex justify-between mt-2 text-xs text-muted-foreground">
@@ -454,10 +454,10 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                         <p className="text-sm font-medium">Resolution</p>
                       </div>
                       <p className="text-2xl font-bold">
-                        {slaMetrics.by_type?.GEN?.resolution?.compliance_rate || 100}%
+                        {slaMetrics.by_type?.GEN?.resolution?.compliance_rate || 0}%
                       </p>
                       <Progress
-                        value={slaMetrics.by_type?.GEN?.resolution?.compliance_rate || 100}
+                        value={slaMetrics.by_type?.GEN?.resolution?.compliance_rate || 0}
                         className="h-1.5 mt-2"
                       />
                       <div className="flex justify-between mt-2 text-xs text-muted-foreground">
@@ -503,11 +503,11 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                       <p className="text-sm text-muted-foreground">Total Tickets</p>
                     </div>
                     <div className="text-center p-4 rounded-lg bg-muted/50">
-                      <p className="text-3xl font-bold">{slaMetrics.overall?.first_response?.compliance_rate || 100}%</p>
+                      <p className="text-3xl font-bold">{slaMetrics.overall?.first_response?.compliance_rate || 0}%</p>
                       <p className="text-sm text-muted-foreground">First Response SLA</p>
                     </div>
                     <div className="text-center p-4 rounded-lg bg-muted/50">
-                      <p className="text-3xl font-bold">{slaMetrics.overall?.resolution?.compliance_rate || 100}%</p>
+                      <p className="text-3xl font-bold">{slaMetrics.overall?.resolution?.compliance_rate || 0}%</p>
                       <p className="text-sm text-muted-foreground">Resolution SLA</p>
                     </div>
                     <div className="text-center p-4 rounded-lg bg-destructive/10">
@@ -537,16 +537,16 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                               <div>
                                 <div className="flex justify-between text-sm">
                                   <span>First Response</span>
-                                  <span>{data.first_response?.compliance_rate || 100}%</span>
+                                  <span>{data.first_response?.compliance_rate || 0}%</span>
                                 </div>
-                                <Progress value={data.first_response?.compliance_rate || 100} className="h-1.5" />
+                                <Progress value={data.first_response?.compliance_rate || 0} className="h-1.5" />
                               </div>
                               <div>
                                 <div className="flex justify-between text-sm">
                                   <span>Resolution</span>
-                                  <span>{data.resolution?.compliance_rate || 100}%</span>
+                                  <span>{data.resolution?.compliance_rate || 0}%</span>
                                 </div>
-                                <Progress value={data.resolution?.compliance_rate || 100} className="h-1.5" />
+                                <Progress value={data.resolution?.compliance_rate || 0} className="h-1.5" />
                               </div>
                             </div>
                           </div>
@@ -803,7 +803,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                               </div>
                               <div>
                                 <p className="text-muted-foreground">FR SLA</p>
-                                <p className="font-medium">{dept.by_type_detailed?.RFQ?.sla?.first_response?.compliance_rate || 100}%</p>
+                                <p className="font-medium">{dept.by_type_detailed?.RFQ?.sla?.first_response?.compliance_rate || 0}%</p>
                               </div>
                               <div>
                                 <p className="text-muted-foreground">Win Rate</p>
@@ -835,7 +835,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                               </div>
                               <div>
                                 <p className="text-muted-foreground">FR SLA</p>
-                                <p className="font-medium">{dept.by_type_detailed?.GEN?.sla?.first_response?.compliance_rate || 100}%</p>
+                                <p className="font-medium">{dept.by_type_detailed?.GEN?.sla?.first_response?.compliance_rate || 0}%</p>
                               </div>
                               <div>
                                 <p className="text-muted-foreground">Completion</p>
@@ -914,8 +914,8 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                             <p className="font-semibold">{userPerformance.leaderboard.best_sla_compliance[0].name}</p>
                             <p className="text-2xl font-bold">
                               {Math.round(
-                                ((userPerformance.leaderboard.best_sla_compliance[0].sla?.first_response?.compliance_rate || 100) +
-                                (userPerformance.leaderboard.best_sla_compliance[0].sla?.resolution?.compliance_rate || 100)) / 2
+                                ((userPerformance.leaderboard.best_sla_compliance[0].sla?.first_response?.compliance_rate || 0) +
+                                (userPerformance.leaderboard.best_sla_compliance[0].sla?.resolution?.compliance_rate || 0)) / 2
                               )}%
                             </p>
                             <p className="text-xs text-muted-foreground">avg SLA compliance</p>
@@ -1000,7 +1000,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                                 <p className="text-xs text-muted-foreground">Completion</p>
                               </div>
                               <div className="text-center">
-                                <p className="font-medium">{user.sla?.first_response?.compliance_rate || 100}%</p>
+                                <p className="font-medium">{user.sla?.first_response?.compliance_rate || 0}%</p>
                                 <p className="text-xs text-muted-foreground">FR SLA</p>
                               </div>
                             </div>
@@ -1057,7 +1057,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">SLA:</span>
-                                  <span className="font-medium ml-1">{user.by_type?.RFQ?.sla?.first_response?.compliance_rate || 100}%</span>
+                                  <span className="font-medium ml-1">{user.by_type?.RFQ?.sla?.first_response?.compliance_rate || 0}%</span>
                                 </div>
                               </div>
                             </div>
@@ -1078,7 +1078,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">SLA:</span>
-                                  <span className="font-medium ml-1">{user.by_type?.GEN?.sla?.first_response?.compliance_rate || 100}%</span>
+                                  <span className="font-medium ml-1">{user.by_type?.GEN?.sla?.first_response?.compliance_rate || 0}%</span>
                                 </div>
                               </div>
                             </div>

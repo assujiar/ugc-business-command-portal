@@ -273,22 +273,40 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Calculate rankings
+    // Calculate rankings - ONLY include departments with actual data
     const rankings = {
+      // Volume: Only departments with at least 1 ticket
       by_volume: departments
+        .filter(dept => departmentMetrics[dept].total_tickets > 0)
         .map(dept => ({ department: dept, count: departmentMetrics[dept].total_tickets }))
         .sort((a, b) => b.count - a.count),
+
+      // Completion rate: Only departments with completed tickets
       by_completion_rate: departments
+        .filter(dept => departmentMetrics[dept].completed_tickets > 0)
         .map(dept => ({ department: dept, rate: departmentMetrics[dept].completion_rate }))
         .sort((a, b) => b.rate - a.rate),
+
+      // SLA compliance: Only departments with actual SLA data
       by_sla_compliance: departments
+        .filter(dept => {
+          const sla = departmentMetrics[dept].sla
+          return (sla.first_response.met + sla.first_response.breached +
+                  sla.resolution.met + sla.resolution.breached) > 0
+        })
         .map(dept => ({
           department: dept,
           rate: (departmentMetrics[dept].sla.first_response.compliance_rate +
                  departmentMetrics[dept].sla.resolution.compliance_rate) / 2,
         }))
         .sort((a, b) => b.rate - a.rate),
+
+      // Win rate: Only departments with closed RFQ tickets
       by_win_rate: departments
+        .filter(dept => {
+          const wl = departmentMetrics[dept].win_loss
+          return (wl.won + wl.lost) > 0
+        })
         .map(dept => ({ department: dept, rate: departmentMetrics[dept].win_loss.win_rate }))
         .sort((a, b) => b.rate - a.rate),
     }
