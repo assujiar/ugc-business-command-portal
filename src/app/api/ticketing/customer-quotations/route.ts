@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    // Support both flat and nested data structures
     const ticket_id = body.ticket_id
     const operational_cost_id = body.operational_cost_id || null
 
@@ -105,87 +104,169 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ticket ID is required' }, { status: 400 })
     }
 
-    // Build customer_data from flat fields or use nested object
-    const customer_data = body.customer_data || {
-      customer_name: body.customer_name || '',
-      customer_company: body.customer_company || null,
-      customer_email: body.customer_email || null,
-      customer_phone: body.customer_phone || null,
-      customer_address: body.customer_address || null,
-    }
+    // Get flat values directly from body (dialog sends flat fields)
+    const customer_name = body.customer_name || ''
+    const customer_company = body.customer_company || null
+    const customer_email = body.customer_email || null
+    const customer_phone = body.customer_phone || null
+    const customer_address = body.customer_address || null
 
-    // Build service_data from flat fields or use nested object
-    const service_data = body.service_data || {
-      service_type: body.service_type || null,
-      incoterm: body.incoterm || null,
-      fleet_type: body.fleet_type || null,
-      fleet_quantity: body.fleet_quantity || null,
-      commodity: body.commodity || null,
-      origin_address: body.origin_address || null,
-      origin_city: body.origin_city || null,
-      origin_country: body.origin_country || null,
-      origin_port: body.origin_port || null,
-      destination_address: body.destination_address || null,
-      destination_city: body.destination_city || null,
-      destination_country: body.destination_country || null,
-      destination_port: body.destination_port || null,
-      cargo_description: body.cargo_description || null,
-      cargo_weight: body.cargo_weight || null,
-      cargo_weight_unit: body.cargo_weight_unit || null,
-      cargo_volume: body.cargo_volume || null,
-      cargo_volume_unit: body.cargo_volume_unit || null,
-      cargo_quantity: body.cargo_quantity || null,
-      cargo_quantity_unit: body.cargo_quantity_unit || null,
-    }
+    const service_type = body.service_type || null
+    const incoterm = body.incoterm || null
+    const fleet_type = body.fleet_type || null
+    const fleet_quantity = body.fleet_quantity || null
+    const commodity = body.commodity || null
 
-    // Build rate_data from flat fields or use nested object
-    const rate_data = body.rate_data || {
-      rate_structure: body.rate_structure || 'bundling',
-      total_cost: body.total_cost || 0,
-      target_margin_percent: body.target_margin_percent || 0,
-      total_selling_rate: body.total_selling_rate || 0,
-      currency: body.currency || 'IDR',
-    }
+    const origin_address = body.origin_address || null
+    const origin_city = body.origin_city || null
+    const origin_country = body.origin_country || null
+    const origin_port = body.origin_port || null
 
-    // Build terms_data from flat fields or use nested object
-    const terms_data = body.terms_data || {
-      scope_of_work: body.scope_of_work || null,
-      terms_includes: body.terms_includes || [],
-      terms_excludes: body.terms_excludes || [],
-      terms_notes: body.terms_notes || null,
-      validity_days: body.validity_days || 14,
-    }
+    const destination_address = body.destination_address || null
+    const destination_city = body.destination_city || null
+    const destination_country = body.destination_country || null
+    const destination_port = body.destination_port || null
+
+    const cargo_description = body.cargo_description || null
+    const cargo_weight = body.cargo_weight ?? null
+    const cargo_weight_unit = body.cargo_weight_unit || 'kg'
+    const cargo_volume = body.cargo_volume ?? null
+    const cargo_volume_unit = body.cargo_volume_unit || 'cbm'
+    const cargo_quantity = body.cargo_quantity ?? null
+    const cargo_quantity_unit = body.cargo_quantity_unit || null
+
+    const rate_structure = body.rate_structure || 'bundling'
+    const total_cost = body.total_cost || 0
+    const target_margin_percent = body.target_margin_percent || 0
+    const total_selling_rate = body.total_selling_rate || 0
+    const currency = body.currency || 'IDR'
+
+    const scope_of_work = body.scope_of_work || null
+    const terms_includes = body.terms_includes || []
+    const terms_excludes = body.terms_excludes || []
+    const terms_notes = body.terms_notes || null
+    const validity_days = body.validity_days || 14
 
     const items = body.items || []
 
-    // Call RPC to create quotation
-    const { data: result, error } = await (supabase as any).rpc('rpc_create_customer_quotation', {
-      p_ticket_id: ticket_id,
-      p_operational_cost_id: operational_cost_id,
-      p_customer_data: customer_data,
-      p_service_data: service_data,
-      p_rate_data: rate_data,
-      p_terms_data: terms_data,
-      p_items: items,
-    })
-
-    if (error) {
-      console.error('Error creating customer quotation:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    // Validation
+    if (!customer_name) {
+      return NextResponse.json({ error: 'Customer name is required' }, { status: 400 })
     }
 
-    if (!result?.success) {
-      return NextResponse.json({ error: result?.error || 'Failed to create quotation' }, { status: 400 })
+    // Generate quotation number using RPC
+    const { data: quotation_number, error: seqError } = await (supabase as any)
+      .rpc('generate_customer_quotation_number')
+
+    if (seqError || !quotation_number) {
+      console.error('Error generating quotation number:', seqError)
+      return NextResponse.json({ error: 'Failed to generate quotation number' }, { status: 500 })
     }
+
+    // Calculate valid_until date
+    const valid_until = new Date()
+    valid_until.setDate(valid_until.getDate() + validity_days)
+    const valid_until_str = valid_until.toISOString().split('T')[0]
+
+    // Insert quotation directly (bypass RPC to avoid JSONB serialization issues)
+    const { data: quotation, error: insertError } = await (supabase as any)
+      .from('customer_quotations')
+      .insert({
+        ticket_id,
+        operational_cost_id,
+        quotation_number,
+        customer_name,
+        customer_company,
+        customer_email,
+        customer_phone,
+        customer_address,
+        service_type,
+        fleet_type,
+        fleet_quantity,
+        incoterm,
+        commodity,
+        cargo_description,
+        cargo_weight,
+        cargo_weight_unit,
+        cargo_volume,
+        cargo_volume_unit,
+        cargo_quantity,
+        cargo_quantity_unit,
+        origin_address,
+        origin_city,
+        origin_country,
+        origin_port,
+        destination_address,
+        destination_city,
+        destination_country,
+        destination_port,
+        rate_structure,
+        total_cost,
+        target_margin_percent,
+        total_selling_rate,
+        currency,
+        scope_of_work,
+        terms_includes,
+        terms_excludes,
+        terms_notes,
+        validity_days,
+        valid_until: valid_until_str,
+        created_by: user.id,
+      })
+      .select('id, quotation_number')
+      .single()
+
+    if (insertError) {
+      console.error('Error inserting customer quotation:', insertError)
+      return NextResponse.json({ error: insertError.message }, { status: 500 })
+    }
+
+    const quotation_id = quotation.id
+
+    // Insert breakdown items if any
+    if (items.length > 0) {
+      const itemsToInsert = items.map((item: any, index: number) => ({
+        quotation_id,
+        component_type: item.component_type,
+        component_name: item.component_name || null,
+        description: item.description || null,
+        cost_amount: item.cost_amount || 0,
+        target_margin_percent: item.target_margin_percent || 0,
+        selling_rate: item.selling_rate || 0,
+        quantity: item.quantity || null,
+        unit: item.unit || null,
+        sort_order: item.sort_order ?? index,
+      }))
+
+      const { error: itemsError } = await (supabase as any)
+        .from('customer_quotation_items')
+        .insert(itemsToInsert)
+
+      if (itemsError) {
+        console.error('Error inserting quotation items:', itemsError)
+        // Continue even if items fail - quotation is created
+      }
+    }
+
+    // Create ticket event
+    await (supabase as any)
+      .from('ticket_events')
+      .insert({
+        ticket_id,
+        event_type: 'customer_quotation_created',
+        actor_user_id: user.id,
+        new_value: { quotation_id, quotation_number },
+        notes: 'Customer quotation created',
+      })
 
     return NextResponse.json({
       success: true,
       data: {
-        id: result.quotation_id,
-        quotation_number: result.quotation_number,
+        id: quotation_id,
+        quotation_number,
       },
-      quotation_id: result.quotation_id,
-      quotation_number: result.quotation_number,
+      quotation_id,
+      quotation_number,
     }, { status: 201 })
   } catch (err) {
     console.error('Unexpected error:', err)
