@@ -25,6 +25,7 @@ import {
   ExternalLink,
   Package,
   Truck,
+  Pencil,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -372,6 +373,14 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
           </Button>
           {quotation.status === 'draft' && (
             <>
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/customer-quotations/${quotationId}/edit`)}
+                disabled={actionLoading}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
               <Button
                 variant="outline"
                 onClick={handleSendWhatsApp}

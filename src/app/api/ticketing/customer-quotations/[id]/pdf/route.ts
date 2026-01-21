@@ -308,7 +308,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     <body>
       <div class="header">
         <div>
-          <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjUwIiB2aWV3Qm94PSIwIDAgMTUwIDUwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iNTAiIGZpbGw9IiMxYTM2NWQiLz48dGV4dCB4PSI3NSIgeT0iMzIiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyMCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IndoaXRlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VR0M8L3RleHQ+PC9zdmc+" class="logo" alt="UGC Logo"/>
+          <img src="/logo/logougctaglinefull.png" class="logo" alt="UGC Logo" style="max-height: 60px; width: auto;"/>
         </div>
         <div class="company-info">
           <strong>PT. UGC Logistics</strong><br/>
