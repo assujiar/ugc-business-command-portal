@@ -344,13 +344,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Invalid send method' }, { status: 400 })
     }
 
-    // Fetch quotation with all details
+    // Fetch quotation with all details including creator profile
     const { data: quotation, error } = await (supabase as any)
       .from('customer_quotations')
       .select(`
         *,
         ticket:tickets!customer_quotations_ticket_id_fkey(id, ticket_code, subject),
-        items:customer_quotation_items(*)
+        items:customer_quotation_items(*),
+        creator:profiles!customer_quotations_created_by_fkey(user_id, name, email)
       `)
       .eq('id', id)
       .single()
@@ -358,6 +359,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (error || !quotation) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
+
+    // Get creator email for reply-to (fallback to current user if not found)
+    const creatorEmail = quotation.creator?.email || profileData.email
 
     // Build URLs using production URL
     const validationUrl = `${PRODUCTION_URL}/quotation-verify/${quotation.validation_code}`
@@ -409,7 +413,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Check if email service is configured
       if (!isEmailServiceConfigured()) {
         return NextResponse.json({
-          error: 'Email service is not configured. Please set RESEND_API_KEY environment variable.',
+          error: 'Email service is not configured. Please set SMTP environment variables (SMTP_HOST, SMTP_USER, SMTP_PASS).',
           fallback: {
             email_subject: emailSubject,
             email_html: emailHtml,
@@ -419,13 +423,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }, { status: 503 })
       }
 
-      // Send email via Resend
+      // Send email via SMTP (Nodemailer)
+      // Reply-To is set to quotation creator's email so customer replies go to the right person
       const emailResult = await sendEmail({
         to: quotation.customer_email,
         subject: emailSubject,
         html: emailHtml,
         text: emailText,
-        replyTo: profileData.email, // Reply goes to the sales person
+        replyTo: creatorEmail, // Reply goes to quotation creator
       })
 
       if (!emailResult.success) {
