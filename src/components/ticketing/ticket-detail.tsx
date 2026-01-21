@@ -691,6 +691,70 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     })
 
+    // Add quote_sent_to_customer events with ordinal labels
+    const quoteSentEvents = events
+      .filter(e => e.event_type === 'quote_sent_to_customer')
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+    quoteSentEvents.forEach((event, index) => {
+      const isCreatorEvent = event.actor_user_id === ticket.created_by
+      const sentOrdinal = index < ordinalLabels.length
+        ? `${ordinalLabels[index]} Sent`
+        : `${index + 1}${index === 0 ? 'st' : index === 1 ? 'nd' : index === 2 ? 'rd' : 'th'} Sent`
+
+      items.push({
+        id: `quote-sent-${event.id}`,
+        type: 'event',
+        created_at: event.created_at,
+        user_id: event.actor_user_id || '',
+        user_name: event.actor?.name || 'System',
+        user_initials: getInitials(event.actor?.name || 'S'),
+        is_creator: isCreatorEvent,
+        content: event.notes || 'Quote forwarded to end customer',
+        badge_type: 'sent_to_customer',
+        badge_label: sentOrdinal,
+        extra_data: {
+          sent_count: (event.new_value as any)?.sent_count || index + 1,
+        },
+      })
+    })
+
+    // Add other important events (request_adjustment, won, lost, etc.)
+    const otherEventTypes = ['request_adjustment', 'won', 'lost', 'assigned', 'reassigned', 'priority_changed']
+    const eventLabelsMap: Record<string, string> = {
+      'request_adjustment': 'Request Adjustment',
+      'won': 'Won',
+      'lost': 'Lost',
+      'assigned': 'Assigned',
+      'reassigned': 'Reassigned',
+      'priority_changed': 'Priority Changed',
+    }
+    const eventBadgeTypes: Record<string, string> = {
+      'request_adjustment': 'adjustment',
+      'won': 'won',
+      'lost': 'lost',
+      'assigned': 'assigned',
+      'reassigned': 'assigned',
+      'priority_changed': 'priority',
+    }
+
+    events.filter(e => otherEventTypes.includes(e.event_type)).forEach((event) => {
+      const isCreatorEvent = event.actor_user_id === ticket.created_by
+      items.push({
+        id: `event-other-${event.id}`,
+        type: 'event',
+        created_at: event.created_at,
+        user_id: event.actor_user_id || '',
+        user_name: event.actor?.name || 'System',
+        user_initials: getInitials(event.actor?.name || 'S'),
+        is_creator: isCreatorEvent,
+        content: event.notes || eventLabelsMap[event.event_type] || event.event_type,
+        badge_type: eventBadgeTypes[event.event_type] || 'event',
+        badge_label: eventLabelsMap[event.event_type] || event.event_type,
+        extra_data: { event_type: event.event_type },
+      })
+    })
+
     // Sort by created_at descending (newest first)
     items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
@@ -711,24 +775,37 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const calculateResponseMetrics = () => {
     const timeline = buildUnifiedTimeline()
 
+    // Sort in ascending order (oldest first) for proper calculation
+    const sortedTimeline = [...timeline].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+
     let deptResponses: number[] = []
     let creatorResponses: number[] = []
     let lastTimestamp = new Date(ticket.created_at).getTime()
     let lastResponderIsCreator = true // Ticket starts with creator
 
-    timeline.forEach((item) => {
+    sortedTimeline.forEach((item) => {
       const itemTime = new Date(item.created_at).getTime()
       const responseSeconds = Math.floor((itemTime - lastTimestamp) / 1000)
 
-      if (item.is_creator) {
-        if (!lastResponderIsCreator) {
-          creatorResponses.push(responseSeconds)
+      // Only count positive response times
+      if (responseSeconds > 0) {
+        if (item.is_creator) {
+          if (!lastResponderIsCreator) {
+            creatorResponses.push(responseSeconds)
+          }
+        } else {
+          if (lastResponderIsCreator) {
+            deptResponses.push(responseSeconds)
+          }
         }
+      }
+
+      // Update tracking
+      if (item.is_creator) {
         lastResponderIsCreator = true
       } else {
-        if (lastResponderIsCreator) {
-          deptResponses.push(responseSeconds)
-        }
         lastResponderIsCreator = false
       }
 
@@ -1622,6 +1699,12 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                       item.badge_type === 'internal' ? 'border-yellow-400 text-yellow-600 bg-yellow-500/10' :
                                       item.badge_type === 'quote' ? 'border-green-400 text-green-500 bg-green-500/10' :
                                       item.badge_type === 'status' ? 'border-orange-400 text-orange-500 bg-orange-500/10' :
+                                      item.badge_type === 'sent_to_customer' ? 'border-purple-400 text-purple-500 bg-purple-500/10' :
+                                      item.badge_type === 'adjustment' ? 'border-amber-400 text-amber-500 bg-amber-500/10' :
+                                      item.badge_type === 'won' ? 'border-emerald-400 text-emerald-500 bg-emerald-500/10' :
+                                      item.badge_type === 'lost' ? 'border-red-400 text-red-500 bg-red-500/10' :
+                                      item.badge_type === 'assigned' ? 'border-cyan-400 text-cyan-500 bg-cyan-500/10' :
+                                      item.badge_type === 'priority' ? 'border-pink-400 text-pink-500 bg-pink-500/10' :
                                       ''
                                     }`}
                                   >
@@ -1685,6 +1768,34 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                   <Badge variant="outline" className="text-[10px]">
                                     {statusVariants[item.extra_data.new_status as TicketStatus]?.label || item.extra_data.new_status}
                                   </Badge>
+                                </div>
+                              )}
+
+                              {item.badge_type === 'sent_to_customer' && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Forward className="h-4 w-4 text-purple-500" />
+                                  <span className="text-sm font-medium text-purple-500">Sent to Customer</span>
+                                </div>
+                              )}
+
+                              {item.badge_type === 'adjustment' && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <RotateCcw className="h-4 w-4 text-amber-500" />
+                                  <span className="text-sm font-medium text-amber-500">Request Adjustment</span>
+                                </div>
+                              )}
+
+                              {item.badge_type === 'won' && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Award className="h-4 w-4 text-emerald-500" />
+                                  <span className="text-sm font-medium text-emerald-500">Won</span>
+                                </div>
+                              )}
+
+                              {item.badge_type === 'lost' && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <XCircle className="h-4 w-4 text-red-500" />
+                                  <span className="text-sm font-medium text-red-500">Lost</span>
                                 </div>
                               )}
 

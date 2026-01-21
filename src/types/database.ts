@@ -1074,7 +1074,7 @@ export type TicketStatus = 'open' | 'need_response' | 'in_progress' | 'waiting_c
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type TicketCloseOutcome = 'won' | 'lost'
 export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected'
-export type TicketEventType = 'created' | 'assigned' | 'reassigned' | 'status_changed' | 'priority_changed' | 'comment_added' | 'attachment_added' | 'quote_created' | 'quote_sent' | 'resolved' | 'closed' | 'reopened'
+export type TicketEventType = 'created' | 'assigned' | 'reassigned' | 'status_changed' | 'priority_changed' | 'comment_added' | 'attachment_added' | 'quote_created' | 'quote_sent' | 'quote_sent_to_customer' | 'resolved' | 'closed' | 'reopened'
 export type TicketingDepartment = 'MKT' | 'SAL' | 'DOM' | 'EXI' | 'DTD' | 'TRF'
 export type ResponseOwner = 'creator' | 'assignee'
 
