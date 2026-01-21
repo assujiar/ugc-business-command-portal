@@ -101,40 +101,56 @@ const INCOTERMS = [
   'FAS', 'FOB', 'CFR', 'CIF',
 ]
 
-// Service types
+// Service types (matching shipment details)
 const SERVICE_TYPES = [
-  'Sea Freight FCL',
-  'Sea Freight LCL',
-  'Air Freight',
-  'Land Trucking',
-  'Multimodal',
-  'Door to Door',
-  'Port to Port',
-  'Door to Port',
-  'Port to Door',
-  'Customs Clearance',
-  'Warehousing',
-  'Cross-Border',
+  // Domestics Operations
+  { value: 'LTL', label: 'LTL (Less Than Truckload)', department: 'Domestics Operations' },
+  { value: 'FTL', label: 'FTL (Full Truckload)', department: 'Domestics Operations' },
+  { value: 'AF', label: 'AF (Air Freight Domestic)', department: 'Domestics Operations' },
+  { value: 'LCL', label: 'LCL (Less Container Load)', department: 'Domestics Operations' },
+  { value: 'FCL', label: 'FCL (Full Container Load)', department: 'Domestics Operations' },
+  { value: 'WAREHOUSING', label: 'Warehousing', department: 'Domestics Operations' },
+  { value: 'FULFILLMENT', label: 'Fulfillment', department: 'Domestics Operations' },
+  // Exim Operations
+  { value: 'LCL Export', label: 'LCL Export', department: 'Exim Operations' },
+  { value: 'FCL Export', label: 'FCL Export', department: 'Exim Operations' },
+  { value: 'Airfreight Export', label: 'Airfreight Export', department: 'Exim Operations' },
+  { value: 'LCL Import', label: 'LCL Import', department: 'Exim Operations' },
+  { value: 'FCL Import', label: 'FCL Import', department: 'Exim Operations' },
+  { value: 'Airfreight Import', label: 'Airfreight Import', department: 'Exim Operations' },
+  { value: 'Customs Clearance', label: 'Customs Clearance', department: 'Exim Operations' },
+  // Import DTD Operations
+  { value: 'LCL DTD', label: 'LCL DTD (Door to Door)', department: 'Import DTD Operations' },
+  { value: 'FCL DTD', label: 'FCL DTD (Door to Door)', department: 'Import DTD Operations' },
+  { value: 'Airfreight DTD', label: 'Airfreight DTD (Door to Door)', department: 'Import DTD Operations' },
 ]
 
-// Fleet types
+// Group service types by department
+const SERVICE_TYPES_BY_DEPARTMENT = SERVICE_TYPES.reduce((acc, type) => {
+  if (!acc[type.department]) {
+    acc[type.department] = []
+  }
+  acc[type.department].push(type)
+  return acc
+}, {} as Record<string, typeof SERVICE_TYPES>)
+
+// Fleet types (matching shipment details)
 const FLEET_TYPES = [
-  '20ft Container',
-  '40ft Container',
-  '40ft HC Container',
-  '45ft Container',
-  'Reefer 20ft',
-  'Reefer 40ft',
-  'Open Top',
-  'Flat Rack',
-  'Trailer',
-  'Truck',
-  'CDD',
-  'CDE',
-  'Fuso',
-  'Wingbox',
-  'Van',
-  'Pallet',
+  'Blindvan',
+  'Pickup',
+  'CDE Box',
+  'CDE Bak',
+  'CDD Box',
+  'CDD Bak',
+  'CDD Long',
+  'CDD Refer',
+  'Fuso Box',
+  'Fuso Bak',
+  'TWB',
+  'Trailer 20 Feet',
+  'Trailer 40 Feet',
+  'Flatbed',
+  'Lainnya',
 ]
 
 // Currency options
@@ -729,8 +745,13 @@ export function CustomerQuotationDialog({
                       <SelectValue placeholder="Select service type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {SERVICE_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      {Object.entries(SERVICE_TYPES_BY_DEPARTMENT).map(([dept, types]) => (
+                        <SelectGroup key={dept}>
+                          <SelectLabel>{dept}</SelectLabel>
+                          {types.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                          ))}
+                        </SelectGroup>
                       ))}
                     </SelectContent>
                   </Select>
