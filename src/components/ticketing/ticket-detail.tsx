@@ -732,35 +732,133 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   RFQ Details
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Service Type</p>
-                    <p>{(ticket.rfq_data as { service_type?: string })?.service_type || '—'}</p>
+              <CardContent className="space-y-6">
+                {/* Service Information */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Service Information</h4>
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Service Type</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.service_type || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Service Code</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.service_type_code || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Department</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.department || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Fleet Type</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.fleet_type || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Fleet Quantity</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.fleet_quantity ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Incoterm</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.incoterm || '-'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Cargo Category</p>
-                    <p>{(ticket.rfq_data as { cargo_category?: string })?.cargo_category || '—'}</p>
+                </div>
+
+                {/* Cargo Information */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Cargo Information</h4>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Cargo Category</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.cargo_category || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Cargo Description</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.cargo_description || '-'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Origin</p>
-                    <p>{(ticket.rfq_data as { origin_city?: string })?.origin_city || '—'}</p>
+                </div>
+
+                {/* Origin & Destination */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Origin & Destination</h4>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="p-3 border rounded-md bg-muted/30">
+                      <p className="text-xs font-medium text-muted-foreground uppercase mb-2">Origin</p>
+                      <div className="space-y-1 text-sm">
+                        <p><span className="text-muted-foreground">Address:</span> {(ticket.rfq_data as any)?.origin_address || '-'}</p>
+                        <p><span className="text-muted-foreground">City:</span> {(ticket.rfq_data as any)?.origin_city || '-'}</p>
+                        <p><span className="text-muted-foreground">Country:</span> {(ticket.rfq_data as any)?.origin_country || '-'}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 border rounded-md bg-muted/30">
+                      <p className="text-xs font-medium text-muted-foreground uppercase mb-2">Destination</p>
+                      <div className="space-y-1 text-sm">
+                        <p><span className="text-muted-foreground">Address:</span> {(ticket.rfq_data as any)?.destination_address || '-'}</p>
+                        <p><span className="text-muted-foreground">City:</span> {(ticket.rfq_data as any)?.destination_city || '-'}</p>
+                        <p><span className="text-muted-foreground">Country:</span> {(ticket.rfq_data as any)?.destination_country || '-'}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Destination</p>
-                    <p>{(ticket.rfq_data as { destination_city?: string })?.destination_city || '—'}</p>
+                </div>
+
+                {/* Quantity & Dimensions */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Quantity & Dimensions</h4>
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Quantity</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.quantity ?? '-'} {(ticket.rfq_data as any)?.unit_of_measure || ''}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Weight/Unit (Kg)</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.weight_per_unit_kg ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Total Weight (Kg)</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.weight_total_kg ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Total Volume (CBM)</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.volume_total_cbm ?? (ticket.rfq_data as any)?.total_volume ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Length (cm)</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.length_cm ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Width (cm)</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.width_cm ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Height (cm)</p>
+                      <p className="text-sm">{(ticket.rfq_data as any)?.height_cm ?? '-'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Quantity</p>
-                    <p>
-                      {(ticket.rfq_data as { quantity?: number })?.quantity || '—'}{' '}
-                      {(ticket.rfq_data as { unit_of_measure?: string })?.unit_of_measure || ''}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Total Volume</p>
-                    <p>{(ticket.rfq_data as { total_volume?: number })?.total_volume || '—'} CBM</p>
-                  </div>
+                </div>
+
+                {/* Scope of Work */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Scope of Work</h4>
+                  <p className="text-sm p-3 border rounded-md bg-muted/30 whitespace-pre-wrap">
+                    {(ticket.rfq_data as any)?.scope_of_work || '-'}
+                  </p>
+                </div>
+
+                {/* Additional Services */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Additional Services</h4>
+                  {(ticket.rfq_data as any)?.additional_services && (ticket.rfq_data as any).additional_services.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {((ticket.rfq_data as any).additional_services as string[]).map((service: string) => (
+                        <span key={service} className="px-2 py-1 text-xs rounded-full bg-brand/10 text-brand">
+                          {service}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">-</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
