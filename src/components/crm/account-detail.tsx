@@ -82,11 +82,12 @@ interface Account {
   city: string | null
   province: string | null
   country: string | null
-  website: string | null
-  employee_count: string | null
-  annual_revenue: string | null
+  domain: string | null
+  phone: string | null
+  npwp: string | null
   notes: string | null
   account_status: AccountStatus | null
+  activity_status: string | null
   first_transaction_date: string | null
   last_transaction_date: string | null
   created_at: string
@@ -187,11 +188,16 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl lg:text-2xl font-bold">{account.company_name}</h1>
               {account.account_status && (
                 <Badge className={accountStatusColors[account.account_status] || 'bg-gray-100'}>
                   {accountStatusLabels[account.account_status] || account.account_status}
+                </Badge>
+              )}
+              {account.activity_status && (
+                <Badge variant="outline">
+                  {account.activity_status}
                 </Badge>
               )}
             </div>
@@ -273,16 +279,16 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
                   <span>{account.industry || '-'}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <span className="text-muted-foreground">Website</span>
-                  {account.website ? (
+                  <span className="text-muted-foreground">Domain</span>
+                  {account.domain ? (
                     <a
-                      href={account.website.startsWith('http') ? account.website : `https://${account.website}`}
+                      href={`https://${account.domain}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-600 hover:underline flex items-center gap-1"
                     >
                       <Globe className="h-3 w-3" />
-                      {account.website}
+                      {account.domain}
                     </a>
                   ) : (
                     <span>-</span>
@@ -337,6 +343,17 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
                     <a href={`tel:${account.pic_phone}`} className="text-blue-600 hover:underline flex items-center gap-1">
                       <Phone className="h-3 w-3" />
                       {account.pic_phone}
+                    </a>
+                  ) : (
+                    <span>-</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <span className="text-muted-foreground">Company Phone</span>
+                  {account.phone ? (
+                    <a href={`tel:${account.phone}`} className="text-blue-600 hover:underline flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      {account.phone}
                     </a>
                   ) : (
                     <span>-</span>

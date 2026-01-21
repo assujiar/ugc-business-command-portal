@@ -46,7 +46,13 @@ export default async function AccountDetailPage({ params }: AccountDetailPagePro
     .eq('account_id', id)
     .single()
 
-  if (error || !account) {
+  if (error) {
+    console.error('Error fetching account:', error.message, 'account_id:', id, 'user_role:', profile.role)
+    notFound()
+  }
+
+  if (!account) {
+    console.error('Account not found:', id)
     notFound()
   }
 
