@@ -415,6 +415,23 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
             </div>
           </div>
         ` : ''}
+
+        ${quotation.estimated_leadtime || quotation.estimated_cargo_value ? `
+          <div class="service-details">
+            ${quotation.estimated_leadtime ? `
+              <div class="detail-item">
+                <div class="detail-label">Estimated Leadtime</div>
+                <div class="detail-value">${quotation.estimated_leadtime}</div>
+              </div>
+            ` : ''}
+            ${quotation.estimated_cargo_value ? `
+              <div class="detail-item">
+                <div class="detail-label">Estimated Cargo Value</div>
+                <div class="detail-value">${formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR')}</div>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
       </div>
 
       <div class="section">

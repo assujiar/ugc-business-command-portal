@@ -79,6 +79,9 @@ interface ShipmentData {
   volume_total_cbm: number | null
   scope_of_work: string
   additional_services: string[]
+  estimated_leadtime: string
+  estimated_cargo_value: number | null
+  cargo_value_currency: string
 }
 
 interface FormData {
@@ -232,6 +235,9 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     volume_total_cbm: null,
     scope_of_work: '',
     additional_services: [],
+    estimated_leadtime: '',
+    estimated_cargo_value: null,
+    cargo_value_currency: 'IDR',
   })
 
   const supabase = createBrowserClient<Database>(
@@ -425,6 +431,9 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
           total_volume: shipmentData.volume_total_cbm,
           scope_of_work: shipmentData.scope_of_work,
           additional_services: shipmentData.additional_services,
+          estimated_leadtime: shipmentData.estimated_leadtime || null,
+          estimated_cargo_value: shipmentData.estimated_cargo_value,
+          cargo_value_currency: shipmentData.cargo_value_currency,
         }
       }
 
@@ -1211,6 +1220,75 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                   />
                   <p className="text-xs text-muted-foreground">
                     Auto-calculated: Quantity x Weight/Unit
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Estimated Leadtime & Cargo Value */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium">Leadtime & Cargo Value</h4>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="estimated_leadtime">Estimated Leadtime</Label>
+                  <Input
+                    id="estimated_leadtime"
+                    value={shipmentData.estimated_leadtime}
+                    onChange={(e) =>
+                      setShipmentData((prev) => ({
+                        ...prev,
+                        estimated_leadtime: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g., 3-5 hari, 1 minggu"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Estimasi waktu pengiriman
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="estimated_cargo_value">Estimated Cargo Value</Label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={shipmentData.cargo_value_currency}
+                      onValueChange={(value) =>
+                        setShipmentData((prev) => ({
+                          ...prev,
+                          cargo_value_currency: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="w-[100px]">
+                        <SelectValue placeholder="Currency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="IDR">IDR</SelectItem>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="SGD">SGD</SelectItem>
+                        <SelectItem value="CNY">CNY</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      id="estimated_cargo_value"
+                      type="number"
+                      min="0"
+                      step="1000"
+                      className="flex-1"
+                      value={shipmentData.estimated_cargo_value ?? ''}
+                      onChange={(e) =>
+                        setShipmentData((prev) => ({
+                          ...prev,
+                          estimated_cargo_value: e.target.value
+                            ? parseFloat(e.target.value)
+                            : null,
+                        }))
+                      }
+                      placeholder="Estimated value"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Perkiraan nilai barang yang dikirim
                   </p>
                 </div>
               </div>

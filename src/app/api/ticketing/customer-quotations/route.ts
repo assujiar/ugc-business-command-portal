@@ -135,6 +135,10 @@ export async function POST(request: NextRequest) {
     const cargo_quantity = body.cargo_quantity ?? null
     const cargo_quantity_unit = body.cargo_quantity_unit || null
 
+    const estimated_leadtime = body.estimated_leadtime || null
+    const estimated_cargo_value = body.estimated_cargo_value ?? null
+    const cargo_value_currency = body.cargo_value_currency || 'IDR'
+
     const rate_structure = body.rate_structure || 'bundling'
     const total_cost = body.total_cost || 0
     const target_margin_percent = body.target_margin_percent || 0
@@ -192,6 +196,9 @@ export async function POST(request: NextRequest) {
         cargo_volume_unit,
         cargo_quantity,
         cargo_quantity_unit,
+        estimated_leadtime,
+        estimated_cargo_value,
+        cargo_value_currency,
         origin_address,
         origin_city,
         origin_country,
