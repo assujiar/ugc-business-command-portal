@@ -615,9 +615,18 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     })
 
-    // Add quotes
-    quotes.forEach((quote) => {
+    // Add quotes - sorted by created_at to get correct sequence
+    const sortedQuotes = [...quotes].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+    const ordinalLabels = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth']
+
+    sortedQuotes.forEach((quote, index) => {
       const isCreatorQuote = quote.created_by === ticket.created_by
+      const quoteLabel = index < ordinalLabels.length
+        ? `${ordinalLabels[index]} Quote`
+        : `Quote #${index + 1}`
+
       items.push({
         id: `quote-${quote.id}`,
         type: 'quote',
@@ -628,13 +637,14 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         is_creator: isCreatorQuote,
         content: quote.notes || '',
         badge_type: 'quote',
-        badge_label: 'Quote',
+        badge_label: quoteLabel,
         extra_data: {
           quote_number: quote.quote_number,
           amount: quote.amount,
           currency: quote.currency,
           valid_until: quote.valid_until,
           terms: quote.terms,
+          quote_sequence: index + 1,
         },
       })
     })
