@@ -113,13 +113,13 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap');
     *{margin:0;padding:0;box-sizing:border-box}
     @page{size:A4;margin:0}
-    html,body{width:210mm;min-height:297mm}
+    html,body{width:210mm;height:297mm}
     body{font-family:'Segoe UI',Arial,sans-serif;font-size:8px;line-height:1.3;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
-    .page{position:relative;width:210mm;min-height:297mm;display:flex;flex-direction:column}
+    .page{width:210mm;height:297mm;display:flex;flex-direction:column;overflow:hidden}
 
     /* Header - full width orange block */
-    .hdr{background:#ff4600;color:#fff;padding:12px 0.8cm 10px 0.8cm;display:flex;justify-content:space-between;align-items:flex-start}
+    .hdr{background:#ff4600;color:#fff;padding:12px 0.8cm 10px 0.8cm;display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0}
     .logo{display:flex;align-items:center;gap:10px}
     .logo img{height:40px}
     .logo h1{font-size:14px;font-weight:700;margin-bottom:2px}
@@ -130,7 +130,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     .doc .status-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:8px;font-weight:700;margin-top:4px}
 
     /* Content area */
-    .content{flex:1;padding:12px 0.8cm 10px 0.8cm}
+    .content{flex:1;padding:12px 0.8cm 10px 0.8cm;overflow:hidden}
 
     /* Date info bar */
     .date-bar{display:flex;gap:15px;margin-bottom:10px;padding:6px 10px;background:#f8f9fa;border-radius:4px;font-size:7px}
@@ -186,8 +186,8 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     .valid p{font-size:7px;color:#0066cc}
     .valid strong{color:#004499}
 
-    /* Signature section - above footer */
-    .sig-section{display:flex;justify-content:space-between;align-items:flex-end;padding:10px 0;margin-top:auto;border-top:1px solid #e5e5e5}
+    /* Signature section - fixed at bottom above footer */
+    .sig-section{display:flex;justify-content:space-between;align-items:flex-end;padding:10px 0.8cm;border-top:1px solid #e5e5e5;background:#fff;flex-shrink:0}
     .sig-left{display:flex;gap:12px;align-items:flex-end}
     .qr{text-align:center}
     .qr img{width:50px;height:50px;border:1px solid #e5e5e5;padding:2px;border-radius:3px}
@@ -200,10 +200,15 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     .ugc-info strong{color:#1a1a1a;font-size:8px}
 
     /* Footer - full width orange block */
-    .ftr{background:#ff4600;color:#fff;padding:4px 0.8cm;font-family:'Courier New',monospace;font-size:7px;display:flex;justify-content:space-between;align-items:center}
+    .ftr{background:#ff4600;color:#fff;padding:4px 0.8cm;font-family:'Courier New',monospace;font-size:7px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
     .ftr span{opacity:0.95}
 
     .keep{break-inside:avoid;page-break-inside:avoid}
+
+    @media print{
+      html,body{width:210mm;height:297mm}
+      .page{width:210mm;height:297mm}
+    }
   </style>
 </head>
 <body>
@@ -214,7 +219,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinewhite.png" alt="UGC">
         <div>
           <h1>${UGC_INFO.shortName}</h1>
-          <p>${UGC_INFO.address}<br>${UGC_INFO.phone} | ${UGC_INFO.email} | ${UGC_INFO.web}</p>
+          <p>${UGC_INFO.address}<br>Tel: ${UGC_INFO.phone} | Email: ${UGC_INFO.email} | Web: ${UGC_INFO.web}</p>
         </div>
       </div>
       <div class="doc">
@@ -305,26 +310,26 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
       <div class="valid keep">
         <p>Valid for <strong>${quotation.validity_days} days</strong> until <strong>${formatDate(quotation.valid_until)}</strong></p>
       </div>
+    </div>
 
-      <!-- Signature Section -->
-      <div class="sig-section keep">
-        <div class="sig-left">
-          <div class="qr">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR">
-            <p>Scan to verify</p>
-          </div>
-          <div class="sig-block">
-            <div class="hand">${profile.name}</div>
-            <div class="name">${profile.name}</div>
-            <div class="title">Sales & Commercial Department</div>
-          </div>
+    <!-- Signature Section - Above Footer -->
+    <div class="sig-section">
+      <div class="sig-left">
+        <div class="qr">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR">
+          <p>Scan to verify</p>
         </div>
-        <div class="ugc-info">
-          <strong>${UGC_INFO.name}</strong><br>
-          ${UGC_INFO.address}<br>
-          ${UGC_INFO.phone} | ${UGC_INFO.email}<br>
-          ${UGC_INFO.web}
+        <div class="sig-block">
+          <div class="hand">${profile.name}</div>
+          <div class="name">${profile.name}</div>
+          <div class="title">Sales & Commercial Department</div>
         </div>
+      </div>
+      <div class="ugc-info">
+        <strong>${UGC_INFO.name}</strong><br>
+        ${UGC_INFO.address}<br>
+        Tel: ${UGC_INFO.phone} | Email: ${UGC_INFO.email}<br>
+        Web: ${UGC_INFO.web}
       </div>
     </div>
 
