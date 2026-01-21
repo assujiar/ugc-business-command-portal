@@ -205,17 +205,17 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
                   <span className="truncate">Tickets</span>
                 </Link>
                 <Link
-                  href="/quotations"
+                  href="/operational-costs"
                   onClick={handleNavClick}
                   className={cn(
                     'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                    pathname === '/quotations' || pathname.startsWith('/quotations/')
+                    pathname === '/operational-costs' || pathname.startsWith('/operational-costs/')
                       ? 'bg-brand text-white'
                       : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
                   <FileText className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">Quotations</span>
+                  <span className="truncate">Operational Costs</span>
                 </Link>
                 <Link
                   href="/tickets/new"

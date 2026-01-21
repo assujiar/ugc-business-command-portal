@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, canViewAllTickets, canCreateQuotes } from '@/lib/permissions'
+import { canAccessTicketing, canViewAllTickets, canCreateOperationalCosts } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +10,7 @@ interface ProfileData {
   role: UserRole
 }
 
-// GET /api/ticketing/quotations - List all quotations
+// GET /api/ticketing/operational-costs - List all operational costs
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       query = query.or(`quote_number.ilike.%${search}%`)
     }
 
-    // If user cannot view all, only show quotes for their tickets
+    // If user cannot view all, only show costs for their tickets
     if (!canViewAllTickets(profile.role)) {
       // Get user's ticket IDs first
       const { data: userTickets } = await (supabase as any)
@@ -95,16 +95,16 @@ export async function GET(request: NextRequest) {
     // Apply pagination
     query = query.range(offset, offset + limit - 1)
 
-    const { data: quotations, error, count } = await query
+    const { data: costs, error, count } = await query
 
     if (error) {
-      console.error('Error fetching quotations:', error)
+      console.error('Error fetching operational costs:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      data: quotations || [],
+      data: costs || [],
       total: count || 0,
       limit,
       offset,
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/ticketing/quotations - Create a new quotation
+// POST /api/ticketing/operational-costs - Create a new operational cost
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -139,9 +139,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Check if user can create quotes
-    if (!canCreateQuotes(profile.role)) {
-      return NextResponse.json({ error: 'Not authorized to create quotes' }, { status: 403 })
+    // Check if user can create operational costs
+    if (!canCreateOperationalCosts(profile.role)) {
+      return NextResponse.json({ error: 'Not authorized to create operational costs' }, { status: 403 })
     }
 
     // Parse request body
@@ -170,10 +170,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (ticket.ticket_type !== 'RFQ') {
-      return NextResponse.json({ error: 'Quotes can only be created for RFQ tickets' }, { status: 400 })
+      return NextResponse.json({ error: 'Operational costs can only be created for RFQ tickets' }, { status: 400 })
     }
 
-    // Call RPC to create quote atomically
+    // Call RPC to create cost atomically
     const { data: result, error } = await (supabase as any).rpc('rpc_ticket_create_quote', {
       p_ticket_id: ticket_id,
       p_amount: amount,
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
-      console.error('Error creating quote:', error)
+      console.error('Error creating operational cost:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -191,10 +191,10 @@ export async function POST(request: NextRequest) {
     const rpcResult = typeof result === 'string' ? JSON.parse(result) : result
 
     if (!rpcResult.success) {
-      return NextResponse.json({ error: rpcResult.error || 'Failed to create quote' }, { status: 400 })
+      return NextResponse.json({ error: rpcResult.error || 'Failed to create operational cost' }, { status: 400 })
     }
 
-    // Update quote with notes if provided
+    // Update cost with notes if provided
     if (notes) {
       await (supabase as any)
         .from('ticket_rate_quotes')
@@ -204,8 +204,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      quote_id: rpcResult.quote_id,
-      quote_number: rpcResult.quote_number,
+      cost_id: rpcResult.quote_id,
+      cost_number: rpcResult.quote_number,
     }, { status: 201 })
   } catch (err) {
     console.error('Unexpected error:', err)

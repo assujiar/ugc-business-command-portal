@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, canViewAllTickets, canCreateQuotes } from '@/lib/permissions'
+import { canAccessTicketing, canViewAllTickets, canCreateOperationalCosts } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -107,9 +107,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Check if user can create quotes
-    if (!canCreateQuotes(profile.role)) {
-      return NextResponse.json({ error: 'Not authorized to create quotes' }, { status: 403 })
+    // Check if user can create operational costs
+    if (!canCreateOperationalCosts(profile.role)) {
+      return NextResponse.json({ error: 'Not authorized to create operational costs' }, { status: 403 })
     }
 
     // Get ticket to validate

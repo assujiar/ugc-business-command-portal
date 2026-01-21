@@ -40,7 +40,7 @@ import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
-interface QuotationsDashboardProps {
+interface OperationalCostsDashboardProps {
   profile: Profile
 }
 
@@ -62,9 +62,9 @@ const formatCurrency = (amount: number, currency: string = 'IDR') => {
   }).format(amount)
 }
 
-export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
+export function OperationalCostsDashboard({ profile }: OperationalCostsDashboardProps) {
   const router = useRouter()
-  const [quotations, setQuotations] = useState<any[]>([])
+  const [costs, setCosts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -80,8 +80,8 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
 
   const canViewAll = canViewAllTickets(profile.role)
 
-  // Fetch quotations
-  const fetchQuotations = async () => {
+  // Fetch operational costs
+  const fetchCosts = async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -89,35 +89,35 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
       if (searchQuery) params.append('search', searchQuery)
       params.append('limit', '100')
 
-      const response = await fetch(`/api/ticketing/quotations?${params.toString()}`)
+      const response = await fetch(`/api/ticketing/operational-costs?${params.toString()}`)
       const result = await response.json()
 
       if (result.success) {
-        setQuotations(result.data || [])
+        setCosts(result.data || [])
         setTotal(result.total || 0)
 
         // Calculate stats from all data
-        const allQuotes = result.data || []
+        const allCosts = result.data || []
         setStats({
-          total: allQuotes.length,
-          draft: allQuotes.filter((q: any) => q.status === 'draft').length,
-          sent: allQuotes.filter((q: any) => q.status === 'sent').length,
-          accepted: allQuotes.filter((q: any) => q.status === 'accepted').length,
-          rejected: allQuotes.filter((q: any) => q.status === 'rejected').length,
-          total_value: allQuotes
-            .filter((q: any) => q.status === 'accepted')
-            .reduce((sum: number, q: any) => sum + (q.amount || 0), 0),
+          total: allCosts.length,
+          draft: allCosts.filter((c: any) => c.status === 'draft').length,
+          sent: allCosts.filter((c: any) => c.status === 'sent').length,
+          accepted: allCosts.filter((c: any) => c.status === 'accepted').length,
+          rejected: allCosts.filter((c: any) => c.status === 'rejected').length,
+          total_value: allCosts
+            .filter((c: any) => c.status === 'accepted')
+            .reduce((sum: number, c: any) => sum + (c.amount || 0), 0),
         })
       }
     } catch (err) {
-      console.error('Error fetching quotations:', err)
+      console.error('Error fetching operational costs:', err)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchQuotations()
+    fetchCosts()
   }, [statusFilter, searchQuery])
 
   // Format date
@@ -130,7 +130,7 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
     })
   }
 
-  // Check if quote is expired
+  // Check if cost is expired
   const isExpired = (validUntil: string) => {
     if (!validUntil) return false
     return new Date(validUntil) < new Date()
@@ -141,9 +141,9 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Quotations</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Operational Costs</h1>
           <p className="text-muted-foreground">
-            Manage rate quotes for RFQ tickets
+            Manage operational costs for RFQ tickets
           </p>
         </div>
       </div>
@@ -152,7 +152,7 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
       <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Quotes</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Costs</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -193,7 +193,7 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
           </CardHeader>
           <CardContent>
             <div className="text-xl font-bold">{formatCurrency(stats.total_value)}</div>
-            <p className="text-xs text-muted-foreground">Accepted quotes</p>
+            <p className="text-xs text-muted-foreground">Accepted costs</p>
           </CardContent>
         </Card>
       </div>
@@ -206,7 +206,7 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by quote number..."
+                  placeholder="Search by cost number..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -225,20 +225,20 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
                 <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="icon" onClick={fetchQuotations}>
+            <Button variant="outline" size="icon" onClick={fetchCosts}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Quotations Table */}
+      {/* Operational Costs Table */}
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Quote Number</TableHead>
+                <TableHead>Cost Number</TableHead>
                 <TableHead>Ticket</TableHead>
                 <TableHead>Account</TableHead>
                 <TableHead>Amount</TableHead>
@@ -256,38 +256,38 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : quotations.length === 0 ? (
+              ) : costs.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-8">
                     <FileText className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-muted-foreground">No quotations found</p>
+                    <p className="text-muted-foreground">No operational costs found</p>
                   </TableCell>
                 </TableRow>
               ) : (
-                quotations.map((quote) => (
+                costs.map((cost) => (
                   <TableRow
-                    key={quote.id}
+                    key={cost.id}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/quotations/${quote.id}`)}
+                    onClick={() => router.push(`/operational-costs/${cost.id}`)}
                   >
                     <TableCell className="font-mono text-sm font-medium">
-                      {quote.quote_number}
+                      {cost.cost_number || cost.quote_number}
                     </TableCell>
                     <TableCell>
                       <Link
-                        href={`/tickets/${quote.ticket?.id}`}
+                        href={`/tickets/${cost.ticket?.id}`}
                         onClick={(e) => e.stopPropagation()}
                         className="text-brand hover:underline"
                       >
-                        {quote.ticket?.ticket_code}
+                        {cost.ticket?.ticket_code}
                       </Link>
                     </TableCell>
                     <TableCell>
-                      {quote.ticket?.account ? (
+                      {cost.ticket?.account ? (
                         <div className="flex items-center gap-1">
                           <Building2 className="h-3 w-3 text-muted-foreground" />
                           <span className="text-sm truncate max-w-[120px]">
-                            {quote.ticket.account.company_name}
+                            {cost.ticket.account.company_name}
                           </span>
                         </div>
                       ) : (
@@ -295,33 +295,33 @@ export function QuotationsDashboard({ profile }: QuotationsDashboardProps) {
                       )}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {formatCurrency(quote.amount, quote.currency)}
+                      {formatCurrency(cost.amount, cost.currency)}
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={statusVariants[quote.status]?.variant || 'outline'}
+                        variant={statusVariants[cost.status]?.variant || 'outline'}
                         className="gap-1"
                       >
-                        {statusVariants[quote.status]?.icon}
-                        {statusVariants[quote.status]?.label || quote.status}
+                        {statusVariants[cost.status]?.icon}
+                        {statusVariants[cost.status]?.label || cost.status}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <span className={`text-sm ${isExpired(quote.valid_until) && quote.status !== 'accepted' ? 'text-destructive' : ''}`}>
-                          {formatDate(quote.valid_until)}
+                        <span className={`text-sm ${isExpired(cost.valid_until) && cost.status !== 'accepted' ? 'text-destructive' : ''}`}>
+                          {formatDate(cost.valid_until)}
                         </span>
-                        {isExpired(quote.valid_until) && quote.status !== 'accepted' && (
+                        {isExpired(cost.valid_until) && cost.status !== 'accepted' && (
                           <Badge variant="destructive" className="text-xs ml-1">Expired</Badge>
                         )}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">
-                      {quote.creator?.name || '—'}
+                      {cost.creator?.name || '—'}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(quote.created_at)}
+                      {formatDate(cost.created_at)}
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" className="h-8 w-8">

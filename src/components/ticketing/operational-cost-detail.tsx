@@ -36,13 +36,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { canCreateQuotes } from '@/lib/permissions'
+import { canCreateOperationalCosts } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
-interface QuotationDetailProps {
-  quotationId: string
+interface OperationalCostDetailProps {
+  costId: string
   profile: Profile
 }
 
@@ -64,39 +64,39 @@ const formatCurrency = (amount: number, currency: string = 'IDR') => {
   }).format(amount)
 }
 
-export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) {
+export function OperationalCostDetail({ costId, profile }: OperationalCostDetailProps) {
   const router = useRouter()
-  const [quotation, setQuotation] = useState<any>(null)
+  const [cost, setCost] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const canManageQuotes = canCreateQuotes(profile.role)
+  const canManageCosts = canCreateOperationalCosts(profile.role)
 
-  // Fetch quotation
-  const fetchQuotation = async () => {
+  // Fetch operational cost
+  const fetchCost = async () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/ticketing/quotations/${quotationId}`)
+      const response = await fetch(`/api/ticketing/operational-costs/${costId}`)
       const result = await response.json()
 
       if (result.success) {
-        setQuotation(result.data)
+        setCost(result.data)
       } else {
-        setError(result.error || 'Failed to load quotation')
+        setError(result.error || 'Failed to load operational cost')
       }
     } catch (err) {
-      console.error('Error fetching quotation:', err)
-      setError('Failed to load quotation')
+      console.error('Error fetching operational cost:', err)
+      setError('Failed to load operational cost')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchQuotation()
-  }, [quotationId])
+    fetchCost()
+  }, [costId])
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -119,7 +119,7 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
     })
   }
 
-  // Check if quote is expired
+  // Check if cost is expired
   const isExpired = (validUntil: string) => {
     if (!validUntil) return false
     return new Date(validUntil) < new Date()
@@ -129,7 +129,7 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
   const updateStatus = async (newStatus: string) => {
     setActionLoading(true)
     try {
-      const response = await fetch(`/api/ticketing/quotations/${quotationId}`, {
+      const response = await fetch(`/api/ticketing/operational-costs/${costId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -137,7 +137,7 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
       const result = await response.json()
 
       if (result.success) {
-        fetchQuotation()
+        fetchCost()
       } else {
         setError(result.error || 'Failed to update status')
       }
@@ -149,23 +149,23 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
     }
   }
 
-  // Delete quotation
-  const deleteQuotation = async () => {
+  // Delete operational cost
+  const deleteCost = async () => {
     setActionLoading(true)
     try {
-      const response = await fetch(`/api/ticketing/quotations/${quotationId}`, {
+      const response = await fetch(`/api/ticketing/operational-costs/${costId}`, {
         method: 'DELETE',
       })
       const result = await response.json()
 
       if (result.success) {
-        router.push('/quotations')
+        router.push('/operational-costs')
       } else {
-        setError(result.error || 'Failed to delete quotation')
+        setError(result.error || 'Failed to delete operational cost')
       }
     } catch (err) {
-      console.error('Error deleting quotation:', err)
-      setError('Failed to delete quotation')
+      console.error('Error deleting operational cost:', err)
+      setError('Failed to delete operational cost')
     } finally {
       setActionLoading(false)
     }
@@ -179,7 +179,7 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
     )
   }
 
-  if (error || !quotation) {
+  if (error || !cost) {
     return (
       <div className="space-y-4">
         <Button variant="ghost" onClick={() => router.back()}>
@@ -189,14 +189,14 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
         <Card>
           <CardContent className="py-8 text-center">
             <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-lg font-medium">{error || 'Quotation not found'}</p>
+            <p className="text-lg font-medium">{error || 'Operational cost not found'}</p>
           </CardContent>
         </Card>
       </div>
     )
   }
 
-  const ticket = quotation.ticket
+  const ticket = cost.ticket
   const account = ticket?.account
   const contact = ticket?.contact
 
@@ -211,35 +211,35 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight font-mono">
-                {quotation.quote_number}
+                {cost.cost_number || cost.quote_number}
               </h1>
               <Badge
-                variant={statusVariants[quotation.status]?.variant || 'outline'}
+                variant={statusVariants[cost.status]?.variant || 'outline'}
                 className="gap-1"
               >
-                {statusVariants[quotation.status]?.icon}
-                {statusVariants[quotation.status]?.label || quotation.status}
+                {statusVariants[cost.status]?.icon}
+                {statusVariants[cost.status]?.label || cost.status}
               </Badge>
-              {isExpired(quotation.valid_until) && quotation.status !== 'accepted' && (
+              {isExpired(cost.valid_until) && cost.status !== 'accepted' && (
                 <Badge variant="destructive">Expired</Badge>
               )}
             </div>
             <p className="text-muted-foreground">
-              Created {formatDateTime(quotation.created_at)}
+              Created {formatDateTime(cost.created_at)}
             </p>
           </div>
         </div>
 
-        {canManageQuotes && (
+        {canManageCosts && (
           <div className="flex gap-2">
-            {quotation.status === 'draft' && (
+            {cost.status === 'draft' && (
               <>
                 <Button
                   onClick={() => updateStatus('sent')}
                   disabled={actionLoading}
                 >
                   <Send className="mr-2 h-4 w-4" />
-                  Send Quote
+                  Send Cost
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -250,20 +250,20 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Quotation</AlertDialogTitle>
+                      <AlertDialogTitle>Delete Operational Cost</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Are you sure you want to delete this quotation? This action cannot be undone.
+                        Are you sure you want to delete this operational cost? This action cannot be undone.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={deleteQuotation}>Delete</AlertDialogAction>
+                      <AlertDialogAction onClick={deleteCost}>Delete</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
               </>
             )}
-            {quotation.status === 'sent' && (
+            {cost.status === 'sent' && (
               <>
                 <Button
                   variant="outline"
@@ -288,18 +288,18 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Quote Details */}
+        {/* Cost Details */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Quote Details</CardTitle>
+            <CardTitle>Cost Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Amount */}
             <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
               <div>
-                <p className="text-sm text-muted-foreground">Quote Amount</p>
+                <p className="text-sm text-muted-foreground">Cost Amount</p>
                 <p className="text-3xl font-bold">
-                  {formatCurrency(quotation.amount, quotation.currency)}
+                  {formatCurrency(cost.amount, cost.currency)}
                 </p>
               </div>
               <DollarSign className="h-8 w-8 text-muted-foreground" />
@@ -313,40 +313,40 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
                 <p className="text-sm text-muted-foreground mb-1">Valid Until</p>
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className={isExpired(quotation.valid_until) ? 'text-destructive' : ''}>
-                    {formatDate(quotation.valid_until)}
+                  <span className={isExpired(cost.valid_until) ? 'text-destructive' : ''}>
+                    {formatDate(cost.valid_until)}
                   </span>
                 </div>
               </div>
-              {quotation.sent_at && (
+              {cost.sent_at && (
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Sent At</p>
                   <div className="flex items-center gap-2">
                     <Send className="h-4 w-4 text-muted-foreground" />
-                    <span>{formatDateTime(quotation.sent_at)}</span>
+                    <span>{formatDateTime(cost.sent_at)}</span>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Terms */}
-            {quotation.terms && (
+            {cost.terms && (
               <>
                 <Separator />
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">Terms & Conditions</p>
-                  <p className="whitespace-pre-wrap">{quotation.terms}</p>
+                  <p className="whitespace-pre-wrap">{cost.terms}</p>
                 </div>
               </>
             )}
 
             {/* Notes */}
-            {quotation.notes && (
+            {cost.notes && (
               <>
                 <Separator />
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">Internal Notes</p>
-                  <p className="whitespace-pre-wrap text-muted-foreground">{quotation.notes}</p>
+                  <p className="whitespace-pre-wrap text-muted-foreground">{cost.notes}</p>
                 </div>
               </>
             )}
@@ -357,9 +357,9 @@ export function QuotationDetail({ quotationId, profile }: QuotationDetailProps) 
               <p className="text-sm text-muted-foreground mb-2">Created By</p>
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
-                <span>{quotation.creator?.name || 'Unknown'}</span>
-                {quotation.creator?.email && (
-                  <span className="text-muted-foreground">({quotation.creator.email})</span>
+                <span>{cost.creator?.name || 'Unknown'}</span>
+                {cost.creator?.email && (
+                  <span className="text-muted-foreground">({cost.creator.email})</span>
                 )}
               </div>
             </div>
