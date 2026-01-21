@@ -52,8 +52,28 @@ import { RATE_COMPONENTS, RATE_COMPONENTS_BY_CATEGORY, getRateComponentLabel } f
 interface CustomerQuotationDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  ticketId: string
-  ticketData: {
+  // Legacy props (for backward compatibility)
+  ticketId?: string
+  ticketData?: {
+    ticket_code: string
+    subject: string
+    rfq_data?: any
+    account?: {
+      company_name?: string
+      address?: string
+      city?: string
+      country?: string
+    }
+    contact?: {
+      first_name?: string
+      last_name?: string
+      email?: string
+      phone?: string
+    }
+  }
+  // New unified ticket prop (used from dashboard)
+  ticket?: {
+    id: string
     ticket_code: string
     subject: string
     rfq_data?: any
@@ -75,6 +95,7 @@ interface CustomerQuotationDialogProps {
     currency: string
   }
   onSuccess?: () => void
+  onCreated?: () => void
 }
 
 interface QuotationItem {
@@ -160,11 +181,22 @@ const CURRENCIES = ['IDR', 'USD', 'SGD', 'EUR', 'CNY', 'JPY']
 export function CustomerQuotationDialog({
   open,
   onOpenChange,
-  ticketId,
-  ticketData,
+  ticketId: legacyTicketId,
+  ticketData: legacyTicketData,
+  ticket,
   operationalCost,
   onSuccess,
+  onCreated,
 }: CustomerQuotationDialogProps) {
+  // Support both legacy and new prop patterns
+  const ticketId = ticket?.id || legacyTicketId || ''
+  const ticketData = ticket ? {
+    ticket_code: ticket.ticket_code,
+    subject: ticket.subject,
+    rfq_data: ticket.rfq_data,
+    account: ticket.account,
+    contact: ticket.contact,
+  } : legacyTicketData || { ticket_code: '', subject: '' }
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
@@ -484,6 +516,7 @@ export function CustomerQuotationDialog({
         })
         // Close dialog and redirect to detail page
         onOpenChange(false)
+        onCreated?.()
         router.push(`/customer-quotations/${result.data.id}`)
       } else {
         throw new Error(result.error || 'Failed to create quotation')

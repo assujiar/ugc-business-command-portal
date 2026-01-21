@@ -470,6 +470,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
+
+      // Sync quotation status to ticket (quotation sent → ticket pending)
+      if (quotation.ticket_id) {
+        await (supabase as any).rpc('sync_quotation_to_ticket', {
+          p_quotation_id: id,
+          p_new_status: 'sent',
+          p_actor_user_id: user.id
+        })
+      }
     }
 
     return NextResponse.json({

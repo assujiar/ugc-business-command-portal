@@ -172,6 +172,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updates.sent_at = new Date().toISOString()
     }
 
+    // Track if this is a status change that needs ticket sync
+    const needsTicketSync = status !== undefined &&
+      ['sent', 'accepted', 'rejected'].includes(status) &&
+      quotation.status !== status &&
+      quotation.ticket_id
+
     // Update quotation
     const { data: updatedQuotation, error } = await (supabase as any)
       .from('customer_quotations')
@@ -215,9 +221,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Sync quotation status to ticket (bidirectional sync)
+    let syncResult = null
+    if (needsTicketSync) {
+      const { data: syncData, error: syncError } = await (supabase as any).rpc('sync_quotation_to_ticket', {
+        p_quotation_id: id,
+        p_new_status: status,
+        p_actor_user_id: user.id
+      })
+      syncResult = syncData
+      if (syncError) {
+        console.error('Error syncing quotation to ticket:', syncError)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: updatedQuotation,
+      ticket_sync: syncResult,
     })
   } catch (err) {
     console.error('Unexpected error:', err)
