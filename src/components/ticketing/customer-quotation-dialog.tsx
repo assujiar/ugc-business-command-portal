@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   X,
   Plus,
@@ -164,6 +165,7 @@ export function CustomerQuotationDialog({
   operationalCost,
   onSuccess,
 }: CustomerQuotationDialogProps) {
+  const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -465,12 +467,13 @@ export function CustomerQuotationDialog({
       const result = await response.json()
 
       if (result.success && result.data) {
-        setQuotationId(result.data.id)
-        setQuotationNumber(result.data.quotation_number)
         toast({
           title: 'Success',
           description: `Quotation ${result.data.quotation_number} created successfully`,
         })
+        // Close dialog and redirect to detail page
+        onOpenChange(false)
+        router.push(`/customer-quotations/${result.data.id}`)
       } else {
         throw new Error(result.error || 'Failed to create quotation')
       }
