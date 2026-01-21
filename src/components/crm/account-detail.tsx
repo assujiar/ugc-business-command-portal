@@ -45,7 +45,7 @@ interface Opportunity {
   name: string
   stage: OpportunityStage
   estimated_value: number | null
-  expected_close_date: string | null
+  next_step_due_date: string | null
   owner_user_id: string | null
 }
 
@@ -453,9 +453,9 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
                         <p className="font-medium">{opp.name}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge className={stageColors[opp.stage]}>{opp.stage}</Badge>
-                          {opp.expected_close_date && (
+                          {opp.next_step_due_date && (
                             <span className="text-xs text-muted-foreground">
-                              Expected: {formatDate(opp.expected_close_date)}
+                              Next Step: {formatDate(opp.next_step_due_date)}
                             </span>
                           )}
                         </div>
