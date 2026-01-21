@@ -34,6 +34,7 @@ import {
   ThumbsUp,
   RotateCcw,
   Forward,
+  Bell,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -167,6 +168,9 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const [lostReasonNote, setLostReasonNote] = useState('')
   const [lostCompetitor, setLostCompetitor] = useState('')
   const [lostCompetitorCost, setLostCompetitorCost] = useState('')
+
+  // Reminder state
+  const [sendingReminder, setSendingReminder] = useState(false)
 
   // Permission checks
   const canAssign = canAssignTickets(profile.role)
@@ -456,6 +460,43 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     } finally {
       setSubmittingComment(false)
+    }
+  }
+
+  // Send reminder (for GEN tickets)
+  const handleSendReminder = async () => {
+    setSendingReminder(true)
+    try {
+      const response = await fetch(`/api/ticketing/tickets/${ticket.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: '🔔 **Reminder**: Mohon update status request ini. Terima kasih.',
+          is_internal: false,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to send reminder')
+      }
+
+      toast({
+        title: 'Reminder sent',
+        description: 'Reminder has been sent to the assignee',
+      })
+
+      await refreshTicket()
+      fetchData()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to send reminder',
+        variant: 'destructive',
+      })
+    } finally {
+      setSendingReminder(false)
     }
   }
 
@@ -1534,20 +1575,20 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   {/* Creator Actions for GEN tickets */}
                   {isCreator && ticket.ticket_type === 'GEN' && (
                     <>
-                      {/* Request Adjustment - available after ops responds (has activity from ops) */}
-                      {(comments.length > 0 || ticket.status !== 'open') && (
+                      {/* Send Reminder - available when ticket is not yet resolved/closed */}
+                      {!['resolved', 'closed'].includes(ticket.status) && (
                         <Button
-                          onClick={() => executeAction('request_adjustment')}
-                          disabled={actionLoading === 'request_adjustment'}
+                          onClick={handleSendReminder}
+                          disabled={sendingReminder}
                           className="w-full"
                           variant="outline"
                         >
-                          {actionLoading === 'request_adjustment' ? (
+                          {sendingReminder ? (
                             <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                           ) : (
-                            <RotateCcw className="mr-2 h-4 w-4" />
+                            <Bell className="mr-2 h-4 w-4" />
                           )}
-                          Request Adjustment
+                          Send Reminder
                         </Button>
                       )}
 
