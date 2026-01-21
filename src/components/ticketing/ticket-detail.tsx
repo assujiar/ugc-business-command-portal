@@ -669,8 +669,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     })
 
-    // Sort by created_at ascending
-    items.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    // Sort by created_at descending (newest first)
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     return items
   }
@@ -745,17 +745,32 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   // Calculate response time for each timeline item
   const getTimelineWithResponseTimes = () => {
     const timeline = buildUnifiedTimeline()
-    let lastTimestamp = new Date(ticket.created_at).getTime()
 
-    return timeline.map((item) => {
+    // Sort ascending for response time calculation
+    const sortedAsc = [...timeline].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+
+    let lastTimestamp = new Date(ticket.created_at).getTime()
+    const responseMap = new Map<string, { seconds: number; formatted: string }>()
+
+    sortedAsc.forEach((item) => {
       const itemTime = new Date(item.created_at).getTime()
       const responseSeconds = Math.floor((itemTime - lastTimestamp) / 1000)
       lastTimestamp = itemTime
+      responseMap.set(item.id, {
+        seconds: responseSeconds,
+        formatted: formatShortDuration(responseSeconds),
+      })
+    })
 
+    // Return timeline in original order (descending - newest first) with response times
+    return timeline.map((item) => {
+      const response = responseMap.get(item.id) || { seconds: 0, formatted: '0s' }
       return {
         ...item,
-        responseSeconds,
-        responseFormatted: formatShortDuration(responseSeconds),
+        responseSeconds: response.seconds,
+        responseFormatted: response.formatted,
       }
     })
   }
