@@ -1218,7 +1218,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   {isCreator && ticket.ticket_type === 'RFQ' && (
                     <>
                       {/* Request Adjustment - available after ops sends quote */}
-                      {quotes.length > 0 && ticket.status !== 'pending' && (
+                      {quotes.length > 0 && (
                         <Button
                           onClick={() => executeAction('request_adjustment')}
                           disabled={actionLoading === 'request_adjustment'}
@@ -1235,7 +1235,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                       )}
 
                       {/* Quote Sent to Customer - available after ops sends quote */}
-                      {quotes.length > 0 && ticket.status !== 'pending' && (
+                      {quotes.length > 0 && (
                         <Button
                           onClick={() => executeAction('quote_sent_to_customer')}
                           disabled={actionLoading === 'quote_sent_to_customer'}
@@ -1251,8 +1251,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                         </Button>
                       )}
 
-                      {/* Won/Lost Buttons - available after quote sent to customer */}
-                      {(ticket.status === 'pending' || (quotes.length > 0 && ticket.status === 'waiting_customer')) && (
+                      {/* Won/Lost Buttons - available after ops sends quote */}
+                      {quotes.length > 0 && (
                         <div className="grid grid-cols-2 gap-2">
                           <Button
                             onClick={() => executeAction('mark_won')}
@@ -1343,11 +1343,10 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   {(isAssignee || isOpsOrAdmin) && ticket.ticket_type === 'RFQ' && !isCreator && (
                     <>
                       {/* Submit Quote Button - always available until ticket is closed */}
-                      {(ticket.status !== 'pending') && (
-                        <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>
-                          <DialogTrigger asChild>
-                            <Button className="w-full bg-green-600 hover:bg-green-700">
-                              <DollarSign className="mr-2 h-4 w-4" />
+                      <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button className="w-full bg-green-600 hover:bg-green-700">
+                            <DollarSign className="mr-2 h-4 w-4" />
                               Submit Quote
                             </Button>
                           </DialogTrigger>
@@ -1411,7 +1410,6 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                             </DialogFooter>
                           </DialogContent>
                         </Dialog>
-                      )}
                     </>
                   )}
                 </div>
