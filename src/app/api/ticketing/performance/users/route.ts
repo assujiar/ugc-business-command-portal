@@ -241,10 +241,16 @@ export async function GET(request: NextRequest) {
         },
         response: {
           total_responses: commentMetrics?.count || 0,
+          avg_response_seconds: commentMetrics && commentMetrics.count > 0
+            ? Math.round(commentMetrics.totalSeconds / commentMetrics.count)
+            : 0,
           avg_response_hours: commentMetrics && commentMetrics.count > 0
             ? Math.round((commentMetrics.totalSeconds / commentMetrics.count / 3600) * 10) / 10
             : 0,
         },
+        avg_resolution_seconds: completedTickets > 0
+          ? Math.round((metrics.total_resolution_hours * 3600) / completedTickets)
+          : 0,
         avg_resolution_hours: completedTickets > 0
           ? Math.round((metrics.total_resolution_hours / completedTickets) * 10) / 10
           : 0,

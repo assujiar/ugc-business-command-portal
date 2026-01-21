@@ -110,20 +110,20 @@ export async function GET(request: NextRequest) {
       ? Math.round((resolutionMet / withResolution.length) * 100)
       : 100
 
-    // Calculate average times
-    const avgFirstResponseHours = withFirstResponse.length > 0
+    // Calculate average times in seconds
+    const avgFirstResponseSeconds = withFirstResponse.length > 0
       ? withFirstResponse.reduce((sum: number, s: any) => {
           const created = new Date(s.created_at)
           const responded = new Date(s.first_response_at)
-          return sum + (responded.getTime() - created.getTime()) / (1000 * 60 * 60)
+          return sum + (responded.getTime() - created.getTime()) / 1000
         }, 0) / withFirstResponse.length
       : 0
 
-    const avgResolutionHours = withResolution.length > 0
+    const avgResolutionSeconds = withResolution.length > 0
       ? withResolution.reduce((sum: number, s: any) => {
           const created = new Date(s.created_at)
           const resolved = new Date(s.resolution_at)
-          return sum + (resolved.getTime() - created.getTime()) / (1000 * 60 * 60)
+          return sum + (resolved.getTime() - created.getTime()) / 1000
         }, 0) / withResolution.length
       : 0
 
@@ -157,22 +157,122 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // SLA by ticket type
+    // SLA by ticket type with detailed metrics
     const byType: Record<string, any> = {}
-    for (const type of ['RFQ', 'GEN']) {
-      const typeData = filteredData.filter((s: any) => s.ticket?.ticket_type === type)
-      const typeWithFR = typeData.filter((s: any) => s.first_response_at !== null)
-      const typeWithRes = typeData.filter((s: any) => s.resolution_at !== null)
 
-      byType[type] = {
-        total: typeData.length,
-        first_response_compliance: typeWithFR.length > 0
-          ? Math.round((typeWithFR.filter((s: any) => s.first_response_met === true).length / typeWithFR.length) * 100)
+    // RFQ specific metrics (includes first quote SLA)
+    const rfqData = filteredData.filter((s: any) => s.ticket?.ticket_type === 'RFQ')
+    const rfqWithFR = rfqData.filter((s: any) => s.first_response_at !== null)
+    const rfqWithRes = rfqData.filter((s: any) => s.resolution_at !== null)
+    const rfqWithQuote = rfqData.filter((s: any) => s.time_to_first_quote_seconds !== null)
+
+    // Calculate average first quote time for RFQ
+    const avgFirstQuoteSeconds = rfqWithQuote.length > 0
+      ? rfqWithQuote.reduce((sum: number, s: any) => sum + (s.time_to_first_quote_seconds || 0), 0) / rfqWithQuote.length
+      : 0
+
+    // First quote SLA compliance (assuming 24h SLA for first quote)
+    const firstQuoteSlaHours = 24
+    const rfqQuoteMet = rfqWithQuote.filter((s: any) =>
+      (s.time_to_first_quote_seconds || 0) <= firstQuoteSlaHours * 3600
+    ).length
+    const rfqQuoteBreached = rfqWithQuote.length - rfqQuoteMet
+
+    byType['RFQ'] = {
+      total: rfqData.length,
+      first_response: {
+        met: rfqWithFR.filter((s: any) => s.first_response_met === true).length,
+        breached: rfqWithFR.filter((s: any) => s.first_response_met === false).length,
+        pending: rfqData.length - rfqWithFR.length,
+        compliance_rate: rfqWithFR.length > 0
+          ? Math.round((rfqWithFR.filter((s: any) => s.first_response_met === true).length / rfqWithFR.length) * 100)
           : 100,
-        resolution_compliance: typeWithRes.length > 0
-          ? Math.round((typeWithRes.filter((s: any) => s.resolution_met === true).length / typeWithRes.length) * 100)
+        avg_seconds: rfqWithFR.length > 0
+          ? Math.round(rfqWithFR.reduce((sum: number, s: any) => {
+              const created = new Date(s.created_at)
+              const responded = new Date(s.first_response_at)
+              return sum + (responded.getTime() - created.getTime()) / 1000
+            }, 0) / rfqWithFR.length)
+          : 0,
+      },
+      first_quote: {
+        met: rfqQuoteMet,
+        breached: rfqQuoteBreached,
+        pending: rfqData.length - rfqWithQuote.length,
+        compliance_rate: rfqWithQuote.length > 0
+          ? Math.round((rfqQuoteMet / rfqWithQuote.length) * 100)
           : 100,
-      }
+        avg_seconds: Math.round(avgFirstQuoteSeconds),
+        sla_hours: firstQuoteSlaHours,
+      },
+      resolution: {
+        met: rfqWithRes.filter((s: any) => s.resolution_met === true).length,
+        breached: rfqWithRes.filter((s: any) => s.resolution_met === false).length,
+        pending: rfqData.length - rfqWithRes.length,
+        compliance_rate: rfqWithRes.length > 0
+          ? Math.round((rfqWithRes.filter((s: any) => s.resolution_met === true).length / rfqWithRes.length) * 100)
+          : 100,
+        avg_seconds: rfqWithRes.length > 0
+          ? Math.round(rfqWithRes.reduce((sum: number, s: any) => {
+              const created = new Date(s.created_at)
+              const resolved = new Date(s.resolution_at)
+              return sum + (resolved.getTime() - created.getTime()) / 1000
+            }, 0) / rfqWithRes.length)
+          : 0,
+      },
+      at_risk: rfqData.filter((s: any) => {
+        if (s.first_response_at) return false
+        const created = new Date(s.created_at)
+        const now = new Date()
+        const hoursPassed = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+        return hoursPassed >= (s.first_response_sla_hours || 4) * 0.75
+      }).length,
+    }
+
+    // GEN specific metrics
+    const genData = filteredData.filter((s: any) => s.ticket?.ticket_type === 'GEN')
+    const genWithFR = genData.filter((s: any) => s.first_response_at !== null)
+    const genWithRes = genData.filter((s: any) => s.resolution_at !== null)
+
+    byType['GEN'] = {
+      total: genData.length,
+      first_response: {
+        met: genWithFR.filter((s: any) => s.first_response_met === true).length,
+        breached: genWithFR.filter((s: any) => s.first_response_met === false).length,
+        pending: genData.length - genWithFR.length,
+        compliance_rate: genWithFR.length > 0
+          ? Math.round((genWithFR.filter((s: any) => s.first_response_met === true).length / genWithFR.length) * 100)
+          : 100,
+        avg_seconds: genWithFR.length > 0
+          ? Math.round(genWithFR.reduce((sum: number, s: any) => {
+              const created = new Date(s.created_at)
+              const responded = new Date(s.first_response_at)
+              return sum + (responded.getTime() - created.getTime()) / 1000
+            }, 0) / genWithFR.length)
+          : 0,
+      },
+      resolution: {
+        met: genWithRes.filter((s: any) => s.resolution_met === true).length,
+        breached: genWithRes.filter((s: any) => s.resolution_met === false).length,
+        pending: genData.length - genWithRes.length,
+        compliance_rate: genWithRes.length > 0
+          ? Math.round((genWithRes.filter((s: any) => s.resolution_met === true).length / genWithRes.length) * 100)
+          : 100,
+        avg_seconds: genWithRes.length > 0
+          ? Math.round(genWithRes.reduce((sum: number, s: any) => {
+              const created = new Date(s.created_at)
+              const resolved = new Date(s.resolution_at)
+              return sum + (resolved.getTime() - created.getTime()) / 1000
+            }, 0) / genWithRes.length)
+          : 0,
+      },
+      at_risk: genData.filter((s: any) => {
+        if (s.first_response_at) return false
+        const created = new Date(s.created_at)
+        const now = new Date()
+        const hoursPassed = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+        return hoursPassed >= (s.first_response_sla_hours || 4) * 0.75
+      }).length,
     }
 
     // At-risk tickets (approaching SLA breach)
@@ -196,14 +296,16 @@ export async function GET(request: NextRequest) {
             breached: firstResponseBreached,
             pending: totalWithSLA - withFirstResponse.length,
             compliance_rate: firstResponseCompliance,
-            avg_hours: Math.round(avgFirstResponseHours * 10) / 10,
+            avg_seconds: Math.round(avgFirstResponseSeconds),
+            avg_hours: Math.round(avgFirstResponseSeconds / 3600 * 10) / 10,
           },
           resolution: {
             met: resolutionMet,
             breached: resolutionBreached,
             pending: totalWithSLA - withResolution.length,
             compliance_rate: resolutionCompliance,
-            avg_hours: Math.round(avgResolutionHours * 10) / 10,
+            avg_seconds: Math.round(avgResolutionSeconds),
+            avg_hours: Math.round(avgResolutionSeconds / 3600 * 10) / 10,
           },
         },
         by_department: byDepartment,

@@ -48,6 +48,35 @@ const departmentLabels: Record<string, string> = {
   TRF: 'Traffic & Warehouse',
 }
 
+// Format seconds to "xx jam yy menit zz detik" format
+function formatDuration(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0) return '0 detik'
+
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
+
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours} jam`)
+  if (minutes > 0) parts.push(`${minutes} menit`)
+  if (secs > 0 || parts.length === 0) parts.push(`${secs} detik`)
+
+  return parts.join(' ')
+}
+
+// Format seconds to short format for cards (e.g., "2j 30m")
+function formatDurationShort(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0) return '0d'
+
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+
+  if (hours > 0 && minutes > 0) return `${hours}j ${minutes}m`
+  if (hours > 0) return `${hours}j`
+  if (minutes > 0) return `${minutes}m`
+  return `${Math.floor(seconds)}d`
+}
+
 export function OverviewDashboard({ profile }: OverviewDashboardProps) {
   const [period, setPeriod] = useState('30')
   const [loading, setLoading] = useState(true)
@@ -259,160 +288,235 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
         </TabsList>
 
         {/* SLA Compliance Tab */}
-        <TabsContent value="sla" className="space-y-4">
+        <TabsContent value="sla" className="space-y-6">
           {slaMetrics && (
             <>
-              {/* Overall SLA Cards */}
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Timer className="h-4 w-4" />
-                      First Response SLA
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">
-                      {slaMetrics.overall?.first_response?.compliance_rate || 100}%
+              {/* RFQ Analytics Section */}
+              <Card className="border-blue-200 dark:border-blue-900">
+                <CardHeader className="bg-blue-50/50 dark:bg-blue-950/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="default" className="text-sm">RFQ</Badge>
+                      <CardTitle className="text-lg">Request for Quotation</CardTitle>
                     </div>
-                    <Progress
-                      value={slaMetrics.overall?.first_response?.compliance_rate || 100}
-                      className="h-2 mt-2"
-                    />
-                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                      <span>{slaMetrics.overall?.first_response?.met || 0} met</span>
-                      <span>{slaMetrics.overall?.first_response?.breached || 0} breached</span>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>{slaMetrics.by_type?.RFQ?.total || 0} tickets</span>
+                      {(slaMetrics.by_type?.RFQ?.at_risk || 0) > 0 && (
+                        <Badge variant="destructive" className="text-xs">
+                          {slaMetrics.by_type?.RFQ?.at_risk} at risk
+                        </Badge>
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Target className="h-4 w-4" />
-                      Resolution SLA
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">
-                      {slaMetrics.overall?.resolution?.compliance_rate || 100}%
-                    </div>
-                    <Progress
-                      value={slaMetrics.overall?.resolution?.compliance_rate || 100}
-                      className="h-2 mt-2"
-                    />
-                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                      <span>{slaMetrics.overall?.resolution?.met || 0} met</span>
-                      <span>{slaMetrics.overall?.resolution?.breached || 0} breached</span>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Avg First Response</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">
-                      {slaMetrics.overall?.first_response?.avg_hours || 0}h
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">Average time to first response</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-destructive" />
-                      At Risk
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-destructive">
-                      {slaMetrics.at_risk_count || 0}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">Approaching SLA breach</p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* SLA by Ticket Type */}
-              {slaMetrics.by_type && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>SLA by Ticket Type</CardTitle>
-                    <CardDescription>Comparison between RFQ and General Request tickets</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid gap-6 md:grid-cols-2">
-                      {/* RFQ */}
-                      <div className="p-4 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="default">RFQ</Badge>
-                            <span className="text-sm text-muted-foreground">
-                              {slaMetrics.by_type.RFQ?.total || 0} tickets
-                            </span>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">First Response</p>
-                            <p className="text-2xl font-bold">
-                              {slaMetrics.by_type.RFQ?.first_response_compliance || 100}%
-                            </p>
-                            <Progress
-                              value={slaMetrics.by_type.RFQ?.first_response_compliance || 100}
-                              className="h-1.5 mt-1"
-                            />
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">Resolution</p>
-                            <p className="text-2xl font-bold">
-                              {slaMetrics.by_type.RFQ?.resolution_compliance || 100}%
-                            </p>
-                            <Progress
-                              value={slaMetrics.by_type.RFQ?.resolution_compliance || 100}
-                              className="h-1.5 mt-1"
-                            />
-                          </div>
-                        </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {/* First Response SLA */}
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Timer className="h-4 w-4 text-blue-600" />
+                        <p className="text-sm font-medium">First Response</p>
                       </div>
+                      <p className="text-2xl font-bold">
+                        {slaMetrics.by_type?.RFQ?.first_response?.compliance_rate || 100}%
+                      </p>
+                      <Progress
+                        value={slaMetrics.by_type?.RFQ?.first_response?.compliance_rate || 100}
+                        className="h-1.5 mt-2"
+                      />
+                      <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                        <span>{slaMetrics.by_type?.RFQ?.first_response?.met || 0} met</span>
+                        <span>{slaMetrics.by_type?.RFQ?.first_response?.breached || 0} breached</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Avg: {formatDuration(slaMetrics.by_type?.RFQ?.first_response?.avg_seconds)}
+                      </p>
+                    </div>
 
-                      {/* GEN */}
-                      <div className="p-4 rounded-lg border bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary">GEN</Badge>
-                            <span className="text-sm text-muted-foreground">
-                              {slaMetrics.by_type.GEN?.total || 0} tickets
-                            </span>
-                          </div>
+                    {/* First Quote SLA - RFQ Only */}
+                    <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="h-4 w-4 text-blue-600" />
+                        <p className="text-sm font-medium">First Quote</p>
+                      </div>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {slaMetrics.by_type?.RFQ?.first_quote?.compliance_rate || 100}%
+                      </p>
+                      <Progress
+                        value={slaMetrics.by_type?.RFQ?.first_quote?.compliance_rate || 100}
+                        className="h-1.5 mt-2"
+                      />
+                      <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                        <span>{slaMetrics.by_type?.RFQ?.first_quote?.met || 0} met</span>
+                        <span>{slaMetrics.by_type?.RFQ?.first_quote?.breached || 0} breached</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Avg: {formatDuration(slaMetrics.by_type?.RFQ?.first_quote?.avg_seconds)}
+                      </p>
+                      <p className="text-xs text-blue-600 mt-1">
+                        SLA: {slaMetrics.by_type?.RFQ?.first_quote?.sla_hours || 24}h
+                      </p>
+                    </div>
+
+                    {/* Resolution SLA */}
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Target className="h-4 w-4 text-green-600" />
+                        <p className="text-sm font-medium">Resolution</p>
+                      </div>
+                      <p className="text-2xl font-bold">
+                        {slaMetrics.by_type?.RFQ?.resolution?.compliance_rate || 100}%
+                      </p>
+                      <Progress
+                        value={slaMetrics.by_type?.RFQ?.resolution?.compliance_rate || 100}
+                        className="h-1.5 mt-2"
+                      />
+                      <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                        <span>{slaMetrics.by_type?.RFQ?.resolution?.met || 0} met</span>
+                        <span>{slaMetrics.by_type?.RFQ?.resolution?.breached || 0} breached</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Avg: {formatDuration(slaMetrics.by_type?.RFQ?.resolution?.avg_seconds)}
+                      </p>
+                    </div>
+
+                    {/* Pending */}
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle className="h-4 w-4 text-orange-500" />
+                        <p className="text-sm font-medium">Pending</p>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">First Response</span>
+                          <span className="font-medium">{slaMetrics.by_type?.RFQ?.first_response?.pending || 0}</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">First Response</p>
-                            <p className="text-2xl font-bold">
-                              {slaMetrics.by_type.GEN?.first_response_compliance || 100}%
-                            </p>
-                            <Progress
-                              value={slaMetrics.by_type.GEN?.first_response_compliance || 100}
-                              className="h-1.5 mt-1"
-                            />
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">Resolution</p>
-                            <p className="text-2xl font-bold">
-                              {slaMetrics.by_type.GEN?.resolution_compliance || 100}%
-                            </p>
-                            <Progress
-                              value={slaMetrics.by_type.GEN?.resolution_compliance || 100}
-                              className="h-1.5 mt-1"
-                            />
-                          </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">First Quote</span>
+                          <span className="font-medium">{slaMetrics.by_type?.RFQ?.first_quote?.pending || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Resolution</span>
+                          <span className="font-medium">{slaMetrics.by_type?.RFQ?.resolution?.pending || 0}</span>
                         </div>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* GEN Analytics Section */}
+              <Card className="border-purple-200 dark:border-purple-900">
+                <CardHeader className="bg-purple-50/50 dark:bg-purple-950/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-sm">GEN</Badge>
+                      <CardTitle className="text-lg">General Request</CardTitle>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>{slaMetrics.by_type?.GEN?.total || 0} tickets</span>
+                      {(slaMetrics.by_type?.GEN?.at_risk || 0) > 0 && (
+                        <Badge variant="destructive" className="text-xs">
+                          {slaMetrics.by_type?.GEN?.at_risk} at risk
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {/* First Response SLA */}
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Timer className="h-4 w-4 text-purple-600" />
+                        <p className="text-sm font-medium">First Response</p>
+                      </div>
+                      <p className="text-2xl font-bold">
+                        {slaMetrics.by_type?.GEN?.first_response?.compliance_rate || 100}%
+                      </p>
+                      <Progress
+                        value={slaMetrics.by_type?.GEN?.first_response?.compliance_rate || 100}
+                        className="h-1.5 mt-2"
+                      />
+                      <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                        <span>{slaMetrics.by_type?.GEN?.first_response?.met || 0} met</span>
+                        <span>{slaMetrics.by_type?.GEN?.first_response?.breached || 0} breached</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Avg: {formatDuration(slaMetrics.by_type?.GEN?.first_response?.avg_seconds)}
+                      </p>
+                    </div>
+
+                    {/* Resolution SLA */}
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Target className="h-4 w-4 text-green-600" />
+                        <p className="text-sm font-medium">Resolution</p>
+                      </div>
+                      <p className="text-2xl font-bold">
+                        {slaMetrics.by_type?.GEN?.resolution?.compliance_rate || 100}%
+                      </p>
+                      <Progress
+                        value={slaMetrics.by_type?.GEN?.resolution?.compliance_rate || 100}
+                        className="h-1.5 mt-2"
+                      />
+                      <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                        <span>{slaMetrics.by_type?.GEN?.resolution?.met || 0} met</span>
+                        <span>{slaMetrics.by_type?.GEN?.resolution?.breached || 0} breached</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Avg: {formatDuration(slaMetrics.by_type?.GEN?.resolution?.avg_seconds)}
+                      </p>
+                    </div>
+
+                    {/* Pending */}
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle className="h-4 w-4 text-orange-500" />
+                        <p className="text-sm font-medium">Pending</p>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">First Response</span>
+                          <span className="font-medium">{slaMetrics.by_type?.GEN?.first_response?.pending || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Resolution</span>
+                          <span className="font-medium">{slaMetrics.by_type?.GEN?.resolution?.pending || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Overall Summary */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Overall Summary</CardTitle>
+                  <CardDescription>Combined metrics for all ticket types</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <div className="text-center p-4 rounded-lg bg-muted/50">
+                      <p className="text-3xl font-bold">{slaMetrics.overall?.total_tickets || 0}</p>
+                      <p className="text-sm text-muted-foreground">Total Tickets</p>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-muted/50">
+                      <p className="text-3xl font-bold">{slaMetrics.overall?.first_response?.compliance_rate || 100}%</p>
+                      <p className="text-sm text-muted-foreground">First Response SLA</p>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-muted/50">
+                      <p className="text-3xl font-bold">{slaMetrics.overall?.resolution?.compliance_rate || 100}%</p>
+                      <p className="text-sm text-muted-foreground">Resolution SLA</p>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-destructive/10">
+                      <p className="text-3xl font-bold text-destructive">{slaMetrics.at_risk_count || 0}</p>
+                      <p className="text-sm text-muted-foreground">At Risk</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* SLA by Department */}
               {slaMetrics.by_department && (
@@ -477,7 +581,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                     <CardTitle className="text-sm font-medium">Avg Response Time</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-bold">{responseTime.overall?.avg_response_hours || 0}h</div>
+                    <div className="text-2xl font-bold">{formatDuration(responseTime.overall?.avg_response_seconds)}</div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Across all responses
                     </p>
@@ -540,7 +644,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                             <span className="font-medium">{user.name}</span>
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {user.total_responses} responses | Avg {user.avg_response_hours}h
+                            {user.total_responses} responses | Avg {formatDurationShort(user.avg_response_seconds)}
                           </div>
                         </div>
                       ))}
@@ -717,7 +821,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                       {userPerformance.leaderboard?.fastest_response?.[0] ? (
                         <div>
                           <p className="font-semibold">{userPerformance.leaderboard.fastest_response[0].name}</p>
-                          <p className="text-2xl font-bold">{userPerformance.leaderboard.fastest_response[0].response?.avg_response_hours || 0}h</p>
+                          <p className="text-lg font-bold">{formatDuration(userPerformance.leaderboard.fastest_response[0].response?.avg_response_seconds)}</p>
                           <p className="text-xs text-muted-foreground">avg response time</p>
                         </div>
                       ) : (
