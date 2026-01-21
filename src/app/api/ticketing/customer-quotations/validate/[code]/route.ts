@@ -42,6 +42,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         origin_country,
         destination_city,
         destination_country,
+        commodity,
+        cargo_description,
+        cargo_weight,
+        cargo_weight_unit,
+        cargo_volume,
+        cargo_volume_unit,
+        estimated_cargo_value,
+        cargo_value_currency,
+        fleet_type,
+        fleet_quantity,
         total_selling_rate,
         currency,
         rate_structure,
@@ -97,6 +107,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         route: quotation.origin_city && quotation.destination_city
           ? `${quotation.origin_city}, ${quotation.origin_country || ''} → ${quotation.destination_city}, ${quotation.destination_country || ''}`
           : null,
+        // Cargo details
+        commodity: quotation.commodity,
+        cargo_description: quotation.cargo_description,
+        cargo_weight: quotation.cargo_weight,
+        cargo_weight_unit: quotation.cargo_weight_unit || 'kg',
+        cargo_volume: quotation.cargo_volume,
+        cargo_volume_unit: quotation.cargo_volume_unit || 'cbm',
+        cargo_value: quotation.estimated_cargo_value
+          ? formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR')
+          : null,
+        fleet_type: quotation.fleet_type,
+        fleet_quantity: quotation.fleet_quantity,
         total_amount: formatCurrency(quotation.total_selling_rate, quotation.currency),
         currency: quotation.currency,
         rate_structure: quotation.rate_structure,

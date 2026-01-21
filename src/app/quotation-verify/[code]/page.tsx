@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { CheckCircle, XCircle, Clock, AlertTriangle, Building2, MapPin, Package, FileText, Calendar, User } from 'lucide-react'
+import Image from 'next/image'
+import { CheckCircle, XCircle, Clock, AlertTriangle, MapPin, Package, FileText, Calendar, User, Phone, Mail, Globe, Truck, Box, Scale, Ruler } from 'lucide-react'
 
 interface QuotationData {
   quotation_number: string
@@ -15,6 +16,16 @@ interface QuotationData {
   service_type: string | null
   incoterm: string | null
   route: string | null
+  // Cargo details
+  commodity: string | null
+  cargo_description: string | null
+  cargo_weight: number | null
+  cargo_weight_unit: string
+  cargo_volume: number | null
+  cargo_volume_unit: string
+  cargo_value: string | null
+  fleet_type: string | null
+  fleet_quantity: number | null
   total_amount: string
   currency: string
   rate_structure: string
@@ -36,6 +47,18 @@ interface VerificationResponse {
   verification_status: 'valid' | 'expired' | 'revoked'
   data?: QuotationData
   error?: string
+}
+
+// UGC Company Info
+const UGC_INFO = {
+  name: 'PT. Utama Global Indo Cargo',
+  shortName: 'UGC Logistics',
+  address: 'Graha Fadillah, Jl Prof. Soepomo SH No. 45 BZ Blok C, Tebet, Jakarta Selatan, Indonesia 12810',
+  phone: '+6221 8350778',
+  fax: '+6221 8300219',
+  whatsapp: '+62812 8459 6614',
+  email: 'service@ugc.co.id',
+  web: 'www.utamaglobalindocargo.com',
 }
 
 export default function QuotationVerifyPage() {
@@ -77,10 +100,10 @@ export default function QuotationVerifyPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Verifying quotation...</p>
+      <div className="min-h-screen bg-gradient-to-br from-[#ff4600] via-[#ff6b35] to-[#ff8c42] flex items-center justify-center">
+        <div className="text-center bg-white/95 backdrop-blur-sm rounded-2xl p-8 shadow-2xl">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#ff4600] border-t-transparent mx-auto"></div>
+          <p className="mt-4 text-gray-700 font-medium">Verifying quotation...</p>
         </div>
       </div>
     )
@@ -88,8 +111,8 @@ export default function QuotationVerifyPage() {
 
   if (!result) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#ff4600] via-[#ff6b35] to-[#ff8c42] flex items-center justify-center p-4">
+        <div className="text-center bg-white rounded-2xl p-8 shadow-2xl max-w-md w-full">
           <XCircle className="h-16 w-16 text-red-500 mx-auto" />
           <h1 className="mt-4 text-2xl font-bold text-gray-900">Verification Error</h1>
           <p className="mt-2 text-gray-600">Unable to verify the quotation. Please try again.</p>
@@ -102,39 +125,43 @@ export default function QuotationVerifyPage() {
     switch (result.verification_status) {
       case 'valid':
         return {
-          icon: <CheckCircle className="h-20 w-20 text-green-500" />,
+          icon: <CheckCircle className="h-16 w-16 text-emerald-500" />,
           title: 'Quotation Verified',
           subtitle: 'This is an authentic quotation from UGC Logistics',
-          bgColor: 'bg-green-50',
-          borderColor: 'border-green-500',
-          textColor: 'text-green-700',
+          bgColor: 'bg-emerald-50',
+          borderColor: 'border-emerald-400',
+          textColor: 'text-emerald-700',
+          badgeColor: 'bg-emerald-500',
         }
       case 'expired':
         return {
-          icon: <Clock className="h-20 w-20 text-amber-500" />,
+          icon: <Clock className="h-16 w-16 text-amber-500" />,
           title: 'Quotation Expired',
           subtitle: 'This quotation is authentic but has passed its validity period',
           bgColor: 'bg-amber-50',
-          borderColor: 'border-amber-500',
+          borderColor: 'border-amber-400',
           textColor: 'text-amber-700',
+          badgeColor: 'bg-amber-500',
         }
       case 'revoked':
         return {
-          icon: <XCircle className="h-20 w-20 text-red-500" />,
+          icon: <XCircle className="h-16 w-16 text-red-500" />,
           title: 'Quotation Revoked',
           subtitle: 'This quotation has been revoked and is no longer valid',
           bgColor: 'bg-red-50',
-          borderColor: 'border-red-500',
+          borderColor: 'border-red-400',
           textColor: 'text-red-700',
+          badgeColor: 'bg-red-500',
         }
       default:
         return {
-          icon: <AlertTriangle className="h-20 w-20 text-gray-500" />,
+          icon: <AlertTriangle className="h-16 w-16 text-gray-500" />,
           title: 'Invalid Code',
           subtitle: 'This quotation code is not found in our system',
           bgColor: 'bg-gray-50',
-          borderColor: 'border-gray-500',
+          borderColor: 'border-gray-400',
           textColor: 'text-gray-700',
+          badgeColor: 'bg-gray-500',
         }
     }
   }
@@ -144,15 +171,23 @@ export default function QuotationVerifyPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-[#1a365d] text-white py-6">
+      {/* Header with Orange Gradient */}
+      <header className="bg-gradient-to-r from-[#ff4600] to-[#ff6b35] text-white py-6 shadow-lg">
         <div className="max-w-4xl mx-auto px-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">UGC Logistics</h1>
-              <p className="text-blue-200 text-sm">Quotation Verification</p>
+            <div className="flex items-center gap-4">
+              <Image
+                src="/logo/logougctaglinewhite.png"
+                alt="UGC Logo"
+                width={160}
+                height={50}
+                className="h-12 w-auto"
+              />
             </div>
-            <Building2 className="h-10 w-10 opacity-50" />
+            <div className="text-right hidden sm:block">
+              <p className="text-white/90 text-sm font-medium">Quotation Verification Portal</p>
+              <p className="text-white/70 text-xs mt-1">{UGC_INFO.web}</p>
+            </div>
           </div>
         </div>
       </header>
@@ -160,29 +195,34 @@ export default function QuotationVerifyPage() {
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 py-8">
         {/* Status Card */}
-        <div className={`${status.bgColor} ${status.borderColor} border-l-4 rounded-lg p-6 mb-6`}>
-          <div className="flex items-start gap-4">
-            {status.icon}
+        <div className={`${status.bgColor} border-2 ${status.borderColor} rounded-2xl p-6 mb-6 shadow-sm`}>
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
+            <div className="flex-shrink-0">{status.icon}</div>
             <div>
-              <h2 className={`text-2xl font-bold ${status.textColor}`}>{status.title}</h2>
-              <p className="text-gray-600 mt-1">{status.subtitle}</p>
+              <div className="flex items-center justify-center sm:justify-start gap-3 flex-wrap">
+                <h2 className={`text-2xl font-bold ${status.textColor}`}>{status.title}</h2>
+                <span className={`${status.badgeColor} text-white text-xs px-3 py-1 rounded-full font-medium uppercase tracking-wide`}>
+                  {result.verification_status}
+                </span>
+              </div>
+              <p className="text-gray-600 mt-2">{status.subtitle}</p>
             </div>
           </div>
         </div>
 
         {/* Quotation Details */}
         {data && (
-          <div className="bg-white rounded-lg shadow-sm">
-            {/* Quotation Header */}
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Quotation Number</p>
-                  <p className="text-xl font-bold text-[#1a365d]">{data.quotation_number}</p>
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+            {/* Quotation Header with Orange Accent */}
+            <div className="bg-gradient-to-r from-[#ff4600] to-[#ff6b35] p-6">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-center sm:text-left">
+                  <p className="text-white/80 text-sm font-medium">Quotation Number</p>
+                  <p className="text-2xl font-bold text-white tracking-wide">{data.quotation_number}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">Total Amount</p>
-                  <p className="text-2xl font-bold text-[#1a365d]">{data.total_amount}</p>
+                <div className="text-center sm:text-right">
+                  <p className="text-white/80 text-sm font-medium">Total Amount</p>
+                  <p className="text-3xl font-bold text-white">{data.total_amount}</p>
                 </div>
               </div>
             </div>
@@ -190,35 +230,35 @@ export default function QuotationVerifyPage() {
             {/* Details Grid */}
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Customer Info */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <div className="space-y-3">
+                <h3 className="font-semibold text-[#ff4600] flex items-center gap-2 text-sm uppercase tracking-wide">
                   <User className="h-4 w-4" />
                   Customer
                 </h3>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="font-medium">{data.customer_name}</p>
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                  <p className="font-semibold text-gray-900">{data.customer_name}</p>
                   {data.customer_company && (
-                    <p className="text-gray-600">{data.customer_company}</p>
+                    <p className="text-gray-600 text-sm mt-1">{data.customer_company}</p>
                   )}
                 </div>
               </div>
 
               {/* Dates */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <div className="space-y-3">
+                <h3 className="font-semibold text-[#ff4600] flex items-center gap-2 text-sm uppercase tracking-wide">
                   <Calendar className="h-4 w-4" />
-                  Validity
+                  Validity Period
                 </h3>
-                <div className="bg-gray-50 rounded-lg p-4">
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Issued:</span>
-                    <span>{formatDate(data.created_at)}</span>
+                    <span className="font-medium text-gray-900">{formatDate(data.created_at)}</span>
                   </div>
                   <div className="flex justify-between text-sm mt-2">
                     <span className="text-gray-500">Valid Until:</span>
-                    <span className={data.is_expired ? 'text-red-600' : ''}>
+                    <span className={`font-medium ${data.is_expired ? 'text-red-600' : 'text-gray-900'}`}>
                       {formatDate(data.valid_until)}
-                      {data.is_expired && ' (Expired)'}
+                      {data.is_expired && <span className="ml-1 text-xs">(Expired)</span>}
                     </span>
                   </div>
                 </div>
@@ -226,22 +266,22 @@ export default function QuotationVerifyPage() {
 
               {/* Service Details */}
               {(data.service_type || data.incoterm) && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-[#ff4600] flex items-center gap-2 text-sm uppercase tracking-wide">
                     <Package className="h-4 w-4" />
-                    Service
+                    Service Details
                   </h3>
-                  <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                     {data.service_type && (
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">Type:</span>
-                        <span>{data.service_type}</span>
+                        <span className="font-medium text-gray-900">{data.service_type}</span>
                       </div>
                     )}
                     {data.incoterm && (
                       <div className="flex justify-between text-sm mt-2">
                         <span className="text-gray-500">Incoterm:</span>
-                        <span>{data.incoterm}</span>
+                        <span className="font-medium text-gray-900">{data.incoterm}</span>
                       </div>
                     )}
                   </div>
@@ -250,37 +290,107 @@ export default function QuotationVerifyPage() {
 
               {/* Route */}
               {data.route && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-[#ff4600] flex items-center gap-2 text-sm uppercase tracking-wide">
                     <MapPin className="h-4 w-4" />
                     Route
                   </h3>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-sm">{data.route}</p>
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                    <p className="text-sm text-gray-900">{data.route}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Fleet */}
+              {data.fleet_type && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-[#ff4600] flex items-center gap-2 text-sm uppercase tracking-wide">
+                    <Truck className="h-4 w-4" />
+                    Fleet
+                  </h3>
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                    <p className="text-sm font-medium text-gray-900">
+                      {data.fleet_type}
+                      {data.fleet_quantity && data.fleet_quantity > 1 && (
+                        <span className="text-[#ff4600]"> × {data.fleet_quantity} unit</span>
+                      )}
+                    </p>
                   </div>
                 </div>
               )}
             </div>
 
+            {/* Cargo Details Section */}
+            {(data.commodity || data.cargo_description || data.cargo_weight || data.cargo_volume || data.cargo_value) && (
+              <div className="px-6 pb-6">
+                <h3 className="font-semibold text-[#ff4600] mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
+                  <Box className="h-4 w-4" />
+                  Cargo Details
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {data.commodity && (
+                    <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Commodity</p>
+                      <p className="font-semibold text-gray-900 mt-1">{data.commodity}</p>
+                    </div>
+                  )}
+                  {data.cargo_description && (
+                    <div className="bg-orange-50 rounded-xl p-4 border border-orange-100 sm:col-span-2 lg:col-span-2">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Description</p>
+                      <p className="font-medium text-gray-900 mt-1">{data.cargo_description}</p>
+                    </div>
+                  )}
+                  {data.cargo_weight && (
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <Scale className="h-4 w-4 text-[#ff4600]" />
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Total Weight</p>
+                      </div>
+                      <p className="font-semibold text-gray-900 mt-1">
+                        {data.cargo_weight.toLocaleString()} {data.cargo_weight_unit}
+                      </p>
+                    </div>
+                  )}
+                  {data.cargo_volume && (
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <Ruler className="h-4 w-4 text-[#ff4600]" />
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Total Volume</p>
+                      </div>
+                      <p className="font-semibold text-gray-900 mt-1">
+                        {data.cargo_volume.toLocaleString()} {data.cargo_volume_unit}
+                      </p>
+                    </div>
+                  )}
+                  {data.cargo_value && (
+                    <div className="bg-[#ff4600]/10 rounded-xl p-4 border border-[#ff4600]/20">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Cargo Value</p>
+                      <p className="font-bold text-[#ff4600] mt-1 text-lg">{data.cargo_value}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Rate Breakdown */}
             {data.items && data.items.length > 0 && (
-              <div className="p-6 border-t border-gray-200">
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <div className="px-6 pb-6">
+                <h3 className="font-semibold text-[#ff4600] mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
                   <FileText className="h-4 w-4" />
                   Rate Breakdown
                 </h3>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto rounded-xl border border-gray-200">
                   <table className="w-full">
                     <thead>
-                      <tr className="bg-gray-50">
-                        <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Description</th>
-                        <th className="text-right py-3 px-4 text-sm font-medium text-gray-700">Amount</th>
+                      <tr className="bg-[#ff4600]">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-white">Description</th>
+                        <th className="text-right py-3 px-4 text-sm font-semibold text-white">Amount</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.items.map((item, index) => (
-                        <tr key={index} className="border-t border-gray-100">
-                          <td className="py-3 px-4">
+                        <tr key={index} className="border-t border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4 text-gray-900">
                             {item.name}
                             {item.quantity && item.unit && (
                               <span className="text-gray-500 text-sm ml-2">
@@ -288,12 +398,12 @@ export default function QuotationVerifyPage() {
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-right">{item.amount}</td>
+                          <td className="py-3 px-4 text-right font-medium text-gray-900">{item.amount}</td>
                         </tr>
                       ))}
-                      <tr className="border-t-2 border-gray-200 font-semibold bg-gray-50">
-                        <td className="py-3 px-4">Total</td>
-                        <td className="py-3 px-4 text-right">{data.total_amount}</td>
+                      <tr className="border-t-2 border-[#ff4600] bg-orange-50">
+                        <td className="py-3 px-4 font-bold text-[#ff4600]">Total</td>
+                        <td className="py-3 px-4 text-right font-bold text-[#ff4600] text-lg">{data.total_amount}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -303,30 +413,30 @@ export default function QuotationVerifyPage() {
 
             {/* Terms */}
             {(data.terms_includes?.length || data.terms_excludes?.length) && (
-              <div className="p-6 border-t border-gray-200">
-                <h3 className="font-semibold text-gray-900 mb-4">Terms & Conditions</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="px-6 pb-6">
+                <h3 className="font-semibold text-[#ff4600] mb-4 text-sm uppercase tracking-wide">Terms & Conditions</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {data.terms_includes && data.terms_includes.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium text-green-700 mb-2">Included:</p>
-                      <ul className="text-sm space-y-1">
+                    <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+                      <p className="text-sm font-semibold text-emerald-700 mb-3">Included:</p>
+                      <ul className="text-sm space-y-2">
                         {data.terms_includes.map((term, index) => (
                           <li key={index} className="flex items-start gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                            <span>{term}</span>
+                            <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-gray-700">{term}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
                   )}
                   {data.terms_excludes && data.terms_excludes.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium text-red-700 mb-2">Excluded:</p>
-                      <ul className="text-sm space-y-1">
+                    <div className="bg-red-50 rounded-xl p-4 border border-red-200">
+                      <p className="text-sm font-semibold text-red-700 mb-3">Excluded:</p>
+                      <ul className="text-sm space-y-2">
                         {data.terms_excludes.map((term, index) => (
                           <li key={index} className="flex items-start gap-2">
                             <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                            <span>{term}</span>
+                            <span className="text-gray-700">{term}</span>
                           </li>
                         ))}
                       </ul>
@@ -337,9 +447,9 @@ export default function QuotationVerifyPage() {
             )}
 
             {/* Issued By */}
-            <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-lg">
-              <p className="text-sm text-gray-500">
-                Issued by <span className="font-medium text-gray-700">{data.issued_by}</span> from UGC Logistics
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                Issued by <span className="font-semibold text-[#ff4600]">{data.issued_by}</span> from {UGC_INFO.shortName}
               </p>
             </div>
           </div>
@@ -347,9 +457,9 @@ export default function QuotationVerifyPage() {
 
         {/* Not Found Message */}
         {!data && result.error && (
-          <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-            <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
-            <h3 className="mt-4 text-lg font-semibold text-gray-900">Quotation Not Found</h3>
+          <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+            <AlertTriangle className="h-16 w-16 text-amber-500 mx-auto" />
+            <h3 className="mt-4 text-xl font-bold text-gray-900">Quotation Not Found</h3>
             <p className="mt-2 text-gray-600">
               The verification code you provided does not match any quotation in our system.
               Please check the code and try again.
@@ -357,25 +467,54 @@ export default function QuotationVerifyPage() {
           </div>
         )}
 
-        {/* Footer Note */}
-        <div className="mt-8 text-center text-sm text-gray-500">
-          <p>
-            If you have questions about this quotation, please contact UGC Logistics at{' '}
-            <a href="mailto:info@ugclogistics.com" className="text-[#1a365d] hover:underline">
-              info@ugclogistics.com
+        {/* Contact Info Card */}
+        <div className="mt-8 bg-white rounded-2xl shadow-lg p-6">
+          <h3 className="font-semibold text-gray-900 mb-4 text-center">Questions about this quotation?</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <a href={`tel:${UGC_INFO.phone}`} className="flex items-center justify-center gap-2 p-3 bg-gray-50 rounded-xl hover:bg-[#ff4600] hover:text-white transition-colors group">
+              <Phone className="h-4 w-4 text-[#ff4600] group-hover:text-white" />
+              <span className="text-gray-700 group-hover:text-white">{UGC_INFO.phone}</span>
             </a>
-          </p>
+            <a href={`mailto:${UGC_INFO.email}`} className="flex items-center justify-center gap-2 p-3 bg-gray-50 rounded-xl hover:bg-[#ff4600] hover:text-white transition-colors group">
+              <Mail className="h-4 w-4 text-[#ff4600] group-hover:text-white" />
+              <span className="text-gray-700 group-hover:text-white">{UGC_INFO.email}</span>
+            </a>
+            <a href={`https://${UGC_INFO.web}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 p-3 bg-gray-50 rounded-xl hover:bg-[#ff4600] hover:text-white transition-colors group">
+              <Globe className="h-4 w-4 text-[#ff4600] group-hover:text-white" />
+              <span className="text-gray-700 group-hover:text-white">{UGC_INFO.web}</span>
+            </a>
+          </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-800 text-white py-6 mt-12">
-        <div className="max-w-4xl mx-auto px-4 text-center text-sm">
-          <p>PT. UGC Logistics</p>
-          <p className="mt-1 text-gray-400">Jl. Raya Example No. 123, Jakarta, Indonesia</p>
-          <p className="mt-4 text-gray-500">
-            This verification page confirms the authenticity of quotations issued by UGC Logistics.
-          </p>
+      <footer className="bg-gradient-to-r from-gray-900 to-gray-800 text-white py-8 mt-12">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <Image
+                src="/logo/logougctaglinewhite.png"
+                alt="UGC Logo"
+                width={140}
+                height={45}
+                className="h-10 w-auto mx-auto md:mx-0"
+              />
+              <p className="mt-3 text-gray-400 text-sm max-w-md">
+                {UGC_INFO.address}
+              </p>
+            </div>
+            <div className="text-center md:text-right text-sm text-gray-400">
+              <p className="flex items-center justify-center md:justify-end gap-2">
+                <Phone className="h-3 w-3" /> {UGC_INFO.phone}
+              </p>
+              <p className="mt-1 flex items-center justify-center md:justify-end gap-2">
+                <Mail className="h-3 w-3" /> {UGC_INFO.email}
+              </p>
+              <p className="mt-3 text-gray-500 text-xs">
+                This verification page confirms the authenticity of quotations issued by UGC Logistics.
+              </p>
+            </div>
+          </div>
         </div>
       </footer>
     </div>
