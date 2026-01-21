@@ -129,197 +129,207 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        @page {
+          size: A4;
+          margin: 10mm;
+        }
+
         body {
           font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
-          font-size: 10px;
-          line-height: 1.5;
+          font-size: 9px;
+          line-height: 1.4;
           color: var(--dark);
           background: white;
         }
 
         .page {
           max-width: 210mm;
+          min-height: 297mm;
           margin: 0 auto;
-          padding: 15mm;
+          padding: 8mm;
         }
 
-        /* Header */
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          padding-bottom: 15px;
-          border-bottom: 3px solid var(--orange);
-          margin-bottom: 20px;
-        }
-
-        .logo-section img {
-          height: 50px;
-          width: auto;
-        }
-
-        .company-details {
-          text-align: right;
-          font-size: 9px;
-          color: var(--gray);
-          line-height: 1.6;
-        }
-
-        .company-details strong {
-          color: var(--dark);
-          font-size: 11px;
-        }
-
-        /* Title Banner */
-        .title-banner {
+        /* Header - Combined with title */
+        .header-wrapper {
           background: linear-gradient(135deg, var(--orange) 0%, var(--orange-light) 100%);
           color: white;
-          padding: 20px 25px;
-          margin: -15mm -15mm 20px -15mm;
+          padding: 12px 16px;
+          margin-bottom: 12px;
+          border-radius: 6px;
           display: flex;
           justify-content: space-between;
           align-items: center;
         }
 
-        .title-banner h1 {
-          font-size: 22px;
+        .header-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .header-left img {
+          height: 36px;
+          width: auto;
+          background: white;
+          padding: 4px 8px;
+          border-radius: 4px;
+        }
+
+        .header-title h1 {
+          font-size: 18px;
           font-weight: 700;
-          letter-spacing: 3px;
+          letter-spacing: 2px;
           text-transform: uppercase;
         }
 
-        .quote-number {
+        .header-right {
           text-align: right;
         }
 
-        .quote-number .label {
-          font-size: 9px;
+        .header-right .label {
+          font-size: 8px;
           opacity: 0.9;
           text-transform: uppercase;
-          letter-spacing: 1px;
+          letter-spacing: 0.5px;
         }
 
-        .quote-number .number {
-          font-size: 16px;
+        .header-right .number {
+          font-size: 13px;
           font-weight: 700;
-          margin-top: 3px;
+          margin-top: 2px;
+        }
+
+        .company-bar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 8px 0;
+          margin-bottom: 10px;
+          border-bottom: 2px solid var(--orange);
+          font-size: 8px;
+          color: var(--gray);
+        }
+
+        .company-bar strong {
+          color: var(--dark);
+          font-size: 10px;
         }
 
         /* Info Grid */
         .info-grid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: 12px;
-          margin-bottom: 20px;
+          gap: 8px;
+          margin-bottom: 12px;
         }
 
         .info-card {
           background: var(--light-gray);
-          padding: 12px;
-          border-radius: 6px;
-          border-left: 3px solid var(--orange);
+          padding: 8px;
+          border-radius: 4px;
+          border-left: 2px solid var(--orange);
         }
 
         .info-card .label {
-          font-size: 8px;
+          font-size: 7px;
           color: var(--gray);
           text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 4px;
+          letter-spacing: 0.3px;
+          margin-bottom: 2px;
         }
 
         .info-card .value {
-          font-size: 11px;
+          font-size: 9px;
           font-weight: 600;
           color: var(--dark);
         }
 
         /* Sections */
         .section {
-          margin-bottom: 18px;
+          margin-bottom: 12px;
         }
 
         .section-header {
           display: flex;
           align-items: center;
-          gap: 8px;
-          margin-bottom: 12px;
-          padding-bottom: 6px;
-          border-bottom: 2px solid var(--orange);
+          gap: 6px;
+          margin-bottom: 8px;
+          padding-bottom: 4px;
+          border-bottom: 1px solid var(--orange);
         }
 
         .section-icon {
-          width: 20px;
-          height: 20px;
+          width: 16px;
+          height: 16px;
           background: var(--orange);
-          border-radius: 4px;
+          border-radius: 3px;
           display: flex;
           align-items: center;
           justify-content: center;
           color: white;
-          font-size: 10px;
+          font-size: 8px;
         }
 
         .section-title {
-          font-size: 12px;
+          font-size: 10px;
           font-weight: 700;
           color: var(--orange);
           text-transform: uppercase;
-          letter-spacing: 1px;
+          letter-spacing: 0.5px;
         }
 
         /* Customer Box */
         .customer-box {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 15px;
+          gap: 10px;
         }
 
         .customer-card {
           background: var(--orange-bg);
-          padding: 15px;
-          border-radius: 8px;
+          padding: 10px;
+          border-radius: 6px;
           border: 1px solid #ffe4d6;
         }
 
         .customer-card .name {
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 700;
           color: var(--orange);
-          margin-bottom: 5px;
+          margin-bottom: 3px;
         }
 
         .customer-card p {
           color: var(--gray);
-          font-size: 10px;
-          margin: 2px 0;
+          font-size: 8px;
+          margin: 1px 0;
         }
 
         /* Details Grid */
         .details-grid {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 10px;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
         }
 
         .detail-box {
           background: var(--light-gray);
-          padding: 10px 12px;
-          border-radius: 6px;
+          padding: 6px 8px;
+          border-radius: 4px;
         }
 
         .detail-box .label {
-          font-size: 8px;
+          font-size: 7px;
           color: var(--gray);
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 0.3px;
         }
 
         .detail-box .value {
-          font-size: 11px;
+          font-size: 9px;
           font-weight: 500;
           color: var(--dark);
-          margin-top: 2px;
+          margin-top: 1px;
         }
 
         /* Route Display */
@@ -327,11 +337,11 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 15px;
+          gap: 12px;
           background: linear-gradient(135deg, var(--orange-bg) 0%, #fff 100%);
-          padding: 15px;
-          border-radius: 8px;
-          margin: 10px 0;
+          padding: 10px;
+          border-radius: 6px;
+          margin: 8px 0;
           border: 1px solid #ffe4d6;
         }
 
@@ -341,18 +351,18 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         }
 
         .route-point .city {
-          font-size: 14px;
+          font-size: 11px;
           font-weight: 700;
           color: var(--dark);
         }
 
         .route-point .country {
-          font-size: 9px;
+          font-size: 8px;
           color: var(--gray);
         }
 
         .route-arrow {
-          font-size: 24px;
+          font-size: 18px;
           color: var(--orange);
         }
 
@@ -360,23 +370,23 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         .rate-table {
           width: 100%;
           border-collapse: collapse;
-          margin: 10px 0;
-          font-size: 10px;
+          margin: 8px 0;
+          font-size: 8px;
         }
 
         .rate-table th {
           background: var(--orange);
           color: white;
-          padding: 10px 12px;
+          padding: 6px 8px;
           text-align: left;
           font-weight: 600;
-          font-size: 9px;
+          font-size: 8px;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 0.3px;
         }
 
         .rate-table td {
-          padding: 10px 12px;
+          padding: 6px 8px;
           border-bottom: 1px solid #e5e7eb;
         }
 
@@ -386,7 +396,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         .rate-table .right { text-align: right; }
 
         .item-desc {
-          font-size: 9px;
+          font-size: 7px;
           color: var(--gray);
         }
 
@@ -394,23 +404,23 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         .total-box {
           background: linear-gradient(135deg, var(--orange) 0%, var(--orange-light) 100%);
           color: white;
-          padding: 15px 20px;
-          border-radius: 8px;
+          padding: 10px 14px;
+          border-radius: 6px;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-top: 15px;
+          margin-top: 10px;
         }
 
         .total-label {
-          font-size: 12px;
+          font-size: 10px;
           font-weight: 600;
           text-transform: uppercase;
-          letter-spacing: 1px;
+          letter-spacing: 0.5px;
         }
 
         .total-amount {
-          font-size: 22px;
+          font-size: 16px;
           font-weight: 700;
         }
 
@@ -418,13 +428,13 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         .terms-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 15px;
+          gap: 10px;
         }
 
         .terms-card {
-          padding: 12px;
-          border-radius: 8px;
-          font-size: 9px;
+          padding: 8px;
+          border-radius: 6px;
+          font-size: 8px;
         }
 
         .terms-card.included {
@@ -438,9 +448,9 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         }
 
         .terms-card h4 {
-          font-size: 10px;
+          font-size: 9px;
           font-weight: 700;
-          margin-bottom: 8px;
+          margin-bottom: 5px;
         }
 
         .terms-card.included h4 { color: #059669; }
@@ -451,10 +461,11 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         }
 
         .terms-card li {
-          margin: 4px 0;
+          margin: 2px 0;
           display: flex;
           align-items: flex-start;
-          gap: 6px;
+          gap: 4px;
+          font-size: 7px;
         }
 
         .check { color: #059669; font-weight: bold; }
@@ -463,11 +474,12 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         /* Validity Banner */
         .validity-banner {
           background: var(--orange-bg);
-          border: 2px dashed var(--orange);
-          padding: 12px 15px;
-          border-radius: 8px;
-          margin: 15px 0;
+          border: 1px dashed var(--orange);
+          padding: 8px 10px;
+          border-radius: 6px;
+          margin: 10px 0;
           text-align: center;
+          font-size: 8px;
         }
 
         .validity-banner strong {
@@ -476,9 +488,9 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
 
         /* Footer */
         .footer {
-          margin-top: 25px;
-          padding-top: 20px;
-          border-top: 2px solid var(--light-gray);
+          margin-top: 15px;
+          padding-top: 12px;
+          border-top: 1px solid var(--light-gray);
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
@@ -486,7 +498,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
 
         .signature-block {
           display: flex;
-          gap: 20px;
+          gap: 12px;
           align-items: flex-start;
         }
 
@@ -495,44 +507,44 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         }
 
         .qr-box img {
-          width: 80px;
-          height: 80px;
-          border: 2px solid var(--orange);
-          border-radius: 8px;
-          padding: 4px;
+          width: 60px;
+          height: 60px;
+          border: 1px solid var(--orange);
+          border-radius: 4px;
+          padding: 2px;
         }
 
         .qr-box .qr-label {
-          font-size: 8px;
+          font-size: 7px;
           color: var(--gray);
-          margin-top: 5px;
+          margin-top: 3px;
         }
 
         .signer-info {
-          padding-top: 5px;
+          padding-top: 3px;
         }
 
         .signer-name {
-          font-size: 13px;
+          font-size: 10px;
           font-weight: 700;
           color: var(--orange);
         }
 
         .signer-title {
-          font-size: 10px;
+          font-size: 8px;
           color: var(--gray);
-          margin-top: 2px;
+          margin-top: 1px;
         }
 
         .signer-date {
-          font-size: 9px;
+          font-size: 7px;
           color: var(--gray);
-          margin-top: 5px;
+          margin-top: 3px;
         }
 
         .verify-info {
           text-align: right;
-          font-size: 8px;
+          font-size: 7px;
           color: var(--gray);
         }
 
@@ -544,10 +556,10 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
 
         .company-footer {
           text-align: center;
-          margin-top: 20px;
-          padding-top: 15px;
+          margin-top: 12px;
+          padding-top: 10px;
           border-top: 1px solid var(--light-gray);
-          font-size: 8px;
+          font-size: 7px;
           color: var(--gray);
         }
 
@@ -556,33 +568,34 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         }
 
         @media print {
-          .page { padding: 10mm; }
-          .title-banner { margin: -10mm -10mm 15px -10mm; }
+          .page { padding: 8mm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       </style>
     </head>
     <body>
       <div class="page">
         <!-- Header -->
-        <div class="header">
-          <div class="logo-section">
+        <div class="header-wrapper">
+          <div class="header-left">
             <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinefull.png" alt="UGC Logo"/>
+            <div class="header-title">
+              <h1>Quotation</h1>
+            </div>
           </div>
-          <div class="company-details">
-            <strong>${UGC_INFO.name}</strong><br/>
-            ${UGC_INFO.address}<br/>
-            ${UGC_INFO.city}<br/>
-            Tel: ${UGC_INFO.phone} | Fax: ${UGC_INFO.fax}<br/>
-            Email: ${UGC_INFO.email}
+          <div class="header-right">
+            <div class="label">Document No.</div>
+            <div class="number">${quotation.quotation_number}</div>
           </div>
         </div>
 
-        <!-- Title Banner -->
-        <div class="title-banner">
-          <h1>Quotation</h1>
-          <div class="quote-number">
-            <div class="label">Document No.</div>
-            <div class="number">${quotation.quotation_number}</div>
+        <!-- Company Bar -->
+        <div class="company-bar">
+          <div>
+            <strong>${UGC_INFO.name}</strong> | ${UGC_INFO.address}, ${UGC_INFO.city}
+          </div>
+          <div>
+            Tel: ${UGC_INFO.phone} | Email: ${UGC_INFO.email}
           </div>
         </div>
 

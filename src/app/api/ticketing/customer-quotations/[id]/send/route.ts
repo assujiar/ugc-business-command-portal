@@ -35,8 +35,23 @@ const formatDate = (date: string | Date): string => {
   })
 }
 
+// UGC Company Info
+const UGC_INFO = {
+  name: 'PT. Utama Global Indo Cargo',
+  shortName: 'UGC Logistics',
+  address: 'Graha Fadillah, Jl Prof. Soepomo SH No. 45 BZ Blok C, Tebet, Jakarta Selatan, Indonesia 12810',
+  phone: '+6221 8350778',
+  fax: '+6221 8300219',
+  whatsapp: '+62812 8459 6614',
+  email: 'service@ugc.co.id',
+  web: 'www.utamaglobalindocargo.com',
+}
+
+// Production base URL
+const PRODUCTION_URL = 'https://ugc-business-command-portal.vercel.app'
+
 // Generate WhatsApp text - concise, professional, friendly
-const generateWhatsAppText = (quotation: any, profile: ProfileData, pdfUrl: string): string => {
+const generateWhatsAppText = (quotation: any, profile: ProfileData, validationUrl: string, pdfUrl: string): string => {
   const greeting = getTimeBasedGreeting()
   const customerName = quotation.customer_name?.split(' ')[0] || 'Bapak/Ibu'
 
@@ -50,17 +65,32 @@ const generateWhatsAppText = (quotation: any, profile: ProfileData, pdfUrl: stri
     serviceInfo = ` untuk layanan ${quotation.service_type}`
   }
 
+  // Build cargo details
+  let cargoDetails = ''
+  if (quotation.cargo_description || quotation.fleet_type || quotation.cargo_weight) {
+    cargoDetails = '\n📦 *Detail Cargo:*'
+    if (quotation.commodity) cargoDetails += `\n   • Commodity: ${quotation.commodity}`
+    if (quotation.cargo_description) cargoDetails += `\n   • Deskripsi: ${quotation.cargo_description}`
+    if (quotation.fleet_type) cargoDetails += `\n   • Fleet: ${quotation.fleet_type}${quotation.fleet_quantity ? ` × ${quotation.fleet_quantity}` : ''}`
+    if (quotation.cargo_weight) cargoDetails += `\n   • Berat: ${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}`
+    if (quotation.cargo_volume) cargoDetails += `\n   • Volume: ${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}`
+    cargoDetails += '\n'
+  }
+
   const text = `${greeting} ${customerName},
 
-Terima kasih atas kepercayaan Anda pada UGC Logistics.
+Terima kasih atas kepercayaan Anda pada *${UGC_INFO.shortName}*.
 
 Berikut kami sampaikan penawaran harga${serviceInfo}${routeInfo ? ` ${routeInfo}` : ''}:
 
 📋 *No. Quotation:* ${quotation.quotation_number}
 💰 *Total:* ${formatCurrency(quotation.total_selling_rate, quotation.currency)}
 📅 *Berlaku hingga:* ${formatDate(quotation.valid_until)}
+${cargoDetails}
+🔗 *Lihat Quotation Online:*
+${validationUrl}
 
-📎 *Detail lengkap dapat dilihat di:*
+📄 *Download PDF:*
 ${pdfUrl}
 
 Mohon konfirmasi jika ada pertanyaan atau membutuhkan informasi tambahan. Kami siap membantu!
@@ -70,14 +100,15 @@ Terima kasih 🙏
 Best regards,
 *${profile.name}*
 Sales & Commercial Executive
-UGC Logistics
-📞 +62 21 1234567`
+${UGC_INFO.shortName}
+📞 ${UGC_INFO.phone}
+📱 ${UGC_INFO.whatsapp}`
 
   return text
 }
 
-// Generate Email HTML - professional, complete narrative
-const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: string): string => {
+// Generate Email HTML - professional, complete narrative with UGC branding
+const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: string, pdfUrl: string): string => {
   const customerName = quotation.customer_name || 'Bapak/Ibu'
   const companyName = quotation.customer_company || ''
 
@@ -94,7 +125,7 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
     itemsSummary = `
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
         <thead>
-          <tr style="background: #1a365d; color: white;">
+          <tr style="background: #ff4600; color: white;">
             <th style="padding: 10px; text-align: left;">Description</th>
             <th style="padding: 10px; text-align: right;">Amount</th>
           </tr>
@@ -106,9 +137,9 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
               <td style="padding: 10px; text-align: right;">${formatCurrency(item.selling_rate, quotation.currency)}</td>
             </tr>
           `).join('')}
-          <tr style="background: #f8f9fa; font-weight: bold;">
-            <td style="padding: 10px;">Total</td>
-            <td style="padding: 10px; text-align: right;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</td>
+          <tr style="background: #fff8f5; font-weight: bold;">
+            <td style="padding: 10px; color: #ff4600;">Total</td>
+            <td style="padding: 10px; text-align: right; color: #ff4600;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</td>
           </tr>
         </tbody>
       </table>
@@ -120,125 +151,92 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
     <html>
     <head>
       <meta charset="UTF-8">
-      <style>
-        body {
-          font-family: 'Segoe UI', Arial, sans-serif;
-          line-height: 1.6;
-          color: #333;
-          max-width: 600px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-        .header {
-          background: #1a365d;
-          color: white;
-          padding: 20px;
-          text-align: center;
-          border-radius: 8px 8px 0 0;
-        }
-        .content {
-          background: #ffffff;
-          padding: 30px;
-          border: 1px solid #e2e8f0;
-          border-top: none;
-        }
-        .highlight-box {
-          background: #f8f9fa;
-          border-left: 4px solid #1a365d;
-          padding: 15px;
-          margin: 20px 0;
-        }
-        .validity-box {
-          background: #d4edda;
-          border-left: 4px solid #28a745;
-          padding: 15px;
-          margin: 20px 0;
-        }
-        .cta-button {
-          display: inline-block;
-          background: #1a365d;
-          color: white;
-          padding: 12px 30px;
-          text-decoration: none;
-          border-radius: 5px;
-          margin: 20px 0;
-        }
-        .footer {
-          background: #f8f9fa;
-          padding: 20px;
-          text-align: center;
-          font-size: 12px;
-          color: #666;
-          border-radius: 0 0 8px 8px;
-          border: 1px solid #e2e8f0;
-          border-top: none;
-        }
-        .signature {
-          margin-top: 30px;
-          border-top: 1px solid #e2e8f0;
-          padding-top: 20px;
-        }
-      </style>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
     </head>
-    <body>
-      <div class="header">
-        <h1 style="margin: 0; font-size: 24px;">UGC Logistics</h1>
-        <p style="margin: 5px 0 0 0; opacity: 0.9;">Quotation ${quotation.quotation_number}</p>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f5;">
+      <!-- Header with Logo -->
+      <div style="background: linear-gradient(135deg, #ff4600 0%, #ff6b35 100%); color: white; padding: 25px 30px; text-align: center;">
+        <img src="${PRODUCTION_URL}/logo/logougctaglinewhite.png" alt="UGC Logistics" style="height: 45px; margin-bottom: 10px;" />
+        <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Quotation ${quotation.quotation_number}</p>
       </div>
 
-      <div class="content">
-        <p>Yth. ${customerName}${companyName ? `,<br/>${companyName}` : ''},</p>
+      <!-- Content -->
+      <div style="background: #ffffff; padding: 30px; border: 1px solid #e2e8f0; border-top: none;">
+        <p style="margin-top: 0;">Yth. <strong>${customerName}</strong>${companyName ? `,<br/>${companyName}` : ''},</p>
 
-        <p>Terima kasih atas kepercayaan Anda kepada UGC Logistics. Dengan senang hati kami sampaikan penawaran harga untuk layanan ${serviceInfo}${routeInfo}.</p>
+        <p>Terima kasih atas kepercayaan Anda kepada <strong style="color: #ff4600;">${UGC_INFO.shortName}</strong>. Dengan senang hati kami sampaikan penawaran harga untuk layanan ${serviceInfo}${routeInfo}.</p>
 
-        <div class="highlight-box">
+        <!-- Quote Info Box -->
+        <div style="background: #fff8f5; border-left: 4px solid #ff4600; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
           <p style="margin: 0;"><strong>No. Quotation:</strong> ${quotation.quotation_number}</p>
-          <p style="margin: 5px 0;"><strong>Tanggal:</strong> ${formatDate(quotation.created_at)}</p>
-          ${quotation.ticket?.ticket_code ? `<p style="margin: 5px 0;"><strong>Reference:</strong> ${quotation.ticket.ticket_code}</p>` : ''}
+          <p style="margin: 5px 0 0;"><strong>Tanggal:</strong> ${formatDate(quotation.created_at)}</p>
+          ${quotation.ticket?.ticket_code ? `<p style="margin: 5px 0 0;"><strong>Reference:</strong> ${quotation.ticket.ticket_code}</p>` : ''}
         </div>
 
+        <!-- Cargo Details -->
+        ${(quotation.commodity || quotation.cargo_description || quotation.cargo_weight || quotation.cargo_volume || quotation.fleet_type) ? `
+          <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h3 style="color: #ff4600; margin: 0 0 15px 0; font-size: 14px;">📦 Detail Cargo</h3>
+            <table style="width: 100%; font-size: 13px;">
+              ${quotation.commodity ? `<tr><td style="padding: 5px 0; color: #666;">Commodity:</td><td style="padding: 5px 0;"><strong>${quotation.commodity}</strong></td></tr>` : ''}
+              ${quotation.cargo_description ? `<tr><td style="padding: 5px 0; color: #666;">Deskripsi:</td><td style="padding: 5px 0;">${quotation.cargo_description}</td></tr>` : ''}
+              ${quotation.fleet_type ? `<tr><td style="padding: 5px 0; color: #666;">Fleet:</td><td style="padding: 5px 0;"><strong>${quotation.fleet_type}</strong>${quotation.fleet_quantity ? ` × ${quotation.fleet_quantity} unit` : ''}</td></tr>` : ''}
+              ${quotation.cargo_weight ? `<tr><td style="padding: 5px 0; color: #666;">Berat:</td><td style="padding: 5px 0;">${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}</td></tr>` : ''}
+              ${quotation.cargo_volume ? `<tr><td style="padding: 5px 0; color: #666;">Volume:</td><td style="padding: 5px 0;">${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}</td></tr>` : ''}
+              ${quotation.estimated_cargo_value ? `<tr><td style="padding: 5px 0; color: #666;">Nilai Cargo:</td><td style="padding: 5px 0;"><strong style="color: #ff4600;">${formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR')}</strong></td></tr>` : ''}
+            </table>
+          </div>
+        ` : ''}
+
         ${itemsSummary || `
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-            <p style="margin: 0; color: #666;">Total Penawaran</p>
-            <p style="margin: 10px 0; font-size: 28px; font-weight: bold; color: #1a365d;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</p>
+          <div style="background: linear-gradient(135deg, #fff8f5 0%, #fff 100%); padding: 25px; border-radius: 12px; margin: 20px 0; text-align: center; border: 1px solid #ffe4d6;">
+            <p style="margin: 0; color: #666; font-size: 13px;">Total Penawaran</p>
+            <p style="margin: 10px 0 0; font-size: 32px; font-weight: bold; color: #ff4600;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</p>
           </div>
         `}
 
         ${quotation.scope_of_work ? `
           <div style="margin: 20px 0;">
-            <h3 style="color: #1a365d; margin-bottom: 10px;">Scope of Work:</h3>
-            <p style="white-space: pre-wrap;">${quotation.scope_of_work}</p>
+            <h3 style="color: #ff4600; margin-bottom: 10px; font-size: 14px;">Scope of Work:</h3>
+            <p style="white-space: pre-wrap; background: #f9fafb; padding: 15px; border-radius: 8px; margin: 0;">${quotation.scope_of_work}</p>
           </div>
         ` : ''}
 
-        <div class="validity-box">
-          <strong>⏰ Validitas Penawaran:</strong> Penawaran ini berlaku selama <strong>${quotation.validity_days} hari</strong> sejak tanggal penerbitan (hingga ${formatDate(quotation.valid_until)}).
+        <!-- Validity Box -->
+        <div style="background: #ecfdf5; border-left: 4px solid #10b981; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+          <strong>⏰ Validitas Penawaran:</strong> Penawaran ini berlaku selama <strong>${quotation.validity_days} hari</strong> sejak tanggal penerbitan (hingga <strong>${formatDate(quotation.valid_until)}</strong>).
         </div>
 
-        <p>Detail lengkap mengenai penawaran ini dapat dilihat pada dokumen PDF terlampir. Anda juga dapat memverifikasi keaslian dokumen dengan memindai QR code yang tersedia.</p>
+        <p>Detail lengkap mengenai penawaran ini dapat dilihat melalui link di bawah. Anda juga dapat memverifikasi keaslian dokumen dengan memindai QR code yang tersedia.</p>
 
-        <p style="text-align: center;">
-          <a href="${validationUrl}" class="cta-button">Lihat Quotation Online</a>
-        </p>
+        <!-- CTA Buttons -->
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${validationUrl}" style="display: inline-block; background: linear-gradient(135deg, #ff4600 0%, #ff6b35 100%); color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 5px;">📋 Lihat Quotation Online</a>
+          <br/><br/>
+          <a href="${pdfUrl}" style="display: inline-block; background: #ffffff; color: #ff4600; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; border: 2px solid #ff4600; margin: 5px;">📄 Download Quotation Letter</a>
+        </div>
 
         <p>Jika Bapak/Ibu memiliki pertanyaan atau membutuhkan informasi tambahan, silakan menghubungi kami. Kami dengan senang hati akan membantu.</p>
 
         <p>Kami berharap dapat bekerja sama dengan ${companyName || 'perusahaan Anda'} dan memberikan layanan logistik terbaik.</p>
 
-        <div class="signature">
+        <!-- Signature -->
+        <div style="margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
           <p style="margin: 0;">Hormat kami,</p>
-          <p style="margin: 10px 0 0 0;"><strong>${profile.name}</strong></p>
-          <p style="margin: 0; color: #666;">Sales & Commercial Executive</p>
-          <p style="margin: 5px 0 0 0; color: #666;">UGC Logistics</p>
-          <p style="margin: 0; color: #666;">Email: ${profile.email}</p>
-          <p style="margin: 0; color: #666;">Tel: +62 21 1234567</p>
+          <p style="margin: 10px 0 0 0;"><strong style="color: #ff4600;">${profile.name}</strong></p>
+          <p style="margin: 0; color: #666; font-size: 13px;">Sales & Commercial Executive</p>
+          <p style="margin: 5px 0 0 0; color: #666; font-size: 13px;">${UGC_INFO.shortName}</p>
+          <p style="margin: 5px 0 0 0; color: #666; font-size: 13px;">📧 ${profile.email}</p>
+          <p style="margin: 0; color: #666; font-size: 13px;">📞 ${UGC_INFO.phone} | 📱 ${UGC_INFO.whatsapp}</p>
         </div>
       </div>
 
-      <div class="footer">
-        <p style="margin: 0;">PT. UGC Logistics</p>
-        <p style="margin: 5px 0;">Jl. Raya Example No. 123, Jakarta, Indonesia</p>
-        <p style="margin: 10px 0 0 0; font-size: 10px;">This email and any attachments are confidential. If you have received this email in error, please delete it immediately.</p>
+      <!-- Footer -->
+      <div style="background: linear-gradient(135deg, #ff4600 0%, #ff6b35 100%); padding: 25px; text-align: center; color: white; font-size: 12px;">
+        <p style="margin: 0; font-weight: bold;">${UGC_INFO.name}</p>
+        <p style="margin: 8px 0; opacity: 0.9;">${UGC_INFO.address}</p>
+        <p style="margin: 8px 0; opacity: 0.9;">📞 ${UGC_INFO.phone} | 📠 ${UGC_INFO.fax} | 📧 ${UGC_INFO.email}</p>
+        <p style="margin: 12px 0 0 0; opacity: 0.7; font-size: 10px;">This email and any attachments are confidential. If you have received this email in error, please delete it immediately.</p>
       </div>
     </body>
     </html>
@@ -246,7 +244,7 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
 }
 
 // Generate plain text email version
-const generateEmailPlainText = (quotation: any, profile: ProfileData, validationUrl: string): string => {
+const generateEmailPlainText = (quotation: any, profile: ProfileData, validationUrl: string, pdfUrl: string): string => {
   const customerName = quotation.customer_name || 'Bapak/Ibu'
   const companyName = quotation.customer_company || ''
 
@@ -255,35 +253,51 @@ const generateEmailPlainText = (quotation: any, profile: ProfileData, validation
     routeInfo = ` dari ${quotation.origin_city} ke ${quotation.destination_city}`
   }
 
+  // Build cargo details
+  let cargoDetails = ''
+  if (quotation.cargo_description || quotation.fleet_type || quotation.cargo_weight) {
+    cargoDetails = '\n\nDETAIL CARGO:'
+    if (quotation.commodity) cargoDetails += `\n- Commodity: ${quotation.commodity}`
+    if (quotation.cargo_description) cargoDetails += `\n- Deskripsi: ${quotation.cargo_description}`
+    if (quotation.fleet_type) cargoDetails += `\n- Fleet: ${quotation.fleet_type}${quotation.fleet_quantity ? ` × ${quotation.fleet_quantity}` : ''}`
+    if (quotation.cargo_weight) cargoDetails += `\n- Berat: ${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}`
+    if (quotation.cargo_volume) cargoDetails += `\n- Volume: ${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}`
+    if (quotation.estimated_cargo_value) cargoDetails += `\n- Nilai Cargo: ${formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR')}`
+  }
+
   return `
-UGC Logistics - Quotation ${quotation.quotation_number}
+${UGC_INFO.shortName} - Quotation ${quotation.quotation_number}
 
 Yth. ${customerName}${companyName ? `, ${companyName}` : ''},
 
-Terima kasih atas kepercayaan Anda kepada UGC Logistics. Dengan senang hati kami sampaikan penawaran harga untuk layanan ${quotation.service_type || 'pengiriman barang'}${routeInfo}.
+Terima kasih atas kepercayaan Anda kepada ${UGC_INFO.shortName}. Dengan senang hati kami sampaikan penawaran harga untuk layanan ${quotation.service_type || 'pengiriman barang'}${routeInfo}.
 
 No. Quotation: ${quotation.quotation_number}
 Tanggal: ${formatDate(quotation.created_at)}
 ${quotation.ticket?.ticket_code ? `Reference: ${quotation.ticket.ticket_code}` : ''}
 
 TOTAL PENAWARAN: ${formatCurrency(quotation.total_selling_rate, quotation.currency)}
+${cargoDetails}
 
 Validitas: Penawaran ini berlaku selama ${quotation.validity_days} hari sejak tanggal penerbitan (hingga ${formatDate(quotation.valid_until)}).
 
-Detail lengkap dapat dilihat di: ${validationUrl}
+📋 Lihat Quotation Online: ${validationUrl}
+📄 Download Quotation Letter: ${pdfUrl}
 
 Jika memiliki pertanyaan atau membutuhkan informasi tambahan, silakan menghubungi kami.
 
 Hormat kami,
 ${profile.name}
 Sales & Commercial Executive
-UGC Logistics
+${UGC_INFO.shortName}
 Email: ${profile.email}
-Tel: +62 21 1234567
+Tel: ${UGC_INFO.phone}
+WhatsApp: ${UGC_INFO.whatsapp}
 
 ---
-PT. UGC Logistics
-Jl. Raya Example No. 123, Jakarta, Indonesia
+${UGC_INFO.name}
+${UGC_INFO.address}
+Tel: ${UGC_INFO.phone} | Fax: ${UGC_INFO.fax} | Email: ${UGC_INFO.email}
 `.trim()
 }
 
@@ -343,10 +357,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
 
-    // Build URLs
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
-    const pdfDownloadUrl = pdf_url || `${baseUrl}/api/ticketing/customer-quotations/${id}/pdf`
+    // Build URLs using production URL
+    const validationUrl = `${PRODUCTION_URL}/quotation-verify/${quotation.validation_code}`
+    const pdfDownloadUrl = pdf_url || `${PRODUCTION_URL}/api/ticketing/customer-quotations/${id}/pdf`
 
     let responseData: any = {
       quotation_id: id,
@@ -356,7 +369,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (method === 'whatsapp') {
       // Generate WhatsApp text
-      const whatsappText = generateWhatsAppText(quotation, profileData, pdfDownloadUrl)
+      const whatsappText = generateWhatsAppText(quotation, profileData, validationUrl, pdfDownloadUrl)
 
       // Generate WhatsApp URL (if phone number is available)
       let whatsappUrl = ''
@@ -380,9 +393,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     } else if (method === 'email') {
       // Generate email content
-      const emailSubject = `Penawaran Harga - ${quotation.quotation_number} | UGC Logistics`
-      const emailHtml = generateEmailHTML(quotation, profileData, validationUrl)
-      const emailText = generateEmailPlainText(quotation, profileData, validationUrl)
+      const emailSubject = `Penawaran Harga - ${quotation.quotation_number} | ${UGC_INFO.shortName}`
+      const emailHtml = generateEmailHTML(quotation, profileData, validationUrl, pdfDownloadUrl)
+      const emailText = generateEmailPlainText(quotation, profileData, validationUrl, pdfDownloadUrl)
 
       responseData = {
         ...responseData,
