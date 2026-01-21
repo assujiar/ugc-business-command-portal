@@ -564,62 +564,108 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
         <TabsContent value="response" className="space-y-4">
           {responseTime && (
             <>
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Total Responses</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">{responseTime.overall?.total_responses || 0}</div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Last {period} days
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Avg Response Time</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{formatDuration(responseTime.overall?.avg_response_seconds)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Across all responses
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Under 1 Hour</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-success">
-                      {responseTime.distribution?.under_1_hour || 0}
+              {/* RFQ Response Times */}
+              <Card className="border-blue-200 dark:border-blue-900">
+                <CardHeader className="bg-blue-50/50 dark:bg-blue-950/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="default" className="text-sm">RFQ</Badge>
+                      <CardTitle className="text-lg">Response Times</CardTitle>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Quick responses
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
+                    <span className="text-sm text-muted-foreground">
+                      {responseTime.by_type?.RFQ?.total_responses || 0} responses
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <p className="text-sm text-muted-foreground">Avg Response</p>
+                      <p className="text-xl font-bold">{formatDuration(responseTime.by_type?.RFQ?.avg_response_seconds)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 text-center">
+                      <p className="text-lg font-bold text-green-600">{responseTime.by_type?.RFQ?.distribution?.under_1_hour || 0}</p>
+                      <p className="text-xs text-muted-foreground">&lt; 1 jam</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 text-center">
+                      <p className="text-lg font-bold">{responseTime.by_type?.RFQ?.distribution?.under_4_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">&lt; 4 jam</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 text-center">
+                      <p className="text-lg font-bold">{responseTime.by_type?.RFQ?.distribution?.under_24_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">&lt; 24 jam</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 text-center">
+                      <p className="text-lg font-bold text-red-600">{responseTime.by_type?.RFQ?.distribution?.over_24_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">&gt; 24 jam</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-              {/* Response Distribution */}
+              {/* GEN Response Times */}
+              <Card className="border-purple-200 dark:border-purple-900">
+                <CardHeader className="bg-purple-50/50 dark:bg-purple-950/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-sm">GEN</Badge>
+                      <CardTitle className="text-lg">Response Times</CardTitle>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {responseTime.by_type?.GEN?.total_responses || 0} responses
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <p className="text-sm text-muted-foreground">Avg Response</p>
+                      <p className="text-xl font-bold">{formatDuration(responseTime.by_type?.GEN?.avg_response_seconds)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 text-center">
+                      <p className="text-lg font-bold text-green-600">{responseTime.by_type?.GEN?.distribution?.under_1_hour || 0}</p>
+                      <p className="text-xs text-muted-foreground">&lt; 1 jam</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 text-center">
+                      <p className="text-lg font-bold">{responseTime.by_type?.GEN?.distribution?.under_4_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">&lt; 4 jam</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 text-center">
+                      <p className="text-lg font-bold">{responseTime.by_type?.GEN?.distribution?.under_24_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">&lt; 24 jam</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 text-center">
+                      <p className="text-lg font-bold text-red-600">{responseTime.by_type?.GEN?.distribution?.over_24_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">&gt; 24 jam</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Overall Summary */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Response Time Distribution</CardTitle>
+                  <CardTitle>Overall Summary</CardTitle>
+                  <CardDescription>Combined response metrics for all ticket types</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-4 gap-4">
-                    {responseTime.distribution && Object.entries({
-                      'Under 1h': responseTime.distribution.under_1_hour,
-                      'Under 4h': responseTime.distribution.under_4_hours,
-                      'Under 24h': responseTime.distribution.under_24_hours,
-                      'Over 24h': responseTime.distribution.over_24_hours,
-                    }).map(([label, count]) => (
-                      <div key={label} className="text-center p-3 rounded-lg bg-muted">
-                        <p className="text-2xl font-bold">{count as number || 0}</p>
-                        <p className="text-xs text-muted-foreground">{label}</p>
-                      </div>
-                    ))}
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <div className="text-center p-4 rounded-lg bg-muted/50">
+                      <p className="text-3xl font-bold">{responseTime.overall?.total_responses || 0}</p>
+                      <p className="text-sm text-muted-foreground">Total Responses</p>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-muted/50">
+                      <p className="text-xl font-bold">{formatDuration(responseTime.overall?.avg_response_seconds)}</p>
+                      <p className="text-sm text-muted-foreground">Avg Response Time</p>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-green-50 dark:bg-green-950/20">
+                      <p className="text-3xl font-bold text-green-600">{responseTime.distribution?.under_1_hour || 0}</p>
+                      <p className="text-sm text-muted-foreground">Under 1 Hour</p>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-red-50 dark:bg-red-950/20">
+                      <p className="text-3xl font-bold text-red-600">{responseTime.distribution?.over_24_hours || 0}</p>
+                      <p className="text-sm text-muted-foreground">Over 24 Hours</p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -682,7 +728,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                   </Card>
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-sm">Highest Win Rate</CardTitle>
+                      <CardTitle className="text-sm">Highest Win Rate (RFQ)</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
@@ -700,44 +746,86 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                   </Card>
                 </div>
 
-                {/* Department Details */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Department Performance</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      {deptPerformance.departments && Object.entries(deptPerformance.departments).map(([deptCode, dept]: [string, any]) => (
-                        dept.total_tickets > 0 && (
-                          <div key={deptCode} className="space-y-3 pb-4 border-b last:border-0">
-                            <div className="flex justify-between items-center">
-                              <h4 className="font-semibold">{departmentLabels[deptCode] || deptCode}</h4>
-                              <Badge variant="outline">{dept.total_tickets || 0} tickets</Badge>
+                {/* Department Details by Type */}
+                {deptPerformance.departments && Object.entries(deptPerformance.departments).map(([deptCode, dept]: [string, any]) => (
+                  dept.total_tickets > 0 && (
+                    <Card key={deptCode}>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle>{departmentLabels[deptCode] || deptCode}</CardTitle>
+                          <Badge variant="outline">{dept.total_tickets || 0} tickets</Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {/* RFQ Performance */}
+                          <div className="p-4 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/10">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Badge variant="default" className="text-xs">RFQ</Badge>
+                              <span className="text-sm text-muted-foreground">
+                                {dept.by_type_detailed?.RFQ?.total_tickets || 0} tickets
+                              </span>
                             </div>
-                            <div className="grid grid-cols-4 gap-4 text-sm">
+                            <div className="grid grid-cols-2 gap-3 text-sm">
                               <div>
                                 <p className="text-muted-foreground">Active</p>
-                                <p className="font-medium">{dept.active_tickets || 0}</p>
+                                <p className="font-medium">{dept.by_type_detailed?.RFQ?.active_tickets || 0}</p>
                               </div>
                               <div>
                                 <p className="text-muted-foreground">Completed</p>
-                                <p className="font-medium">{dept.completed_tickets || 0}</p>
+                                <p className="font-medium">{dept.by_type_detailed?.RFQ?.completed_tickets || 0}</p>
                               </div>
                               <div>
                                 <p className="text-muted-foreground">FR SLA</p>
-                                <p className="font-medium">{dept.sla?.first_response?.compliance_rate || 100}%</p>
+                                <p className="font-medium">{dept.by_type_detailed?.RFQ?.sla?.first_response?.compliance_rate || 100}%</p>
                               </div>
                               <div>
                                 <p className="text-muted-foreground">Win Rate</p>
-                                <p className="font-medium">{dept.win_loss?.win_rate || 0}%</p>
+                                <p className="font-medium">{dept.by_type_detailed?.RFQ?.win_loss?.win_rate || 0}%</p>
+                              </div>
+                              <div className="col-span-2">
+                                <p className="text-muted-foreground">Avg Resolution</p>
+                                <p className="font-medium">{formatDuration(dept.by_type_detailed?.RFQ?.avg_resolution_seconds)}</p>
                               </div>
                             </div>
                           </div>
-                        )
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+
+                          {/* GEN Performance */}
+                          <div className="p-4 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50/30 dark:bg-purple-950/10">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Badge variant="secondary" className="text-xs">GEN</Badge>
+                              <span className="text-sm text-muted-foreground">
+                                {dept.by_type_detailed?.GEN?.total_tickets || 0} tickets
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <p className="text-muted-foreground">Active</p>
+                                <p className="font-medium">{dept.by_type_detailed?.GEN?.active_tickets || 0}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Completed</p>
+                                <p className="font-medium">{dept.by_type_detailed?.GEN?.completed_tickets || 0}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">FR SLA</p>
+                                <p className="font-medium">{dept.by_type_detailed?.GEN?.sla?.first_response?.compliance_rate || 100}%</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Completion</p>
+                                <p className="font-medium">{dept.by_type_detailed?.GEN?.completion_rate || 0}%</p>
+                              </div>
+                              <div className="col-span-2">
+                                <p className="text-muted-foreground">Avg Resolution</p>
+                                <p className="font-medium">{formatDuration(dept.by_type_detailed?.GEN?.avg_resolution_seconds)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                ))}
               </>
             )}
         </TabsContent>
@@ -831,37 +919,85 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                   </Card>
                 </div>
 
-                {/* User Performance List */}
+                {/* User Performance List with Type Breakdown */}
                 <Card>
                   <CardHeader>
                     <CardTitle>Team Performance</CardTitle>
                     <CardDescription>{userPerformance.total_users || 0} team members</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       {userPerformance.users?.slice(0, 10).map((user: any) => (
-                        <div key={user.user_id} className="flex items-center justify-between py-2 border-b last:border-0">
-                          <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                              <Users className="h-4 w-4 text-muted-foreground" />
+                        <div key={user.user_id} className="space-y-3 pb-4 border-b last:border-0">
+                          {/* User Header */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{user.name}</p>
+                                <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">{user.name}</p>
-                              <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+                            <div className="flex gap-4 text-sm">
+                              <div className="text-center">
+                                <p className="font-medium">{user.tickets?.assigned || 0}</p>
+                                <p className="text-xs text-muted-foreground">Total</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="font-medium">{user.tickets?.completion_rate || 0}%</p>
+                                <p className="text-xs text-muted-foreground">Completion</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="font-medium">{user.sla?.first_response?.compliance_rate || 100}%</p>
+                                <p className="text-xs text-muted-foreground">FR SLA</p>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex gap-6 text-sm">
-                            <div className="text-center">
-                              <p className="font-medium">{user.tickets?.assigned || 0}</p>
-                              <p className="text-xs text-muted-foreground">Assigned</p>
+                          {/* Type Breakdown */}
+                          <div className="grid grid-cols-2 gap-3 pl-11">
+                            {/* RFQ */}
+                            <div className="p-2 rounded bg-blue-50/50 dark:bg-blue-950/20 text-xs">
+                              <div className="flex items-center gap-1 mb-1">
+                                <Badge variant="default" className="text-[10px] px-1 py-0">RFQ</Badge>
+                                <span className="text-muted-foreground">{user.by_type?.RFQ?.tickets?.assigned || 0} tickets</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                  <span className="text-muted-foreground">Comp:</span>
+                                  <span className="font-medium ml-1">{user.by_type?.RFQ?.tickets?.completion_rate || 0}%</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Win:</span>
+                                  <span className="font-medium ml-1">{user.by_type?.RFQ?.win_loss?.win_rate || 0}%</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">SLA:</span>
+                                  <span className="font-medium ml-1">{user.by_type?.RFQ?.sla?.first_response?.compliance_rate || 100}%</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-center">
-                              <p className="font-medium">{user.tickets?.completion_rate || 0}%</p>
-                              <p className="text-xs text-muted-foreground">Completion</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="font-medium">{user.sla?.first_response?.compliance_rate || 100}%</p>
-                              <p className="text-xs text-muted-foreground">FR SLA</p>
+                            {/* GEN */}
+                            <div className="p-2 rounded bg-purple-50/50 dark:bg-purple-950/20 text-xs">
+                              <div className="flex items-center gap-1 mb-1">
+                                <Badge variant="secondary" className="text-[10px] px-1 py-0">GEN</Badge>
+                                <span className="text-muted-foreground">{user.by_type?.GEN?.tickets?.assigned || 0} tickets</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                  <span className="text-muted-foreground">Comp:</span>
+                                  <span className="font-medium ml-1">{user.by_type?.GEN?.tickets?.completion_rate || 0}%</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Active:</span>
+                                  <span className="font-medium ml-1">{user.by_type?.GEN?.tickets?.active || 0}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">SLA:</span>
+                                  <span className="font-medium ml-1">{user.by_type?.GEN?.sla?.first_response?.compliance_rate || 100}%</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>

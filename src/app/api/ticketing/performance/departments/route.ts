@@ -154,6 +154,88 @@ export async function GET(request: NextRequest) {
       ).length
       const completedCount = total - activeCount
 
+      // Calculate detailed metrics per ticket type
+      const byTypeDetailed: Record<string, any> = {}
+
+      // RFQ detailed metrics for this department
+      const rfqTickets = deptTickets.filter((t: any) => t.ticket_type === 'RFQ')
+      const rfqActive = rfqTickets.filter((t: any) => !['resolved', 'closed'].includes(t.status)).length
+      const rfqCompleted = rfqTickets.length - rfqActive
+      const rfqClosed = rfqTickets.filter((t: any) => t.status === 'closed')
+      const rfqWon = rfqClosed.filter((t: any) => t.close_outcome === 'won').length
+      const rfqLost = rfqClosed.filter((t: any) => t.close_outcome === 'lost').length
+      const rfqWithSLA = rfqTickets.filter((t: any) => t.sla_tracking && t.sla_tracking.length > 0)
+      const rfqSlaData = rfqWithSLA.map((t: any) => t.sla_tracking[0]).filter(Boolean)
+      const rfqFRMet = rfqSlaData.filter((s: any) => s.first_response_met === true).length
+      const rfqFRBreached = rfqSlaData.filter((s: any) => s.first_response_met === false).length
+      const rfqResolved = rfqTickets.filter((t: any) => t.resolved_at)
+      const rfqAvgResHours = rfqResolved.length > 0
+        ? rfqResolved.reduce((sum: number, t: any) => {
+            const created = new Date(t.created_at)
+            const resolved = new Date(t.resolved_at)
+            return sum + (resolved.getTime() - created.getTime()) / (1000 * 60 * 60)
+          }, 0) / rfqResolved.length
+        : 0
+
+      byTypeDetailed['RFQ'] = {
+        total_tickets: rfqTickets.length,
+        active_tickets: rfqActive,
+        completed_tickets: rfqCompleted,
+        completion_rate: rfqTickets.length > 0 ? Math.round((rfqCompleted / rfqTickets.length) * 100) : 0,
+        win_loss: {
+          won: rfqWon,
+          lost: rfqLost,
+          win_rate: rfqClosed.length > 0 ? Math.round((rfqWon / rfqClosed.length) * 100) : 0,
+        },
+        sla: {
+          first_response: {
+            met: rfqFRMet,
+            breached: rfqFRBreached,
+            compliance_rate: (rfqFRMet + rfqFRBreached) > 0
+              ? Math.round((rfqFRMet / (rfqFRMet + rfqFRBreached)) * 100)
+              : 100,
+          },
+        },
+        avg_resolution_hours: Math.round(rfqAvgResHours * 10) / 10,
+        avg_resolution_seconds: Math.round(rfqAvgResHours * 3600),
+      }
+
+      // GEN detailed metrics for this department
+      const genTickets = deptTickets.filter((t: any) => t.ticket_type === 'GEN')
+      const genActive = genTickets.filter((t: any) => !['resolved', 'closed'].includes(t.status)).length
+      const genCompleted = genTickets.length - genActive
+      const genClosed = genTickets.filter((t: any) => t.status === 'closed')
+      const genWithSLA = genTickets.filter((t: any) => t.sla_tracking && t.sla_tracking.length > 0)
+      const genSlaData = genWithSLA.map((t: any) => t.sla_tracking[0]).filter(Boolean)
+      const genFRMet = genSlaData.filter((s: any) => s.first_response_met === true).length
+      const genFRBreached = genSlaData.filter((s: any) => s.first_response_met === false).length
+      const genResolved = genTickets.filter((t: any) => t.resolved_at)
+      const genAvgResHours = genResolved.length > 0
+        ? genResolved.reduce((sum: number, t: any) => {
+            const created = new Date(t.created_at)
+            const resolved = new Date(t.resolved_at)
+            return sum + (resolved.getTime() - created.getTime()) / (1000 * 60 * 60)
+          }, 0) / genResolved.length
+        : 0
+
+      byTypeDetailed['GEN'] = {
+        total_tickets: genTickets.length,
+        active_tickets: genActive,
+        completed_tickets: genCompleted,
+        completion_rate: genTickets.length > 0 ? Math.round((genCompleted / genTickets.length) * 100) : 0,
+        sla: {
+          first_response: {
+            met: genFRMet,
+            breached: genFRBreached,
+            compliance_rate: (genFRMet + genFRBreached) > 0
+              ? Math.round((genFRMet / (genFRMet + genFRBreached)) * 100)
+              : 100,
+          },
+        },
+        avg_resolution_hours: Math.round(genAvgResHours * 10) / 10,
+        avg_resolution_seconds: Math.round(genAvgResHours * 3600),
+      }
+
       departmentMetrics[dept] = {
         total_tickets: total,
         active_tickets: activeCount,
@@ -164,6 +246,7 @@ export async function GET(request: NextRequest) {
           RFQ: rfqCount,
           GEN: genCount,
         },
+        by_type_detailed: byTypeDetailed,
         win_loss: {
           won: wonCount,
           lost: lostCount,
@@ -186,6 +269,7 @@ export async function GET(request: NextRequest) {
           },
         },
         avg_resolution_hours: Math.round(avgResolutionHours * 10) / 10,
+        avg_resolution_seconds: Math.round(avgResolutionHours * 3600),
       }
     }
 

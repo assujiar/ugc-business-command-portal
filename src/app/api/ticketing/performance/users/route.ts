@@ -146,11 +146,22 @@ export async function GET(request: NextRequest) {
           total_resolution_hours: 0,
           by_status: {},
           by_priority: { urgent: 0, high: 0, medium: 0, low: 0 },
+          // Add per-type tracking
+          by_type: {
+            RFQ: { assigned: 0, resolved: 0, closed: 0, won: 0, lost: 0, sla_fr_met: 0, sla_fr_breached: 0, total_res_hours: 0 },
+            GEN: { assigned: 0, resolved: 0, closed: 0, sla_fr_met: 0, sla_fr_breached: 0, total_res_hours: 0 },
+          },
         }
       }
 
       const metrics = userMetrics[userId]
       metrics.assigned_tickets++
+
+      // Track by ticket type
+      const ticketType = ticket.ticket_type as 'RFQ' | 'GEN'
+      if (ticketType && metrics.by_type[ticketType]) {
+        metrics.by_type[ticketType].assigned++
+      }
 
       // Status
       metrics.by_status[ticket.status] = (metrics.by_status[ticket.status] || 0) + 1
@@ -161,18 +172,46 @@ export async function GET(request: NextRequest) {
       }
 
       // Resolved/closed
-      if (ticket.status === 'resolved') metrics.resolved_tickets++
+      if (ticket.status === 'resolved') {
+        metrics.resolved_tickets++
+        if (ticketType && metrics.by_type[ticketType]) {
+          metrics.by_type[ticketType].resolved++
+        }
+      }
       if (ticket.status === 'closed') {
         metrics.closed_tickets++
-        if (ticket.close_outcome === 'won') metrics.won_tickets++
-        if (ticket.close_outcome === 'lost') metrics.lost_tickets++
+        if (ticketType && metrics.by_type[ticketType]) {
+          metrics.by_type[ticketType].closed++
+        }
+        if (ticket.close_outcome === 'won') {
+          metrics.won_tickets++
+          if (ticketType === 'RFQ') {
+            metrics.by_type.RFQ.won++
+          }
+        }
+        if (ticket.close_outcome === 'lost') {
+          metrics.lost_tickets++
+          if (ticketType === 'RFQ') {
+            metrics.by_type.RFQ.lost++
+          }
+        }
       }
 
       // SLA
       const sla = ticket.sla_tracking?.[0]
       if (sla) {
-        if (sla.first_response_met === true) metrics.sla_fr_met++
-        if (sla.first_response_met === false) metrics.sla_fr_breached++
+        if (sla.first_response_met === true) {
+          metrics.sla_fr_met++
+          if (ticketType && metrics.by_type[ticketType]) {
+            metrics.by_type[ticketType].sla_fr_met++
+          }
+        }
+        if (sla.first_response_met === false) {
+          metrics.sla_fr_breached++
+          if (ticketType && metrics.by_type[ticketType]) {
+            metrics.by_type[ticketType].sla_fr_breached++
+          }
+        }
         if (sla.resolution_met === true) metrics.sla_res_met++
         if (sla.resolution_met === false) metrics.sla_res_breached++
       }
@@ -181,7 +220,11 @@ export async function GET(request: NextRequest) {
       if (ticket.resolved_at) {
         const created = new Date(ticket.created_at)
         const resolved = new Date(ticket.resolved_at)
-        metrics.total_resolution_hours += (resolved.getTime() - created.getTime()) / (1000 * 60 * 60)
+        const resHours = (resolved.getTime() - created.getTime()) / (1000 * 60 * 60)
+        metrics.total_resolution_hours += resHours
+        if (ticketType && metrics.by_type[ticketType]) {
+          metrics.by_type[ticketType].total_res_hours += resHours
+        }
       }
     }
 
@@ -202,6 +245,62 @@ export async function GET(request: NextRequest) {
     const userPerformance = Object.values(userMetrics).map((metrics: any) => {
       const commentMetrics = userCommentMetrics[metrics.user_id]
       const completedTickets = metrics.resolved_tickets + metrics.closed_tickets
+
+      // Calculate by_type detailed metrics
+      const byTypeDetailed: Record<string, any> = {}
+
+      // RFQ type metrics
+      const rfqData = metrics.by_type.RFQ
+      const rfqCompleted = rfqData.resolved + rfqData.closed
+      byTypeDetailed['RFQ'] = {
+        tickets: {
+          assigned: rfqData.assigned,
+          resolved: rfqData.resolved,
+          closed: rfqData.closed,
+          active: rfqData.assigned - rfqCompleted,
+          completion_rate: rfqData.assigned > 0 ? Math.round((rfqCompleted / rfqData.assigned) * 100) : 0,
+        },
+        win_loss: {
+          won: rfqData.won,
+          lost: rfqData.lost,
+          win_rate: rfqData.closed > 0 ? Math.round((rfqData.won / rfqData.closed) * 100) : 0,
+        },
+        sla: {
+          first_response: {
+            met: rfqData.sla_fr_met,
+            breached: rfqData.sla_fr_breached,
+            compliance_rate: (rfqData.sla_fr_met + rfqData.sla_fr_breached) > 0
+              ? Math.round((rfqData.sla_fr_met / (rfqData.sla_fr_met + rfqData.sla_fr_breached)) * 100)
+              : 100,
+          },
+        },
+        avg_resolution_seconds: rfqCompleted > 0 ? Math.round((rfqData.total_res_hours * 3600) / rfqCompleted) : 0,
+        avg_resolution_hours: rfqCompleted > 0 ? Math.round((rfqData.total_res_hours / rfqCompleted) * 10) / 10 : 0,
+      }
+
+      // GEN type metrics
+      const genData = metrics.by_type.GEN
+      const genCompleted = genData.resolved + genData.closed
+      byTypeDetailed['GEN'] = {
+        tickets: {
+          assigned: genData.assigned,
+          resolved: genData.resolved,
+          closed: genData.closed,
+          active: genData.assigned - genCompleted,
+          completion_rate: genData.assigned > 0 ? Math.round((genCompleted / genData.assigned) * 100) : 0,
+        },
+        sla: {
+          first_response: {
+            met: genData.sla_fr_met,
+            breached: genData.sla_fr_breached,
+            compliance_rate: (genData.sla_fr_met + genData.sla_fr_breached) > 0
+              ? Math.round((genData.sla_fr_met / (genData.sla_fr_met + genData.sla_fr_breached)) * 100)
+              : 100,
+          },
+        },
+        avg_resolution_seconds: genCompleted > 0 ? Math.round((genData.total_res_hours * 3600) / genCompleted) : 0,
+        avg_resolution_hours: genCompleted > 0 ? Math.round((genData.total_res_hours / genCompleted) * 10) / 10 : 0,
+      }
 
       return {
         user_id: metrics.user_id,
@@ -254,6 +353,7 @@ export async function GET(request: NextRequest) {
         avg_resolution_hours: completedTickets > 0
           ? Math.round((metrics.total_resolution_hours / completedTickets) * 10) / 10
           : 0,
+        by_type: byTypeDetailed,
         by_status: metrics.by_status,
         by_priority: metrics.by_priority,
       }
