@@ -42,11 +42,9 @@ const UGC_INFO = {
   web: 'www.utamaglobalindocargo.com',
 }
 
-// Compact PDF HTML
 const generateQuotationHTML = (quotation: any, profile: ProfileData, validationUrl: string): string => {
   const items = quotation.items || []
   const isBreakdown = quotation.rate_structure === 'breakdown'
-  const watermarkText = `${quotation.quotation_number} • ${quotation.validation_code}`
 
   let rateHTML = ''
   if (isBreakdown && items.length > 0) {
@@ -92,31 +90,43 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
   <meta charset="UTF-8">
   <title>Quotation ${quotation.quotation_number}</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap');
     *{margin:0;padding:0;box-sizing:border-box}
-    @page{size:A4;margin:10mm}
+    @page{size:A4;margin:0}
+    html,body{width:210mm;min-height:297mm}
     body{font-family:'Segoe UI',Arial,sans-serif;font-size:8px;line-height:1.3;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .wm{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-45deg);font-size:36px;font-weight:bold;color:rgba(255,70,0,0.03);white-space:nowrap;pointer-events:none;z-index:-1}
-    .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:8px;border-bottom:2px solid #ff4600;margin-bottom:10px}
-    .logo{display:flex;align-items:center;gap:8px}
-    .logo img{height:36px}
-    .logo h1{font-size:13px;color:#ff4600;margin-bottom:1px}
-    .logo p{font-size:7px;color:#666;line-height:1.3}
+
+    .page{position:relative;width:210mm;min-height:297mm;display:flex;flex-direction:column}
+
+    /* Header - full width orange block */
+    .hdr{background:#ff4600;color:#fff;padding:12px 0.8cm 10px 0.8cm;display:flex;justify-content:space-between;align-items:flex-start}
+    .logo{display:flex;align-items:center;gap:10px}
+    .logo img{height:40px}
+    .logo h1{font-size:14px;font-weight:700;margin-bottom:2px}
+    .logo p{font-size:7px;opacity:0.9;line-height:1.4}
     .doc{text-align:right}
-    .doc .t{font-size:18px;font-weight:700;letter-spacing:1px}
-    .doc .n{font-size:10px;font-weight:600;color:#ff4600;margin-top:2px}
-    .doc .d{font-size:7px;color:#666;margin-top:4px}
+    .doc .t{font-size:20px;font-weight:700;letter-spacing:2px}
+    .doc .n{font-size:11px;font-weight:600;margin-top:3px;opacity:0.95}
+    .doc .d{font-size:7px;margin-top:5px;opacity:0.9}
+
+    /* Content area */
+    .content{flex:1;padding:12px 0.8cm 10px 0.8cm}
+
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
     .box{background:#f8f9fa;border:1px solid #e5e5e5;border-radius:4px;padding:6px 8px}
     .box h3{font-size:8px;font-weight:700;color:#ff4600;text-transform:uppercase;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid #e5e5e5}
     .row{display:flex;margin-bottom:2px}
     .row .l{width:60px;font-size:7px;color:#666}
     .row .v{flex:1;font-size:7px;font-weight:500}
+
     .route{background:#fff5f0;border:1px solid #ffcdb8;border-radius:4px;padding:8px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:20px}
     .route .pt{text-align:center}
     .route .city{font-size:11px;font-weight:700}
     .route .ctry{font-size:7px;color:#666}
     .route .arr{font-size:18px;color:#ff4600;font-weight:bold}
+
     .sec{font-size:8px;font-weight:700;text-transform:uppercase;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid #ff4600}
+
     .tbl{width:100%;border-collapse:collapse;margin-bottom:8px}
     .tbl th{background:#1a1a1a;color:#fff;font-size:7px;font-weight:600;text-transform:uppercase;padding:5px 6px;text-align:left}
     .tbl td{padding:5px 6px;border-bottom:1px solid #e5e5e5;font-size:7px;vertical-align:top}
@@ -124,13 +134,16 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     .tbl .c{text-align:center}
     .tbl .r{text-align:right;font-weight:600}
     .m{color:#666;font-size:6px}
+
     .total{background:#ff4600;color:#fff;padding:6px 10px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
     .total .lbl{font-size:8px;font-weight:600;text-transform:uppercase}
     .total .amt{font-size:14px;font-weight:700}
+
     .cargo{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
     .cargo .item{background:#f8f9fa;border:1px solid #e5e5e5;border-radius:3px;padding:4px 6px}
     .cargo .item .l{font-size:6px;color:#666;text-transform:uppercase}
     .cargo .item .v{font-size:8px;font-weight:600;margin-top:1px}
+
     .terms{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
     .terms .t{border:1px solid #e5e5e5;border-radius:4px;overflow:hidden}
     .terms .t h4{font-size:7px;font-weight:600;padding:4px 6px;text-transform:uppercase}
@@ -138,141 +151,156 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     .terms .t.exc h4{background:#f8d7da;color:#721c24}
     .terms .t ul{list-style:none;padding:4px 6px}
     .terms .t li{font-size:7px;padding:1px 0}
+
     .note{background:#fff5f0;border-left:2px solid #ff4600;padding:5px 8px;margin-bottom:10px;border-radius:0 4px 4px 0}
     .note h4{font-size:7px;font-weight:600;color:#ff4600;text-transform:uppercase;margin-bottom:2px}
     .note p{font-size:7px;color:#333;line-height:1.4}
+
     .valid{background:#e7f3ff;border:1px dashed #0066cc;border-radius:4px;padding:5px;text-align:center;margin-bottom:10px}
     .valid p{font-size:7px;color:#0066cc}
     .valid strong{color:#004499}
-    .sig{display:flex;justify-content:space-between;align-items:flex-end;padding-top:8px;border-top:1px solid #e5e5e5}
-    .sig .left{display:flex;gap:10px;align-items:flex-end}
-    .sig .qr{text-align:center}
-    .sig .qr img{width:45px;height:45px;border:1px solid #e5e5e5;padding:2px;border-radius:3px}
-    .sig .qr p{font-size:6px;color:#666;margin-top:2px}
-    .sig .block{min-width:140px}
-    .sig .block .line{border-bottom:1px solid #1a1a1a;height:20px;margin-bottom:3px}
-    .sig .block .name{font-size:8px;font-weight:600}
-    .sig .block .title{font-size:6px;color:#666}
-    .sig .contact{text-align:right;font-size:6px;color:#666;line-height:1.5}
-    .sig .contact strong{color:#1a1a1a}
-    .ftr{margin-top:8px;padding-top:6px;border-top:1px solid #e5e5e5;text-align:center}
-    .ftr p{font-size:6px;color:#666}
-    .ftr .verify{font-size:5px;color:#999;margin-top:3px;font-family:monospace}
+
+    /* Signature section - above footer */
+    .sig-section{display:flex;justify-content:space-between;align-items:flex-end;padding:10px 0;margin-top:auto;border-top:1px solid #e5e5e5}
+    .sig-left{display:flex;gap:12px;align-items:flex-end}
+    .qr{text-align:center}
+    .qr img{width:50px;height:50px;border:1px solid #e5e5e5;padding:2px;border-radius:3px}
+    .qr p{font-size:6px;color:#666;margin-top:2px}
+    .sig-block{min-width:160px}
+    .sig-block .hand{font-family:'Dancing Script',cursive;font-size:22px;color:#1a1a1a;margin-bottom:2px}
+    .sig-block .name{font-size:9px;font-weight:600;border-top:1px solid #1a1a1a;padding-top:3px}
+    .sig-block .title{font-size:7px;color:#666;margin-top:1px}
+    .ugc-info{text-align:right;font-size:7px;color:#666;line-height:1.6}
+    .ugc-info strong{color:#1a1a1a;font-size:8px}
+
+    /* Footer - full width orange block */
+    .ftr{background:#ff4600;color:#fff;padding:4px 0.8cm;font-family:'Courier New',monospace;font-size:7px;display:flex;justify-content:space-between;align-items:center}
+    .ftr span{opacity:0.95}
+
     .keep{break-inside:avoid;page-break-inside:avoid}
   </style>
 </head>
 <body>
-  <div class="wm">${watermarkText}</div>
-
-  <div class="hdr keep">
-    <div class="logo">
-      <img src="https://ugc-business-command-portal.vercel.app/logo/logougctagline.png" alt="UGC">
-      <div>
-        <h1>${UGC_INFO.shortName}</h1>
-        <p>${UGC_INFO.address}<br>${UGC_INFO.phone} | ${UGC_INFO.email}</p>
+  <div class="page">
+    <!-- Header -->
+    <div class="hdr">
+      <div class="logo">
+        <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinewhite.png" alt="UGC">
+        <div>
+          <h1>${UGC_INFO.shortName}</h1>
+          <p>${UGC_INFO.address}<br>${UGC_INFO.phone} | ${UGC_INFO.email} | ${UGC_INFO.web}</p>
+        </div>
+      </div>
+      <div class="doc">
+        <div class="t">QUOTATION</div>
+        <div class="n">${quotation.quotation_number}</div>
+        <div class="d">Date: ${formatDate(quotation.created_at)} | Valid: ${formatDate(quotation.valid_until)}</div>
       </div>
     </div>
-    <div class="doc">
-      <div class="t">QUOTATION</div>
-      <div class="n">${quotation.quotation_number}</div>
-      <div class="d">Date: ${formatDate(quotation.created_at)} | Valid: ${formatDate(quotation.valid_until)}</div>
-    </div>
-  </div>
 
-  <div class="grid keep">
-    <div class="box">
-      <h3>Customer</h3>
-      <div class="row"><span class="l">Name</span><span class="v">${quotation.customer_name || '-'}</span></div>
-      <div class="row"><span class="l">Company</span><span class="v">${quotation.customer_company || '-'}</span></div>
-      <div class="row"><span class="l">Email</span><span class="v">${quotation.customer_email || '-'}</span></div>
-      <div class="row"><span class="l">Phone</span><span class="v">${quotation.customer_phone || '-'}</span></div>
-    </div>
-    <div class="box">
-      <h3>Details</h3>
-      <div class="row"><span class="l">Reference</span><span class="v">${quotation.ticket?.ticket_code || '-'}</span></div>
-      <div class="row"><span class="l">Service</span><span class="v">${quotation.service_type || '-'}</span></div>
-      <div class="row"><span class="l">Incoterm</span><span class="v">${quotation.incoterm || '-'}</span></div>
-      <div class="row"><span class="l">Prepared</span><span class="v">${profile.name}</span></div>
-    </div>
-  </div>
-
-  <div class="route keep">
-    <div class="pt">
-      <div class="city">${quotation.origin_city || 'Origin'}</div>
-      <div class="ctry">${quotation.origin_country || ''}${quotation.origin_port ? ` • ${quotation.origin_port}` : ''}</div>
-    </div>
-    <div class="arr">→</div>
-    <div class="pt">
-      <div class="city">${quotation.destination_city || 'Destination'}</div>
-      <div class="ctry">${quotation.destination_country || ''}${quotation.destination_port ? ` • ${quotation.destination_port}` : ''}</div>
-    </div>
-  </div>
-
-  ${(quotation.cargo_weight || quotation.cargo_volume || quotation.commodity || quotation.estimated_leadtime) ? `
-  <div class="keep">
-    <div class="sec">Cargo</div>
-    <div class="cargo">
-      ${quotation.commodity ? `<div class="item"><div class="l">Commodity</div><div class="v">${quotation.commodity}</div></div>` : ''}
-      ${quotation.cargo_weight ? `<div class="item"><div class="l">Weight</div><div class="v">${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}</div></div>` : ''}
-      ${quotation.cargo_volume ? `<div class="item"><div class="l">Volume</div><div class="v">${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}</div></div>` : ''}
-      ${quotation.cargo_quantity ? `<div class="item"><div class="l">Qty</div><div class="v">${quotation.cargo_quantity} ${quotation.cargo_quantity_unit || ''}</div></div>` : ''}
-      ${quotation.estimated_leadtime ? `<div class="item"><div class="l">Lead Time</div><div class="v">${quotation.estimated_leadtime}</div></div>` : ''}
-      ${quotation.fleet_type ? `<div class="item"><div class="l">Fleet</div><div class="v">${quotation.fleet_type}${quotation.fleet_quantity ? ` × ${quotation.fleet_quantity}` : ''}</div></div>` : ''}
-    </div>
-  </div>
-  ` : ''}
-
-  ${quotation.cargo_description ? `<div class="note keep"><h4>Cargo Description</h4><p>${quotation.cargo_description}</p></div>` : ''}
-
-  <div class="keep">
-    <div class="sec">Rate (${quotation.currency || 'IDR'})</div>
-    ${rateHTML}
-    <div class="total">
-      <span class="lbl">Total</span>
-      <span class="amt">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</span>
-    </div>
-  </div>
-
-  ${quotation.scope_of_work ? `<div class="note keep"><h4>Scope of Work</h4><p>${quotation.scope_of_work}</p></div>` : ''}
-
-  ${(includesList || excludesList) ? `
-  <div class="keep">
-    <div class="sec">Terms</div>
-    <div class="terms">
-      ${includesList ? `<div class="t inc"><h4>Included</h4><ul>${includesList}</ul></div>` : ''}
-      ${excludesList ? `<div class="t exc"><h4>Excluded</h4><ul>${excludesList}</ul></div>` : ''}
-    </div>
-  </div>
-  ` : ''}
-
-  ${quotation.terms_notes ? `<div class="note keep"><h4>Notes</h4><p>${quotation.terms_notes}</p></div>` : ''}
-
-  <div class="valid keep">
-    <p>Valid for <strong>${quotation.validity_days} days</strong> until <strong>${formatDate(quotation.valid_until)}</strong></p>
-  </div>
-
-  <div class="sig keep">
-    <div class="left">
-      <div class="qr">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR">
-        <p>Verify</p>
+    <!-- Content -->
+    <div class="content">
+      <div class="grid keep">
+        <div class="box">
+          <h3>Customer</h3>
+          <div class="row"><span class="l">Name</span><span class="v">${quotation.customer_name || '-'}</span></div>
+          <div class="row"><span class="l">Company</span><span class="v">${quotation.customer_company || '-'}</span></div>
+          <div class="row"><span class="l">Email</span><span class="v">${quotation.customer_email || '-'}</span></div>
+          <div class="row"><span class="l">Phone</span><span class="v">${quotation.customer_phone || '-'}</span></div>
+        </div>
+        <div class="box">
+          <h3>Details</h3>
+          <div class="row"><span class="l">Reference</span><span class="v">${quotation.ticket?.ticket_code || '-'}</span></div>
+          <div class="row"><span class="l">Service</span><span class="v">${quotation.service_type || '-'}</span></div>
+          <div class="row"><span class="l">Incoterm</span><span class="v">${quotation.incoterm || '-'}</span></div>
+          <div class="row"><span class="l">Prepared</span><span class="v">${profile.name}</span></div>
+        </div>
       </div>
-      <div class="block">
-        <div class="line"></div>
-        <div class="name">${profile.name}</div>
-        <div class="title">Sales • ${UGC_INFO.shortName}</div>
+
+      <div class="route keep">
+        <div class="pt">
+          <div class="city">${quotation.origin_city || 'Origin'}</div>
+          <div class="ctry">${quotation.origin_country || ''}${quotation.origin_port ? ' • ' + quotation.origin_port : ''}</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="pt">
+          <div class="city">${quotation.destination_city || 'Destination'}</div>
+          <div class="ctry">${quotation.destination_country || ''}${quotation.destination_port ? ' • ' + quotation.destination_port : ''}</div>
+        </div>
+      </div>
+
+      ${(quotation.cargo_weight || quotation.cargo_volume || quotation.commodity || quotation.estimated_leadtime) ? `
+      <div class="keep">
+        <div class="sec">Cargo</div>
+        <div class="cargo">
+          ${quotation.commodity ? `<div class="item"><div class="l">Commodity</div><div class="v">${quotation.commodity}</div></div>` : ''}
+          ${quotation.cargo_weight ? `<div class="item"><div class="l">Weight</div><div class="v">${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}</div></div>` : ''}
+          ${quotation.cargo_volume ? `<div class="item"><div class="l">Volume</div><div class="v">${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}</div></div>` : ''}
+          ${quotation.cargo_quantity ? `<div class="item"><div class="l">Qty</div><div class="v">${quotation.cargo_quantity} ${quotation.cargo_quantity_unit || ''}</div></div>` : ''}
+          ${quotation.estimated_leadtime ? `<div class="item"><div class="l">Lead Time</div><div class="v">${quotation.estimated_leadtime}</div></div>` : ''}
+          ${quotation.fleet_type ? `<div class="item"><div class="l">Fleet</div><div class="v">${quotation.fleet_type}${quotation.fleet_quantity ? ' × ' + quotation.fleet_quantity : ''}</div></div>` : ''}
+        </div>
+      </div>
+      ` : ''}
+
+      ${quotation.cargo_description ? `<div class="note keep"><h4>Cargo Description</h4><p>${quotation.cargo_description}</p></div>` : ''}
+
+      <div class="keep">
+        <div class="sec">Rate (${quotation.currency || 'IDR'})</div>
+        ${rateHTML}
+        <div class="total">
+          <span class="lbl">Total</span>
+          <span class="amt">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</span>
+        </div>
+      </div>
+
+      ${quotation.scope_of_work ? `<div class="note keep"><h4>Scope of Work</h4><p>${quotation.scope_of_work}</p></div>` : ''}
+
+      ${(includesList || excludesList) ? `
+      <div class="keep">
+        <div class="sec">Terms</div>
+        <div class="terms">
+          ${includesList ? `<div class="t inc"><h4>Included</h4><ul>${includesList}</ul></div>` : ''}
+          ${excludesList ? `<div class="t exc"><h4>Excluded</h4><ul>${excludesList}</ul></div>` : ''}
+        </div>
+      </div>
+      ` : ''}
+
+      ${quotation.terms_notes ? `<div class="note keep"><h4>Notes</h4><p>${quotation.terms_notes}</p></div>` : ''}
+
+      <div class="valid keep">
+        <p>Valid for <strong>${quotation.validity_days} days</strong> until <strong>${formatDate(quotation.valid_until)}</strong></p>
+      </div>
+
+      <!-- Signature Section -->
+      <div class="sig-section keep">
+        <div class="sig-left">
+          <div class="qr">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR">
+            <p>Scan to verify</p>
+          </div>
+          <div class="sig-block">
+            <div class="hand">${profile.name}</div>
+            <div class="name">${profile.name}</div>
+            <div class="title">Sales & Commercial Department</div>
+          </div>
+        </div>
+        <div class="ugc-info">
+          <strong>${UGC_INFO.name}</strong><br>
+          ${UGC_INFO.address}<br>
+          ${UGC_INFO.phone} | ${UGC_INFO.email}<br>
+          ${UGC_INFO.web}
+        </div>
       </div>
     </div>
-    <div class="contact">
-      <strong>${UGC_INFO.name}</strong><br>
-      ${UGC_INFO.address}<br>
-      ${UGC_INFO.phone} | ${UGC_INFO.email}
-    </div>
-  </div>
 
-  <div class="ftr">
-    <p>Thank you for your business</p>
-    <div class="verify">${quotation.quotation_number} • ${quotation.validation_code} • ${validationUrl}</div>
+    <!-- Footer -->
+    <div class="ftr">
+      <span>${quotation.quotation_number}</span>
+      <span>${formatDate(quotation.created_at)}</span>
+      <span>${validationUrl}</span>
+      <span>Ref: ${quotation.ticket?.ticket_code || '-'}</span>
+    </div>
   </div>
 </body>
 </html>`
@@ -303,7 +331,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .select(`
         *,
         ticket:tickets!customer_quotations_ticket_id_fkey(id, ticket_code, subject),
-        items:customer_quotation_items(*)
+        items:customer_quotation_items(*),
+        creator:profiles!customer_quotations_created_by_fkey(user_id, role, name, email)
       `)
       .eq('id', id)
       .single()
@@ -312,9 +341,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
 
+    // Use creator's profile for PDF, fallback to current user
+    const creatorProfile: ProfileData = quotation.creator || profileData
+
     const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
-    const html = generateQuotationHTML(quotation, profileData, validationUrl)
+    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl)
 
     return NextResponse.json({
       success: true,
@@ -353,7 +385,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select(`
         *,
         ticket:tickets!customer_quotations_ticket_id_fkey(id, ticket_code, subject),
-        items:customer_quotation_items(*)
+        items:customer_quotation_items(*),
+        creator:profiles!customer_quotations_created_by_fkey(user_id, role, name, email)
       `)
       .eq('id', id)
       .single()
@@ -362,9 +395,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
 
+    // Use creator's profile for PDF, fallback to current user
+    const creatorProfile: ProfileData = quotation.creator || profileData
+
     const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
-    const html = generateQuotationHTML(quotation, profileData, validationUrl)
+    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl)
 
     return new NextResponse(html, {
       headers: { 'Content-Type': 'text/html' },
