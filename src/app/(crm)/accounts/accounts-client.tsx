@@ -63,6 +63,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { UserRole } from '@/types/database'
 
 interface AccountEnriched {
@@ -138,6 +139,7 @@ function getAttemptLabel(attemptNumber: number): string {
 }
 
 export default function AccountsClient({ accounts, userRole }: AccountsClientProps) {
+  const router = useRouter()
   const [filterAccountStatus, setFilterAccountStatus] = useState<string | null>(null)
   const [filterActivityStatus, setFilterActivityStatus] = useState<string | null>(null)
   const [selectedAccount, setSelectedAccount] = useState<AccountEnriched | null>(null)
@@ -1000,6 +1002,15 @@ export default function AccountsClient({ accounts, userRole }: AccountsClientPro
             <Button variant="outline" onClick={() => setShowDetailModal(false)}>
               Close
             </Button>
+            {selectedAccount && (
+              <Button variant="secondary" onClick={() => {
+                setShowDetailModal(false)
+                router.push(`/accounts/${selectedAccount.account_id}`)
+              }}>
+                <ExternalLink className="h-4 w-4 mr-2" />
+                More Detail
+              </Button>
+            )}
             {canEditAccounts && selectedAccount && (
               <Button variant="secondary" onClick={() => {
                 setShowDetailModal(false)
