@@ -135,6 +135,9 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
     )
   }
 
+  // Get current user's performance data
+  const myPerformance = userPerformance?.users?.find((u: any) => u.user_id === profile.user_id)
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -255,6 +258,114 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
             </Card>
           </div>
         </>
+      )}
+
+      {/* My Performance - Personal metrics as Creator and Assignee */}
+      {myPerformance && (
+        <Card className="border-brand/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-brand" />
+              My Performance
+            </CardTitle>
+            <CardDescription>Your personal metrics as ticket creator and assignee</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* As Creator */}
+              <div className="p-4 rounded-lg border border-green-200 dark:border-green-900 bg-green-50/30 dark:bg-green-950/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className="border-green-500 text-green-600">CREATOR</Badge>
+                  <span className="text-sm text-muted-foreground">Tiket yang saya buat</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-2xl font-bold">{myPerformance.as_creator?.tickets_created || 0}</p>
+                    <p className="text-xs text-muted-foreground">Tiket Dibuat</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      {myPerformance.as_creator?.stage_response?.count > 0
+                        ? formatDurationShort(myPerformance.as_creator.stage_response.avg_seconds)
+                        : '-'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Avg Stage Response ({myPerformance.as_creator?.stage_response?.count || 0}x)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* As Assignee */}
+              <div className="p-4 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className="border-blue-500 text-blue-600">ASSIGNEE</Badge>
+                  <span className="text-sm text-muted-foreground">Tiket yang di-assign ke saya</span>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-2xl font-bold">{myPerformance.as_assignee?.tickets?.assigned || 0}</p>
+                    <p className="text-xs text-muted-foreground">Tiket Assigned</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{myPerformance.as_assignee?.tickets?.completion_rate || 0}%</p>
+                    <p className="text-xs text-muted-foreground">Completion Rate</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      {myPerformance.as_assignee?.first_response?.count > 0
+                        ? formatDurationShort(myPerformance.as_assignee.first_response.avg_seconds)
+                        : '-'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Avg First Response ({myPerformance.as_assignee?.first_response?.count || 0}x)
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      {myPerformance.as_assignee?.stage_response?.count > 0
+                        ? formatDurationShort(myPerformance.as_assignee.stage_response.avg_seconds)
+                        : '-'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Avg Stage Response ({myPerformance.as_assignee?.stage_response?.count || 0}x)
+                    </p>
+                  </div>
+                </div>
+                {/* SLA Compliance */}
+                {(myPerformance.as_assignee?.sla?.first_response?.met > 0 || myPerformance.as_assignee?.sla?.first_response?.breached > 0) && (
+                  <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                    <div className="flex gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">FR SLA:</span>
+                        <span className="font-medium ml-1">{myPerformance.as_assignee?.sla?.first_response?.compliance_rate || 0}%</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Resolution SLA:</span>
+                        <span className="font-medium ml-1">{myPerformance.as_assignee?.sla?.resolution?.compliance_rate || 0}%</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* First Quote for OPS */}
+                {myPerformance.as_assignee?.first_quote && (
+                  <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                    <div className="flex gap-4 text-sm">
+                      <div>
+                        <span className="text-blue-600 font-medium">First Quote (OPS):</span>
+                        <span className="font-medium ml-1">
+                          {myPerformance.as_assignee.first_quote.count > 0
+                            ? `${formatDurationShort(myPerformance.as_assignee.first_quote.avg_seconds)} (${myPerformance.as_assignee.first_quote.count}x)`
+                            : 'Belum ada'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Status Distribution */}
