@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { canViewAllTickets, getUserTicketingDepartment, isOps, isAdmin } from '@/lib/permissions'
+import { canViewAllTickets, getUserTicketingDepartment, isOps, isAdmin, getAnalyticsScope } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -137,6 +137,15 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
 
   // Get current user's performance data
   const myPerformance = userPerformance?.users?.find((u: any) => u.user_id === profile.user_id)
+
+  // Get analytics scope to determine which sections to show
+  const analyticsScope = getAnalyticsScope(profile.role, profile.user_id)
+  const isAllScope = analyticsScope.scope === 'all' // Director, super admin
+  const isDepartmentScope = analyticsScope.scope === 'department' // Managers, Ops
+  const userDepartment = getUserTicketingDepartment(profile.role)
+
+  // Get current user's department performance
+  const myDepartmentPerformance = userDepartment && deptPerformance?.departments?.[userDepartment]
 
   return (
     <div className="space-y-6">
@@ -363,6 +372,225 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                   </div>
                 )}
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* MY DEPARTMENT - For non-admin users (staff, managers, ops) */}
+      {!isAllScope && myDepartmentPerformance && userDepartment && (
+        <Card className="border-purple-200 dark:border-purple-900">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-purple-600" />
+              My Department: {departmentLabels[userDepartment] || userDepartment}
+            </CardTitle>
+            <CardDescription>Performance metrics for your department</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="text-2xl font-bold">{myDepartmentPerformance.total_tickets || 0}</p>
+                <p className="text-xs text-muted-foreground">Total Tickets</p>
+              </div>
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="text-2xl font-bold">{myDepartmentPerformance.completion_rate || 0}%</p>
+                <p className="text-xs text-muted-foreground">Completion Rate</p>
+              </div>
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="text-2xl font-bold">{myDepartmentPerformance.sla?.first_response?.compliance_rate || 0}%</p>
+                <p className="text-xs text-muted-foreground">FR SLA Compliance</p>
+              </div>
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="text-2xl font-bold">{myDepartmentPerformance.sla?.resolution?.compliance_rate || 0}%</p>
+                <p className="text-xs text-muted-foreground">Resolution SLA</p>
+              </div>
+            </div>
+            {/* Type breakdown */}
+            {myDepartmentPerformance.by_type_detailed && (
+              <div className="grid gap-4 md:grid-cols-2 mt-4">
+                {myDepartmentPerformance.by_type_detailed.RFQ && (
+                  <div className="p-3 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="default" className="text-xs">RFQ</Badge>
+                      <span className="text-sm text-muted-foreground">{myDepartmentPerformance.by_type_detailed.RFQ.total_tickets || 0} tickets</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Comp:</span>
+                        <span className="font-medium ml-1">{myDepartmentPerformance.by_type_detailed.RFQ.completion_rate || 0}%</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">SLA:</span>
+                        <span className="font-medium ml-1">{myDepartmentPerformance.by_type_detailed.RFQ.sla?.first_response?.compliance_rate || 0}%</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Active:</span>
+                        <span className="font-medium ml-1">{myDepartmentPerformance.by_type_detailed.RFQ.active_tickets || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {myDepartmentPerformance.by_type_detailed.GEN && (
+                  <div className="p-3 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50/30 dark:bg-purple-950/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="secondary" className="text-xs">GEN</Badge>
+                      <span className="text-sm text-muted-foreground">{myDepartmentPerformance.by_type_detailed.GEN.total_tickets || 0} tickets</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Comp:</span>
+                        <span className="font-medium ml-1">{myDepartmentPerformance.by_type_detailed.GEN.completion_rate || 0}%</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">SLA:</span>
+                        <span className="font-medium ml-1">{myDepartmentPerformance.by_type_detailed.GEN.sla?.first_response?.compliance_rate || 0}%</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Active:</span>
+                        <span className="font-medium ml-1">{myDepartmentPerformance.by_type_detailed.GEN.active_tickets || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* DEPARTMENT PERFORMANCE - For Director/Super Admin only */}
+      {isAllScope && deptPerformance?.departments && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-brand" />
+              Department Performance
+            </CardTitle>
+            <CardDescription>Performance breakdown by department</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(deptPerformance.departments).map(([deptCode, dept]: [string, any]) => (
+                <div key={deptCode} className="p-4 rounded-lg border">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{deptCode}</Badge>
+                      <span className="font-medium">{departmentLabels[deptCode] || deptCode}</span>
+                    </div>
+                    <div className="flex gap-4 text-sm">
+                      <span>{dept.total_tickets || 0} tickets</span>
+                      <span className="text-muted-foreground">|</span>
+                      <span>{dept.completion_rate || 0}% completion</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div className="p-2 rounded bg-muted/50">
+                      <p className="text-lg font-bold">{dept.active_tickets || 0}</p>
+                      <p className="text-xs text-muted-foreground">Active</p>
+                    </div>
+                    <div className="p-2 rounded bg-muted/50">
+                      <p className="text-lg font-bold">{dept.completed_tickets || 0}</p>
+                      <p className="text-xs text-muted-foreground">Completed</p>
+                    </div>
+                    <div className="p-2 rounded bg-muted/50">
+                      <p className="text-lg font-bold">{dept.sla?.first_response?.compliance_rate || 0}%</p>
+                      <p className="text-xs text-muted-foreground">FR SLA</p>
+                    </div>
+                    <div className="p-2 rounded bg-muted/50">
+                      <p className="text-lg font-bold">{dept.sla?.resolution?.compliance_rate || 0}%</p>
+                      <p className="text-xs text-muted-foreground">Resolution SLA</p>
+                    </div>
+                  </div>
+                  {/* RFQ/GEN breakdown */}
+                  {dept.by_type_detailed && (
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      {dept.by_type_detailed.RFQ && dept.by_type_detailed.RFQ.total_tickets > 0 && (
+                        <div className="p-2 rounded bg-blue-50/50 dark:bg-blue-950/20 text-xs">
+                          <span className="font-medium text-blue-600">RFQ:</span>
+                          <span className="ml-1">{dept.by_type_detailed.RFQ.total_tickets} tickets,</span>
+                          <span className="ml-1">{dept.by_type_detailed.RFQ.completion_rate || 0}% comp,</span>
+                          <span className="ml-1">{dept.by_type_detailed.RFQ.sla?.first_response?.compliance_rate || 0}% SLA</span>
+                        </div>
+                      )}
+                      {dept.by_type_detailed.GEN && dept.by_type_detailed.GEN.total_tickets > 0 && (
+                        <div className="p-2 rounded bg-purple-50/50 dark:bg-purple-950/20 text-xs">
+                          <span className="font-medium text-purple-600">GEN:</span>
+                          <span className="ml-1">{dept.by_type_detailed.GEN.total_tickets} tickets,</span>
+                          <span className="ml-1">{dept.by_type_detailed.GEN.completion_rate || 0}% comp,</span>
+                          <span className="ml-1">{dept.by_type_detailed.GEN.sla?.first_response?.compliance_rate || 0}% SLA</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* USERS PERFORMANCE - For Director/Super Admin only */}
+      {isAllScope && userPerformance?.users && userPerformance.users.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-brand" />
+              Users Performance
+            </CardTitle>
+            <CardDescription>Performance breakdown by user ({userPerformance.total_users || 0} users)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {userPerformance.users.slice(0, 10).map((user: any) => (
+                <div key={user.user_id} className="p-4 rounded-lg border">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{user.name}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 text-sm">
+                      <div className="text-center">
+                        <p className="font-medium">{user.as_creator?.tickets_created || 0}</p>
+                        <p className="text-xs text-muted-foreground">Created</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-medium">{user.as_assignee?.tickets?.assigned || 0}</p>
+                        <p className="text-xs text-muted-foreground">Assigned</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-medium">{user.as_assignee?.tickets?.completion_rate || 0}%</p>
+                        <p className="text-xs text-muted-foreground">Completion</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                    {/* As Creator */}
+                    <div className="p-2 rounded bg-green-50/50 dark:bg-green-950/20">
+                      <p className="text-green-600 font-medium mb-1">Creator</p>
+                      <p>Stage Resp: {user.as_creator?.stage_response?.count > 0 ? formatDurationShort(user.as_creator.stage_response.avg_seconds) : '-'}</p>
+                    </div>
+                    {/* As Assignee */}
+                    <div className="p-2 rounded bg-blue-50/50 dark:bg-blue-950/20">
+                      <p className="text-blue-600 font-medium mb-1">First Resp</p>
+                      <p>{user.as_assignee?.first_response?.count > 0 ? `${formatDurationShort(user.as_assignee.first_response.avg_seconds)} (${user.as_assignee.first_response.count}x)` : '-'}</p>
+                    </div>
+                    <div className="p-2 rounded bg-purple-50/50 dark:bg-purple-950/20">
+                      <p className="text-purple-600 font-medium mb-1">Stage Resp</p>
+                      <p>{user.as_assignee?.stage_response?.count > 0 ? `${formatDurationShort(user.as_assignee.stage_response.avg_seconds)} (${user.as_assignee.stage_response.count}x)` : '-'}</p>
+                    </div>
+                    <div className="p-2 rounded bg-muted/50">
+                      <p className="font-medium mb-1">SLA</p>
+                      <p>FR: {user.as_assignee?.sla?.first_response?.compliance_rate || 0}%</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
