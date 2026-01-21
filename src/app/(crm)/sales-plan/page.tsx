@@ -27,7 +27,7 @@ export default async function SalesPlanPage({ searchParams }: PageProps) {
   }
 
   if (!canAccessSalesPlan(profile.role)) {
-    redirect('/dashboard')
+    redirect('/overview-crm')
   }
 
   // Get filter params

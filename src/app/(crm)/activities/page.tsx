@@ -28,7 +28,7 @@ export default async function ActivitiesPage({ searchParams }: PageProps) {
   }
 
   if (!canAccessActivities(profile.role)) {
-    redirect('/dashboard')
+    redirect('/overview-crm')
   }
 
   // Get filter params

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, canViewAllTickets, getUserTicketingDepartment } from '@/lib/permissions'
+import { canAccessTicketing, getAnalyticsScope } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
-    const department = searchParams.get('department')
+    const departmentFilter = searchParams.get('department')
 
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -36,29 +36,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    const canViewAll = canViewAllTickets(profile.role)
-    const userDepartment = getUserTicketingDepartment(profile.role)
-
-    // Build base query conditions
-    let conditions: string[] = []
-
-    if (!canViewAll) {
-      // Non-ops users only see their own tickets
-      conditions.push(`(created_by.eq.${user.id},assigned_to.eq.${user.id})`)
-    } else if (department) {
-      // Admin/ops filtering by department
-      conditions.push(`department.eq.${department}`)
-    }
+    // Get analytics scope based on role
+    const analyticsScope = getAnalyticsScope(profile.role, user.id)
 
     // Fetch all tickets for calculations
     let query = (supabase as any)
       .from('tickets')
       .select('id, status, priority, department, ticket_type, created_at, resolved_at, closed_at')
 
-    if (!canViewAll) {
+    // Apply filtering based on analytics scope
+    if (analyticsScope.scope === 'user') {
+      // User scope: only see their own tickets
       query = query.or(`created_by.eq.${user.id},assigned_to.eq.${user.id}`)
-    } else if (department) {
-      query = query.eq('department', department)
+    } else if (analyticsScope.scope === 'department') {
+      // Department scope: see department tickets
+      if (analyticsScope.department) {
+        query = query.eq('department', analyticsScope.department)
+      }
+    }
+    // 'all' scope: no additional filtering
+
+    // Allow optional department filter override (for admins)
+    if (departmentFilter && analyticsScope.scope === 'all') {
+      query = query.eq('department', departmentFilter)
     }
 
     const { data: tickets, error: ticketsError } = await query

@@ -1,9 +1,9 @@
 // =====================================================
-// Root Page - Redirect to Dashboard
+// Root Page - Redirect to CRM Overview
 // =====================================================
 
 import { redirect } from 'next/navigation'
 
 export default function RootPage() {
-  redirect('/dashboard')
+  redirect('/overview-crm')
 }

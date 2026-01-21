@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, canViewAllTickets } from '@/lib/permissions'
+import { canAccessTicketing, getAnalyticsScope } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || '30' // days
-    const department = searchParams.get('department')
+    const departmentFilter = searchParams.get('department')
 
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -37,8 +37,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Non-ops users get empty performance data
-    if (!canViewAllTickets(profile.role)) {
+    // Get analytics scope based on role
+    const analyticsScope = getAnalyticsScope(profile.role, user.id)
+
+    // Users with 'user' scope don't get team performance data
+    if (analyticsScope.scope === 'user') {
       return NextResponse.json({
         success: true,
         data: {
@@ -81,8 +84,11 @@ export async function GET(request: NextRequest) {
       .gte('created_at', startDate.toISOString())
       .not('assigned_to', 'is', null)
 
-    if (department) {
-      ticketQuery = ticketQuery.eq('department', department)
+    // Apply department filter based on analytics scope
+    if (analyticsScope.scope === 'department' && analyticsScope.department) {
+      ticketQuery = ticketQuery.eq('department', analyticsScope.department)
+    } else if (departmentFilter && analyticsScope.scope === 'all') {
+      ticketQuery = ticketQuery.eq('department', departmentFilter)
     }
 
     const { data: tickets, error: ticketsError } = await ticketQuery

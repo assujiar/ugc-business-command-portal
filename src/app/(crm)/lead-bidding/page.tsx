@@ -29,7 +29,7 @@ export default async function LeadBiddingPage({ searchParams }: PageProps) {
 
   // Check if user has access
   if (!canAccessSalesInbox(profile.role)) {
-    redirect('/dashboard')
+    redirect('/overview-crm')
   }
 
   // Get filter params

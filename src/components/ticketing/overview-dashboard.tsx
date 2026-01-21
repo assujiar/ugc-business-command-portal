@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { canViewAllTickets } from '@/lib/permissions'
+import { canViewAllTickets, getUserTicketingDepartment, isOps, isAdmin } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -466,7 +466,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                     <CardTitle className="text-sm font-medium">Total Responses</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-bold">{responseTime.total_responses || 0}</div>
+                    <div className="text-3xl font-bold">{responseTime.overall?.total_responses || 0}</div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Last {period} days
                     </p>
@@ -477,7 +477,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                     <CardTitle className="text-sm font-medium">Avg Response Time</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-bold">{responseTime.avg_response_hours || 0}h</div>
+                    <div className="text-3xl font-bold">{responseTime.overall?.avg_response_hours || 0}h</div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Across all responses
                     </p>
@@ -489,7 +489,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold text-success">
-                      {responseTime.distribution?.under_1h || 0}
+                      {responseTime.distribution?.under_1_hour || 0}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Quick responses
@@ -504,13 +504,12 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                   <CardTitle>Response Time Distribution</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-5 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
                     {responseTime.distribution && Object.entries({
-                      'Under 1h': responseTime.distribution.under_1h,
-                      '1-4h': responseTime.distribution['1_to_4h'],
-                      '4-8h': responseTime.distribution['4_to_8h'],
-                      '8-24h': responseTime.distribution['8_to_24h'],
-                      'Over 24h': responseTime.distribution.over_24h,
+                      'Under 1h': responseTime.distribution.under_1_hour,
+                      'Under 4h': responseTime.distribution.under_4_hours,
+                      'Under 24h': responseTime.distribution.under_24_hours,
+                      'Over 24h': responseTime.distribution.over_24_hours,
                     }).map(([label, count]) => (
                       <div key={label} className="text-center p-3 rounded-lg bg-muted">
                         <p className="text-2xl font-bold">{count as number || 0}</p>
@@ -541,7 +540,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                             <span className="font-medium">{user.name}</span>
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {user.response_count} responses | Avg {user.avg_hours}h
+                            {user.total_responses} responses | Avg {user.avg_response_hours}h
                           </div>
                         </div>
                       ))}
@@ -565,13 +564,13 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {deptPerformance.rankings?.best_sla_compliance?.slice(0, 3).map((dept: any, idx: number) => (
+                        {deptPerformance.rankings?.by_sla_compliance?.slice(0, 3).map((dept: any, idx: number) => (
                           <div key={dept.department} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <Badge variant={idx === 0 ? 'default' : 'outline'}>#{idx + 1}</Badge>
                               <span>{departmentLabels[dept.department] || dept.department}</span>
                             </div>
-                            <span className="font-medium">{dept.overall_sla_compliance}%</span>
+                            <span className="font-medium">{Math.round(dept.rate || 0)}%</span>
                           </div>
                         ))}
                       </div>
@@ -583,13 +582,13 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {deptPerformance.rankings?.highest_win_rate?.slice(0, 3).map((dept: any, idx: number) => (
+                        {deptPerformance.rankings?.by_win_rate?.slice(0, 3).map((dept: any, idx: number) => (
                           <div key={dept.department} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <Badge variant={idx === 0 ? 'default' : 'outline'}>#{idx + 1}</Badge>
                               <span>{departmentLabels[dept.department] || dept.department}</span>
                             </div>
-                            <span className="font-medium">{dept.win_loss?.win_rate || 0}%</span>
+                            <span className="font-medium">{dept.rate || 0}%</span>
                           </div>
                         ))}
                       </div>
@@ -604,31 +603,33 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-6">
-                      {deptPerformance.departments?.map((dept: any) => (
-                        <div key={dept.department} className="space-y-3 pb-4 border-b last:border-0">
-                          <div className="flex justify-between items-center">
-                            <h4 className="font-semibold">{departmentLabels[dept.department] || dept.department}</h4>
-                            <Badge variant="outline">{dept.tickets?.assigned || 0} tickets</Badge>
+                      {deptPerformance.departments && Object.entries(deptPerformance.departments).map(([deptCode, dept]: [string, any]) => (
+                        dept.total_tickets > 0 && (
+                          <div key={deptCode} className="space-y-3 pb-4 border-b last:border-0">
+                            <div className="flex justify-between items-center">
+                              <h4 className="font-semibold">{departmentLabels[deptCode] || deptCode}</h4>
+                              <Badge variant="outline">{dept.total_tickets || 0} tickets</Badge>
+                            </div>
+                            <div className="grid grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <p className="text-muted-foreground">Active</p>
+                                <p className="font-medium">{dept.active_tickets || 0}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Completed</p>
+                                <p className="font-medium">{dept.completed_tickets || 0}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">FR SLA</p>
+                                <p className="font-medium">{dept.sla?.first_response?.compliance_rate || 100}%</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Win Rate</p>
+                                <p className="font-medium">{dept.win_loss?.win_rate || 0}%</p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="grid grid-cols-4 gap-4 text-sm">
-                            <div>
-                              <p className="text-muted-foreground">Active</p>
-                              <p className="font-medium">{dept.tickets?.active || 0}</p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">Completed</p>
-                              <p className="font-medium">{(dept.tickets?.resolved || 0) + (dept.tickets?.closed || 0)}</p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">FR SLA</p>
-                              <p className="font-medium">{dept.sla?.first_response?.compliance_rate || 100}%</p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">Win Rate</p>
-                              <p className="font-medium">{dept.win_loss?.win_rate || 0}%</p>
-                            </div>
-                          </div>
-                        </div>
+                        )
                       ))}
                     </div>
                   </CardContent>

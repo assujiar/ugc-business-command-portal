@@ -60,7 +60,7 @@ export default async function LeadManagementPage({ searchParams }: PageProps) {
 
   // Check if user has access to lead management
   if (!canAccessLeadManagement(profile.role)) {
-    redirect('/dashboard')
+    redirect('/overview-crm')
   }
 
   // Get filter params
