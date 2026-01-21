@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { getUserTicketingDepartment } from '@/lib/permissions'
+import { getUserTicketingDepartment, isOps } from '@/lib/permissions'
 import {
   SERVICE_TYPES,
   DOMESTICS_SERVICE_CODES,
@@ -143,6 +143,9 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
       show_sender_to_ops: true,
     },
   })
+
+  // Check if user is ops (hide account linking for ops users)
+  const isOpsUser = isOps(profile.role)
 
   // Fetch contacts when account is selected
   const handleAccountSelect = async (accountId: string) => {
@@ -586,87 +589,92 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="account_id">Link to Account (Optional)</Label>
-            <Select
-              onValueChange={handleAccountSelect}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select account" />
-              </SelectTrigger>
-              <SelectContent>
-                {accounts.map((account) => (
-                  <SelectItem key={account.account_id} value={account.account_id}>
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      {account.company_name}
+          {/* Account linking - hidden for Ops users */}
+          {!isOpsUser && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="account_id">Link to Account (Optional)</Label>
+                <Select
+                  onValueChange={handleAccountSelect}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.account_id} value={account.account_id}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          {account.company_name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sender Info - shows when account is selected */}
+              {selectedAccountId && (
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium">Sender Information</h4>
+                    {loadingContacts && (
+                      <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="sender_name">Name</Label>
+                      <Input
+                        id="sender_name"
+                        name="sender_name"
+                        value={senderName}
+                        onChange={(e) => setSenderName(e.target.value)}
+                        placeholder="Contact name"
+                      />
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sender_email">Email</Label>
+                      <Input
+                        id="sender_email"
+                        name="sender_email"
+                        type="email"
+                        value={senderEmail}
+                        onChange={(e) => setSenderEmail(e.target.value)}
+                        placeholder="contact@company.com"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sender_phone">Phone</Label>
+                      <Input
+                        id="sender_phone"
+                        name="sender_phone"
+                        value={senderPhone}
+                        onChange={(e) => setSenderPhone(e.target.value)}
+                        placeholder="+62..."
+                      />
+                    </div>
+                  </div>
 
-          {/* Sender Info - shows when account is selected */}
-          {selectedAccountId && (
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium">Sender Information</h4>
-                {loadingContacts && (
-                  <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                )}
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="sender_name">Name</Label>
-                  <Input
-                    id="sender_name"
-                    name="sender_name"
-                    value={senderName}
-                    onChange={(e) => setSenderName(e.target.value)}
-                    placeholder="Contact name"
-                  />
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="show_sender_to_ops" className="text-sm font-medium">
+                        Show Sender Info to Operations
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Jika dimatikan, Ops tidak bisa melihat nama, email, phone, dan account
+                      </p>
+                    </div>
+                    <Switch
+                      id="show_sender_to_ops"
+                      checked={showSenderToOps}
+                      onCheckedChange={setShowSenderToOps}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sender_email">Email</Label>
-                  <Input
-                    id="sender_email"
-                    name="sender_email"
-                    type="email"
-                    value={senderEmail}
-                    onChange={(e) => setSenderEmail(e.target.value)}
-                    placeholder="contact@company.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sender_phone">Phone</Label>
-                  <Input
-                    id="sender_phone"
-                    name="sender_phone"
-                    value={senderPhone}
-                    onChange={(e) => setSenderPhone(e.target.value)}
-                    placeholder="+62..."
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t">
-                <div className="space-y-0.5">
-                  <Label htmlFor="show_sender_to_ops" className="text-sm font-medium">
-                    Show Sender Info to Operations
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Jika dimatikan, Ops tidak bisa melihat nama, email, phone, dan account
-                  </p>
-                </div>
-                <Switch
-                  id="show_sender_to_ops"
-                  checked={showSenderToOps}
-                  onCheckedChange={setShowSenderToOps}
-                />
-              </div>
-            </div>
+              )}
+            </>
           )}
 
           <div className="space-y-2">

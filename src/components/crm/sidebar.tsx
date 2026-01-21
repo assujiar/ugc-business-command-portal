@@ -30,7 +30,7 @@ import {
   PlusCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities, canAccessTicketing, canAssignTickets } from '@/lib/permissions'
+import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities, canAccessTicketing, canAssignTickets, isOps } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -59,6 +59,9 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const [isCrmModuleExpanded, setIsCrmModuleExpanded] = useState(true)
   const [isTicketingModuleExpanded, setIsTicketingModuleExpanded] = useState(false)
+
+  // Check if user is ops (hide CRM module for ops users)
+  const isOpsUser = isOps(profile.role)
 
   const filteredNavigation = navigation.filter((item) => {
     if (item.roles === 'all') return true
@@ -103,51 +106,53 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {/* CRM Module Parent Menu */}
-        <div>
-          <button
-            onClick={() => setIsCrmModuleExpanded(!isCrmModuleExpanded)}
-            className={cn(
-              'w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm transition-colors',
-              'text-foreground hover:bg-accent hover:text-accent-foreground font-medium'
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <FolderKanban className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate">CRM Module</span>
-            </div>
-            {isCrmModuleExpanded ? (
-              <ChevronDown className="h-4 w-4 flex-shrink-0" />
-            ) : (
-              <ChevronRight className="h-4 w-4 flex-shrink-0" />
-            )}
-          </button>
+        {/* CRM Module Parent Menu - hidden for Ops users */}
+        {!isOpsUser && (
+          <div>
+            <button
+              onClick={() => setIsCrmModuleExpanded(!isCrmModuleExpanded)}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm transition-colors',
+                'text-foreground hover:bg-accent hover:text-accent-foreground font-medium'
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <FolderKanban className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">CRM Module</span>
+              </div>
+              {isCrmModuleExpanded ? (
+                <ChevronDown className="h-4 w-4 flex-shrink-0" />
+              ) : (
+                <ChevronRight className="h-4 w-4 flex-shrink-0" />
+              )}
+            </button>
 
-          {/* Submenu Items */}
-          {isCrmModuleExpanded && (
-            <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3">
-              {filteredNavigation.map((item) => {
-                const isActive = pathname === item.href
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    onClick={handleNavClick}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                      isActive
-                        ? 'bg-brand text-white'
-                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                    )}
-                  >
-                    <item.icon className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{item.name}</span>
-                  </Link>
-                )
-              })}
-            </div>
-          )}
-        </div>
+            {/* Submenu Items */}
+            {isCrmModuleExpanded && (
+              <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3">
+                {filteredNavigation.map((item) => {
+                  const isActive = pathname === item.href
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={handleNavClick}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                        isActive
+                          ? 'bg-brand text-white'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      )}
+                    >
+                      <item.icon className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">{item.name}</span>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Ticketing Module Parent Menu */}
         {canAccessTicketing(profile.role) && (
