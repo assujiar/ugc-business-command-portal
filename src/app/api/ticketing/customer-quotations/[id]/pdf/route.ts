@@ -331,7 +331,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .select(`
         *,
         ticket:tickets!customer_quotations_ticket_id_fkey(id, ticket_code, subject),
-        items:customer_quotation_items(*)
+        items:customer_quotation_items(*),
+        creator:profiles!customer_quotations_created_by_fkey(user_id, role, name, email)
       `)
       .eq('id', id)
       .single()
@@ -340,9 +341,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
 
+    // Use creator's profile for PDF, fallback to current user
+    const creatorProfile: ProfileData = quotation.creator || profileData
+
     const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
-    const html = generateQuotationHTML(quotation, profileData, validationUrl)
+    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl)
 
     return NextResponse.json({
       success: true,
@@ -381,7 +385,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select(`
         *,
         ticket:tickets!customer_quotations_ticket_id_fkey(id, ticket_code, subject),
-        items:customer_quotation_items(*)
+        items:customer_quotation_items(*),
+        creator:profiles!customer_quotations_created_by_fkey(user_id, role, name, email)
       `)
       .eq('id', id)
       .single()
@@ -390,9 +395,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
 
+    // Use creator's profile for PDF, fallback to current user
+    const creatorProfile: ProfileData = quotation.creator || profileData
+
     const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
-    const html = generateQuotationHTML(quotation, profileData, validationUrl)
+    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl)
 
     return new NextResponse(html, {
       headers: { 'Content-Type': 'text/html' },
