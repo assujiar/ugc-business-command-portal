@@ -90,11 +90,11 @@ interface TicketDetailProps {
 // Status badge variants
 const statusVariants: Record<TicketStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
   open: { variant: 'destructive', label: 'Open' },
-  need_response: { variant: 'destructive', label: 'Need Response' },
+  need_response: { variant: 'destructive', label: 'Need Your Response' },
   in_progress: { variant: 'default', label: 'In Progress' },
-  waiting_customer: { variant: 'secondary', label: 'Waiting Customer' },
-  need_adjustment: { variant: 'secondary', label: 'Need Adjustment' },
-  pending: { variant: 'outline', label: 'Pending' },
+  waiting_customer: { variant: 'secondary', label: 'Waiting Customer Response' },
+  need_adjustment: { variant: 'secondary', label: 'Requesting Rate Adjustment' },
+  pending: { variant: 'outline', label: 'Sent to Customer' },
   resolved: { variant: 'outline', label: 'Resolved' },
   closed: { variant: 'outline', label: 'Closed' },
 }
@@ -615,9 +615,18 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     })
 
-    // Add quotes
-    quotes.forEach((quote) => {
+    // Add quotes - sorted by created_at to get correct sequence
+    const sortedQuotes = [...quotes].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+    const ordinalLabels = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth']
+
+    sortedQuotes.forEach((quote, index) => {
       const isCreatorQuote = quote.created_by === ticket.created_by
+      const quoteLabel = index < ordinalLabels.length
+        ? `${ordinalLabels[index]} Quote`
+        : `Quote #${index + 1}`
+
       items.push({
         id: `quote-${quote.id}`,
         type: 'quote',
@@ -628,13 +637,14 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         is_creator: isCreatorQuote,
         content: quote.notes || '',
         badge_type: 'quote',
-        badge_label: 'Quote',
+        badge_label: quoteLabel,
         extra_data: {
           quote_number: quote.quote_number,
           amount: quote.amount,
           currency: quote.currency,
           valid_until: quote.valid_until,
           terms: quote.terms,
+          quote_sequence: index + 1,
         },
       })
     })
@@ -1207,8 +1217,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   {/* Creator Actions */}
                   {isCreator && ticket.ticket_type === 'RFQ' && (
                     <>
-                      {/* Request Adjustment - when waiting for creator response */}
-                      {(ticket.status === 'waiting_customer' || ticket.status === 'in_progress') && (
+                      {/* Request Adjustment - available after ops sends quote */}
+                      {quotes.length > 0 && ticket.status !== 'pending' && (
                         <Button
                           onClick={() => executeAction('request_adjustment')}
                           disabled={actionLoading === 'request_adjustment'}
@@ -1224,8 +1234,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                         </Button>
                       )}
 
-                      {/* Quote Sent to Customer */}
-                      {ticket.status === 'waiting_customer' && (
+                      {/* Quote Sent to Customer - available after ops sends quote */}
+                      {quotes.length > 0 && ticket.status !== 'pending' && (
                         <Button
                           onClick={() => executeAction('quote_sent_to_customer')}
                           disabled={actionLoading === 'quote_sent_to_customer'}
@@ -1241,8 +1251,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                         </Button>
                       )}
 
-                      {/* Won/Lost Buttons */}
-                      {(ticket.status === 'pending' || ticket.status === 'waiting_customer') && (
+                      {/* Won/Lost Buttons - available after quote sent to customer */}
+                      {(ticket.status === 'pending' || (quotes.length > 0 && ticket.status === 'waiting_customer')) && (
                         <div className="grid grid-cols-2 gap-2">
                           <Button
                             onClick={() => executeAction('mark_won')}
@@ -1332,8 +1342,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   {/* Assignee/Ops Actions */}
                   {(isAssignee || isOpsOrAdmin) && ticket.ticket_type === 'RFQ' && !isCreator && (
                     <>
-                      {/* Submit Quote Button */}
-                      {(ticket.status === 'open' || ticket.status === 'in_progress' || ticket.status === 'need_adjustment') && (
+                      {/* Submit Quote Button - always available until ticket is closed */}
+                      {(ticket.status !== 'pending') && (
                         <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>
                           <DialogTrigger asChild>
                             <Button className="w-full bg-green-600 hover:bg-green-700">
@@ -1406,11 +1416,29 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   )}
                 </div>
 
-                {/* Status indicator */}
-                {ticket.pending_response_from && (
+                {/* Status indicator - Need Your Response */}
+                {ticket.pending_response_from && ticket.status !== 'pending' && (
                   <div className="text-center pt-2">
-                    <Badge variant={ticket.pending_response_from === 'creator' ? 'secondary' : 'default'}>
-                      Waiting for {ticket.pending_response_from === 'creator' ? 'Creator' : 'Department'} response
+                    {/* Show "Need Your Response" if current user is the one who needs to respond */}
+                    {((isCreator && ticket.pending_response_from === 'creator') ||
+                      (!isCreator && ticket.pending_response_from === 'assignee')) ? (
+                      <Badge variant="destructive" className="animate-pulse">
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        Need Your Response
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">
+                        Waiting for {ticket.pending_response_from === 'creator' ? 'Creator' : 'Department'} response
+                      </Badge>
+                    )}
+                  </div>
+                )}
+                {/* Sent to Customer - waiting for feedback */}
+                {ticket.status === 'pending' && (
+                  <div className="text-center pt-2">
+                    <Badge variant="outline" className="border-orange-400 text-orange-500">
+                      <Clock className="h-3 w-3 mr-1" />
+                      Quote sent to customer, awaiting feedback
                     </Badge>
                   </div>
                 )}
