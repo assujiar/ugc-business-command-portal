@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Image from 'next/image'
-import { CheckCircle, XCircle, Clock, AlertTriangle, MapPin, Package, FileText, Calendar, User, Phone, Mail, Globe, Truck, Box, Scale, Ruler } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, AlertTriangle, MapPin, Package, FileText, Calendar, User, Phone, Mail, Globe, Truck, Box, Scale, Ruler, MessageCircle } from 'lucide-react'
 
 interface QuotationData {
   quotation_number: string
@@ -502,9 +502,9 @@ export default function QuotationVerifyPage() {
         <div className="mt-8 bg-white rounded-2xl shadow-lg p-6">
           <h3 className="font-semibold text-gray-900 mb-4 text-center">Questions about this quotation?</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-            <a href={`tel:${UGC_INFO.phone}`} className="flex items-center justify-center gap-2 p-3 bg-gray-50 rounded-xl hover:bg-[#ff4600] hover:text-white transition-colors group">
-              <Phone className="h-4 w-4 text-[#ff4600] group-hover:text-white" />
-              <span className="text-gray-700 group-hover:text-white">{UGC_INFO.phone}</span>
+            <a href={`https://wa.me/${UGC_INFO.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 p-3 bg-gray-50 rounded-xl hover:bg-[#25D366] hover:text-white transition-colors group">
+              <MessageCircle className="h-4 w-4 text-[#25D366] group-hover:text-white" />
+              <span className="text-gray-700 group-hover:text-white">{UGC_INFO.whatsapp}</span>
             </a>
             <a href={`mailto:${UGC_INFO.email}`} className="flex items-center justify-center gap-2 p-3 bg-gray-50 rounded-xl hover:bg-[#ff4600] hover:text-white transition-colors group">
               <Mail className="h-4 w-4 text-[#ff4600] group-hover:text-white" />
@@ -536,7 +536,7 @@ export default function QuotationVerifyPage() {
             </div>
             <div className="text-center md:text-right text-sm text-white/90">
               <p className="flex items-center justify-center md:justify-end gap-2">
-                <Phone className="h-3 w-3" /> {UGC_INFO.phone}
+                <MessageCircle className="h-3 w-3" /> {UGC_INFO.whatsapp}
               </p>
               <p className="mt-1 flex items-center justify-center md:justify-end gap-2">
                 <Mail className="h-3 w-3" /> {UGC_INFO.email}
