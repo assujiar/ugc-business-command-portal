@@ -107,14 +107,14 @@ export async function GET(request: NextRequest) {
     const resolutionMet = withResolution.filter((s: any) => s.resolution_met === true).length
     const resolutionBreached = withResolution.filter((s: any) => s.resolution_met === false).length
 
-    // Calculate compliance rates
+    // Calculate compliance rates (0% when no data, not 100%)
     const firstResponseCompliance = withFirstResponse.length > 0
       ? Math.round((firstResponseMet / withFirstResponse.length) * 100)
-      : 100
+      : 0
 
     const resolutionCompliance = withResolution.length > 0
       ? Math.round((resolutionMet / withResolution.length) * 100)
-      : 100
+      : 0
 
     // Calculate average times in seconds
     const avgFirstResponseSeconds = withFirstResponse.length > 0
@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
           pending: deptData.length - deptWithFR.length,
           compliance_rate: deptWithFR.length > 0
             ? Math.round((deptWithFR.filter((s: any) => s.first_response_met === true).length / deptWithFR.length) * 100)
-            : 100,
+            : 0,  // No data = 0%, not 100%
         },
         resolution: {
           met: deptWithRes.filter((s: any) => s.resolution_met === true).length,
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
           pending: deptData.length - deptWithRes.length,
           compliance_rate: deptWithRes.length > 0
             ? Math.round((deptWithRes.filter((s: any) => s.resolution_met === true).length / deptWithRes.length) * 100)
-            : 100,
+            : 0,  // No data = 0%, not 100%
         },
       }
     }
@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
         pending: rfqData.length - rfqWithFR.length,
         compliance_rate: rfqWithFR.length > 0
           ? Math.round((rfqWithFR.filter((s: any) => s.first_response_met === true).length / rfqWithFR.length) * 100)
-          : 100,
+          : 0,  // No data = 0%, not 100%
         avg_seconds: rfqWithFRMetrics.length > 0
           ? Math.round(rfqWithFRMetrics.reduce((sum: number, s: any) =>
               sum + (s.metrics?.assignee_first_response_seconds || 0), 0) / rfqWithFRMetrics.length)
@@ -208,7 +208,7 @@ export async function GET(request: NextRequest) {
         pending: rfqData.length - rfqWithQuote.length,
         compliance_rate: rfqWithQuote.length > 0
           ? Math.round((rfqQuoteMet / rfqWithQuote.length) * 100)
-          : 100,
+          : 0,  // No data = 0%, not 100%
         avg_seconds: Math.round(avgFirstQuoteSeconds),
         sla_hours: firstQuoteSlaHours,
       },
@@ -218,7 +218,7 @@ export async function GET(request: NextRequest) {
         pending: rfqData.length - rfqWithRes.length,
         compliance_rate: rfqWithRes.length > 0
           ? Math.round((rfqWithRes.filter((s: any) => s.resolution_met === true).length / rfqWithRes.length) * 100)
-          : 100,
+          : 0,  // No data = 0%, not 100%
         avg_seconds: rfqWithRes.length > 0
           ? Math.round(rfqWithRes.reduce((sum: number, s: any) => {
               const created = new Date(s.created_at)
@@ -250,7 +250,7 @@ export async function GET(request: NextRequest) {
         pending: genData.length - genWithFR.length,
         compliance_rate: genWithFR.length > 0
           ? Math.round((genWithFR.filter((s: any) => s.first_response_met === true).length / genWithFR.length) * 100)
-          : 100,
+          : 0,  // No data = 0%, not 100%
         avg_seconds: genWithFRMetrics.length > 0
           ? Math.round(genWithFRMetrics.reduce((sum: number, s: any) =>
               sum + (s.metrics?.assignee_first_response_seconds || 0), 0) / genWithFRMetrics.length)
@@ -262,7 +262,7 @@ export async function GET(request: NextRequest) {
         pending: genData.length - genWithRes.length,
         compliance_rate: genWithRes.length > 0
           ? Math.round((genWithRes.filter((s: any) => s.resolution_met === true).length / genWithRes.length) * 100)
-          : 100,
+          : 0,  // No data = 0%, not 100%
         avg_seconds: genWithRes.length > 0
           ? Math.round(genWithRes.reduce((sum: number, s: any) => {
               const created = new Date(s.created_at)

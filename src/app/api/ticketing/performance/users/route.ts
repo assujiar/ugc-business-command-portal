@@ -319,7 +319,7 @@ export async function GET(request: NextRequest) {
             breached: rfqData.sla_fr_breached,
             compliance_rate: (rfqData.sla_fr_met + rfqData.sla_fr_breached) > 0
               ? Math.round((rfqData.sla_fr_met / (rfqData.sla_fr_met + rfqData.sla_fr_breached)) * 100)
-              : 100,
+              : 0,  // No data = 0%, not 100%
           },
         },
         avg_resolution_seconds: rfqCompleted > 0 ? Math.round((rfqData.total_res_hours * 3600) / rfqCompleted) : 0,
@@ -343,7 +343,7 @@ export async function GET(request: NextRequest) {
             breached: genData.sla_fr_breached,
             compliance_rate: (genData.sla_fr_met + genData.sla_fr_breached) > 0
               ? Math.round((genData.sla_fr_met / (genData.sla_fr_met + genData.sla_fr_breached)) * 100)
-              : 100,
+              : 0,  // No data = 0%, not 100%
           },
         },
         avg_resolution_seconds: genCompleted > 0 ? Math.round((genData.total_res_hours * 3600) / genCompleted) : 0,
@@ -376,14 +376,14 @@ export async function GET(request: NextRequest) {
             breached: metrics.sla_fr_breached,
             compliance_rate: (metrics.sla_fr_met + metrics.sla_fr_breached) > 0
               ? Math.round((metrics.sla_fr_met / (metrics.sla_fr_met + metrics.sla_fr_breached)) * 100)
-              : 100,
+              : 0,  // No data = 0%, not 100%
           },
           resolution: {
             met: metrics.sla_res_met,
             breached: metrics.sla_res_breached,
             compliance_rate: (metrics.sla_res_met + metrics.sla_res_breached) > 0
               ? Math.round((metrics.sla_res_met / (metrics.sla_res_met + metrics.sla_res_breached)) * 100)
-              : 100,
+              : 0,  // No data = 0%, not 100%
           },
         },
         response: {
@@ -437,25 +437,33 @@ export async function GET(request: NextRequest) {
     const showRankings = canViewAnalyticsRankings(profile.role)
 
     // Calculate leaderboard only if user can view rankings
+    // Note: Users without actual data should NOT appear in leaderboard
     const leaderboard = showRankings ? {
-      most_tickets: [...userPerformance].sort((a, b) => b.tickets.assigned - a.tickets.assigned).slice(0, 5),
+      most_tickets: [...userPerformance]
+        .filter(u => u.tickets.assigned > 0)  // Must have at least 1 ticket
+        .sort((a, b) => b.tickets.assigned - a.tickets.assigned)
+        .slice(0, 5),
       highest_completion_rate: [...userPerformance]
-        .filter(u => u.tickets.assigned >= 5)
+        .filter(u => u.tickets.assigned >= 5 && u.tickets.completion_rate > 0)  // Must have actual completions
         .sort((a, b) => b.tickets.completion_rate - a.tickets.completion_rate)
         .slice(0, 5),
       best_sla_compliance: [...userPerformance]
-        .filter(u => u.tickets.assigned >= 5)
+        .filter(u =>
+          u.tickets.assigned >= 5 &&
+          // Must have at least some SLA data tracked (either met or breached)
+          (u.sla.first_response.met + u.sla.first_response.breached + u.sla.resolution.met + u.sla.resolution.breached) > 0
+        )
         .sort((a, b) =>
           ((b.sla.first_response.compliance_rate + b.sla.resolution.compliance_rate) / 2) -
           ((a.sla.first_response.compliance_rate + a.sla.resolution.compliance_rate) / 2)
         )
         .slice(0, 5),
       fastest_first_response: [...userPerformance]
-        .filter(u => u.response.first_response.count >= 3)
+        .filter(u => u.response.first_response.count >= 3 && u.response.first_response.avg_seconds > 0)  // Must have actual response data
         .sort((a, b) => a.response.first_response.avg_seconds - b.response.first_response.avg_seconds)
         .slice(0, 5),
       fastest_stage_response: [...userPerformance]
-        .filter(u => u.response.stage_response.count >= 5)
+        .filter(u => u.response.stage_response.count >= 5 && u.response.stage_response.avg_seconds > 0)  // Must have actual response data
         .sort((a, b) => a.response.stage_response.avg_seconds - b.response.stage_response.avg_seconds)
         .slice(0, 5),
     } : {
