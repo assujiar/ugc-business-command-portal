@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - periodDays)
 
-    // Fetch tickets with SLA data
+    // Fetch tickets with SLA data (explicit FK for join)
     let ticketQuery = (supabase as any)
       .from('tickets')
       .select(`
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
         resolved_at,
         closed_at,
         close_outcome,
-        sla_tracking:ticket_sla_tracking(
+        sla_tracking:ticket_sla_tracking!ticket_sla_tracking_ticket_id_fkey(
           first_response_met,
           resolution_met,
           first_response_sla_hours,

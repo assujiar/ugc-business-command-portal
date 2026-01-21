@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     // Fetch all tickets for calculations
     let query = (supabase as any)
       .from('tickets')
-      .select('id, status, priority, department, ticket_type, created_at, resolved_at, closed_at')
+      .select('id, status, priority, department, ticket_type, created_at, resolved_at, closed_at, created_by, assigned_to')
 
     // Apply filtering based on analytics scope
     if (analyticsScope.scope === 'user') {
@@ -97,6 +97,22 @@ export async function GET(request: NextRequest) {
       return acc
     }, {})
 
+    // ========================================
+    // SEPARATED STATUS BY CREATED VS ASSIGNED
+    // ========================================
+    const createdByMe = allTickets.filter((t: any) => t.created_by === user.id)
+    const assignedToMe = allTickets.filter((t: any) => t.assigned_to === user.id)
+
+    const byStatusCreated: Record<string, number> = {}
+    const byStatusAssigned: Record<string, number> = {}
+
+    for (const ticket of createdByMe) {
+      byStatusCreated[ticket.status] = (byStatusCreated[ticket.status] || 0) + 1
+    }
+    for (const ticket of assignedToMe) {
+      byStatusAssigned[ticket.status] = (byStatusAssigned[ticket.status] || 0) + 1
+    }
+
     // Recent activity (last 7 days)
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
@@ -126,6 +142,11 @@ export async function GET(request: NextRequest) {
           resolved: resolvedTickets,
           closed: closedTickets,
         },
+        // Separated status by created vs assigned
+        by_status_created: byStatusCreated,
+        by_status_assigned: byStatusAssigned,
+        created_count: createdByMe.length,
+        assigned_count: assignedToMe.length,
         by_priority: {
           urgent: urgentTickets,
           high: highTickets,

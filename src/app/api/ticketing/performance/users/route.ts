@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, getAnalyticsScope, canViewAnalyticsRankings } from '@/lib/permissions'
+import { canAccessTicketing, getAnalyticsScope, canViewAnalyticsRankings, getUserTicketingDepartment } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -427,11 +427,26 @@ export async function GET(request: NextRequest) {
     // ============================================
     // Build final user performance data
     // ============================================
+
+    // Determine which department to filter users by
+    const filterDepartment = analyticsScope.scope === 'department' ? analyticsScope.department : departmentFilter
+
     const userPerformance = Object.values(userMetrics)
-      .filter(metrics =>
+      .filter(metrics => {
         // Include if user has assigned tickets OR created tickets
-        metrics.as_assignee.tickets_assigned > 0 || metrics.as_creator.tickets_created > 0
-      )
+        if (!(metrics.as_assignee.tickets_assigned > 0 || metrics.as_creator.tickets_created > 0)) {
+          return false
+        }
+
+        // If department filter is active, only include users whose role belongs to that department
+        if (filterDepartment) {
+          const userRoleDepartment = getUserTicketingDepartment(metrics.role as any)
+          // Include user only if their role's department matches the filter
+          return userRoleDepartment === filterDepartment
+        }
+
+        return true
+      })
       .map((metrics) => {
         const assignee = metrics.as_assignee
         const creator = metrics.as_creator
