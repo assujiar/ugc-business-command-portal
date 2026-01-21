@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   X,
   Plus,
@@ -164,6 +165,7 @@ export function CustomerQuotationDialog({
   operationalCost,
   onSuccess,
 }: CustomerQuotationDialogProps) {
+  const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -202,6 +204,11 @@ export function CustomerQuotationDialog({
   const [cargoVolumeUnit, setCargoVolumeUnit] = useState('cbm')
   const [cargoQuantity, setCargoQuantity] = useState<number | null>(null)
   const [cargoQuantityUnit, setCargoQuantityUnit] = useState('units')
+
+  // Leadtime & cargo value
+  const [estimatedLeadtime, setEstimatedLeadtime] = useState('')
+  const [estimatedCargoValue, setEstimatedCargoValue] = useState<number | null>(null)
+  const [cargoValueCurrency, setCargoValueCurrency] = useState('IDR')
 
   // Rate structure
   const [rateStructure, setRateStructure] = useState<'bundling' | 'breakdown'>('bundling')
@@ -276,6 +283,9 @@ export function CustomerQuotationDialog({
         setCargoWeight(rfq.cargo_weight || null)
         setCargoVolume(rfq.cargo_volume || null)
         setCargoQuantity(rfq.cargo_quantity || null)
+        setEstimatedLeadtime(rfq.estimated_leadtime || '')
+        setEstimatedCargoValue(rfq.estimated_cargo_value || null)
+        setCargoValueCurrency(rfq.cargo_value_currency || 'IDR')
       }
 
       // Operational cost
@@ -433,6 +443,9 @@ export function CustomerQuotationDialog({
         cargo_volume_unit: cargoVolumeUnit || null,
         cargo_quantity: cargoQuantity,
         cargo_quantity_unit: cargoQuantityUnit || null,
+        estimated_leadtime: estimatedLeadtime || null,
+        estimated_cargo_value: estimatedCargoValue,
+        cargo_value_currency: cargoValueCurrency,
         rate_structure: rateStructure,
         total_cost: totalCost,
         target_margin_percent: targetMarginPercent,
@@ -465,12 +478,13 @@ export function CustomerQuotationDialog({
       const result = await response.json()
 
       if (result.success && result.data) {
-        setQuotationId(result.data.id)
-        setQuotationNumber(result.data.quotation_number)
         toast({
           title: 'Success',
           description: `Quotation ${result.data.quotation_number} created successfully`,
         })
+        // Close dialog and redirect to detail page
+        onOpenChange(false)
+        router.push(`/customer-quotations/${result.data.id}`)
       } else {
         throw new Error(result.error || 'Failed to create quotation')
       }
@@ -868,6 +882,49 @@ export function CustomerQuotationDialog({
                         <SelectItem value="m3">m3</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                </div>
+              </div>
+
+              <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide mt-4">Leadtime & Cargo Value</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="estimated-leadtime">Estimated Leadtime</Label>
+                  <Input
+                    id="estimated-leadtime"
+                    value={estimatedLeadtime}
+                    onChange={(e) => setEstimatedLeadtime(e.target.value)}
+                    placeholder="e.g., 3-5 hari, 1 minggu"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Estimasi waktu pengiriman</p>
+                </div>
+                <div className="flex gap-2">
+                  <div className="w-24">
+                    <Label>Currency</Label>
+                    <Select value={cargoValueCurrency} onValueChange={setCargoValueCurrency}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="IDR">IDR</SelectItem>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="SGD">SGD</SelectItem>
+                        <SelectItem value="CNY">CNY</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1">
+                    <Label htmlFor="estimated-cargo-value">Est. Cargo Value</Label>
+                    <Input
+                      id="estimated-cargo-value"
+                      type="number"
+                      min="0"
+                      step="1000"
+                      value={estimatedCargoValue || ''}
+                      onChange={(e) => setEstimatedCargoValue(e.target.value ? parseFloat(e.target.value) : null)}
+                      placeholder="Estimated value"
+                    />
                   </div>
                 </div>
               </div>
