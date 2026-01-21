@@ -48,6 +48,35 @@ const departmentLabels: Record<string, string> = {
   TRF: 'Traffic & Warehouse',
 }
 
+// Format seconds to "xx jam yy menit zz detik" format
+function formatDuration(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0) return '0 detik'
+
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
+
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours} jam`)
+  if (minutes > 0) parts.push(`${minutes} menit`)
+  if (secs > 0 || parts.length === 0) parts.push(`${secs} detik`)
+
+  return parts.join(' ')
+}
+
+// Format seconds to short format for cards (e.g., "2j 30m")
+function formatDurationShort(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0) return '0d'
+
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+
+  if (hours > 0 && minutes > 0) return `${hours}j ${minutes}m`
+  if (hours > 0) return `${hours}j`
+  if (minutes > 0) return `${minutes}m`
+  return `${Math.floor(seconds)}d`
+}
+
 export function OverviewDashboard({ profile }: OverviewDashboardProps) {
   const [period, setPeriod] = useState('30')
   const [loading, setLoading] = useState(true)
@@ -311,8 +340,8 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                     <CardTitle className="text-sm font-medium">Avg First Response</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-bold">
-                      {slaMetrics.overall?.first_response?.avg_hours || 0}h
+                    <div className="text-2xl font-bold">
+                      {formatDuration(slaMetrics.overall?.first_response?.avg_seconds)}
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">Average time to first response</p>
                   </CardContent>
@@ -477,7 +506,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                     <CardTitle className="text-sm font-medium">Avg Response Time</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-bold">{responseTime.overall?.avg_response_hours || 0}h</div>
+                    <div className="text-2xl font-bold">{formatDuration(responseTime.overall?.avg_response_seconds)}</div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Across all responses
                     </p>
@@ -540,7 +569,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                             <span className="font-medium">{user.name}</span>
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {user.total_responses} responses | Avg {user.avg_response_hours}h
+                            {user.total_responses} responses | Avg {formatDurationShort(user.avg_response_seconds)}
                           </div>
                         </div>
                       ))}
@@ -717,7 +746,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                       {userPerformance.leaderboard?.fastest_response?.[0] ? (
                         <div>
                           <p className="font-semibold">{userPerformance.leaderboard.fastest_response[0].name}</p>
-                          <p className="text-2xl font-bold">{userPerformance.leaderboard.fastest_response[0].response?.avg_response_hours || 0}h</p>
+                          <p className="text-lg font-bold">{formatDuration(userPerformance.leaderboard.fastest_response[0].response?.avg_response_seconds)}</p>
                           <p className="text-xs text-muted-foreground">avg response time</p>
                         </div>
                       ) : (

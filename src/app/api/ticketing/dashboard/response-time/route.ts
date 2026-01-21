@@ -151,6 +151,7 @@ export async function GET(request: NextRequest) {
         user_id: userId,
         name: data.name,
         total_responses: data.count,
+        avg_response_seconds: Math.round(data.totalSeconds / data.count),
         avg_response_hours: Math.round(data.totalSeconds / data.count / 3600 * 10) / 10,
       }))
       .sort((a, b) => b.total_responses - a.total_responses)
