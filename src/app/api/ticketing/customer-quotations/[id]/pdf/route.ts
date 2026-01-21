@@ -49,10 +49,14 @@ const UGC_INFO = {
   web: 'www.utamaglobalindocargo.com',
 }
 
-// Generate HTML for PDF - Letterhead Style Design
+// Generate HTML for PDF - UGC Bold Ticket-Style + Pagebreak Safe + Anti-Tamper Watermark
 const generateQuotationHTML = (quotation: any, profile: ProfileData, validationUrl: string): string => {
   const items = quotation.items || []
   const isBreakdown = quotation.rate_structure === 'breakdown'
+
+  // Anti-tamper watermark text
+  const watermarkText = `${quotation.quotation_number} • ${quotation.validation_code} • `
+  const watermarkRepeated = watermarkText.repeat(50) // Repeat to fill the page
 
   // Build items table for breakdown
   let itemsTableHTML = ''
@@ -61,45 +65,62 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
       <table class="rate-table">
         <thead>
           <tr>
-            <th style="width: 5%">#</th>
-            <th style="width: 50%">Description</th>
-            <th style="width: 20%">Unit</th>
-            <th style="width: 25%">Amount</th>
+            <th class="col-no">#</th>
+            <th>Description</th>
+            <th class="col-unit">Unit</th>
+            <th class="col-amt">Amount</th>
           </tr>
         </thead>
         <tbody>
-          ${items.map((item: any, index: number) => `
-            <tr>
-              <td class="center">${index + 1}</td>
-              <td>${item.component_name || item.component_type}${item.description ? `<div class="item-desc">${item.description}</div>` : ''}</td>
-              <td class="center">${item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}</td>
-              <td class="right">${formatCurrency(item.selling_rate, quotation.currency)}</td>
-            </tr>
-          `).join('')}
+          ${items
+            .map(
+              (item: any, index: number) => `
+              <tr>
+                <td class="center">${index + 1}</td>
+                <td>
+                  <div class="item-title">${item.component_name || item.component_type}</div>
+                  ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
+                </td>
+                <td class="center">${item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}</td>
+                <td class="right">${formatCurrency(item.selling_rate, quotation.currency)}</td>
+              </tr>
+            `
+            )
+            .join('')}
         </tbody>
       </table>
     `
   } else {
     itemsTableHTML = `
-      <div class="bundling-rate">
-        <div class="bundling-label">Logistics Service Package</div>
-        <div class="bundling-route">${quotation.service_type || 'Door to Door'} • ${quotation.origin_city || 'Origin'} → ${quotation.destination_city || 'Destination'}</div>
+      <div class="package-card keep">
+        <div class="package-left">
+          <div class="kicker">Service Package</div>
+          <div class="package-title">${quotation.service_type || 'Door to Door'}</div>
+          <div class="package-sub">${quotation.origin_city || 'Origin'} → ${quotation.destination_city || 'Destination'}</div>
+        </div>
+        <div class="package-right">
+          <div class="chip chip-orange">Bundling Rate</div>
+          <div class="micro">Rate structure: <strong>All-in</strong></div>
+        </div>
       </div>
     `
   }
 
-  // Build includes list
-  const includesList = Array.isArray(quotation.terms_includes) && quotation.terms_includes.length > 0
-    ? quotation.terms_includes.map((t: string) => `<li><span class="icon-check">✓</span>${t}</li>`).join('')
-    : ''
+  const includesList =
+    Array.isArray(quotation.terms_includes) && quotation.terms_includes.length > 0
+      ? quotation.terms_includes
+          .map((t: string) => `<li><span class="tick">✓</span><span>${t}</span></li>`)
+          .join('')
+      : ''
 
-  // Build excludes list
-  const excludesList = Array.isArray(quotation.terms_excludes) && quotation.terms_excludes.length > 0
-    ? quotation.terms_excludes.map((t: string) => `<li><span class="icon-cross">✗</span>${t}</li>`).join('')
-    : ''
+  const excludesList =
+    Array.isArray(quotation.terms_excludes) && quotation.terms_excludes.length > 0
+      ? quotation.terms_excludes
+          .map((t: string) => `<li><span class="cross">✕</span><span>${t}</span></li>`)
+          .join('')
+      : ''
 
-  // Build cargo details grid
-  const cargoDetails = []
+  const cargoDetails: Array<{ label: string; value: string }> = []
   if (quotation.commodity) cargoDetails.push({ label: 'Commodity', value: quotation.commodity })
   if (quotation.cargo_weight) cargoDetails.push({ label: 'Weight', value: `${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}` })
   if (quotation.cargo_volume) cargoDetails.push({ label: 'Volume', value: `${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}` })
@@ -108,879 +129,1015 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
   if (quotation.fleet_type) cargoDetails.push({ label: 'Fleet', value: `${quotation.fleet_type}${quotation.fleet_quantity ? ` × ${quotation.fleet_quantity}` : ''}` })
 
   return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <title>Quotation ${quotation.quotation_number}</title>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        @page {
-          size: A4;
-          margin: 0;
-        }
-
-        body {
-          font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
-          font-size: 10px;
-          line-height: 1.6;
-          color: #1e293b;
-          background: white;
-        }
-
-        .page {
-          width: 210mm;
-          min-height: 297mm;
-          padding: 0;
-          position: relative;
-          background: white;
-        }
-
-        /* ===== DECORATIVE BORDERS ===== */
-        .left-border {
-          position: fixed;
-          left: 0;
-          top: 0;
-          bottom: 0;
-          width: 8mm;
-          background: linear-gradient(180deg,
-            #ff4600 0%, #ff4600 25%,
-            #1e293b 25%, #1e293b 50%,
-            #94a3b8 50%, #94a3b8 75%,
-            #ff4600 75%, #ff4600 100%
-          );
-          z-index: 100;
-        }
-
-        .left-border::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background:
-            linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.1) 50%),
-            linear-gradient(-135deg, transparent 50%, rgba(0,0,0,0.1) 50%);
-          background-size: 4mm 4mm;
-        }
-
-        .right-border {
-          position: fixed;
-          right: 0;
-          top: 0;
-          bottom: 0;
-          width: 8mm;
-          background: linear-gradient(180deg,
-            #94a3b8 0%, #94a3b8 25%,
-            #1e293b 25%, #1e293b 50%,
-            #ff4600 50%, #ff4600 75%,
-            #1e293b 75%, #1e293b 100%
-          );
-          z-index: 100;
-        }
-
-        .right-border::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background:
-            linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.1) 50%),
-            linear-gradient(-135deg, transparent 50%, rgba(0,0,0,0.1) 50%);
-          background-size: 4mm 4mm;
-        }
-
-        /* Corner decorations */
-        .corner-top-right {
-          position: absolute;
-          top: 0;
-          right: 8mm;
-          width: 0;
-          height: 0;
-          border-style: solid;
-          border-width: 0 30mm 30mm 0;
-          border-color: transparent #f1f5f9 transparent transparent;
-        }
-
-        .corner-bottom-left {
-          position: absolute;
-          bottom: 0;
-          left: 8mm;
-          width: 0;
-          height: 0;
-          border-style: solid;
-          border-width: 30mm 0 0 30mm;
-          border-color: transparent transparent transparent #f1f5f9;
-        }
-
-        /* ===== CONTENT AREA ===== */
-        .content {
-          margin-left: 12mm;
-          margin-right: 12mm;
-          padding: 10mm 8mm;
-        }
-
-        /* ===== HEADER BANNER ===== */
-        .header-banner {
-          background: linear-gradient(135deg, #ff4600 0%, #ea580c 100%);
-          padding: 5mm 6mm;
-          border-radius: 3mm;
-          display: flex;
-          align-items: center;
-          gap: 4mm;
-          margin-bottom: 6mm;
-          box-shadow: 0 2mm 4mm rgba(255, 70, 0, 0.2);
-        }
-
-        .header-banner img {
-          height: 14mm;
-          width: auto;
-        }
-
-        .header-banner .brand-text {
-          color: white;
-        }
-
-        .header-banner .brand-name {
-          font-size: 14px;
-          font-weight: 800;
-          letter-spacing: 0.5px;
-        }
-
-        .header-banner .brand-tagline {
-          font-size: 8px;
-          opacity: 0.9;
-          margin-top: 1mm;
-        }
-
-        /* ===== LETTERHEAD INFO ===== */
-        .letterhead-info {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 6mm;
-          padding-bottom: 4mm;
-          border-bottom: 0.5mm solid #e2e8f0;
-        }
-
-        .sender-info { max-width: 55%; }
-        .sender-name {
-          font-size: 14px;
-          font-weight: 800;
-          color: #1e293b;
-          margin-bottom: 1mm;
-        }
-        .sender-title {
-          font-size: 9px;
-          color: #64748b;
-          margin-bottom: 3mm;
-        }
-        .sender-company {
-          font-size: 11px;
-          font-weight: 700;
-          color: #ff4600;
-          margin-bottom: 2mm;
-        }
-        .sender-detail {
-          font-size: 8px;
-          color: #64748b;
-          line-height: 1.8;
-        }
-        .sender-detail span {
-          color: #ff4600;
-          font-weight: 600;
-        }
-
-        .doc-date {
-          text-align: right;
-        }
-        .doc-date .label {
-          font-size: 8px;
-          color: #94a3b8;
-          margin-bottom: 1mm;
-        }
-        .doc-date .value {
-          font-size: 11px;
-          font-weight: 600;
-          color: #1e293b;
-        }
-
-        /* ===== DOCUMENT TITLE ===== */
-        .doc-header {
-          background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
-          border: 0.5mm solid #fed7aa;
-          border-radius: 3mm;
-          padding: 4mm 5mm;
-          margin-bottom: 5mm;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .doc-title-section {}
-        .doc-title {
-          font-size: 18px;
-          font-weight: 800;
-          color: #ff4600;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-        }
-        .doc-number {
-          font-size: 12px;
-          font-weight: 600;
-          color: #1e293b;
-          margin-top: 1mm;
-        }
-
-        .doc-meta {
-          text-align: right;
-          font-size: 8px;
-          color: #64748b;
-        }
-        .doc-meta .value {
-          font-weight: 600;
-          color: #1e293b;
-        }
-
-        /* ===== GREETING ===== */
-        .greeting {
-          font-size: 11px;
-          margin-bottom: 4mm;
-        }
-        .greeting-to {
-          font-weight: 700;
-          color: #1e293b;
-        }
-        .greeting-company {
-          color: #64748b;
-        }
-
-        /* ===== INTRO TEXT ===== */
-        .intro-text {
-          font-size: 10px;
-          color: #475569;
-          line-height: 1.8;
-          margin-bottom: 5mm;
-          text-align: justify;
-        }
-
-        /* ===== SECTIONS ===== */
-        .section {
-          margin-bottom: 5mm;
-          page-break-inside: avoid;
-        }
-
-        .section-title {
-          font-size: 10px;
-          font-weight: 700;
-          color: #ff4600;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          padding-bottom: 2mm;
-          margin-bottom: 3mm;
-          border-bottom: 0.5mm solid #fed7aa;
-          display: flex;
-          align-items: center;
-          gap: 2mm;
-        }
-
-        .section-title::before {
-          content: '';
-          width: 3mm;
-          height: 3mm;
-          background: #ff4600;
-          border-radius: 1mm;
-        }
-
-        /* ===== TWO COLUMN LAYOUT ===== */
-        .two-col {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 4mm;
-        }
-
-        /* ===== CUSTOMER CARD ===== */
-        .customer-card {
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-          padding: 4mm;
-          border-radius: 3mm;
-          border-left: 1mm solid #ff4600;
-        }
-
-        .customer-name {
-          font-size: 12px;
-          font-weight: 700;
-          color: #1e293b;
-          margin-bottom: 1mm;
-        }
-
-        .customer-company {
-          font-size: 10px;
-          font-weight: 600;
-          color: #ff4600;
-          margin-bottom: 2mm;
-        }
-
-        .customer-detail {
-          font-size: 9px;
-          color: #64748b;
-          line-height: 1.6;
-        }
-
-        /* ===== ROUTE DISPLAY ===== */
-        .route-card {
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-          padding: 4mm;
-          border-radius: 3mm;
-          border-left: 1mm solid #ff4600;
-        }
-
-        .route-box {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-
-        .route-point { text-align: center; flex: 1; }
-        .route-city { font-size: 12px; font-weight: 700; color: #1e293b; }
-        .route-country { font-size: 8px; color: #64748b; margin-top: 0.5mm; }
-        .route-port { font-size: 7px; color: #94a3b8; margin-top: 0.5mm; }
-
-        .route-arrow {
-          font-size: 20px;
-          color: #ff4600;
-          padding: 0 3mm;
-        }
-
-        /* ===== DETAILS GRID ===== */
-        .details-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 3mm;
-        }
-
-        .detail-item {
-          background: #f8fafc;
-          padding: 3mm;
-          border-radius: 2mm;
-          border-left: 0.8mm solid #ff4600;
-        }
-
-        .detail-item .label {
-          font-size: 7px;
-          font-weight: 600;
-          color: #94a3b8;
-          text-transform: uppercase;
-          letter-spacing: 0.3px;
-        }
-
-        .detail-item .value {
-          font-size: 10px;
-          font-weight: 600;
-          color: #1e293b;
-          margin-top: 1mm;
-        }
-
-        /* ===== CARGO DESCRIPTION BOX ===== */
-        .cargo-desc {
-          background: #fffbeb;
-          border: 0.3mm solid #fde68a;
-          border-radius: 2mm;
-          padding: 3mm 4mm;
-          margin-top: 3mm;
-        }
-
-        .cargo-desc .label {
-          font-size: 8px;
-          font-weight: 600;
-          color: #92400e;
-          text-transform: uppercase;
-        }
-
-        .cargo-desc .value {
-          font-size: 10px;
-          color: #78350f;
-          margin-top: 1mm;
-          line-height: 1.6;
-        }
-
-        /* ===== RATE TABLE ===== */
-        .rate-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 9px;
-          margin-bottom: 3mm;
-        }
-
-        .rate-table th {
-          background: linear-gradient(135deg, #ff4600 0%, #ea580c 100%);
-          color: white;
-          padding: 3mm;
-          text-align: left;
-          font-weight: 600;
-          font-size: 8px;
-          text-transform: uppercase;
-          letter-spacing: 0.3px;
-        }
-
-        .rate-table th:first-child { border-radius: 2mm 0 0 0; }
-        .rate-table th:last-child { border-radius: 0 2mm 0 0; }
-
-        .rate-table td {
-          padding: 3mm;
-          border-bottom: 0.3mm solid #f1f5f9;
-        }
-
-        .rate-table tr:nth-child(even) { background: #fafafa; }
-        .rate-table tr:last-child td:first-child { border-radius: 0 0 0 2mm; }
-        .rate-table tr:last-child td:last-child { border-radius: 0 0 2mm 0; }
-        .rate-table .center { text-align: center; }
-        .rate-table .right { text-align: right; font-weight: 600; }
-        .item-desc { font-size: 8px; color: #94a3b8; margin-top: 0.5mm; }
-
-        /* Bundling Rate Style */
-        .bundling-rate {
-          background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
-          padding: 4mm;
-          border-radius: 3mm;
-          border: 0.3mm solid #fed7aa;
-          margin-bottom: 3mm;
-        }
-
-        .bundling-label { font-size: 10px; font-weight: 600; color: #ea580c; }
-        .bundling-route { font-size: 9px; color: #78350f; margin-top: 1mm; }
-
-        /* ===== TOTAL BOX ===== */
-        .total-box {
-          background: linear-gradient(135deg, #ff4600 0%, #ea580c 100%);
-          color: white;
-          padding: 4mm 5mm;
-          border-radius: 3mm;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          box-shadow: 0 2mm 4mm rgba(255, 70, 0, 0.3);
-        }
-
-        .total-label {
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        .total-amount {
-          font-size: 20px;
-          font-weight: 800;
-        }
-
-        /* ===== TERMS GRID ===== */
-        .terms-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 4mm;
-        }
-
-        .terms-card {
-          padding: 3mm 4mm;
-          border-radius: 3mm;
-          font-size: 8px;
-        }
-
-        .terms-card.included {
-          background: #ecfdf5;
-          border: 0.3mm solid #a7f3d0;
-        }
-        .terms-card.excluded {
-          background: #fef2f2;
-          border: 0.3mm solid #fecaca;
-        }
-
-        .terms-card h4 {
-          font-size: 9px;
-          font-weight: 700;
-          margin-bottom: 2mm;
-        }
-
-        .terms-card.included h4 { color: #059669; }
-        .terms-card.excluded h4 { color: #dc2626; }
-
-        .terms-card ul { list-style: none; }
-        .terms-card li {
-          margin: 1.5mm 0;
-          display: flex;
-          align-items: flex-start;
-          gap: 2mm;
-          line-height: 1.5;
-        }
-        .icon-check { color: #059669; font-weight: bold; font-size: 9px; }
-        .icon-cross { color: #dc2626; font-weight: bold; font-size: 9px; }
-
-        /* ===== SCOPE BOX ===== */
-        .scope-box {
-          background: #f0fdf4;
-          border-left: 1mm solid #22c55e;
-          padding: 3mm 4mm;
-          border-radius: 0 3mm 3mm 0;
-          font-size: 9px;
-          color: #166534;
-          line-height: 1.7;
-        }
-
-        /* ===== NOTES BOX ===== */
-        .notes-box {
-          background: #fffbeb;
-          border-left: 1mm solid #f59e0b;
-          padding: 3mm 4mm;
-          border-radius: 0 3mm 3mm 0;
-          margin-bottom: 4mm;
-        }
-
-        .notes-box .label {
-          font-size: 8px;
-          font-weight: 600;
-          color: #92400e;
-          text-transform: uppercase;
-        }
-        .notes-box .value {
-          font-size: 9px;
-          color: #78350f;
-          margin-top: 1mm;
-          line-height: 1.6;
-        }
-
-        /* ===== VALIDITY BANNER ===== */
-        .validity-banner {
-          background: linear-gradient(90deg, #fff7ed 0%, white 50%, #fff7ed 100%);
-          border: 0.5mm dashed #ff4600;
-          padding: 3mm 4mm;
-          border-radius: 3mm;
-          text-align: center;
-          font-size: 9px;
-          color: #78350f;
-          margin: 4mm 0;
-        }
-
-        .validity-banner strong { color: #ea580c; }
-
-        /* ===== SIGNATURE FOOTER ===== */
-        .signature-footer {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-end;
-          padding-top: 5mm;
-          margin-top: 5mm;
-          border-top: 0.5mm solid #e2e8f0;
-          page-break-inside: avoid;
-        }
-
-        .signature-left {
-          display: flex;
-          gap: 4mm;
-          align-items: flex-start;
-        }
-
-        .qr-container { text-align: center; }
-        .qr-container img {
-          width: 20mm;
-          height: 20mm;
-          border: 0.5mm solid #ff4600;
-          border-radius: 2mm;
-          padding: 1mm;
-        }
-        .qr-label {
-          font-size: 7px;
-          color: #94a3b8;
-          margin-top: 1mm;
-        }
-
-        .signature-block {
-          padding-top: 2mm;
-        }
-        .signature-line {
-          font-family: 'Brush Script MT', cursive;
-          font-size: 18px;
-          color: #1e293b;
-          border-bottom: 0.3mm solid #1e293b;
-          padding-bottom: 1mm;
-          margin-bottom: 2mm;
-        }
-        .signer-name {
-          font-size: 11px;
-          font-weight: 700;
-          color: #ff4600;
-        }
-        .signer-title {
-          font-size: 8px;
-          color: #64748b;
-          margin-top: 0.5mm;
-        }
-
-        .signature-right {
-          text-align: right;
-        }
-        .contact-item {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 2mm;
-          font-size: 8px;
-          color: #64748b;
-          margin: 1.5mm 0;
-        }
-        .contact-item .icon {
-          width: 4mm;
-          height: 4mm;
-          background: #ff4600;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-size: 6px;
-        }
-        .contact-item .text {
-          color: #1e293b;
-        }
-
-        /* ===== COMPANY FOOTER ===== */
-        .company-footer {
-          text-align: center;
-          padding: 4mm;
-          margin-top: 4mm;
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-          border-radius: 3mm;
-          font-size: 8px;
-          color: #64748b;
-        }
-
-        .company-footer strong { color: #1e293b; }
-        .company-footer .highlight { color: #ff4600; }
-
-        /* ===== PRINT STYLES ===== */
-        @media print {
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-
-          .page {
-            page-break-after: always;
-          }
-
-          .section {
-            page-break-inside: avoid;
-          }
-
-          .signature-footer {
-            page-break-inside: avoid;
-          }
-
-          .rate-table {
-            page-break-inside: auto;
-          }
-
-          .rate-table tr {
-            page-break-inside: avoid;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <!-- Decorative Borders -->
-      <div class="left-border"></div>
-      <div class="right-border"></div>
-
-      <div class="page">
-        <div class="corner-top-right"></div>
-        <div class="corner-bottom-left"></div>
-
-        <div class="content">
-          <!-- Header Banner -->
-          <div class="header-banner">
-            <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinewhite.png" alt="UGC Logistics"/>
-            <div class="brand-text">
-              <div class="brand-name">${UGC_INFO.shortName.toUpperCase()}</div>
-              <div class="brand-tagline">${UGC_INFO.tagline}</div>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Quotation ${quotation.quotation_number}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+    :root{
+      --ugc-orange:#ff4600;
+      --ugc-orange-2:#ff6a2b;
+      --ugc-ink:#0f172a;
+      --ugc-slate:#1e293b;
+      --ugc-muted:#64748b;
+      --ugc-line:#e2e8f0;
+      --ugc-soft:#f8fafc;
+      --ugc-cream:#fff7ed;
+      --ugc-green:#059669;
+      --ugc-red:#dc2626;
+      --shadow: 0 14px 40px rgba(15,23,42,.10);
+      --radius: 14px;
+      --radius-lg: 18px;
+    }
+
+    *{ margin:0; padding:0; box-sizing:border-box; }
+
+    @page{
+      size:A4;
+      margin: 10mm 10mm 12mm 10mm;
+    }
+
+    body{
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      font-size: 10px;
+      line-height: 1.55;
+      color: var(--ugc-slate);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      background: #fff;
+    }
+
+    /* ======= PAGE BACKGROUND (Subtle pattern, still printer-friendly) ======= */
+    .bg{
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background:
+        radial-gradient(1000px 400px at 10% -10%, rgba(255,70,0,.14), transparent 55%),
+        radial-gradient(800px 320px at 110% 0%, rgba(15,23,42,.10), transparent 60%),
+        linear-gradient(180deg, #ffffff 0%, #ffffff 55%, #f9fafb 100%);
+    }
+
+    /* micro pattern overlay */
+    .bg::after{
+      content:"";
+      position:absolute; inset:0;
+      opacity:.10;
+      background-image:
+        linear-gradient(90deg, rgba(15,23,42,.10) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(15,23,42,.10) 1px, transparent 1px);
+      background-size: 12px 12px;
+      mask-image: radial-gradient(circle at 30% 0%, #000 0%, transparent 60%);
+    }
+
+    /* ======= ANTI-TAMPER WATERMARK ======= */
+    .watermark{
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .watermark-text{
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      width: 200%;
+      height: 200%;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: center;
+      justify-content: center;
+      font-size: 6px;
+      font-weight: 400;
+      letter-spacing: 2px;
+      color: rgba(255, 70, 0, 0.035);
+      line-height: 3;
+      word-break: break-all;
+      user-select: none;
+    }
+
+    /* Secondary diagonal watermark layer */
+    .watermark-diagonal{
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .watermark-diagonal::before{
+      content: "${watermarkText.repeat(100)}";
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      transform: rotate(-30deg);
+      font-size: 5px;
+      font-family: monospace;
+      letter-spacing: 1px;
+      line-height: 2.5;
+      color: rgba(15, 23, 42, 0.02);
+      word-break: break-all;
+      white-space: normal;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* ======= LAYOUT ======= */
+    .sheet{
+      position: relative;
+      padding: 0;
+    }
+
+    /* ticket rails left-right */
+    .rail{
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      width: 7mm;
+      background:
+        linear-gradient(180deg,
+          rgba(255,70,0,1) 0%,
+          rgba(255,70,0,1) 18%,
+          rgba(15,23,42,1) 18%,
+          rgba(15,23,42,1) 52%,
+          rgba(255,70,0,1) 52%,
+          rgba(255,70,0,1) 100%
+        );
+      opacity: .95;
+    }
+    .rail.left{ left:-10mm; }
+    .rail.right{ right:-10mm; }
+
+    /* perforation (visual only) */
+    .perf{
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      width: 2mm;
+      background:
+        radial-gradient(circle, rgba(255,255,255,.95) 1.2px, transparent 1.3px) 0 0 / 2mm 6mm;
+      opacity: .85;
+    }
+    .perf.left{ left:-2mm; }
+    .perf.right{ right:-2mm; }
+
+    /* ======= PAGEBREAK SAFETY ======= */
+    .keep{ break-inside: avoid; page-break-inside: avoid; }
+    .keep-pad{ break-inside: avoid; page-break-inside: avoid; padding-top: 1px; }
+    .section{ margin-top: 12px; }
+    .section + .section{ margin-top: 12px; }
+
+    /* allow table to flow across pages, but keep rows intact */
+    table{ width:100%; border-collapse: collapse; }
+    thead{ display: table-header-group; }
+    tfoot{ display: table-footer-group; }
+    tr{ break-inside: avoid; page-break-inside: avoid; }
+
+    /* ======= TOP HERO ======= */
+    .hero{
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(226,232,240,.9);
+      background:
+        linear-gradient(135deg, rgba(255,70,0,1) 0%, rgba(255,106,43,1) 38%, rgba(15,23,42,1) 38%, rgba(15,23,42,1) 100%);
+    }
+
+    .hero-inner{
+      display:flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px 16px 14px 16px;
+      color:#fff;
+      position: relative;
+    }
+
+    /* route line motif */
+    .hero-inner::after{
+      content:"";
+      position:absolute; inset:0;
+      opacity:.18;
+      background:
+        repeating-linear-gradient(135deg, rgba(255,255,255,.22) 0 6px, transparent 6px 12px);
+      mix-blend-mode: overlay;
+      pointer-events:none;
+    }
+
+    .brand{
+      display:flex;
+      gap: 10px;
+      align-items: center;
+      min-width: 58%;
+    }
+    .brand img{
+      height: 14mm;
+      width:auto;
+      display:block;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,.22));
+    }
+    .brand-meta .name{
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: .6px;
+      line-height: 1.05;
+    }
+    .brand-meta .tag{
+      font-size: 8.5px;
+      opacity: .92;
+      margin-top: 2px;
+    }
+    .brand-meta .micro{
+      font-size: 7.2px;
+      opacity: .85;
+      margin-top: 6px;
+      letter-spacing: .2px;
+    }
+
+    .docchip{
+      text-align: right;
+      min-width: 38%;
+    }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: .3px;
+      border: 1px solid rgba(255,255,255,.35);
+      background: rgba(255,255,255,.12);
+      backdrop-filter: blur(6px);
+    }
+    .chip-orange{
+      background: rgba(255,255,255,.14);
+    }
+    .docchip .title{
+      margin-top: 10px;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .docchip .number{
+      margin-top: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      opacity: .95;
+    }
+
+    .hero-foot{
+      display:flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 16px 12px 16px;
+      background: rgba(255,255,255,.10);
+      border-top: 1px solid rgba(255,255,255,.18);
+      color: rgba(255,255,255,.92);
+      font-size: 8px;
+    }
+    .hero-foot strong{ color:#fff; }
+    .hero-foot .right{ text-align:right; }
+
+    /* ======= MAIN GRID ======= */
+    .grid-2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    /* ======= CARDS ======= */
+    .card{
+      border: 1px solid rgba(226,232,240,.9);
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: 0 10px 26px rgba(15,23,42,.06);
+      overflow: hidden;
+    }
+
+    .card-h{
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      background: linear-gradient(135deg, var(--ugc-soft) 0%, #ffffff 60%);
+      border-bottom: 1px solid var(--ugc-line);
+    }
+
+    .h-left{
+      display:flex; align-items:center; gap: 8px;
+      min-width: 60%;
+    }
+    .pill{
+      width: 9px; height: 9px; border-radius: 3px;
+      background: var(--ugc-orange);
+      box-shadow: 0 6px 14px rgba(255,70,0,.25);
+    }
+    .card-title{
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      color: var(--ugc-ink);
+    }
+    .card-sub{
+      font-size: 8px;
+      color: var(--ugc-muted);
+    }
+
+    .card-b{
+      padding: 12px;
+    }
+
+    .kv{
+      display:grid;
+      grid-template-columns: 92px 1fr;
+      gap: 6px 10px;
+      font-size: 9px;
+    }
+    .kv .k{ color: var(--ugc-muted); }
+    .kv .v{ color: var(--ugc-slate); font-weight: 600; }
+
+    .route{
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap: 10px;
+      background: linear-gradient(135deg, #fff 0%, var(--ugc-cream) 100%);
+      border: 1px dashed rgba(255,70,0,.45);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .route .pt{
+      text-align:center;
+      flex:1;
+    }
+    .route .city{
+      font-size: 12px;
+      font-weight: 900;
+      color: var(--ugc-ink);
+      letter-spacing: .2px;
+    }
+    .route .meta{
+      font-size: 8px;
+      color: var(--ugc-muted);
+      margin-top: 2px;
+    }
+    .route .arrow{
+      width: 42px;
+      text-align:center;
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--ugc-orange);
+    }
+    .route .micro{
+      font-size: 7px;
+      color: #9a3412;
+      margin-top: 3px;
+    }
+
+    /* ======= SECTION HEAD ======= */
+    .sec-head{
+      margin-top: 12px;
+      display:flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 2px;
+    }
+    .sec-head .h{
+      font-size: 11px;
+      font-weight: 900;
+      color: var(--ugc-ink);
+      letter-spacing: .4px;
+      text-transform: uppercase;
+    }
+    .sec-head .meta{
+      font-size: 8px;
+      color: var(--ugc-muted);
+    }
+
+    /* ======= DETAILS GRID ======= */
+    .details{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .tile{
+      border: 1px solid var(--ugc-line);
+      background: linear-gradient(135deg, #fff 0%, var(--ugc-soft) 100%);
+      border-radius: 12px;
+      padding: 10px;
+    }
+    .tile .k{
+      font-size: 7px;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      color: #94a3b8;
+      font-weight: 800;
+    }
+    .tile .v{
+      margin-top: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--ugc-ink);
+      line-height: 1.2;
+    }
+
+    .note{
+      margin-top: 10px;
+      border-left: 4px solid rgba(255,70,0,.85);
+      background: linear-gradient(135deg, rgba(255,70,0,.08) 0%, rgba(15,23,42,.03) 100%);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .note .k{
+      font-size: 8px;
+      font-weight: 900;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+      color: #9a3412;
+    }
+    .note .v{
+      margin-top: 4px;
+      font-size: 9px;
+      color: #7c2d12;
+      line-height: 1.6;
+    }
+
+    /* ======= PACKAGE CARD ======= */
+    .package-card{
+      display:flex;
+      justify-content: space-between;
+      align-items: stretch;
+      gap: 10px;
+      border: 1px solid rgba(255,70,0,.35);
+      background: linear-gradient(135deg, #fff 0%, var(--ugc-cream) 90%);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+    .kicker{
+      font-size: 7px;
+      font-weight: 900;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      color: #9a3412;
+    }
+    .package-title{
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: 900;
+      color: var(--ugc-ink);
+      letter-spacing: .2px;
+    }
+    .package-sub{
+      margin-top: 3px;
+      font-size: 9px;
+      color: #7c2d12;
+      font-weight: 700;
+    }
+    .package-right{
+      text-align:right;
+      min-width: 34%;
+      display:flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .package-right .micro{
+      font-size: 7.5px;
+      color: #7c2d12;
+      opacity: .95;
+    }
+
+    /* ======= RATE TABLE ======= */
+    .rate-wrap{
+      margin-top: 10px;
+      border: 1px solid var(--ugc-line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 10px 26px rgba(15,23,42,.06);
+    }
+    .rate-head{
+      background: linear-gradient(135deg, var(--ugc-ink) 0%, var(--ugc-slate) 65%, var(--ugc-orange) 65%, var(--ugc-orange-2) 100%);
+      color:#fff;
+      padding: 10px 12px;
+      display:flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .rate-head .left{
+      display:flex; flex-direction: column;
+      gap: 2px;
+    }
+    .rate-head .ttl{
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .7px;
+      text-transform: uppercase;
+    }
+    .rate-head .sub{
+      font-size: 8px;
+      opacity: .9;
+    }
+    .rate-head .badge{
+      font-size: 8px;
+      font-weight: 900;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.35);
+      background: rgba(255,255,255,.12);
+    }
+
+    .rate-table th{
+      background: linear-gradient(135deg, var(--ugc-soft) 0%, #fff 80%);
+      color: var(--ugc-ink);
+      padding: 10px;
+      border-bottom: 1px solid var(--ugc-line);
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      font-weight: 900;
+    }
+    .rate-table td{
+      padding: 10px;
+      border-bottom: 1px solid rgba(226,232,240,.7);
+      font-size: 9px;
+      vertical-align: top;
+    }
+    .rate-table tr:nth-child(even) td{
+      background: #fcfcfd;
+    }
+    .rate-table .col-no{ width: 7%; text-align:center; }
+    .rate-table .col-unit{ width: 18%; text-align:center; }
+    .rate-table .col-amt{ width: 22%; text-align:right; }
+    .rate-table .center{ text-align:center; }
+    .rate-table .right{ text-align:right; font-weight: 900; color: var(--ugc-ink); }
+    .item-title{ font-weight: 900; color: var(--ugc-ink); }
+    .item-desc{ margin-top: 4px; font-size: 8px; color: var(--ugc-muted); line-height: 1.5; }
+
+    /* ======= TOTAL STRIP ======= */
+    .total{
+      display:flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: linear-gradient(135deg, var(--ugc-orange) 0%, var(--ugc-orange-2) 55%, var(--ugc-ink) 55%, var(--ugc-ink) 100%);
+      color:#fff;
+    }
+    .total .k{
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: .7px;
+      text-transform: uppercase;
+      opacity: .95;
+    }
+    .total .v{
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: .4px;
+      text-shadow: 0 10px 20px rgba(0,0,0,.12);
+    }
+    .total .mini{
+      font-size: 7.5px;
+      opacity: .9;
+      margin-top: 2px;
+    }
+
+    /* ======= TERMS ======= */
+    .terms{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .tcard{
+      border: 1px solid var(--ugc-line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 10px 26px rgba(15,23,42,.06);
+      background: #fff;
+    }
+    .tcard .th{
+      padding: 10px 12px;
+      font-weight: 900;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      font-size: 9px;
+      border-bottom: 1px solid var(--ugc-line);
+      display:flex; align-items:center; gap: 8px;
+    }
+    .tcard .tb{ padding: 10px 12px; font-size: 9px; }
+    .tcard ul{ list-style:none; }
+    .tcard li{ display:flex; gap: 8px; line-height: 1.5; margin: 6px 0; }
+    .tick{ color: var(--ugc-green); font-weight: 900; width: 14px; display:inline-block; }
+    .cross{ color: var(--ugc-red); font-weight: 900; width: 14px; display:inline-block; }
+    .t-inc .th{ background: rgba(5,150,105,.08); color: #065f46; }
+    .t-exc .th{ background: rgba(220,38,38,.08); color: #7f1d1d; }
+
+    /* ======= VALIDITY STRIP ======= */
+    .validity{
+      margin-top: 12px;
+      border-radius: var(--radius);
+      border: 1px dashed rgba(255,70,0,.55);
+      background: linear-gradient(135deg, #fff 0%, var(--ugc-cream) 100%);
+      padding: 10px 12px;
+      text-align: center;
+      font-size: 9px;
+      color: #7c2d12;
+    }
+    .validity strong{ color: var(--ugc-orange); }
+
+    /* ======= SIGNATURE ======= */
+    .sign{
+      margin-top: 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--ugc-line);
+      background: #fff;
+      box-shadow: 0 10px 26px rgba(15,23,42,.06);
+      padding: 12px;
+      display:flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    .sign-left{
+      display:flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    .qr{
+      text-align:center;
+      width: 72px;
+      flex: 0 0 72px;
+    }
+    .qr img{
+      width: 66px; height: 66px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,70,0,.45);
+      padding: 6px;
+    }
+    .qr .lbl{
+      margin-top: 6px;
+      font-size: 7px;
+      color: #94a3b8;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    .sig{
+      min-width: 220px;
+    }
+    .sig .hand{
+      font-family: "Brush Script MT", cursive;
+      font-size: 20px;
+      color: var(--ugc-ink);
+      border-bottom: 1px solid rgba(15,23,42,.45);
+      padding-bottom: 4px;
+      margin-bottom: 6px;
+      width: 220px;
+    }
+    .sig .nm{
+      font-size: 11px;
+      font-weight: 900;
+      color: var(--ugc-orange);
+    }
+    .sig .tl{
+      margin-top: 2px;
+      font-size: 8px;
+      color: var(--ugc-muted);
+    }
+
+    .sign-right{
+      text-align:right;
+      font-size: 8.5px;
+      color: var(--ugc-muted);
+      line-height: 1.8;
+    }
+    .sign-right strong{ color: var(--ugc-ink); }
+    .contactline{
+      display:flex;
+      justify-content: flex-end;
+      gap: 8px;
+      align-items:center;
+    }
+    .dot{
+      width: 8px; height: 8px; border-radius: 999px;
+      background: var(--ugc-orange);
+      box-shadow: 0 6px 14px rgba(255,70,0,.25);
+    }
+
+    /* ======= FOOTER ======= */
+    .footer{
+      margin-top: 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--ugc-line);
+      background: linear-gradient(135deg, var(--ugc-soft) 0%, #fff 60%);
+      padding: 10px 12px;
+      text-align:center;
+      font-size: 8px;
+      color: var(--ugc-muted);
+    }
+    .footer strong{ color: var(--ugc-ink); }
+    .footer .hl{ color: var(--ugc-orange); font-weight: 900; }
+
+    /* ======= SECURITY FOOTER (Anti-tamper) ======= */
+    .security-footer{
+      margin-top: 8px;
+      padding: 6px 12px;
+      background: rgba(15, 23, 42, 0.03);
+      border-radius: 8px;
+      font-size: 6px;
+      font-family: monospace;
+      color: rgba(100, 116, 139, 0.6);
+      text-align: center;
+      letter-spacing: 0.5px;
+      word-break: break-all;
+    }
+
+    /* ======= PRINT ======= */
+    @media print{
+      .hero, .card, .rate-wrap, .tcard, .sign, .footer{
+        box-shadow: none !important;
+      }
+      .watermark-diagonal::before{
+        color: rgba(15, 23, 42, 0.015);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="bg"></div>
+
+  <!-- Anti-Tamper Watermark -->
+  <div class="watermark">
+    <div class="watermark-text">${watermarkRepeated}</div>
+  </div>
+  <div class="watermark-diagonal"></div>
+
+  <div class="rail left"></div><div class="perf left"></div>
+  <div class="rail right"></div><div class="perf right"></div>
+
+  <div class="sheet">
+    <!-- HERO -->
+    <div class="hero keep">
+      <div class="hero-inner">
+        <div class="brand">
+          <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinewhite.png" alt="UGC Logistics" />
+          <div class="brand-meta">
+            <div class="name">${UGC_INFO.shortName.toUpperCase()}</div>
+            <div class="tag">${UGC_INFO.tagline}</div>
+            <div class="micro">
+              ${UGC_INFO.address}, ${UGC_INFO.city} • ${UGC_INFO.phone} • ${UGC_INFO.web}
             </div>
           </div>
+        </div>
 
-          <!-- Letterhead Info -->
-          <div class="letterhead-info">
-            <div class="sender-info">
-              <div class="sender-name">${profile.name.toUpperCase()}</div>
-              <div class="sender-title">Sales & Commercial Executive</div>
-              <div class="sender-company">${UGC_INFO.name}</div>
-              <div class="sender-detail">
-                <span>Address:</span> ${UGC_INFO.address}, ${UGC_INFO.city}<br/>
-                <span>Web:</span> ${UGC_INFO.web}<br/>
-                <span>Phone:</span> ${UGC_INFO.phone}
-              </div>
-            </div>
-            <div class="doc-date">
-              <div class="label">Date</div>
-              <div class="value">${formatDate(quotation.created_at)}</div>
-            </div>
-          </div>
+        <div class="docchip">
+          <div class="chip chip-orange">REFERENCE <strong>${quotation.ticket?.ticket_code || '-'}</strong></div>
+          <div class="title">Quotation</div>
+          <div class="number">${quotation.quotation_number}</div>
+        </div>
+      </div>
 
-          <!-- Document Header -->
-          <div class="doc-header">
-            <div class="doc-title-section">
-              <div class="doc-title">Quotation</div>
-              <div class="doc-number">${quotation.quotation_number}</div>
-            </div>
-            <div class="doc-meta">
-              Reference: <span class="value">${quotation.ticket?.ticket_code || '-'}</span><br/>
-              Valid Until: <span class="value">${formatDate(quotation.valid_until)}</span><br/>
-              Validity: <span class="value">${quotation.validity_days} Days</span>
-            </div>
-          </div>
+      <div class="hero-foot">
+        <div>
+          <div><strong>Issued:</strong> ${formatDate(quotation.created_at)}</div>
+          <div><strong>Valid Until:</strong> ${formatDate(quotation.valid_until)} (${quotation.validity_days} days)</div>
+        </div>
+        <div class="right">
+          <div><strong>Prepared by:</strong> ${profile.name}</div>
+          <div><strong>Email:</strong> ${profile.email || UGC_INFO.email}</div>
+        </div>
+      </div>
+    </div>
 
-          <!-- Greeting -->
-          <div class="greeting">
-            Dear <span class="greeting-to">${quotation.customer_name}</span>${quotation.customer_company ? `,<br/><span class="greeting-company">${quotation.customer_company}</span>` : ''},
-          </div>
+    <!-- GREETING -->
+    <div class="section keep">
+      <div class="note">
+        <div class="k">To</div>
+        <div class="v">
+          Dear <strong>${quotation.customer_name || '-'}</strong>
+          ${quotation.customer_company ? `, <strong>${quotation.customer_company}</strong>` : ''}.<br/>
+          Thank you for your interest in our services. Below is our quotation for
+          <strong>${quotation.service_type || 'logistics services'}</strong>
+          ${quotation.origin_city && quotation.destination_city ? ` from <strong>${quotation.origin_city}</strong> to <strong>${quotation.destination_city}</strong>` : ''}.
+        </div>
+      </div>
+    </div>
 
-          <!-- Intro Text -->
-          <div class="intro-text">
-            Thank you for your interest in our logistics services. We are pleased to present you with our quotation for ${quotation.service_type || 'logistics services'}${quotation.origin_city && quotation.destination_city ? ` from ${quotation.origin_city} to ${quotation.destination_city}` : ''}. Please find below the details of our proposed service and pricing.
-          </div>
-
-          <!-- Customer & Route Section -->
-          <div class="two-col section">
+    <!-- CUSTOMER + ROUTE -->
+    <div class="grid-2 section keep-pad">
+      <div class="card keep">
+        <div class="card-h">
+          <div class="h-left">
+            <div class="pill"></div>
             <div>
-              <div class="section-title">Customer Information</div>
-              <div class="customer-card">
-                <div class="customer-name">${quotation.customer_name}</div>
-                ${quotation.customer_company ? `<div class="customer-company">${quotation.customer_company}</div>` : ''}
-                <div class="customer-detail">
-                  ${quotation.customer_email ? `✉ ${quotation.customer_email}<br/>` : ''}
-                  ${quotation.customer_phone ? `☏ ${quotation.customer_phone}` : ''}
-                  ${quotation.customer_address ? `<br/>📍 ${quotation.customer_address}` : ''}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <div class="section-title">Route Information</div>
-              <div class="route-card">
-                <div class="route-box">
-                  <div class="route-point">
-                    <div class="route-city">${quotation.origin_city || 'Origin'}</div>
-                    <div class="route-country">${quotation.origin_country || ''}</div>
-                    ${quotation.origin_port ? `<div class="route-port">Port: ${quotation.origin_port}</div>` : ''}
-                  </div>
-                  <div class="route-arrow">→</div>
-                  <div class="route-point">
-                    <div class="route-city">${quotation.destination_city || 'Destination'}</div>
-                    <div class="route-country">${quotation.destination_country || ''}</div>
-                    ${quotation.destination_port ? `<div class="route-port">Port: ${quotation.destination_port}</div>` : ''}
-                  </div>
-                </div>
-              </div>
+              <div class="card-title">Customer</div>
+              <div class="card-sub">Contact & address details</div>
             </div>
           </div>
-
-          <!-- Service & Cargo Details -->
-          ${cargoDetails.length > 0 ? `
-            <div class="section">
-              <div class="section-title">Service & Cargo Details</div>
-              <div class="details-grid">
-                ${quotation.service_type ? `<div class="detail-item"><div class="label">Service Type</div><div class="value">${quotation.service_type}</div></div>` : ''}
-                ${quotation.incoterm ? `<div class="detail-item"><div class="label">Incoterm</div><div class="value">${quotation.incoterm}</div></div>` : ''}
-                ${cargoDetails.map(d => `<div class="detail-item"><div class="label">${d.label}</div><div class="value">${d.value}</div></div>`).join('')}
-              </div>
-              ${quotation.cargo_description ? `
-                <div class="cargo-desc">
-                  <div class="label">Cargo Description</div>
-                  <div class="value">${quotation.cargo_description}</div>
-                </div>
-              ` : ''}
-            </div>
-          ` : ''}
-
-          <!-- Rate Quotation -->
-          <div class="section">
-            <div class="section-title">Rate Quotation</div>
-            ${itemsTableHTML}
-            <div class="total-box">
-              <div class="total-label">Total Amount</div>
-              <div class="total-amount">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</div>
-            </div>
-          </div>
-
-          ${quotation.scope_of_work ? `
-            <div class="section">
-              <div class="section-title">Scope of Work</div>
-              <div class="scope-box">${quotation.scope_of_work}</div>
-            </div>
-          ` : ''}
-
-          ${(includesList || excludesList) ? `
-            <div class="section">
-              <div class="section-title">Terms & Conditions</div>
-              <div class="terms-grid">
-                ${includesList ? `<div class="terms-card included"><h4>✓ Included in Quote</h4><ul>${includesList}</ul></div>` : ''}
-                ${excludesList ? `<div class="terms-card excluded"><h4>✗ Not Included</h4><ul>${excludesList}</ul></div>` : ''}
-              </div>
-            </div>
-          ` : ''}
-
-          ${quotation.terms_notes ? `
-            <div class="notes-box">
-              <div class="label">Additional Notes</div>
-              <div class="value">${quotation.terms_notes}</div>
-            </div>
-          ` : ''}
-
-          <div class="validity-banner">
-            ⏰ This quotation is valid for <strong>${quotation.validity_days} days</strong> from issue date (until <strong>${formatDate(quotation.valid_until)}</strong>). Prices are subject to change after validity period.
-          </div>
-
-          <!-- Signature Footer -->
-          <div class="signature-footer">
-            <div class="signature-left">
-              <div class="qr-container">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR Code"/>
-                <div class="qr-label">Scan to Verify</div>
-              </div>
-              <div class="signature-block">
-                <div class="signature-line">${profile.name}</div>
-                <div class="signer-name">${profile.name.toUpperCase()}</div>
-                <div class="signer-title">Sales & Commercial Executive</div>
-              </div>
-            </div>
-            <div class="signature-right">
-              <div class="contact-item">
-                <div class="icon">☏</div>
-                <div class="text">${UGC_INFO.phone}</div>
-              </div>
-              <div class="contact-item">
-                <div class="icon">✉</div>
-                <div class="text">${profile.email || UGC_INFO.email}</div>
-              </div>
-              <div class="contact-item">
-                <div class="icon">🌐</div>
-                <div class="text">${UGC_INFO.web}</div>
-              </div>
-              <div class="contact-item">
-                <div class="icon">📍</div>
-                <div class="text">${UGC_INFO.city}</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Company Footer -->
-          <div class="company-footer">
-            <strong>${UGC_INFO.name}</strong><br/>
-            ${UGC_INFO.address}, ${UGC_INFO.city}<br/>
-            <span class="highlight">☏ ${UGC_INFO.phone}</span> • <span class="highlight">✉ ${UGC_INFO.email}</span> • <span class="highlight">🌐 ${UGC_INFO.web}</span>
+        </div>
+        <div class="card-b">
+          <div class="kv">
+            <div class="k">Name</div><div class="v">${quotation.customer_name || '-'}</div>
+            <div class="k">Company</div><div class="v">${quotation.customer_company || '-'}</div>
+            <div class="k">Email</div><div class="v">${quotation.customer_email || '-'}</div>
+            <div class="k">Phone</div><div class="v">${quotation.customer_phone || '-'}</div>
+            <div class="k">Address</div><div class="v">${quotation.customer_address || '-'}</div>
           </div>
         </div>
       </div>
-    </body>
-    </html>
+
+      <div class="card keep">
+        <div class="card-h">
+          <div class="h-left">
+            <div class="pill"></div>
+            <div>
+              <div class="card-title">Route</div>
+              <div class="card-sub">Origin → Destination</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-b">
+          <div class="route">
+            <div class="pt">
+              <div class="city">${quotation.origin_city || 'Origin'}</div>
+              <div class="meta">${quotation.origin_country || ''}</div>
+              ${quotation.origin_port ? `<div class="micro">Port: ${quotation.origin_port}</div>` : `<div class="micro">&nbsp;</div>`}
+            </div>
+            <div class="arrow">→</div>
+            <div class="pt">
+              <div class="city">${quotation.destination_city || 'Destination'}</div>
+              <div class="meta">${quotation.destination_country || ''}</div>
+              ${quotation.destination_port ? `<div class="micro">Port: ${quotation.destination_port}</div>` : `<div class="micro">&nbsp;</div>`}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SERVICE & CARGO DETAILS -->
+    ${(quotation.service_type || quotation.incoterm || cargoDetails.length > 0 || quotation.cargo_description) ? `
+      <div class="section keep-pad">
+        <div class="sec-head">
+          <div class="h">Service & Cargo</div>
+          <div class="meta">Key shipment parameters</div>
+        </div>
+
+        <div class="details">
+          ${quotation.service_type ? `<div class="tile"><div class="k">Service Type</div><div class="v">${quotation.service_type}</div></div>` : ''}
+          ${quotation.incoterm ? `<div class="tile"><div class="k">Incoterm</div><div class="v">${quotation.incoterm}</div></div>` : ''}
+          ${cargoDetails.map(d => `<div class="tile"><div class="k">${d.label}</div><div class="v">${d.value}</div></div>`).join('')}
+        </div>
+
+        ${quotation.cargo_description ? `
+          <div class="note keep">
+            <div class="k">Cargo Description</div>
+            <div class="v">${quotation.cargo_description}</div>
+          </div>
+        ` : ''}
+      </div>
+    ` : ''}
+
+    <!-- RATE -->
+    <div class="section keep-pad">
+      <div class="rate-wrap">
+        <div class="rate-head keep">
+          <div class="left">
+            <div class="ttl">Rate Quotation</div>
+            <div class="sub">
+              Currency: <strong>${quotation.currency || 'IDR'}</strong>
+              • Structure: <strong>${quotation.rate_structure || (isBreakdown ? 'breakdown' : 'all-in')}</strong>
+            </div>
+          </div>
+          <div class="badge">UGC • Commercial Offer</div>
+        </div>
+
+        <div class="keep-pad" style="padding:12px;">
+          ${itemsTableHTML}
+        </div>
+
+        <div class="total keep">
+          <div>
+            <div class="k">Total Amount</div>
+            <div class="mini">Taxes / duties follow terms & conditions (if applicable)</div>
+          </div>
+          <div class="v">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCOPE -->
+    ${quotation.scope_of_work ? `
+      <div class="section keep">
+        <div class="sec-head">
+          <div class="h">Scope of Work</div>
+          <div class="meta">Operational boundaries</div>
+        </div>
+        <div class="note">
+          <div class="k">Scope</div>
+          <div class="v">${quotation.scope_of_work}</div>
+        </div>
+      </div>
+    ` : ''}
+
+    <!-- TERMS -->
+    ${(includesList || excludesList) ? `
+      <div class="section keep-pad">
+        <div class="sec-head">
+          <div class="h">Terms & Conditions</div>
+          <div class="meta">Included vs not included</div>
+        </div>
+
+        <div class="terms">
+          ${includesList ? `
+            <div class="tcard t-inc keep">
+              <div class="th">Included in Quote</div>
+              <div class="tb"><ul>${includesList}</ul></div>
+            </div>
+          ` : ''}
+
+          ${excludesList ? `
+            <div class="tcard t-exc keep">
+              <div class="th">Not Included</div>
+              <div class="tb"><ul>${excludesList}</ul></div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    ` : ''}
+
+    <!-- ADDITIONAL NOTES -->
+    ${quotation.terms_notes ? `
+      <div class="section keep">
+        <div class="note">
+          <div class="k">Additional Notes</div>
+          <div class="v">${quotation.terms_notes}</div>
+        </div>
+      </div>
+    ` : ''}
+
+    <!-- VALIDITY -->
+    <div class="validity keep">
+      This quotation is valid for <strong>${quotation.validity_days} days</strong> from the issue date
+      (until <strong>${formatDate(quotation.valid_until)}</strong>). Prices may change after the validity period.
+    </div>
+
+    <!-- SIGNATURE -->
+    <div class="sign keep">
+      <div class="sign-left">
+        <div class="qr">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR Code" />
+          <div class="lbl">Verify</div>
+        </div>
+        <div class="sig">
+          <div class="hand">${profile.name}</div>
+          <div class="nm">${profile.name.toUpperCase()}</div>
+          <div class="tl">Sales & Commercial Executive • ${UGC_INFO.shortName}</div>
+        </div>
+      </div>
+
+      <div class="sign-right">
+        <div class="contactline"><span class="dot"></span><span><strong>${UGC_INFO.phone}</strong> (Office)</span></div>
+        <div class="contactline"><span class="dot"></span><span><strong>${profile.email || UGC_INFO.email}</strong> (Email)</span></div>
+        <div class="contactline"><span class="dot"></span><span><strong>${UGC_INFO.web}</strong> (Website)</span></div>
+        <div class="contactline"><span class="dot"></span><span>${UGC_INFO.city}</span></div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer keep">
+      <strong>${UGC_INFO.name}</strong><br/>
+      ${UGC_INFO.address}, ${UGC_INFO.city}<br/>
+      <span class="hl">${UGC_INFO.phone}</span> • <span class="hl">${UGC_INFO.email}</span> • <span class="hl">${UGC_INFO.web}</span>
+    </div>
+
+    <!-- SECURITY FOOTER (Anti-tamper verification) -->
+    <div class="security-footer">
+      Document ID: ${quotation.quotation_number} • Validation: ${quotation.validation_code} • Verify at: ${validationUrl}
+    </div>
+  </div>
+</body>
+</html>
   `
 }
 
