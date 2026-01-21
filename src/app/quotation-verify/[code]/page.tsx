@@ -488,7 +488,7 @@ export default function QuotationVerifyPage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gradient-to-r from-gray-900 to-gray-800 text-white py-8 mt-12">
+      <footer className="bg-gradient-to-r from-[#ff4600] to-[#ff6b35] text-white py-8 mt-12">
         <div className="max-w-4xl mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="text-center md:text-left">
@@ -499,18 +499,18 @@ export default function QuotationVerifyPage() {
                 height={45}
                 className="h-10 w-auto mx-auto md:mx-0"
               />
-              <p className="mt-3 text-gray-400 text-sm max-w-md">
+              <p className="mt-3 text-white/80 text-sm max-w-md">
                 {UGC_INFO.address}
               </p>
             </div>
-            <div className="text-center md:text-right text-sm text-gray-400">
+            <div className="text-center md:text-right text-sm text-white/90">
               <p className="flex items-center justify-center md:justify-end gap-2">
                 <Phone className="h-3 w-3" /> {UGC_INFO.phone}
               </p>
               <p className="mt-1 flex items-center justify-center md:justify-end gap-2">
                 <Mail className="h-3 w-3" /> {UGC_INFO.email}
               </p>
-              <p className="mt-3 text-gray-500 text-xs">
+              <p className="mt-3 text-white/70 text-xs">
                 This verification page confirms the authenticity of quotations issued by UGC Logistics.
               </p>
             </div>

@@ -26,6 +26,7 @@ import {
   Package,
   Truck,
   Pencil,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -159,6 +160,62 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
       toast({
         title: 'Error',
         description: error.message || 'Failed to generate PDF',
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Download PDF directly
+  const handleDownloadPDF = async () => {
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}/pdf`, {
+        method: 'POST',
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        // Create iframe for printing
+        const iframe = document.createElement('iframe')
+        iframe.style.position = 'fixed'
+        iframe.style.right = '0'
+        iframe.style.bottom = '0'
+        iframe.style.width = '0'
+        iframe.style.height = '0'
+        iframe.style.border = 'none'
+        document.body.appendChild(iframe)
+
+        const iframeDoc = iframe.contentWindow?.document
+        if (iframeDoc) {
+          iframeDoc.open()
+          iframeDoc.write(result.html)
+          iframeDoc.close()
+
+          // Wait for content to load then print
+          iframe.onload = () => {
+            setTimeout(() => {
+              iframe.contentWindow?.print()
+              // Remove iframe after a delay
+              setTimeout(() => {
+                document.body.removeChild(iframe)
+              }, 1000)
+            }, 500)
+          }
+        }
+
+        toast({
+          title: 'Download PDF',
+          description: 'Print dialog opened. Select "Save as PDF" to download.',
+        })
+      } else {
+        throw new Error(result.error || 'Failed to generate PDF')
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to download PDF',
         variant: 'destructive',
       })
     } finally {
@@ -370,6 +427,14 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
           >
             <Eye className="mr-2 h-4 w-4" />
             Preview PDF
+          </Button>
+          <Button
+            variant="default"
+            onClick={handleDownloadPDF}
+            disabled={actionLoading}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Download PDF
           </Button>
           {quotation.status === 'draft' && (
             <>
