@@ -33,6 +33,16 @@ const formatDate = (date: string | Date): string => {
   })
 }
 
+const formatDateTime = (date: string | Date): string => {
+  return new Date(date).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 const UGC_INFO = {
   name: 'PT. Utama Global Indo Cargo',
   shortName: 'UGC Logistics',
@@ -42,9 +52,19 @@ const UGC_INFO = {
   web: 'www.utamaglobalindocargo.com',
 }
 
-const generateQuotationHTML = (quotation: any, profile: ProfileData, validationUrl: string): string => {
+// Status display config
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  draft: { label: 'DRAFT', color: '#6b7280', bg: '#f3f4f6' },
+  sent: { label: 'ACTIVE', color: '#059669', bg: '#d1fae5' },
+  accepted: { label: 'ACCEPTED', color: '#2563eb', bg: '#dbeafe' },
+  rejected: { label: 'REJECTED', color: '#dc2626', bg: '#fee2e2' },
+  expired: { label: 'EXPIRED', color: '#d97706', bg: '#fef3c7' },
+}
+
+const generateQuotationHTML = (quotation: any, profile: ProfileData, validationUrl: string, printDate: string): string => {
   const items = quotation.items || []
   const isBreakdown = quotation.rate_structure === 'breakdown'
+  const status = STATUS_CONFIG[quotation.status] || STATUS_CONFIG.draft
 
   let rateHTML = ''
   if (isBreakdown && items.length > 0) {
@@ -93,13 +113,13 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap');
     *{margin:0;padding:0;box-sizing:border-box}
     @page{size:A4;margin:0}
-    html,body{width:210mm;min-height:297mm}
+    html,body{width:210mm;height:297mm}
     body{font-family:'Segoe UI',Arial,sans-serif;font-size:8px;line-height:1.3;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
-    .page{position:relative;width:210mm;min-height:297mm;display:flex;flex-direction:column}
+    .page{width:210mm;height:297mm;display:flex;flex-direction:column;overflow:hidden}
 
     /* Header - full width orange block */
-    .hdr{background:#ff4600;color:#fff;padding:12px 0.8cm 10px 0.8cm;display:flex;justify-content:space-between;align-items:flex-start}
+    .hdr{background:#ff4600;color:#fff;padding:12px 0.8cm 10px 0.8cm;display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0}
     .logo{display:flex;align-items:center;gap:10px}
     .logo img{height:40px}
     .logo h1{font-size:14px;font-weight:700;margin-bottom:2px}
@@ -107,10 +127,16 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     .doc{text-align:right}
     .doc .t{font-size:20px;font-weight:700;letter-spacing:2px}
     .doc .n{font-size:11px;font-weight:600;margin-top:3px;opacity:0.95}
-    .doc .d{font-size:7px;margin-top:5px;opacity:0.9}
+    .doc .status-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:8px;font-weight:700;margin-top:4px}
 
     /* Content area */
-    .content{flex:1;padding:12px 0.8cm 10px 0.8cm}
+    .content{flex:1;padding:12px 0.8cm 10px 0.8cm;overflow:hidden}
+
+    /* Date info bar */
+    .date-bar{display:flex;gap:15px;margin-bottom:10px;padding:6px 10px;background:#f8f9fa;border-radius:4px;font-size:7px}
+    .date-bar .item{display:flex;gap:4px}
+    .date-bar .label{color:#666}
+    .date-bar .value{font-weight:600;color:#1a1a1a}
 
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
     .box{background:#f8f9fa;border:1px solid #e5e5e5;border-radius:4px;padding:6px 8px}
@@ -160,8 +186,8 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     .valid p{font-size:7px;color:#0066cc}
     .valid strong{color:#004499}
 
-    /* Signature section - above footer */
-    .sig-section{display:flex;justify-content:space-between;align-items:flex-end;padding:10px 0;margin-top:auto;border-top:1px solid #e5e5e5}
+    /* Signature section - fixed at bottom above footer */
+    .sig-section{display:flex;justify-content:space-between;align-items:flex-end;padding:10px 0.8cm;border-top:1px solid #e5e5e5;background:#fff;flex-shrink:0}
     .sig-left{display:flex;gap:12px;align-items:flex-end}
     .qr{text-align:center}
     .qr img{width:50px;height:50px;border:1px solid #e5e5e5;padding:2px;border-radius:3px}
@@ -174,10 +200,15 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     .ugc-info strong{color:#1a1a1a;font-size:8px}
 
     /* Footer - full width orange block */
-    .ftr{background:#ff4600;color:#fff;padding:4px 0.8cm;font-family:'Courier New',monospace;font-size:7px;display:flex;justify-content:space-between;align-items:center}
+    .ftr{background:#ff4600;color:#fff;padding:4px 0.8cm;font-family:'Courier New',monospace;font-size:7px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
     .ftr span{opacity:0.95}
 
     .keep{break-inside:avoid;page-break-inside:avoid}
+
+    @media print{
+      html,body{width:210mm;height:297mm}
+      .page{width:210mm;height:297mm}
+    }
   </style>
 </head>
 <body>
@@ -188,18 +219,26 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinewhite.png" alt="UGC">
         <div>
           <h1>${UGC_INFO.shortName}</h1>
-          <p>${UGC_INFO.address}<br>${UGC_INFO.phone} | ${UGC_INFO.email} | ${UGC_INFO.web}</p>
+          <p>${UGC_INFO.address}<br>Tel: ${UGC_INFO.phone} | Email: ${UGC_INFO.email} | Web: ${UGC_INFO.web}</p>
         </div>
       </div>
       <div class="doc">
         <div class="t">QUOTATION</div>
         <div class="n">${quotation.quotation_number}</div>
-        <div class="d">Date: ${formatDate(quotation.created_at)} | Valid: ${formatDate(quotation.valid_until)}</div>
+        <div class="status-badge" style="background:${status.bg};color:${status.color}">${status.label}</div>
       </div>
     </div>
 
     <!-- Content -->
     <div class="content">
+      <!-- Date Info Bar -->
+      <div class="date-bar keep">
+        <div class="item"><span class="label">Issue:</span><span class="value">${formatDateTime(quotation.created_at)}</span></div>
+        <div class="item"><span class="label">Status Update:</span><span class="value">${formatDateTime(quotation.updated_at)}</span></div>
+        <div class="item"><span class="label">Valid Until:</span><span class="value">${formatDate(quotation.valid_until)}</span></div>
+        <div class="item"><span class="label">Print:</span><span class="value">${printDate}</span></div>
+      </div>
+
       <div class="grid keep">
         <div class="box">
           <h3>Customer</h3>
@@ -271,26 +310,26 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
       <div class="valid keep">
         <p>Valid for <strong>${quotation.validity_days} days</strong> until <strong>${formatDate(quotation.valid_until)}</strong></p>
       </div>
+    </div>
 
-      <!-- Signature Section -->
-      <div class="sig-section keep">
-        <div class="sig-left">
-          <div class="qr">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR">
-            <p>Scan to verify</p>
-          </div>
-          <div class="sig-block">
-            <div class="hand">${profile.name}</div>
-            <div class="name">${profile.name}</div>
-            <div class="title">Sales & Commercial Department</div>
-          </div>
+    <!-- Signature Section - Above Footer -->
+    <div class="sig-section">
+      <div class="sig-left">
+        <div class="qr">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR">
+          <p>Scan to verify</p>
         </div>
-        <div class="ugc-info">
-          <strong>${UGC_INFO.name}</strong><br>
-          ${UGC_INFO.address}<br>
-          ${UGC_INFO.phone} | ${UGC_INFO.email}<br>
-          ${UGC_INFO.web}
+        <div class="sig-block">
+          <div class="hand">${profile.name}</div>
+          <div class="name">${profile.name}</div>
+          <div class="title">Sales & Commercial Department</div>
         </div>
+      </div>
+      <div class="ugc-info">
+        <strong>${UGC_INFO.name}</strong><br>
+        ${UGC_INFO.address}<br>
+        Tel: ${UGC_INFO.phone} | Email: ${UGC_INFO.email}<br>
+        Web: ${UGC_INFO.web}
       </div>
     </div>
 
@@ -310,6 +349,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params
     const supabase = await createClient()
+    const printDate = formatDateTime(new Date())
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -346,7 +386,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
-    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl)
+    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl, printDate)
 
     return NextResponse.json({
       success: true,
@@ -364,6 +404,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params
     const supabase = await createClient()
+    const printDate = formatDateTime(new Date())
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -400,7 +441,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
-    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl)
+    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl, printDate)
 
     return new NextResponse(html, {
       headers: { 'Content-Type': 'text/html' },
