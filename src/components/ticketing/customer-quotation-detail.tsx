@@ -663,8 +663,61 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                     <p>{quotation.commodity}</p>
                   </div>
                 )}
+                {quotation.estimated_leadtime && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Estimated Leadtime</p>
+                    <p>{quotation.estimated_leadtime}</p>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Cargo Details */}
+            {(quotation.cargo_description || quotation.cargo_weight || quotation.cargo_volume || quotation.estimated_cargo_value) && (
+              <>
+                <Separator />
+                <div>
+                  <p className="font-medium mb-3 flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    Cargo Details
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {quotation.cargo_description && (
+                      <div className="sm:col-span-2 lg:col-span-4">
+                        <p className="text-sm text-muted-foreground">Description</p>
+                        <p>{quotation.cargo_description}</p>
+                      </div>
+                    )}
+                    {quotation.cargo_weight && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Weight</p>
+                        <p className="font-medium">{quotation.cargo_weight} {quotation.cargo_weight_unit || 'kg'}</p>
+                      </div>
+                    )}
+                    {quotation.cargo_volume && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Volume</p>
+                        <p className="font-medium">{quotation.cargo_volume} {quotation.cargo_volume_unit || 'cbm'}</p>
+                      </div>
+                    )}
+                    {quotation.cargo_quantity && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Quantity</p>
+                        <p className="font-medium">{quotation.cargo_quantity} {quotation.cargo_quantity_unit || 'units'}</p>
+                      </div>
+                    )}
+                    {quotation.estimated_cargo_value && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Cargo Value</p>
+                        <p className="font-medium text-primary">
+                          {formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Route */}
             {(quotation.origin_city || quotation.destination_city) && (
