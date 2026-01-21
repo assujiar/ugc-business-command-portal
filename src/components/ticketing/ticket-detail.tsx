@@ -780,8 +780,13 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     )
 
-    let deptResponses: number[] = []
-    let creatorResponses: number[] = []
+    // Count ALL responses by each party (excluding auto-assigned and auto-status)
+    let deptCount = 0
+    let creatorCount = 0
+
+    // For average response time calculation (time between party switches)
+    let deptResponseTimes: number[] = []
+    let creatorResponseTimes: number[] = []
     let lastTimestamp = new Date(ticket.created_at).getTime()
     let lastResponderIsCreator = true // Ticket starts with creator
 
@@ -789,44 +794,48 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       const itemTime = new Date(item.created_at).getTime()
       const responseSeconds = Math.floor((itemTime - lastTimestamp) / 1000)
 
-      // Only count positive response times
-      if (responseSeconds > 0) {
+      // Exclude auto-assigned and auto-status from count
+      const isAutoEvent = item.badge_type === 'assigned' ||
+        (item.badge_type === 'status' && item.content?.includes('auto'))
+
+      if (!isAutoEvent) {
+        // Count all responses
         if (item.is_creator) {
-          if (!lastResponderIsCreator) {
-            creatorResponses.push(responseSeconds)
-          }
+          creatorCount++
         } else {
-          if (lastResponderIsCreator) {
-            deptResponses.push(responseSeconds)
-          }
+          deptCount++
+        }
+      }
+
+      // Calculate response time only on party switch
+      if (responseSeconds > 0) {
+        if (item.is_creator && !lastResponderIsCreator) {
+          creatorResponseTimes.push(responseSeconds)
+        } else if (!item.is_creator && lastResponderIsCreator) {
+          deptResponseTimes.push(responseSeconds)
         }
       }
 
       // Update tracking
-      if (item.is_creator) {
-        lastResponderIsCreator = true
-      } else {
-        lastResponderIsCreator = false
-      }
-
+      lastResponderIsCreator = item.is_creator
       lastTimestamp = itemTime
     })
 
-    const avgDept = deptResponses.length > 0
-      ? Math.floor(deptResponses.reduce((a, b) => a + b, 0) / deptResponses.length)
+    const avgDept = deptResponseTimes.length > 0
+      ? Math.floor(deptResponseTimes.reduce((a, b) => a + b, 0) / deptResponseTimes.length)
       : 0
-    const avgCreator = creatorResponses.length > 0
-      ? Math.floor(creatorResponses.reduce((a, b) => a + b, 0) / creatorResponses.length)
+    const avgCreator = creatorResponseTimes.length > 0
+      ? Math.floor(creatorResponseTimes.reduce((a, b) => a + b, 0) / creatorResponseTimes.length)
       : 0
 
     return {
       dept: {
-        count: deptResponses.length,
+        count: deptCount,
         avgSeconds: avgDept,
         avgFormatted: formatDuration(avgDept),
       },
       creator: {
-        count: creatorResponses.length,
+        count: creatorCount,
         avgSeconds: avgCreator,
         avgFormatted: formatDuration(avgCreator),
       },
