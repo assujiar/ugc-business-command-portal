@@ -70,6 +70,7 @@ import {
   canViewCRMAccounts,
   isOps,
 } from '@/lib/permissions'
+import { CustomerQuotationDialog } from '@/components/ticketing/customer-quotation-dialog'
 import type { Database } from '@/types/database'
 import type {
   Ticket as TicketType,
@@ -171,6 +172,9 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
 
   // Reminder state
   const [sendingReminder, setSendingReminder] = useState(false)
+
+  // Customer quotation dialog state
+  const [quotationDialogOpen, setQuotationDialogOpen] = useState(false)
 
   // Permission checks
   const canAssign = canAssignTickets(profile.role)
@@ -1410,6 +1414,17 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                         </Button>
                       )}
 
+                      {/* Create Customer Quotation - available after ops sends cost */}
+                      {costs.length > 0 && (
+                        <Button
+                          onClick={() => setQuotationDialogOpen(true)}
+                          className="w-full bg-blue-600 hover:bg-blue-700"
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          Create Customer Quotation
+                        </Button>
+                      )}
+
                       {/* Cost Sent to Customer - available after ops sends cost */}
                       {costs.length > 0 && (
                         <Button
@@ -2237,6 +2252,33 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
           </Card>
         </div>
       </div>
+
+      {/* Customer Quotation Dialog */}
+      <CustomerQuotationDialog
+        open={quotationDialogOpen}
+        onOpenChange={setQuotationDialogOpen}
+        ticketId={ticket.id}
+        ticketData={{
+          ticket_code: ticket.ticket_code,
+          subject: ticket.subject,
+          rfq_data: ticket.rfq_data,
+          account: ticket.account || undefined,
+          contact: ticket.sender_name ? {
+            first_name: ticket.sender_name,
+            last_name: '',
+            email: ticket.sender_email || undefined,
+            phone: ticket.sender_phone || undefined,
+          } : undefined,
+        }}
+        operationalCost={costs.length > 0 ? {
+          amount: costs[costs.length - 1]?.amount || 0,
+          currency: costs[costs.length - 1]?.currency || 'IDR',
+        } : undefined}
+        onSuccess={() => {
+          setQuotationDialogOpen(false)
+          fetchData()
+        }}
+      />
     </div>
   )
 }
