@@ -260,7 +260,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
     }
   }
 
-  // Send via Email
+  // Send via Email (SMTP)
   const handleSendEmail = async (isResend: boolean = false) => {
     setActionLoading(true)
     try {
@@ -272,29 +272,34 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
       const result = await response.json()
 
       if (result.success) {
-        // Copy plain text email to clipboard
-        await navigator.clipboard.writeText(result.data.email_text)
-
-        // Open HTML preview in new window
-        const previewWindow = window.open('', '_blank')
-        if (previewWindow) {
-          previewWindow.document.write(result.data.email_html)
-          previewWindow.document.close()
-        }
-
-        // Create mailto with plain text body (URL encoded)
-        const mailtoBody = encodeURIComponent(result.data.email_text)
-        const mailtoLink = `mailto:${result.data.recipient_email || ''}?subject=${encodeURIComponent(result.data.email_subject)}&body=${mailtoBody}`
-        window.location.href = mailtoLink
-
+        // Email sent successfully via SMTP
         toast({
-          title: isResend ? 'Email Resent' : 'Email Prepared',
-          description: 'Email content copied to clipboard and mailto opened. HTML preview in new tab.',
+          title: isResend ? 'Email Resent Successfully' : 'Email Sent Successfully',
+          description: `Quotation has been sent to ${result.data.recipient_email}`,
         })
 
         if (!isResend) fetchQuotation()
       } else {
-        throw new Error(result.error || 'Failed to send')
+        // Check if there's fallback data (email service not configured)
+        if (result.fallback) {
+          // Fallback to mailto if SMTP not configured
+          const mailtoBody = encodeURIComponent(result.fallback.email_text)
+          const mailtoLink = `mailto:${result.fallback.recipient_email || ''}?subject=${encodeURIComponent(result.fallback.email_subject)}&body=${mailtoBody}`
+
+          // Copy to clipboard
+          await navigator.clipboard.writeText(result.fallback.email_text)
+
+          // Open mailto
+          window.location.href = mailtoLink
+
+          toast({
+            title: 'Email Service Not Configured',
+            description: 'Opening email client as fallback. Content copied to clipboard.',
+            variant: 'destructive',
+          })
+        } else {
+          throw new Error(result.error || 'Failed to send')
+        }
       }
     } catch (error: any) {
       toast({

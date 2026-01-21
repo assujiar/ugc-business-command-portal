@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccessTicketing } from '@/lib/permissions'
+import { sendEmail, isEmailServiceConfigured } from '@/lib/email'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -343,13 +344,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Invalid send method' }, { status: 400 })
     }
 
-    // Fetch quotation with all details
+    // Fetch quotation with all details including creator profile
     const { data: quotation, error } = await (supabase as any)
       .from('customer_quotations')
       .select(`
         *,
         ticket:tickets!customer_quotations_ticket_id_fkey(id, ticket_code, subject),
-        items:customer_quotation_items(*)
+        items:customer_quotation_items(*),
+        creator:profiles!customer_quotations_created_by_fkey(user_id, name, email)
       `)
       .eq('id', id)
       .single()
@@ -357,6 +359,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (error || !quotation) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
+
+    // Get creator email for reply-to (fallback to current user if not found)
+    const creatorEmail = quotation.creator?.email || profileData.email
 
     // Build URLs using production URL
     const validationUrl = `${PRODUCTION_URL}/quotation-verify/${quotation.validation_code}`
@@ -398,19 +403,57 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const emailHtml = generateEmailHTML(quotation, profileData, validationUrl, pdfDownloadUrl)
       const emailText = generateEmailPlainText(quotation, profileData, validationUrl, pdfDownloadUrl)
 
+      // Check if recipient email exists
+      if (!quotation.customer_email) {
+        return NextResponse.json({
+          error: 'Customer email address is not available'
+        }, { status: 400 })
+      }
+
+      // Check if email service is configured
+      if (!isEmailServiceConfigured()) {
+        return NextResponse.json({
+          error: 'Email service is not configured. Please set SMTP environment variables (SMTP_HOST, SMTP_USER, SMTP_PASS).',
+          fallback: {
+            email_subject: emailSubject,
+            email_html: emailHtml,
+            email_text: emailText,
+            recipient_email: quotation.customer_email,
+          }
+        }, { status: 503 })
+      }
+
+      // Send email via SMTP (Nodemailer)
+      // Reply-To is set to quotation creator's email so customer replies go to the right person
+      const emailResult = await sendEmail({
+        to: quotation.customer_email,
+        subject: emailSubject,
+        html: emailHtml,
+        text: emailText,
+        replyTo: creatorEmail, // Reply goes to quotation creator
+      })
+
+      if (!emailResult.success) {
+        return NextResponse.json({
+          error: emailResult.error || 'Failed to send email',
+          fallback: {
+            email_subject: emailSubject,
+            email_html: emailHtml,
+            email_text: emailText,
+            recipient_email: quotation.customer_email,
+          }
+        }, { status: 500 })
+      }
+
       responseData = {
         ...responseData,
+        email_sent: true,
+        message_id: emailResult.messageId,
         email_subject: emailSubject,
-        email_html: emailHtml,
-        email_text: emailText,
         recipient_email: quotation.customer_email,
         pdf_url: pdfDownloadUrl,
         validation_url: validationUrl,
       }
-
-      // Note: Actual email sending would require an email service integration
-      // For now, we return the content for the frontend to handle or for future integration
-      // Example with Resend, SendGrid, or Nodemailer would go here
     }
 
     // Update quotation status to 'sent' only if not a resend
