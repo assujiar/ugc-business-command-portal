@@ -642,26 +642,36 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                 </CardContent>
               </Card>
 
-              {/* Overall Summary */}
+              {/* Overall Summary with First Response vs Stage Response */}
               <Card>
                 <CardHeader>
                   <CardTitle>Overall Summary</CardTitle>
-                  <CardDescription>Combined response metrics for all ticket types</CardDescription>
+                  <CardDescription>First Response (assignee) vs Stage Response (tektokan)</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-4 md:grid-cols-4">
-                    <div className="text-center p-4 rounded-lg bg-muted/50">
-                      <p className="text-3xl font-bold">{responseTime.overall?.total_responses || 0}</p>
-                      <p className="text-sm text-muted-foreground">Total Responses</p>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {/* First Response - Assignee only */}
+                    <div className="p-4 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/10">
+                      <p className="text-sm font-medium text-blue-600 mb-2">First Response</p>
+                      <p className="text-2xl font-bold">{formatDuration(responseTime.first_response?.avg_seconds)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {responseTime.first_response?.total || 0} responses (assignee)
+                      </p>
                     </div>
-                    <div className="text-center p-4 rounded-lg bg-muted/50">
-                      <p className="text-xl font-bold">{formatDuration(responseTime.overall?.avg_response_seconds)}</p>
-                      <p className="text-sm text-muted-foreground">Avg Response Time</p>
+                    {/* Stage Response - Tektokan */}
+                    <div className="p-4 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50/30 dark:bg-purple-950/10">
+                      <p className="text-sm font-medium text-purple-600 mb-2">Stage Response</p>
+                      <p className="text-2xl font-bold">{formatDuration(responseTime.stage_response?.avg_seconds)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {responseTime.stage_response?.total || 0} tektokan
+                      </p>
                     </div>
+                    {/* Quick Responses */}
                     <div className="text-center p-4 rounded-lg bg-green-50 dark:bg-green-950/20">
                       <p className="text-3xl font-bold text-green-600">{responseTime.distribution?.under_1_hour || 0}</p>
                       <p className="text-sm text-muted-foreground">Under 1 Hour</p>
                     </div>
+                    {/* Slow Responses */}
                     <div className="text-center p-4 rounded-lg bg-red-50 dark:bg-red-950/20">
                       <p className="text-3xl font-bold text-red-600">{responseTime.distribution?.over_24_hours || 0}</p>
                       <p className="text-sm text-muted-foreground">Over 24 Hours</p>
@@ -670,7 +680,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                 </CardContent>
               </Card>
 
-              {/* Top Responders */}
+              {/* Top Responders - with separated metrics */}
               {responseTime.top_responders && responseTime.top_responders.length > 0 && (
                 <Card>
                   <CardHeader>
@@ -678,19 +688,35 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                       <Trophy className="h-4 w-4" />
                       Top Responders
                     </CardTitle>
+                    <CardDescription>First Response (assignee) and Stage Response (tektokan) separated</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
                       {responseTime.top_responders.slice(0, 5).map((user: any, idx: number) => (
-                        <div key={user.user_id} className="flex items-center justify-between">
+                        <div key={user.user_id} className="flex items-center justify-between py-2 border-b last:border-0">
                           <div className="flex items-center gap-3">
                             <span className="text-sm font-medium text-muted-foreground w-6">
                               #{idx + 1}
                             </span>
                             <span className="font-medium">{user.name}</span>
                           </div>
-                          <div className="text-sm text-muted-foreground">
-                            {user.total_responses} responses | Avg {formatDurationShort(user.avg_response_seconds)}
+                          <div className="flex gap-4 text-xs">
+                            {/* First Response - only shown if user was assignee */}
+                            {user.first_response?.count > 0 && (
+                              <div className="text-center px-2 py-1 rounded bg-blue-50 dark:bg-blue-950/20">
+                                <span className="text-blue-600">FR:</span>{' '}
+                                <span className="font-medium">{formatDurationShort(user.first_response.avg_seconds)}</span>
+                                <span className="text-muted-foreground ml-1">({user.first_response.count})</span>
+                              </div>
+                            )}
+                            {/* Stage Response */}
+                            {user.stage_response?.count > 0 && (
+                              <div className="text-center px-2 py-1 rounded bg-purple-50 dark:bg-purple-950/20">
+                                <span className="text-purple-600">SR:</span>{' '}
+                                <span className="font-medium">{formatDurationShort(user.stage_response.avg_seconds)}</span>
+                                <span className="text-muted-foreground ml-1">({user.stage_response.count})</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -834,96 +860,120 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
         <TabsContent value="users" className="space-y-4">
           {userPerformance && (
               <>
-                {/* Leaderboard */}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Trophy className="h-4 w-4 text-yellow-500" />
-                        Most Tickets
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {userPerformance.leaderboard?.most_tickets?.[0] ? (
-                        <div>
-                          <p className="font-semibold">{userPerformance.leaderboard.most_tickets[0].name}</p>
-                          <p className="text-2xl font-bold">{userPerformance.leaderboard.most_tickets[0].tickets?.assigned || 0}</p>
-                          <p className="text-xs text-muted-foreground">tickets assigned</p>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground">No data</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        Best Completion
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {userPerformance.leaderboard?.highest_completion_rate?.[0] ? (
-                        <div>
-                          <p className="font-semibold">{userPerformance.leaderboard.highest_completion_rate[0].name}</p>
-                          <p className="text-2xl font-bold">{userPerformance.leaderboard.highest_completion_rate[0].tickets?.completion_rate || 0}%</p>
-                          <p className="text-xs text-muted-foreground">completion rate</p>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground">No data</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Target className="h-4 w-4 text-blue-500" />
-                        Best SLA
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {userPerformance.leaderboard?.best_sla_compliance?.[0] ? (
-                        <div>
-                          <p className="font-semibold">{userPerformance.leaderboard.best_sla_compliance[0].name}</p>
-                          <p className="text-2xl font-bold">
-                            {Math.round(
-                              ((userPerformance.leaderboard.best_sla_compliance[0].sla?.first_response?.compliance_rate || 100) +
-                              (userPerformance.leaderboard.best_sla_compliance[0].sla?.resolution?.compliance_rate || 100)) / 2
-                            )}%
-                          </p>
-                          <p className="text-xs text-muted-foreground">avg SLA compliance</p>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground">No data</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Timer className="h-4 w-4 text-purple-500" />
-                        Fastest Response
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {userPerformance.leaderboard?.fastest_response?.[0] ? (
-                        <div>
-                          <p className="font-semibold">{userPerformance.leaderboard.fastest_response[0].name}</p>
-                          <p className="text-lg font-bold">{formatDuration(userPerformance.leaderboard.fastest_response[0].response?.avg_response_seconds)}</p>
-                          <p className="text-xs text-muted-foreground">avg response time</p>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground">No data</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
+                {/* Leaderboard - Only shown for managers/directors */}
+                {userPerformance.can_view_rankings && (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Trophy className="h-4 w-4 text-yellow-500" />
+                          Most Tickets
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {userPerformance.leaderboard?.most_tickets?.[0] ? (
+                          <div>
+                            <p className="font-semibold">{userPerformance.leaderboard.most_tickets[0].name}</p>
+                            <p className="text-2xl font-bold">{userPerformance.leaderboard.most_tickets[0].tickets?.assigned || 0}</p>
+                            <p className="text-xs text-muted-foreground">tickets assigned</p>
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground">No data</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Best Completion
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {userPerformance.leaderboard?.highest_completion_rate?.[0] ? (
+                          <div>
+                            <p className="font-semibold">{userPerformance.leaderboard.highest_completion_rate[0].name}</p>
+                            <p className="text-2xl font-bold">{userPerformance.leaderboard.highest_completion_rate[0].tickets?.completion_rate || 0}%</p>
+                            <p className="text-xs text-muted-foreground">completion rate</p>
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground">No data</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Target className="h-4 w-4 text-blue-500" />
+                          Best SLA
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {userPerformance.leaderboard?.best_sla_compliance?.[0] ? (
+                          <div>
+                            <p className="font-semibold">{userPerformance.leaderboard.best_sla_compliance[0].name}</p>
+                            <p className="text-2xl font-bold">
+                              {Math.round(
+                                ((userPerformance.leaderboard.best_sla_compliance[0].sla?.first_response?.compliance_rate || 100) +
+                                (userPerformance.leaderboard.best_sla_compliance[0].sla?.resolution?.compliance_rate || 100)) / 2
+                              )}%
+                            </p>
+                            <p className="text-xs text-muted-foreground">avg SLA compliance</p>
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground">No data</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card className="border-blue-200 dark:border-blue-900">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Timer className="h-4 w-4 text-blue-500" />
+                          Fastest First Response
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {userPerformance.leaderboard?.fastest_first_response?.[0] ? (
+                          <div>
+                            <p className="font-semibold">{userPerformance.leaderboard.fastest_first_response[0].name}</p>
+                            <p className="text-lg font-bold">{formatDuration(userPerformance.leaderboard.fastest_first_response[0].response?.first_response?.avg_seconds)}</p>
+                            <p className="text-xs text-muted-foreground">avg first response (assignee)</p>
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground">No data</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card className="border-purple-200 dark:border-purple-900">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Timer className="h-4 w-4 text-purple-500" />
+                          Fastest Stage Response
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {userPerformance.leaderboard?.fastest_stage_response?.[0] ? (
+                          <div>
+                            <p className="font-semibold">{userPerformance.leaderboard.fastest_stage_response[0].name}</p>
+                            <p className="text-lg font-bold">{formatDuration(userPerformance.leaderboard.fastest_stage_response[0].response?.stage_response?.avg_seconds)}</p>
+                            <p className="text-xs text-muted-foreground">avg tektokan</p>
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground">No data</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
 
-                {/* User Performance List with Type Breakdown */}
+                {/* User Performance List with Type Breakdown and Response Metrics */}
                 <Card>
                   <CardHeader>
                     <CardTitle>Team Performance</CardTitle>
-                    <CardDescription>{userPerformance.total_users || 0} team members</CardDescription>
+                    <CardDescription>
+                      {userPerformance.total_users || 0} team members
+                      {!userPerformance.can_view_rankings && ' (Leaderboard hidden for staff roles)'}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-6">
@@ -955,10 +1005,43 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                               </div>
                             </div>
                           </div>
+                          {/* Response Metrics - First Response (assignee) vs Stage Response (tektokan) */}
+                          <div className="grid grid-cols-2 gap-3 pl-11">
+                            {/* First Response - only if user was assignee on any ticket */}
+                            <div className="p-2 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/10 text-xs">
+                              <div className="flex items-center gap-1 mb-1">
+                                <span className="text-blue-600 font-medium">First Response</span>
+                                <span className="text-muted-foreground">(assignee)</span>
+                              </div>
+                              {user.response?.first_response?.count > 0 ? (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">{user.response?.first_response?.count || 0} responses</span>
+                                  <span className="font-medium">{formatDurationShort(user.response?.first_response?.avg_seconds)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">N/A (creator only)</span>
+                              )}
+                            </div>
+                            {/* Stage Response - tektokan */}
+                            <div className="p-2 rounded border border-purple-200 dark:border-purple-900 bg-purple-50/30 dark:bg-purple-950/10 text-xs">
+                              <div className="flex items-center gap-1 mb-1">
+                                <span className="text-purple-600 font-medium">Stage Response</span>
+                                <span className="text-muted-foreground">(tektokan)</span>
+                              </div>
+                              {user.response?.stage_response?.count > 0 ? (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">{user.response?.stage_response?.count || 0} responses</span>
+                                  <span className="font-medium">{formatDurationShort(user.response?.stage_response?.avg_seconds)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">No stage responses</span>
+                              )}
+                            </div>
+                          </div>
                           {/* Type Breakdown */}
                           <div className="grid grid-cols-2 gap-3 pl-11">
                             {/* RFQ */}
-                            <div className="p-2 rounded bg-blue-50/50 dark:bg-blue-950/20 text-xs">
+                            <div className="p-2 rounded bg-muted/50 text-xs">
                               <div className="flex items-center gap-1 mb-1">
                                 <Badge variant="default" className="text-[10px] px-1 py-0">RFQ</Badge>
                                 <span className="text-muted-foreground">{user.by_type?.RFQ?.tickets?.assigned || 0} tickets</span>
@@ -979,7 +1062,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                               </div>
                             </div>
                             {/* GEN */}
-                            <div className="p-2 rounded bg-purple-50/50 dark:bg-purple-950/20 text-xs">
+                            <div className="p-2 rounded bg-muted/50 text-xs">
                               <div className="flex items-center gap-1 mb-1">
                                 <Badge variant="secondary" className="text-[10px] px-1 py-0">GEN</Badge>
                                 <span className="text-muted-foreground">{user.by_type?.GEN?.tickets?.assigned || 0} tickets</span>

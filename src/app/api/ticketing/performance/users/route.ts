@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, getAnalyticsScope } from '@/lib/permissions'
+import { canAccessTicketing, getAnalyticsScope, canViewAnalyticsRankings } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -98,20 +98,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: ticketsError.message }, { status: 500 })
     }
 
-    // Fetch comments for response metrics
+    // Fetch comments for response metrics - include ticket info for first response detection
     let commentsQuery = (supabase as any)
       .from('ticket_comments')
       .select(`
         id,
         user_id,
+        ticket_id,
         response_time_seconds,
         response_direction,
         is_internal,
         created_at,
-        user:profiles!ticket_comments_user_id_fkey(user_id, name, email, role)
+        user:profiles!ticket_comments_user_id_fkey(user_id, name, email, role),
+        ticket:tickets!ticket_comments_ticket_id_fkey(id, created_by, assigned_to)
       `)
       .gte('created_at', startDate.toISOString())
       .eq('is_internal', false)
+      .not('response_time_seconds', 'is', null)
 
     const { data: comments, error: commentsError } = await commentsQuery
 
@@ -228,17 +231,62 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Process comments for response metrics
-    const userCommentMetrics: Record<string, { count: number; totalSeconds: number }> = {}
-    for (const comment of comments || []) {
-      if (comment.response_direction !== 'outbound') continue
+    // Process comments for response metrics - separate first response vs stage response
+    // First, group outbound comments by ticket
+    const outboundComments = (comments || []).filter((c: any) => c.response_direction === 'outbound')
 
-      const userId = comment.user_id
-      if (!userCommentMetrics[userId]) {
-        userCommentMetrics[userId] = { count: 0, totalSeconds: 0 }
+    const commentsByTicket: Record<string, any[]> = {}
+    for (const comment of outboundComments) {
+      const ticketId = comment.ticket_id
+      if (!commentsByTicket[ticketId]) {
+        commentsByTicket[ticketId] = []
       }
-      userCommentMetrics[userId].count++
-      userCommentMetrics[userId].totalSeconds += comment.response_time_seconds || 0
+      commentsByTicket[ticketId].push(comment)
+    }
+
+    // Sort each ticket's comments by created_at
+    for (const ticketId in commentsByTicket) {
+      commentsByTicket[ticketId].sort((a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+    }
+
+    // Track per-user metrics with first response vs stage response separation
+    const userCommentMetrics: Record<string, {
+      firstResponseCount: number;
+      firstResponseTotalSeconds: number;
+      stageResponseCount: number;
+      stageResponseTotalSeconds: number;
+    }> = {}
+
+    for (const ticketId in commentsByTicket) {
+      const ticketComments = commentsByTicket[ticketId]
+      let foundFirstAssigneeResponse = false
+
+      for (const comment of ticketComments) {
+        const userId = comment.user_id
+        const isAssignee = userId === comment.ticket?.assigned_to
+
+        if (!userCommentMetrics[userId]) {
+          userCommentMetrics[userId] = {
+            firstResponseCount: 0,
+            firstResponseTotalSeconds: 0,
+            stageResponseCount: 0,
+            stageResponseTotalSeconds: 0,
+          }
+        }
+
+        if (isAssignee && !foundFirstAssigneeResponse) {
+          // First response by assignee on this ticket
+          userCommentMetrics[userId].firstResponseCount++
+          userCommentMetrics[userId].firstResponseTotalSeconds += comment.response_time_seconds || 0
+          foundFirstAssigneeResponse = true
+        } else {
+          // Stage response (tektokan) - either creator or subsequent assignee responses
+          userCommentMetrics[userId].stageResponseCount++
+          userCommentMetrics[userId].stageResponseTotalSeconds += comment.response_time_seconds || 0
+        }
+      }
     }
 
     // Merge comment metrics and calculate final values
@@ -339,12 +387,35 @@ export async function GET(request: NextRequest) {
           },
         },
         response: {
-          total_responses: commentMetrics?.count || 0,
-          avg_response_seconds: commentMetrics && commentMetrics.count > 0
-            ? Math.round(commentMetrics.totalSeconds / commentMetrics.count)
+          total_responses: commentMetrics
+            ? (commentMetrics.firstResponseCount + commentMetrics.stageResponseCount)
             : 0,
-          avg_response_hours: commentMetrics && commentMetrics.count > 0
-            ? Math.round((commentMetrics.totalSeconds / commentMetrics.count / 3600) * 10) / 10
+          // First response - only for assignees (when user was assigned a ticket)
+          first_response: {
+            count: commentMetrics?.firstResponseCount || 0,
+            avg_seconds: commentMetrics && commentMetrics.firstResponseCount > 0
+              ? Math.round(commentMetrics.firstResponseTotalSeconds / commentMetrics.firstResponseCount)
+              : 0,
+          },
+          // Stage response - tektokan (back-and-forth conversations)
+          stage_response: {
+            count: commentMetrics?.stageResponseCount || 0,
+            avg_seconds: commentMetrics && commentMetrics.stageResponseCount > 0
+              ? Math.round(commentMetrics.stageResponseTotalSeconds / commentMetrics.stageResponseCount)
+              : 0,
+          },
+          // Legacy fields for compatibility
+          avg_response_seconds: commentMetrics
+            ? Math.round(
+                (commentMetrics.firstResponseTotalSeconds + commentMetrics.stageResponseTotalSeconds) /
+                Math.max(1, commentMetrics.firstResponseCount + commentMetrics.stageResponseCount)
+              )
+            : 0,
+          avg_response_hours: commentMetrics
+            ? Math.round(
+                ((commentMetrics.firstResponseTotalSeconds + commentMetrics.stageResponseTotalSeconds) /
+                Math.max(1, commentMetrics.firstResponseCount + commentMetrics.stageResponseCount) / 3600) * 10
+              ) / 10
             : 0,
         },
         avg_resolution_seconds: completedTickets > 0
@@ -362,8 +433,11 @@ export async function GET(request: NextRequest) {
     // Sort by assigned tickets
     userPerformance.sort((a, b) => b.tickets.assigned - a.tickets.assigned)
 
-    // Calculate leaderboard
-    const leaderboard = {
+    // Check if user can view rankings
+    const showRankings = canViewAnalyticsRankings(profile.role)
+
+    // Calculate leaderboard only if user can view rankings
+    const leaderboard = showRankings ? {
       most_tickets: [...userPerformance].sort((a, b) => b.tickets.assigned - a.tickets.assigned).slice(0, 5),
       highest_completion_rate: [...userPerformance]
         .filter(u => u.tickets.assigned >= 5)
@@ -376,10 +450,20 @@ export async function GET(request: NextRequest) {
           ((a.sla.first_response.compliance_rate + a.sla.resolution.compliance_rate) / 2)
         )
         .slice(0, 5),
-      fastest_response: [...userPerformance]
-        .filter(u => u.response.total_responses >= 5)
-        .sort((a, b) => a.response.avg_response_hours - b.response.avg_response_hours)
+      fastest_first_response: [...userPerformance]
+        .filter(u => u.response.first_response.count >= 3)
+        .sort((a, b) => a.response.first_response.avg_seconds - b.response.first_response.avg_seconds)
         .slice(0, 5),
+      fastest_stage_response: [...userPerformance]
+        .filter(u => u.response.stage_response.count >= 5)
+        .sort((a, b) => a.response.stage_response.avg_seconds - b.response.stage_response.avg_seconds)
+        .slice(0, 5),
+    } : {
+      most_tickets: [],
+      highest_completion_rate: [],
+      best_sla_compliance: [],
+      fastest_first_response: [],
+      fastest_stage_response: [],
     }
 
     return NextResponse.json({
@@ -389,6 +473,7 @@ export async function GET(request: NextRequest) {
         users: userPerformance,
         leaderboard,
         total_users: userPerformance.length,
+        can_view_rankings: showRankings,
       },
     })
   } catch (err) {
