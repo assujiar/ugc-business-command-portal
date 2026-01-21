@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccessTicketing } from '@/lib/permissions'
+import { sendEmail, isEmailServiceConfigured } from '@/lib/email'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -398,19 +399,56 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const emailHtml = generateEmailHTML(quotation, profileData, validationUrl, pdfDownloadUrl)
       const emailText = generateEmailPlainText(quotation, profileData, validationUrl, pdfDownloadUrl)
 
+      // Check if recipient email exists
+      if (!quotation.customer_email) {
+        return NextResponse.json({
+          error: 'Customer email address is not available'
+        }, { status: 400 })
+      }
+
+      // Check if email service is configured
+      if (!isEmailServiceConfigured()) {
+        return NextResponse.json({
+          error: 'Email service is not configured. Please set RESEND_API_KEY environment variable.',
+          fallback: {
+            email_subject: emailSubject,
+            email_html: emailHtml,
+            email_text: emailText,
+            recipient_email: quotation.customer_email,
+          }
+        }, { status: 503 })
+      }
+
+      // Send email via Resend
+      const emailResult = await sendEmail({
+        to: quotation.customer_email,
+        subject: emailSubject,
+        html: emailHtml,
+        text: emailText,
+        replyTo: profileData.email, // Reply goes to the sales person
+      })
+
+      if (!emailResult.success) {
+        return NextResponse.json({
+          error: emailResult.error || 'Failed to send email',
+          fallback: {
+            email_subject: emailSubject,
+            email_html: emailHtml,
+            email_text: emailText,
+            recipient_email: quotation.customer_email,
+          }
+        }, { status: 500 })
+      }
+
       responseData = {
         ...responseData,
+        email_sent: true,
+        message_id: emailResult.messageId,
         email_subject: emailSubject,
-        email_html: emailHtml,
-        email_text: emailText,
         recipient_email: quotation.customer_email,
         pdf_url: pdfDownloadUrl,
         validation_url: validationUrl,
       }
-
-      // Note: Actual email sending would require an email service integration
-      // For now, we return the content for the frontend to handle or for future integration
-      // Example with Resend, SendGrid, or Nodemailer would go here
     }
 
     // Update quotation status to 'sent' only if not a resend
