@@ -132,6 +132,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const [uploadingFile, setUploadingFile] = useState(false)
   const [slaDetails, setSlaDetails] = useState<TicketSLADetails | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [quotes, setQuotes] = useState<any[]>([])
 
   // Quote dialog state
   const [quoteDialogOpen, setQuoteDialogOpen] = useState(false)
@@ -224,6 +225,13 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       const attachmentsData = await attachmentsRes.json()
       if (attachmentsData.success) {
         setAttachments(attachmentsData.data || [])
+      }
+
+      // Fetch quotes
+      const quotesRes = await fetch(`/api/ticketing/tickets/${ticket.id}/quotes`)
+      const quotesData = await quotesRes.json()
+      if (quotesData.success) {
+        setQuotes(quotesData.data || [])
       }
 
       // Fetch SLA details
@@ -502,6 +510,29 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     })
   }
 
+  // Format event type for display
+  const formatEventType = (eventType: string): string => {
+    const eventLabels: Record<string, string> = {
+      'created': 'created',
+      'assigned': 'assigned',
+      'status_changed': 'status changed',
+      'comment_added': 'comment added',
+      'quote_submitted': 'quote sent',
+      'quote_sent_to_customer': 'quote sent to customer',
+      'attachment_added': 'attachment added',
+      'attachment_removed': 'attachment removed',
+      'priority_changed': 'priority changed',
+      'department_changed': 'department changed',
+      'resolved': 'resolved',
+      'closed': 'closed',
+      'reopened': 'reopened',
+      'won': 'marked as won',
+      'lost': 'marked as lost',
+      'request_adjustment': 'requested adjustment',
+    }
+    return eventLabels[eventType] || eventType.replace(/_/g, ' ')
+  }
+
   // Format duration from seconds
   const formatDuration = (seconds: number | null | undefined): string => {
     if (seconds === null || seconds === undefined) return 'N/A'
@@ -546,6 +577,177 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       closed: ['open'],
     }
     return transitions[currentStatus] || []
+  }
+
+  // Build unified timeline
+  type TimelineItem = {
+    id: string
+    type: 'comment' | 'quote' | 'status_change' | 'event'
+    created_at: string
+    user_id: string
+    user_name: string
+    user_initials: string
+    is_creator: boolean
+    content: string
+    badge_type: string
+    badge_label: string
+    extra_data?: any
+  }
+
+  const buildUnifiedTimeline = (): TimelineItem[] => {
+    const items: TimelineItem[] = []
+
+    // Add comments
+    comments.forEach((comment) => {
+      const isCreatorComment = comment.user_id === ticket.created_by
+      items.push({
+        id: `comment-${comment.id}`,
+        type: 'comment',
+        created_at: comment.created_at,
+        user_id: comment.user_id,
+        user_name: comment.user?.name || 'Unknown',
+        user_initials: getInitials(comment.user?.name || 'U'),
+        is_creator: isCreatorComment,
+        content: comment.content,
+        badge_type: comment.is_internal ? 'internal' : 'comment',
+        badge_label: comment.is_internal ? 'Internal' : 'Comment',
+        extra_data: { is_internal: comment.is_internal },
+      })
+    })
+
+    // Add quotes
+    quotes.forEach((quote) => {
+      const isCreatorQuote = quote.created_by === ticket.created_by
+      items.push({
+        id: `quote-${quote.id}`,
+        type: 'quote',
+        created_at: quote.created_at,
+        user_id: quote.created_by,
+        user_name: quote.creator?.name || 'Unknown',
+        user_initials: getInitials(quote.creator?.name || 'U'),
+        is_creator: isCreatorQuote,
+        content: quote.notes || '',
+        badge_type: 'quote',
+        badge_label: 'Quote',
+        extra_data: {
+          quote_number: quote.quote_number,
+          amount: quote.amount,
+          currency: quote.currency,
+          valid_until: quote.valid_until,
+          terms: quote.terms,
+        },
+      })
+    })
+
+    // Add status change events
+    events.filter(e => e.event_type === 'status_changed').forEach((event) => {
+      const isCreatorEvent = event.actor_user_id === ticket.created_by
+      const oldStatus = typeof event.old_value === 'object' ? (event.old_value as any)?.status : event.old_value
+      const newStatus = typeof event.new_value === 'object' ? (event.new_value as any)?.status : event.new_value
+      items.push({
+        id: `event-${event.id}`,
+        type: 'status_change',
+        created_at: event.created_at,
+        user_id: event.actor_user_id || '',
+        user_name: event.actor?.name || 'System',
+        user_initials: getInitials(event.actor?.name || 'S'),
+        is_creator: isCreatorEvent,
+        content: event.notes || `${oldStatus} → ${newStatus}`,
+        badge_type: 'status',
+        badge_label: 'Status Update',
+        extra_data: { old_status: oldStatus, new_status: newStatus },
+      })
+    })
+
+    // Sort by created_at ascending
+    items.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+    return items
+  }
+
+  // Get user initials
+  const getInitials = (name: string): string => {
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  // Calculate response metrics
+  const calculateResponseMetrics = () => {
+    const timeline = buildUnifiedTimeline()
+
+    let deptResponses: number[] = []
+    let creatorResponses: number[] = []
+    let lastTimestamp = new Date(ticket.created_at).getTime()
+    let lastResponderIsCreator = true // Ticket starts with creator
+
+    timeline.forEach((item) => {
+      const itemTime = new Date(item.created_at).getTime()
+      const responseSeconds = Math.floor((itemTime - lastTimestamp) / 1000)
+
+      if (item.is_creator) {
+        if (!lastResponderIsCreator) {
+          creatorResponses.push(responseSeconds)
+        }
+        lastResponderIsCreator = true
+      } else {
+        if (lastResponderIsCreator) {
+          deptResponses.push(responseSeconds)
+        }
+        lastResponderIsCreator = false
+      }
+
+      lastTimestamp = itemTime
+    })
+
+    const avgDept = deptResponses.length > 0
+      ? Math.floor(deptResponses.reduce((a, b) => a + b, 0) / deptResponses.length)
+      : 0
+    const avgCreator = creatorResponses.length > 0
+      ? Math.floor(creatorResponses.reduce((a, b) => a + b, 0) / creatorResponses.length)
+      : 0
+
+    return {
+      dept: {
+        count: deptResponses.length,
+        avgSeconds: avgDept,
+        avgFormatted: formatDuration(avgDept),
+      },
+      creator: {
+        count: creatorResponses.length,
+        avgSeconds: avgCreator,
+        avgFormatted: formatDuration(avgCreator),
+      },
+    }
+  }
+
+  // Format short duration (for badges)
+  const formatShortDuration = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`
+    return `${Math.floor(seconds / 86400)}d`
+  }
+
+  // Calculate response time for each timeline item
+  const getTimelineWithResponseTimes = () => {
+    const timeline = buildUnifiedTimeline()
+    let lastTimestamp = new Date(ticket.created_at).getTime()
+
+    return timeline.map((item) => {
+      const itemTime = new Date(item.created_at).getTime()
+      const responseSeconds = Math.floor((itemTime - lastTimestamp) / 1000)
+      lastTimestamp = itemTime
+
+      return {
+        ...item,
+        responseSeconds,
+        responseFormatted: formatShortDuration(responseSeconds),
+      }
+    })
   }
 
   // Handle submit quote
@@ -1216,58 +1418,159 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
             </Card>
           )}
 
-          {/* Comments */}
+          {/* Activity Timeline */}
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-4">
               <CardTitle className="text-lg flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Comments ({comments.length})
+                <Clock className="h-4 w-4" />
+                Activity Timeline
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {comments.length === 0 ? (
-                <p className="text-muted-foreground text-sm text-center py-4">
-                  No comments yet
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {comments.map((comment) => (
-                    <div
-                      key={comment.id}
-                      className={`rounded-lg p-4 ${
-                        comment.is_internal
-                          ? 'bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800'
-                          : comment.user_id === ticket.created_by
-                            ? 'bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800'
-                            : 'bg-muted/50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium text-sm">
-                            {comment.user?.name || 'Unknown'}
-                          </span>
-                          {comment.is_internal && (
-                            <Badge variant="outline" className="text-xs">
-                              Internal
-                            </Badge>
-                          )}
-                          {comment.user_id === ticket.created_by && (
-                            <Badge variant="outline" className="text-xs border-blue-300">
-                              Creator
-                            </Badge>
-                          )}
+              {/* Response Summary Cards */}
+              {(() => {
+                const metrics = calculateResponseMetrics()
+                const timeline = getTimelineWithResponseTimes()
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Dept Response Card */}
+                      <div className="rounded-lg p-3 bg-brand/10 border border-brand/20">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Building2 className="h-3 w-3 text-brand" />
+                          <span className="text-xs font-medium text-brand">Dept Response</span>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(comment.created_at)}
-                        </span>
+                        <p className="text-xl font-bold text-brand">
+                          {metrics.dept.count > 0 ? formatShortDuration(metrics.dept.avgSeconds) : '-'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{metrics.dept.count} responses</p>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
+
+                      {/* Creator Response Card */}
+                      <div className="rounded-lg p-3 bg-orange-500/10 border border-orange-500/20">
+                        <div className="flex items-center gap-2 mb-1">
+                          <User className="h-3 w-3 text-orange-500" />
+                          <span className="text-xs font-medium text-orange-500">Creator Response</span>
+                        </div>
+                        <p className="text-xl font-bold text-orange-500">
+                          {metrics.creator.count > 0 ? formatShortDuration(metrics.creator.avgSeconds) : '-'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{metrics.creator.count} responses</p>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    {/* Timeline Items */}
+                    {timeline.length === 0 ? (
+                      <p className="text-muted-foreground text-sm text-center py-4">
+                        No activity yet
+                      </p>
+                    ) : (
+                      <div className="space-y-4">
+                        {timeline.map((item) => (
+                          <div key={item.id} className="relative">
+                            {/* Timeline Item Header */}
+                            <div className="flex items-center gap-3 mb-2">
+                              {/* Avatar */}
+                              <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                                item.is_creator
+                                  ? 'bg-orange-500/20 text-orange-500'
+                                  : 'bg-brand/20 text-brand'
+                              }`}>
+                                {item.user_initials}
+                              </div>
+
+                              {/* Name and Badge */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-sm">{item.user_name}</span>
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] px-1.5 py-0 ${
+                                      item.badge_type === 'comment' ? 'border-blue-400 text-blue-500 bg-blue-500/10' :
+                                      item.badge_type === 'internal' ? 'border-yellow-400 text-yellow-600 bg-yellow-500/10' :
+                                      item.badge_type === 'quote' ? 'border-green-400 text-green-500 bg-green-500/10' :
+                                      item.badge_type === 'status' ? 'border-orange-400 text-orange-500 bg-orange-500/10' :
+                                      ''
+                                    }`}
+                                  >
+                                    {item.badge_label}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              {/* Response Time + Timestamp */}
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
+                                <div className="flex items-center gap-1">
+                                  {item.is_creator ? (
+                                    <User className="h-3 w-3" />
+                                  ) : (
+                                    <Building2 className="h-3 w-3" />
+                                  )}
+                                  <span>→</span>
+                                  {!item.is_creator ? (
+                                    <User className="h-3 w-3" />
+                                  ) : (
+                                    <Building2 className="h-3 w-3" />
+                                  )}
+                                </div>
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-green-500 border-green-400">
+                                  ⏱ {item.responseFormatted}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            {/* Timestamp */}
+                            <p className="text-[10px] text-muted-foreground ml-11 mb-2">
+                              {formatDate(item.created_at)}
+                            </p>
+
+                            {/* Content Card */}
+                            <div className={`ml-11 rounded-lg p-3 ${
+                              item.is_creator
+                                ? 'bg-orange-500/10 border border-orange-500/20'
+                                : 'bg-muted/50 border border-border'
+                            }`}>
+                              {item.type === 'quote' && item.extra_data && (
+                                <div className="mb-2">
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                                    <DollarSign className="h-3 w-3" />
+                                    <span>Quoted Price</span>
+                                    <span className="font-mono text-[10px]">{item.extra_data.quote_number}</span>
+                                  </div>
+                                  <p className="text-lg font-bold text-green-500">
+                                    {item.extra_data.currency} {Number(item.extra_data.amount).toLocaleString('id-ID')}
+                                  </p>
+                                  {item.extra_data.valid_until && (
+                                    <p className="text-[10px] text-muted-foreground">
+                                      Valid until: {new Date(item.extra_data.valid_until).toLocaleDateString('id-ID')}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {item.type === 'status_change' && item.extra_data && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {statusVariants[item.extra_data.new_status as TicketStatus]?.label || item.extra_data.new_status}
+                                  </Badge>
+                                </div>
+                              )}
+
+                              {item.content && (
+                                <p className="text-sm whitespace-pre-wrap">{item.content}</p>
+                              )}
+
+                              {item.type === 'quote' && item.extra_data?.terms && (
+                                <p className="text-xs text-muted-foreground mt-2">{item.extra_data.terms}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </CardContent>
           </Card>
         </div>
@@ -1447,7 +1750,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
             </Card>
           )}
 
-          {/* Activity Timeline */}
+          {/* Activity Log */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Activity</CardTitle>
@@ -1459,25 +1762,25 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {events.slice(0, 10).map((event) => (
+                  {events.slice(0, 15).map((event) => (
                     <div key={event.id} className="flex gap-3">
-                      <div className="flex-shrink-0 mt-1">
-                        <div className="h-2 w-2 rounded-full bg-brand" />
+                      <div className="flex-shrink-0 mt-1.5">
+                        <div className="h-2 w-2 rounded-full bg-orange-500" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm">
                           <span className="font-medium">{event.actor?.name || 'System'}</span>
                           {' '}
                           <span className="text-muted-foreground">
-                            {event.event_type.replace(/_/g, ' ')}
+                            {formatEventType(event.event_type)}
                           </span>
                         </p>
                         {event.notes && (
-                          <p className="text-xs text-muted-foreground mt-1">
+                          <p className="text-xs text-muted-foreground mt-0.5">
                             {event.notes}
                           </p>
                         )}
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {formatDate(event.created_at)}
                         </p>
                       </div>
