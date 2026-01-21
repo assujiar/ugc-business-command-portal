@@ -421,3 +421,56 @@ export function getUserTicketingDepartment(role: UserRole | null | undefined): s
       return null
   }
 }
+
+// =====================================================
+// Analytics Data Filtering for Ticketing Dashboard
+// =====================================================
+
+export type AnalyticsScope =
+  | 'all'           // Director, super admin - see all data
+  | 'department'    // Ops roles, managers - see department data
+  | 'user'          // Individual users - see own data only
+
+export interface AnalyticsScopeResult {
+  scope: AnalyticsScope
+  department: string | null  // For department scope
+  userId: string | null      // For user scope
+}
+
+// Determine how analytics data should be filtered based on role
+// Rules:
+// - Director, super admin: see all analytics
+// - Ops roles (EXIM Ops, domestics Ops, Import DTD Ops, traffic & warehous): see their department's analytics
+// - Marketing Manager, MACX: see marketing department analytics
+// - Sales Manager, sales support: see sales department analytics
+// - Salesperson, VSDO, DGO, Marcomm: see their own user analytics
+export function getAnalyticsScope(
+  role: UserRole | null | undefined,
+  userId: string
+): AnalyticsScopeResult {
+  if (!role) return { scope: 'user', department: null, userId }
+
+  // Director and super admin see all
+  if (role === 'Director' || role === 'super admin') {
+    return { scope: 'all', department: null, userId: null }
+  }
+
+  // Ops roles see their department
+  if (isOps(role)) {
+    return { scope: 'department', department: getUserTicketingDepartment(role), userId: null }
+  }
+
+  // Marketing Manager, MACX see marketing department
+  if (role === 'Marketing Manager' || role === 'MACX') {
+    return { scope: 'department', department: 'MKT', userId: null }
+  }
+
+  // Sales Manager, Sales Support see sales department
+  if (role === 'sales manager' || role === 'sales support') {
+    return { scope: 'department', department: 'SAL', userId: null }
+  }
+
+  // Salesperson, VSDO, DGO, Marcomm see their own data
+  // (and any other individual contributors)
+  return { scope: 'user', department: null, userId }
+}

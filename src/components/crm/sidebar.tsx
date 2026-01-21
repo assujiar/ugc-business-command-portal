@@ -42,7 +42,7 @@ interface SidebarProps {
 }
 
 const navigation = [
-  { name: 'Overview', href: '/dashboard', icon: LayoutDashboard, roles: 'all' },
+  { name: 'Overview', href: '/overview-crm', icon: LayoutDashboard, roles: 'all' },
   // Marketing routes
   { name: 'Lead Management', href: '/lead-management', icon: ClipboardList, permission: 'leadInbox' },
   // Sales routes
@@ -84,7 +84,7 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
   const sidebarContent = (
     <>
       <div className="p-4 border-b flex items-center justify-between">
-        <Link href="/dashboard" className="flex items-center gap-2" onClick={handleNavClick}>
+        <Link href="/overview-crm" className="flex items-center gap-2" onClick={handleNavClick}>
           <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">UGC</span>
           </div>
@@ -179,11 +179,11 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
             {isTicketingModuleExpanded && (
               <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3">
                 <Link
-                  href="/overview"
+                  href="/overview-ticket"
                   onClick={handleNavClick}
                   className={cn(
                     'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                    pathname === '/overview'
+                    pathname === '/overview-ticket'
                       ? 'bg-brand text-white'
                       : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}

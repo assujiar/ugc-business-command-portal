@@ -47,7 +47,7 @@ export default function LoginPage() {
         setError(error.message)
       } else {
         // Use full page navigation to ensure middleware runs and cookies sync
-        window.location.href = '/dashboard'
+        window.location.href = '/overview-crm'
       }
     } catch (err) {
       setError('An error occurred during login')

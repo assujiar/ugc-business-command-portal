@@ -23,7 +23,7 @@ export default async function TicketingLayout({
 
   // Check ticketing access permission
   if (!canAccessTicketing(profile.role)) {
-    redirect('/dashboard')
+    redirect('/overview-crm')
   }
 
   return <CRMShell profile={profile}>{children}</CRMShell>

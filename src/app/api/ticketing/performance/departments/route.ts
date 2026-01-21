@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, canViewAllTickets } from '@/lib/permissions'
+import { canAccessTicketing, getAnalyticsScope } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -36,19 +36,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Non-ops users get empty department performance data
-    if (!canViewAllTickets(profile.role)) {
+    // Get analytics scope based on role
+    const analyticsScope = getAnalyticsScope(profile.role, user.id)
+
+    // Users with 'user' scope don't get department performance data
+    if (analyticsScope.scope === 'user') {
       return NextResponse.json({
         success: true,
         data: {
           period_days: parseInt(period),
-          departments: [],
+          departments: {},
           rankings: {
-            best_sla_compliance: [],
-            highest_win_rate: [],
-            most_tickets: [],
+            by_volume: [],
+            by_completion_rate: [],
+            by_sla_compliance: [],
+            by_win_rate: [],
           },
-          total_departments: 0,
+          total_tickets: 0,
         },
       })
     }
@@ -59,7 +63,7 @@ export async function GET(request: NextRequest) {
     startDate.setDate(startDate.getDate() - periodDays)
 
     // Fetch tickets with SLA data
-    const { data: tickets, error: ticketsError } = await (supabase as any)
+    let ticketQuery = (supabase as any)
       .from('tickets')
       .select(`
         id,
@@ -81,6 +85,13 @@ export async function GET(request: NextRequest) {
         )
       `)
       .gte('created_at', startDate.toISOString())
+
+    // For department scope, filter to only their department
+    if (analyticsScope.scope === 'department' && analyticsScope.department) {
+      ticketQuery = ticketQuery.eq('department', analyticsScope.department)
+    }
+
+    const { data: tickets, error: ticketsError } = await ticketQuery
 
     if (ticketsError) {
       console.error('Error fetching tickets:', ticketsError)

@@ -49,7 +49,7 @@ export default async function PipelinePage({ searchParams }: PageProps) {
 
   // Check if user has access
   if (!canAccessPipeline(profile.role)) {
-    redirect('/dashboard')
+    redirect('/overview-crm')
   }
 
   // Get filter params

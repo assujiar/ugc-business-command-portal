@@ -8,8 +8,8 @@ import { redirect } from 'next/navigation'
 import { OverviewDashboard } from '@/components/ticketing/overview-dashboard'
 
 export const metadata = {
-  title: 'Overview | UGC Business Command Portal',
-  description: 'Ticketing dashboard and performance metrics',
+  title: 'Ticketing Overview | UGC Business Command Portal',
+  description: 'Ticketing module dashboard and performance metrics',
 }
 
 export default async function OverviewPage() {

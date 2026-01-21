@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, canViewAllTickets, getUserTicketingDepartment } from '@/lib/permissions'
+import { canAccessTicketing, getAnalyticsScope } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
-    const department = searchParams.get('department')
+    const departmentFilter = searchParams.get('department')
     const period = searchParams.get('period') || '30' // days
 
     // Get authenticated user
@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    const canViewAll = canViewAllTickets(profile.role)
+    // Get analytics scope based on role
+    const analyticsScope = getAnalyticsScope(profile.role, user.id)
 
     // Calculate date range
     const periodDays = parseInt(period)
@@ -69,15 +70,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: slaError.message }, { status: 500 })
     }
 
-    // Filter by access
+    // Filter by analytics scope
     let filteredData = slaData || []
-    if (!canViewAll) {
+    if (analyticsScope.scope === 'user') {
+      // User scope: only see their own tickets
       filteredData = filteredData.filter((s: any) =>
         s.ticket?.created_by === user.id || s.ticket?.assigned_to === user.id
       )
+    } else if (analyticsScope.scope === 'department') {
+      // Department scope: see department tickets
+      if (analyticsScope.department) {
+        filteredData = filteredData.filter((s: any) => s.ticket?.department === analyticsScope.department)
+      }
     }
-    if (department) {
-      filteredData = filteredData.filter((s: any) => s.ticket?.department === department)
+    // 'all' scope: no additional filtering
+
+    // Allow optional department filter override (for admins)
+    if (departmentFilter && analyticsScope.scope === 'all') {
+      filteredData = filteredData.filter((s: any) => s.ticket?.department === departmentFilter)
     }
 
     // Calculate SLA metrics
