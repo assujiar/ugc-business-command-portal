@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - periodDays)
 
-    // Build query for SLA tracking data
+    // Build query for SLA tracking data with metrics
     let query = (supabase as any)
       .from('ticket_sla_tracking')
       .select(`
@@ -59,6 +59,12 @@ export async function GET(request: NextRequest) {
           created_by,
           assigned_to,
           created_at
+        ),
+        metrics:ticket_response_metrics!ticket_response_metrics_ticket_id_fkey(
+          assignee_first_response_seconds,
+          assignee_first_response_business_seconds,
+          time_to_first_quote_seconds,
+          time_to_first_quote_business_seconds
         )
       `)
       .gte('created_at', startDate.toISOString())
@@ -164,19 +170,23 @@ export async function GET(request: NextRequest) {
     const rfqData = filteredData.filter((s: any) => s.ticket?.ticket_type === 'RFQ')
     const rfqWithFR = rfqData.filter((s: any) => s.first_response_at !== null)
     const rfqWithRes = rfqData.filter((s: any) => s.resolution_at !== null)
-    const rfqWithQuote = rfqData.filter((s: any) => s.time_to_first_quote_seconds !== null)
+    // Use metrics table for first quote time
+    const rfqWithQuote = rfqData.filter((s: any) => s.metrics?.time_to_first_quote_seconds !== null)
 
-    // Calculate average first quote time for RFQ
+    // Calculate average first quote time for RFQ from metrics
     const avgFirstQuoteSeconds = rfqWithQuote.length > 0
-      ? rfqWithQuote.reduce((sum: number, s: any) => sum + (s.time_to_first_quote_seconds || 0), 0) / rfqWithQuote.length
+      ? rfqWithQuote.reduce((sum: number, s: any) => sum + (s.metrics?.time_to_first_quote_seconds || 0), 0) / rfqWithQuote.length
       : 0
 
     // First quote SLA compliance (assuming 24h SLA for first quote)
     const firstQuoteSlaHours = 24
     const rfqQuoteMet = rfqWithQuote.filter((s: any) =>
-      (s.time_to_first_quote_seconds || 0) <= firstQuoteSlaHours * 3600
+      (s.metrics?.time_to_first_quote_seconds || 0) <= firstQuoteSlaHours * 3600
     ).length
     const rfqQuoteBreached = rfqWithQuote.length - rfqQuoteMet
+
+    // Get RFQ tickets with first response metrics
+    const rfqWithFRMetrics = rfqData.filter((s: any) => s.metrics?.assignee_first_response_seconds !== null)
 
     byType['RFQ'] = {
       total: rfqData.length,
@@ -187,12 +197,9 @@ export async function GET(request: NextRequest) {
         compliance_rate: rfqWithFR.length > 0
           ? Math.round((rfqWithFR.filter((s: any) => s.first_response_met === true).length / rfqWithFR.length) * 100)
           : 100,
-        avg_seconds: rfqWithFR.length > 0
-          ? Math.round(rfqWithFR.reduce((sum: number, s: any) => {
-              const created = new Date(s.created_at)
-              const responded = new Date(s.first_response_at)
-              return sum + (responded.getTime() - created.getTime()) / 1000
-            }, 0) / rfqWithFR.length)
+        avg_seconds: rfqWithFRMetrics.length > 0
+          ? Math.round(rfqWithFRMetrics.reduce((sum: number, s: any) =>
+              sum + (s.metrics?.assignee_first_response_seconds || 0), 0) / rfqWithFRMetrics.length)
           : 0,
       },
       first_quote: {
@@ -233,6 +240,7 @@ export async function GET(request: NextRequest) {
     const genData = filteredData.filter((s: any) => s.ticket?.ticket_type === 'GEN')
     const genWithFR = genData.filter((s: any) => s.first_response_at !== null)
     const genWithRes = genData.filter((s: any) => s.resolution_at !== null)
+    const genWithFRMetrics = genData.filter((s: any) => s.metrics?.assignee_first_response_seconds !== null)
 
     byType['GEN'] = {
       total: genData.length,
@@ -243,12 +251,9 @@ export async function GET(request: NextRequest) {
         compliance_rate: genWithFR.length > 0
           ? Math.round((genWithFR.filter((s: any) => s.first_response_met === true).length / genWithFR.length) * 100)
           : 100,
-        avg_seconds: genWithFR.length > 0
-          ? Math.round(genWithFR.reduce((sum: number, s: any) => {
-              const created = new Date(s.created_at)
-              const responded = new Date(s.first_response_at)
-              return sum + (responded.getTime() - created.getTime()) / 1000
-            }, 0) / genWithFR.length)
+        avg_seconds: genWithFRMetrics.length > 0
+          ? Math.round(genWithFRMetrics.reduce((sum: number, s: any) =>
+              sum + (s.metrics?.assignee_first_response_seconds || 0), 0) / genWithFRMetrics.length)
           : 0,
       },
       resolution: {

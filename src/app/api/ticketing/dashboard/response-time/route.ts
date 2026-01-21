@@ -182,6 +182,47 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Metrics by ticket type
+    const byType: Record<string, any> = {}
+
+    // RFQ specific metrics
+    const rfqOutbound = outboundComments.filter((c: any) => c.ticket?.ticket_type === 'RFQ')
+    const rfqTotalResponses = rfqOutbound.length
+    const rfqAvgResponseSeconds = rfqTotalResponses > 0
+      ? rfqOutbound.reduce((sum: number, c: any) => sum + (c.response_time_seconds || 0), 0) / rfqTotalResponses
+      : 0
+
+    byType['RFQ'] = {
+      total_responses: rfqTotalResponses,
+      avg_response_seconds: Math.round(rfqAvgResponseSeconds),
+      avg_response_hours: Math.round(rfqAvgResponseSeconds / 3600 * 10) / 10,
+      distribution: {
+        under_1_hour: rfqOutbound.filter((c: any) => c.response_time_seconds <= 3600).length,
+        under_4_hours: rfqOutbound.filter((c: any) => c.response_time_seconds <= 14400).length,
+        under_24_hours: rfqOutbound.filter((c: any) => c.response_time_seconds <= 86400).length,
+        over_24_hours: rfqOutbound.filter((c: any) => c.response_time_seconds > 86400).length,
+      },
+    }
+
+    // GEN specific metrics
+    const genOutbound = outboundComments.filter((c: any) => c.ticket?.ticket_type === 'GEN')
+    const genTotalResponses = genOutbound.length
+    const genAvgResponseSeconds = genTotalResponses > 0
+      ? genOutbound.reduce((sum: number, c: any) => sum + (c.response_time_seconds || 0), 0) / genTotalResponses
+      : 0
+
+    byType['GEN'] = {
+      total_responses: genTotalResponses,
+      avg_response_seconds: Math.round(genAvgResponseSeconds),
+      avg_response_hours: Math.round(genAvgResponseSeconds / 3600 * 10) / 10,
+      distribution: {
+        under_1_hour: genOutbound.filter((c: any) => c.response_time_seconds <= 3600).length,
+        under_4_hours: genOutbound.filter((c: any) => c.response_time_seconds <= 14400).length,
+        under_24_hours: genOutbound.filter((c: any) => c.response_time_seconds <= 86400).length,
+        over_24_hours: genOutbound.filter((c: any) => c.response_time_seconds > 86400).length,
+      },
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -205,6 +246,7 @@ export async function GET(request: NextRequest) {
           over_24_hours: totalResponses > 0 ? Math.round((over24Hours / totalResponses) * 100) : 0,
         },
         by_department: byDepartment,
+        by_type: byType,
         top_responders: topResponders,
         daily_trend: dailyTrend,
       },
