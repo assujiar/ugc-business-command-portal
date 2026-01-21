@@ -261,32 +261,38 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
   }
 
   // Send via Email
-  const handleSendEmail = async () => {
+  const handleSendEmail = async (isResend: boolean = false) => {
     setActionLoading(true)
     try {
       const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'email' }),
+        body: JSON.stringify({ method: 'email', isResend }),
       })
       const result = await response.json()
 
       if (result.success) {
+        // Copy plain text email to clipboard
+        await navigator.clipboard.writeText(result.data.email_text)
+
+        // Open HTML preview in new window
         const previewWindow = window.open('', '_blank')
         if (previewWindow) {
           previewWindow.document.write(result.data.email_html)
           previewWindow.document.close()
         }
 
-        const mailtoLink = `mailto:${result.data.recipient_email || ''}?subject=${encodeURIComponent(result.data.email_subject)}`
+        // Create mailto with plain text body (URL encoded)
+        const mailtoBody = encodeURIComponent(result.data.email_text)
+        const mailtoLink = `mailto:${result.data.recipient_email || ''}?subject=${encodeURIComponent(result.data.email_subject)}&body=${mailtoBody}`
         window.location.href = mailtoLink
 
         toast({
-          title: 'Email Prepared',
-          description: 'Email content prepared. Check the preview window.',
+          title: isResend ? 'Email Resent' : 'Email Prepared',
+          description: 'Email content copied to clipboard and mailto opened. HTML preview in new tab.',
         })
 
-        fetchQuotation()
+        if (!isResend) fetchQuotation()
       } else {
         throw new Error(result.error || 'Failed to send')
       }
@@ -294,6 +300,41 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
       toast({
         title: 'Error',
         description: error.message || 'Failed to send email',
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Resend via WhatsApp (doesn't update status)
+  const handleResendWhatsApp = async () => {
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'whatsapp', isResend: true }),
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        await navigator.clipboard.writeText(result.data.whatsapp_text)
+        toast({
+          title: 'WhatsApp Text Copied',
+          description: 'Text copied to clipboard. Opening WhatsApp...',
+        })
+
+        if (result.data.whatsapp_url) {
+          window.open(result.data.whatsapp_url, '_blank')
+        }
+      } else {
+        throw new Error(result.error || 'Failed to resend')
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to resend via WhatsApp',
         variant: 'destructive',
       })
     } finally {
@@ -456,7 +497,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
               </Button>
               <Button
                 variant="outline"
-                onClick={handleSendEmail}
+                onClick={() => handleSendEmail(false)}
                 disabled={actionLoading}
               >
                 <Mail className="mr-2 h-4 w-4" />
@@ -486,6 +527,22 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
           )}
           {quotation.status === 'sent' && (
             <>
+              <Button
+                variant="outline"
+                onClick={handleResendWhatsApp}
+                disabled={actionLoading}
+              >
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Resend WhatsApp
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleSendEmail(true)}
+                disabled={actionLoading}
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                Resend Email
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => updateStatus('accepted')}

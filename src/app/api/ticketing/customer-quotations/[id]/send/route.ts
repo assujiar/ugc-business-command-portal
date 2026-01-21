@@ -333,9 +333,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Parse request body
     const body = await request.json()
-    const { method, pdf_url } = body as {
+    const { method, pdf_url, isResend } = body as {
       method: 'whatsapp' | 'email'
       pdf_url?: string
+      isResend?: boolean
     }
 
     if (!method || !['whatsapp', 'email'].includes(method)) {
@@ -412,26 +413,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Example with Resend, SendGrid, or Nodemailer would go here
     }
 
-    // Update quotation status to 'sent'
-    const sentTo = method === 'email' ? quotation.customer_email : quotation.customer_phone
-    await (supabase as any)
-      .from('customer_quotations')
-      .update({
-        status: 'sent',
-        sent_via: method,
-        sent_to: sentTo,
-        sent_at: new Date().toISOString(),
-        pdf_url: pdf_url || quotation.pdf_url,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
+    // Update quotation status to 'sent' only if not a resend
+    if (!isResend) {
+      const sentTo = method === 'email' ? quotation.customer_email : quotation.customer_phone
+      await (supabase as any)
+        .from('customer_quotations')
+        .update({
+          status: 'sent',
+          sent_via: method,
+          sent_to: sentTo,
+          sent_at: new Date().toISOString(),
+          pdf_url: pdf_url || quotation.pdf_url,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+    }
 
     return NextResponse.json({
       success: true,
       data: responseData,
-      message: method === 'whatsapp'
-        ? 'WhatsApp text generated. Click the link to send via WhatsApp.'
-        : 'Email content generated. Ready to send.',
+      message: isResend
+        ? `Quotation resent via ${method}`
+        : method === 'whatsapp'
+          ? 'WhatsApp text generated. Click the link to send via WhatsApp.'
+          : 'Email content generated. Ready to send.',
     })
   } catch (err) {
     console.error('Unexpected error:', err)
