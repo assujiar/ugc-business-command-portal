@@ -1536,12 +1536,12 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
             </CardContent>
           </Card>
         </Link>
-        <Link href="/quotations">
+        <Link href="/operational-costs">
           <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
             <CardContent className="flex items-center justify-between p-4">
               <div className="flex items-center gap-3">
                 <Clock className="h-5 w-5 text-brand" />
-                <span className="font-medium">Manage Quotations</span>
+                <span className="font-medium">Manage Operational Costs</span>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground" />
             </CardContent>

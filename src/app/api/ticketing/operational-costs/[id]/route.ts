@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, canViewAllTickets, canCreateQuotes } from '@/lib/permissions'
+import { canAccessTicketing, canViewAllTickets, canCreateOperationalCosts } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +14,7 @@ interface ProfileData {
   role: UserRole
 }
 
-// GET /api/ticketing/quotations/[id] - Get a specific quotation
+// GET /api/ticketing/operational-costs/[id] - Get a specific operational cost
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params
@@ -39,8 +39,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Fetch quotation with related data
-    const { data: quotation, error } = await (supabase as any)
+    // Fetch operational cost with related data
+    const { data: cost, error } = await (supabase as any)
       .from('ticket_rate_quotes')
       .select(`
         *,
@@ -65,12 +65,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .eq('id', id)
       .single()
 
-    if (error || !quotation) {
-      return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
+    if (error || !cost) {
+      return NextResponse.json({ error: 'Operational cost not found' }, { status: 404 })
     }
 
     // Check access - user must have access to the ticket
-    const ticket = quotation.ticket
+    const ticket = cost.ticket
     if (!canViewAllTickets(profile.role) &&
         ticket?.creator?.user_id !== user.id &&
         ticket?.assignee?.user_id !== user.id) {
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      data: quotation,
+      data: cost,
     })
   } catch (err) {
     console.error('Unexpected error:', err)
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// PATCH /api/ticketing/quotations/[id] - Update a quotation
+// PATCH /api/ticketing/operational-costs/[id] - Update an operational cost
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params
@@ -112,20 +112,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Check if user can manage quotes
-    if (!canCreateQuotes(profile.role)) {
-      return NextResponse.json({ error: 'Not authorized to manage quotes' }, { status: 403 })
+    // Check if user can manage operational costs
+    if (!canCreateOperationalCosts(profile.role)) {
+      return NextResponse.json({ error: 'Not authorized to manage operational costs' }, { status: 403 })
     }
 
-    // Get current quotation
-    const { data: quotation } = await (supabase as any)
+    // Get current operational cost
+    const { data: cost } = await (supabase as any)
       .from('ticket_rate_quotes')
       .select('*, ticket:tickets!ticket_rate_quotes_ticket_id_fkey(id, ticket_code)')
       .eq('id', id)
       .single()
 
-    if (!quotation) {
-      return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
+    if (!cost) {
+      return NextResponse.json({ error: 'Operational cost not found' }, { status: 404 })
     }
 
     // Parse request body
@@ -152,7 +152,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         rejected: [],
       }
 
-      const currentStatus = quotation.status
+      const currentStatus = cost.status
       if (!validTransitions[currentStatus]?.includes(status)) {
         return NextResponse.json({
           error: `Invalid status transition: ${currentStatus} → ${status}`,
@@ -171,8 +171,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
     }
 
-    // Update quotation
-    const { data: updatedQuotation, error } = await (supabase as any)
+    // Update operational cost
+    const { data: updatedCost, error } = await (supabase as any)
       .from('ticket_rate_quotes')
       .update(updates)
       .eq('id', id)
@@ -180,7 +180,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single()
 
     if (error) {
-      console.error('Error updating quotation:', error)
+      console.error('Error updating operational cost:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -189,18 +189,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       await (supabase as any)
         .from('ticket_events')
         .insert({
-          ticket_id: quotation.ticket_id,
-          event_type: status === 'sent' ? 'quote_sent' : 'status_changed',
+          ticket_id: cost.ticket_id,
+          event_type: status === 'sent' ? 'cost_sent' : 'status_changed',
           actor_user_id: user.id,
-          old_value: { status: quotation.status },
-          new_value: { status, quote_number: quotation.quote_number },
-          notes: `Quotation status updated to ${status}`,
+          old_value: { status: cost.status },
+          new_value: { status, cost_number: cost.quote_number },
+          notes: `Operational cost status updated to ${status}`,
         })
     }
 
     return NextResponse.json({
       success: true,
-      data: updatedQuotation,
+      data: updatedCost,
     })
   } catch (err) {
     console.error('Unexpected error:', err)
@@ -208,7 +208,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// DELETE /api/ticketing/quotations/[id] - Delete a quotation (only draft)
+// DELETE /api/ticketing/operational-costs/[id] - Delete an operational cost (only draft)
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params
@@ -233,43 +233,43 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Check if user can manage quotes
-    if (!canCreateQuotes(profile.role)) {
-      return NextResponse.json({ error: 'Not authorized to manage quotes' }, { status: 403 })
+    // Check if user can manage operational costs
+    if (!canCreateOperationalCosts(profile.role)) {
+      return NextResponse.json({ error: 'Not authorized to manage operational costs' }, { status: 403 })
     }
 
-    // Get quotation
-    const { data: quotation } = await (supabase as any)
+    // Get operational cost
+    const { data: cost } = await (supabase as any)
       .from('ticket_rate_quotes')
       .select('*')
       .eq('id', id)
       .single()
 
-    if (!quotation) {
-      return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
+    if (!cost) {
+      return NextResponse.json({ error: 'Operational cost not found' }, { status: 404 })
     }
 
-    // Only draft quotes can be deleted
-    if (quotation.status !== 'draft') {
+    // Only draft costs can be deleted
+    if (cost.status !== 'draft') {
       return NextResponse.json({
-        error: 'Only draft quotations can be deleted',
+        error: 'Only draft operational costs can be deleted',
       }, { status: 400 })
     }
 
-    // Delete quotation
+    // Delete operational cost
     const { error } = await (supabase as any)
       .from('ticket_rate_quotes')
       .delete()
       .eq('id', id)
 
     if (error) {
-      console.error('Error deleting quotation:', error)
+      console.error('Error deleting operational cost:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Quotation deleted',
+      message: 'Operational cost deleted',
     })
   } catch (err) {
     console.error('Unexpected error:', err)

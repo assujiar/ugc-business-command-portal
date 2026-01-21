@@ -154,13 +154,13 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const [uploadingFile, setUploadingFile] = useState(false)
   const [slaDetails, setSlaDetails] = useState<TicketSLADetails | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [quotes, setQuotes] = useState<any[]>([])
+  const [costs, setCosts] = useState<any[]>([])
 
-  // Quote dialog state
-  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false)
-  const [quoteAmount, setQuoteAmount] = useState('')
-  const [quoteCurrency, setQuoteCurrency] = useState('IDR')
-  const [quoteTerms, setQuoteTerms] = useState('')
+  // Cost dialog state
+  const [costDialogOpen, setCostDialogOpen] = useState(false)
+  const [costAmount, setCostAmount] = useState('')
+  const [costCurrency, setCostCurrency] = useState('IDR')
+  const [costTerms, setCostTerms] = useState('')
 
   // Lost dialog state
   const [lostDialogOpen, setLostDialogOpen] = useState(false)
@@ -253,11 +253,11 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         setAttachments(attachmentsData.data || [])
       }
 
-      // Fetch quotes
-      const quotesRes = await fetch(`/api/ticketing/tickets/${ticket.id}/quotes`)
-      const quotesData = await quotesRes.json()
-      if (quotesData.success) {
-        setQuotes(quotesData.data || [])
+      // Fetch operational costs
+      const costsRes = await fetch(`/api/ticketing/tickets/${ticket.id}/quotes`)
+      const costsData = await costsRes.json()
+      if (costsData.success) {
+        setCosts(costsData.data || [])
       }
 
       // Fetch SLA details
@@ -329,9 +329,9 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
 
   const getActionSuccessMessage = (action: string): string => {
     switch (action) {
-      case 'submit_quote': return 'Quote submitted successfully'
+      case 'submit_cost': return 'Operational cost submitted successfully'
       case 'request_adjustment': return 'Adjustment requested'
-      case 'quote_sent_to_customer': return 'Marked as sent to customer'
+      case 'cost_sent_to_customer': return 'Marked as sent to customer'
       case 'mark_won': return 'Ticket marked as won!'
       case 'mark_lost': return 'Ticket marked as lost'
       default: return 'Action completed'
@@ -580,8 +580,10 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       'assigned': 'assigned',
       'status_changed': 'status changed',
       'comment_added': 'comment added',
-      'quote_submitted': 'quote sent',
-      'quote_sent_to_customer': 'quote sent to customer',
+      'cost_submitted': 'cost sent',
+      'cost_sent_to_customer': 'cost sent to customer',
+      'quote_submitted': 'cost sent',
+      'quote_sent_to_customer': 'cost sent to customer',
       'attachment_added': 'attachment added',
       'attachment_removed': 'attachment removed',
       'priority_changed': 'priority changed',
@@ -645,7 +647,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   // Build unified timeline
   type TimelineItem = {
     id: string
-    type: 'comment' | 'quote' | 'status_change' | 'event'
+    type: 'comment' | 'cost' | 'status_change' | 'event'
     created_at: string
     user_id: string
     user_name: string
@@ -678,36 +680,36 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     })
 
-    // Add quotes - sorted by created_at to get correct sequence
-    const sortedQuotes = [...quotes].sort((a, b) =>
+    // Add operational costs - sorted by created_at to get correct sequence
+    const sortedCosts = [...costs].sort((a, b) =>
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     )
     const ordinalLabels = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth']
 
-    sortedQuotes.forEach((quote, index) => {
-      const isCreatorQuote = quote.created_by === ticket.created_by
-      const quoteLabel = index < ordinalLabels.length
-        ? `${ordinalLabels[index]} Quote`
-        : `Quote #${index + 1}`
+    sortedCosts.forEach((cost, index) => {
+      const isCreatorCost = cost.created_by === ticket.created_by
+      const costLabel = index < ordinalLabels.length
+        ? `${ordinalLabels[index]} Cost`
+        : `Cost #${index + 1}`
 
       items.push({
-        id: `quote-${quote.id}`,
-        type: 'quote',
-        created_at: quote.created_at,
-        user_id: quote.created_by,
-        user_name: quote.creator?.name || 'Unknown',
-        user_initials: getInitials(quote.creator?.name || 'U'),
-        is_creator: isCreatorQuote,
-        content: quote.notes || '',
-        badge_type: 'quote',
-        badge_label: quoteLabel,
+        id: `cost-${cost.id}`,
+        type: 'cost',
+        created_at: cost.created_at,
+        user_id: cost.created_by,
+        user_name: cost.creator?.name || 'Unknown',
+        user_initials: getInitials(cost.creator?.name || 'U'),
+        is_creator: isCreatorCost,
+        content: cost.notes || '',
+        badge_type: 'cost',
+        badge_label: costLabel,
         extra_data: {
-          quote_number: quote.quote_number,
-          amount: quote.amount,
-          currency: quote.currency,
-          valid_until: quote.valid_until,
-          terms: quote.terms,
-          quote_sequence: index + 1,
+          cost_number: cost.quote_number,
+          amount: cost.amount,
+          currency: cost.currency,
+          valid_until: cost.valid_until,
+          terms: cost.terms,
+          cost_sequence: index + 1,
         },
       })
     })
@@ -732,26 +734,26 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     })
 
-    // Add quote_sent_to_customer events with ordinal labels
-    const quoteSentEvents = events
+    // Add cost_sent_to_customer events with ordinal labels (still using quote_sent_to_customer in DB)
+    const costSentEvents = events
       .filter(e => e.event_type === 'quote_sent_to_customer')
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 
-    quoteSentEvents.forEach((event, index) => {
+    costSentEvents.forEach((event, index) => {
       const isCreatorEvent = event.actor_user_id === ticket.created_by
       const sentOrdinal = index < ordinalLabels.length
         ? `${ordinalLabels[index]} Sent`
         : `${index + 1}${index === 0 ? 'st' : index === 1 ? 'nd' : index === 2 ? 'rd' : 'th'} Sent`
 
       items.push({
-        id: `quote-sent-${event.id}`,
+        id: `cost-sent-${event.id}`,
         type: 'event',
         created_at: event.created_at,
         user_id: event.actor_user_id || '',
         user_name: event.actor?.name || 'System',
         user_initials: getInitials(event.actor?.name || 'S'),
         is_creator: isCreatorEvent,
-        content: event.notes || 'Quote forwarded to end customer',
+        content: event.notes || 'Cost forwarded to end customer',
         badge_type: 'sent_to_customer',
         badge_label: sentOrdinal,
         extra_data: {
@@ -924,9 +926,9 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     })
   }
 
-  // Handle submit quote
-  const handleSubmitQuote = async () => {
-    const amount = parseFloat(quoteAmount)
+  // Handle submit operational cost
+  const handleSubmitCost = async () => {
+    const amount = parseFloat(costAmount)
     if (isNaN(amount) || amount <= 0) {
       toast({
         title: 'Error',
@@ -938,14 +940,14 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
 
     const success = await executeAction('submit_quote', {
       amount,
-      currency: quoteCurrency,
-      terms: quoteTerms || null,
+      currency: costCurrency,
+      terms: costTerms || null,
     })
 
     if (success) {
-      setQuoteDialogOpen(false)
-      setQuoteAmount('')
-      setQuoteTerms('')
+      setCostDialogOpen(false)
+      setCostAmount('')
+      setCostTerms('')
     }
   }
 
@@ -1079,7 +1081,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   </div>
                   {ticket.ticket_type === 'RFQ' && (
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground">Time to Quote</p>
+                      <p className="text-xs font-medium text-muted-foreground">Time to Cost</p>
                       <p className="text-sm font-medium">{slaDetails.metrics.quote?.time_to_first_quote_formatted || 'N/A'}</p>
                     </div>
                   )}
@@ -1391,8 +1393,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   {/* Creator Actions */}
                   {isCreator && ticket.ticket_type === 'RFQ' && (
                     <>
-                      {/* Request Adjustment - available after ops sends quote */}
-                      {quotes.length > 0 && (
+                      {/* Request Adjustment - available after ops sends cost */}
+                      {costs.length > 0 && (
                         <Button
                           onClick={() => executeAction('request_adjustment')}
                           disabled={actionLoading === 'request_adjustment'}
@@ -1408,8 +1410,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                         </Button>
                       )}
 
-                      {/* Quote Sent to Customer - available after ops sends quote */}
-                      {quotes.length > 0 && (
+                      {/* Cost Sent to Customer - available after ops sends cost */}
+                      {costs.length > 0 && (
                         <Button
                           onClick={() => executeAction('quote_sent_to_customer')}
                           disabled={actionLoading === 'quote_sent_to_customer'}
@@ -1421,12 +1423,12 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                           ) : (
                             <Forward className="mr-2 h-4 w-4" />
                           )}
-                          Quote Sent to Customer
+                          Cost Sent to Customer
                         </Button>
                       )}
 
-                      {/* Won/Lost Buttons - available after ops sends quote */}
-                      {quotes.length > 0 && (
+                      {/* Won/Lost Buttons - available after ops sends cost */}
+                      {costs.length > 0 && (
                         <div className="grid grid-cols-2 gap-2">
                           <Button
                             onClick={() => executeAction('mark_won')}
@@ -1703,37 +1705,37 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   {/* Assignee/Ops Actions */}
                   {(isAssignee || isOpsOrAdmin) && ticket.ticket_type === 'RFQ' && !isCreator && (
                     <>
-                      {/* Submit Quote Button - always available until ticket is closed */}
-                      <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>
+                      {/* Submit Cost Button - always available until ticket is closed */}
+                      <Dialog open={costDialogOpen} onOpenChange={setCostDialogOpen}>
                         <DialogTrigger asChild>
                           <Button className="w-full bg-green-600 hover:bg-green-700">
                             <DollarSign className="mr-2 h-4 w-4" />
-                              Submit Quote
+                              Submit Cost
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Submit Quote</DialogTitle>
+                              <DialogTitle>Submit Operational Cost</DialogTitle>
                               <DialogDescription>
-                                Enter the quote details to send to the customer.
+                                Enter the cost details to send to the ticket creator.
                               </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4">
                               <div>
-                                <Label htmlFor="quote-amount">Amount *</Label>
+                                <Label htmlFor="cost-amount">Amount *</Label>
                                 <Input
-                                  id="quote-amount"
-                                  name="quote-amount"
+                                  id="cost-amount"
+                                  name="cost-amount"
                                   type="number"
                                   placeholder="Enter amount"
-                                  value={quoteAmount}
-                                  onChange={(e) => setQuoteAmount(e.target.value)}
+                                  value={costAmount}
+                                  onChange={(e) => setCostAmount(e.target.value)}
                                 />
                               </div>
                               <div>
-                                <Label htmlFor="quote-currency">Currency</Label>
-                                <Select value={quoteCurrency} onValueChange={setQuoteCurrency}>
-                                  <SelectTrigger id="quote-currency">
+                                <Label htmlFor="cost-currency">Currency</Label>
+                                <Select value={costCurrency} onValueChange={setCostCurrency}>
+                                  <SelectTrigger id="cost-currency">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -1744,29 +1746,29 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                 </Select>
                               </div>
                               <div>
-                                <Label htmlFor="quote-terms">Terms & Conditions (optional)</Label>
+                                <Label htmlFor="cost-terms">Terms & Conditions (optional)</Label>
                                 <Textarea
-                                  id="quote-terms"
-                                  name="quote-terms"
+                                  id="cost-terms"
+                                  name="cost-terms"
                                   placeholder="Enter any terms or conditions"
-                                  value={quoteTerms}
-                                  onChange={(e) => setQuoteTerms(e.target.value)}
+                                  value={costTerms}
+                                  onChange={(e) => setCostTerms(e.target.value)}
                                 />
                               </div>
                             </div>
                             <DialogFooter>
-                              <Button variant="outline" onClick={() => setQuoteDialogOpen(false)}>
+                              <Button variant="outline" onClick={() => setCostDialogOpen(false)}>
                                 Cancel
                               </Button>
                               <Button
-                                onClick={handleSubmitQuote}
-                                disabled={actionLoading === 'submit_quote' || !quoteAmount}
+                                onClick={handleSubmitCost}
+                                disabled={actionLoading === 'submit_cost' || !costAmount}
                                 className="bg-green-600 hover:bg-green-700"
                               >
-                                {actionLoading === 'submit_quote' ? (
+                                {actionLoading === 'submit_cost' ? (
                                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                                 ) : null}
-                                Submit Quote
+                                Submit Cost
                               </Button>
                             </DialogFooter>
                           </DialogContent>
@@ -1797,7 +1799,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   <div className="text-center pt-2">
                     <Badge variant="outline" className="border-orange-400 text-orange-500">
                       <Clock className="h-3 w-3 mr-1" />
-                      Quote sent to customer, awaiting feedback
+                      Cost sent to customer, awaiting feedback
                     </Badge>
                   </div>
                 )}
@@ -1875,7 +1877,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                     className={`text-[10px] px-1.5 py-0 ${
                                       item.badge_type === 'comment' ? 'border-blue-400 text-blue-500 bg-blue-500/10' :
                                       item.badge_type === 'internal' ? 'border-yellow-400 text-yellow-600 bg-yellow-500/10' :
-                                      item.badge_type === 'quote' ? 'border-green-400 text-green-500 bg-green-500/10' :
+                                      item.badge_type === 'cost' ? 'border-green-400 text-green-500 bg-green-500/10' :
                                       item.badge_type === 'status' ? 'border-orange-400 text-orange-500 bg-orange-500/10' :
                                       item.badge_type === 'sent_to_customer' ? 'border-purple-400 text-purple-500 bg-purple-500/10' :
                                       item.badge_type === 'adjustment' ? 'border-amber-400 text-amber-500 bg-amber-500/10' :
@@ -1923,12 +1925,12 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                 ? 'bg-orange-500/10 border border-orange-500/20'
                                 : 'bg-muted/50 border border-border'
                             }`}>
-                              {item.type === 'quote' && item.extra_data && (
+                              {item.type === 'cost' && item.extra_data && (
                                 <div className="mb-2">
                                   <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                                     <DollarSign className="h-3 w-3" />
-                                    <span>Quoted Price</span>
-                                    <span className="font-mono text-[10px]">{item.extra_data.quote_number}</span>
+                                    <span>Operational Cost</span>
+                                    <span className="font-mono text-[10px]">{item.extra_data.cost_number}</span>
                                   </div>
                                   <p className="text-lg font-bold text-green-500">
                                     {item.extra_data.currency} {Number(item.extra_data.amount).toLocaleString('id-ID')}
@@ -1981,7 +1983,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                 <p className="text-sm whitespace-pre-wrap">{item.content}</p>
                               )}
 
-                              {item.type === 'quote' && item.extra_data?.terms && (
+                              {item.type === 'cost' && item.extra_data?.terms && (
                                 <p className="text-xs text-muted-foreground mt-2">{item.extra_data.terms}</p>
                               )}
                             </div>

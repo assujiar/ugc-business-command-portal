@@ -366,11 +366,14 @@ export function canCloseTickets(role: UserRole | null | undefined): boolean {
   return isAdmin(role) || isOps(role)
 }
 
-// Can user create rate quotes?
-export function canCreateQuotes(role: UserRole | null | undefined): boolean {
+// Can user create operational costs?
+export function canCreateOperationalCosts(role: UserRole | null | undefined): boolean {
   if (!role) return false
   return isAdmin(role) || isOps(role)
 }
+
+// Alias for backward compatibility
+export const canCreateQuotes = canCreateOperationalCosts
 
 // Can user create internal comments?
 export function canCreateInternalComments(role: UserRole | null | undefined): boolean {
