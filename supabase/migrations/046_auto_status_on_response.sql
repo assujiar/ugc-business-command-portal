@@ -129,8 +129,8 @@ BEGIN
                 p_ticket_id,
                 'status_changed',
                 v_user_id,
-                v_ticket.status::TEXT,
-                v_new_status::TEXT,
+                to_jsonb(v_ticket.status::TEXT),
+                to_jsonb(v_new_status::TEXT),
                 'Status auto-changed based on response'
             );
         END IF;
