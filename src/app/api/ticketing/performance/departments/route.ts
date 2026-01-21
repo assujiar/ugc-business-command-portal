@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
             breached: rfqFRBreached,
             compliance_rate: (rfqFRMet + rfqFRBreached) > 0
               ? Math.round((rfqFRMet / (rfqFRMet + rfqFRBreached)) * 100)
-              : 100,
+              : 0,  // No data = 0%, not 100%
           },
         },
         avg_resolution_hours: Math.round(rfqAvgResHours * 10) / 10,
@@ -229,7 +229,7 @@ export async function GET(request: NextRequest) {
             breached: genFRBreached,
             compliance_rate: (genFRMet + genFRBreached) > 0
               ? Math.round((genFRMet / (genFRMet + genFRBreached)) * 100)
-              : 100,
+              : 0,  // No data = 0%, not 100%
           },
         },
         avg_resolution_hours: Math.round(genAvgResHours * 10) / 10,
@@ -258,14 +258,14 @@ export async function GET(request: NextRequest) {
             breached: frBreached,
             compliance_rate: (frMet + frBreached) > 0
               ? Math.round((frMet / (frMet + frBreached)) * 100)
-              : 100,
+              : 0,  // No data = 0%, not 100%
           },
           resolution: {
             met: resMet,
             breached: resBreached,
             compliance_rate: (resMet + resBreached) > 0
               ? Math.round((resMet / (resMet + resBreached)) * 100)
-              : 100,
+              : 0,  // No data = 0%, not 100%
           },
         },
         avg_resolution_hours: Math.round(avgResolutionHours * 10) / 10,

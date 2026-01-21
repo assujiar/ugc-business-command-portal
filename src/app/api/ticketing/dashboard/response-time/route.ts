@@ -134,26 +134,123 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // By user (top responders)
-    const userResponseTimes: Record<string, { name: string; count: number; totalSeconds: number }> = {}
+    // Separate first response (assignee only) vs stage response (tektokan)
+    // First, group comments by ticket to identify first assignee response
+    const commentsByTicket: Record<string, any[]> = {}
     for (const comment of outboundComments) {
+      const ticketId = comment.ticket_id
+      if (!commentsByTicket[ticketId]) {
+        commentsByTicket[ticketId] = []
+      }
+      commentsByTicket[ticketId].push(comment)
+    }
+
+    // Sort each ticket's comments by created_at
+    for (const ticketId in commentsByTicket) {
+      commentsByTicket[ticketId].sort((a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+    }
+
+    // Categorize: first response (assignee's first comment) vs stage response
+    const firstResponses: any[] = []  // Only assignee's first response per ticket
+    const stageResponses: any[] = []  // All other responses (tektokan)
+
+    for (const ticketId in commentsByTicket) {
+      const ticketComments = commentsByTicket[ticketId]
+      let foundFirstAssigneeResponse = false
+
+      for (const comment of ticketComments) {
+        const isAssignee = comment.user?.user_id === comment.ticket?.assigned_to
+
+        if (isAssignee && !foundFirstAssigneeResponse) {
+          // This is the assignee's first response on this ticket
+          firstResponses.push(comment)
+          foundFirstAssigneeResponse = true
+        } else {
+          // This is a stage response (tektokan)
+          stageResponses.push(comment)
+        }
+      }
+    }
+
+    // Calculate first response metrics (assignee only)
+    const firstResponseTotal = firstResponses.length
+    const firstResponseAvgSeconds = firstResponseTotal > 0
+      ? firstResponses.reduce((sum: number, c: any) => sum + (c.response_time_seconds || 0), 0) / firstResponseTotal
+      : 0
+
+    // Calculate stage response metrics (tektokan)
+    const stageResponseTotal = stageResponses.length
+    const stageResponseAvgSeconds = stageResponseTotal > 0
+      ? stageResponses.reduce((sum: number, c: any) => sum + (c.response_time_seconds || 0), 0) / stageResponseTotal
+      : 0
+
+    // By user (top responders) - now with first response and stage response separated
+    const userResponseTimes: Record<string, {
+      name: string;
+      firstResponseCount: number;
+      firstResponseTotalSeconds: number;
+      stageResponseCount: number;
+      stageResponseTotalSeconds: number;
+    }> = {}
+
+    // Process first responses (only for assignees)
+    for (const comment of firstResponses) {
       const userId = comment.user?.user_id
       const userName = comment.user?.name || 'Unknown'
       if (!userResponseTimes[userId]) {
-        userResponseTimes[userId] = { name: userName, count: 0, totalSeconds: 0 }
+        userResponseTimes[userId] = {
+          name: userName,
+          firstResponseCount: 0,
+          firstResponseTotalSeconds: 0,
+          stageResponseCount: 0,
+          stageResponseTotalSeconds: 0,
+        }
       }
-      userResponseTimes[userId].count++
-      userResponseTimes[userId].totalSeconds += comment.response_time_seconds || 0
+      userResponseTimes[userId].firstResponseCount++
+      userResponseTimes[userId].firstResponseTotalSeconds += comment.response_time_seconds || 0
+    }
+
+    // Process stage responses (for all users - tektokan)
+    for (const comment of stageResponses) {
+      const userId = comment.user?.user_id
+      const userName = comment.user?.name || 'Unknown'
+      if (!userResponseTimes[userId]) {
+        userResponseTimes[userId] = {
+          name: userName,
+          firstResponseCount: 0,
+          firstResponseTotalSeconds: 0,
+          stageResponseCount: 0,
+          stageResponseTotalSeconds: 0,
+        }
+      }
+      userResponseTimes[userId].stageResponseCount++
+      userResponseTimes[userId].stageResponseTotalSeconds += comment.response_time_seconds || 0
     }
 
     const topResponders = Object.entries(userResponseTimes)
-      .map(([userId, data]) => ({
-        user_id: userId,
-        name: data.name,
-        total_responses: data.count,
-        avg_response_seconds: Math.round(data.totalSeconds / data.count),
-        avg_response_hours: Math.round(data.totalSeconds / data.count / 3600 * 10) / 10,
-      }))
+      .map(([userId, data]) => {
+        const totalCount = data.firstResponseCount + data.stageResponseCount
+        const totalSeconds = data.firstResponseTotalSeconds + data.stageResponseTotalSeconds
+        return {
+          user_id: userId,
+          name: data.name,
+          total_responses: totalCount,
+          avg_response_seconds: totalCount > 0 ? Math.round(totalSeconds / totalCount) : 0,
+          avg_response_hours: totalCount > 0 ? Math.round(totalSeconds / totalCount / 3600 * 10) / 10 : 0,
+          // First response (assignee only) - only if they were assignee on any ticket
+          first_response: {
+            count: data.firstResponseCount,
+            avg_seconds: data.firstResponseCount > 0 ? Math.round(data.firstResponseTotalSeconds / data.firstResponseCount) : 0,
+          },
+          // Stage response (tektokan) - all users
+          stage_response: {
+            count: data.stageResponseCount,
+            avg_seconds: data.stageResponseCount > 0 ? Math.round(data.stageResponseTotalSeconds / data.stageResponseCount) : 0,
+          },
+        }
+      })
       .sort((a, b) => b.total_responses - a.total_responses)
       .slice(0, 10)
 
@@ -232,6 +329,19 @@ export async function GET(request: NextRequest) {
           avg_response_seconds: Math.round(avgResponseSeconds),
           avg_response_minutes: Math.round(avgResponseMinutes),
           avg_response_hours: Math.round(avgResponseHours * 10) / 10,
+        },
+        // Separated response types
+        first_response: {
+          total: firstResponseTotal,
+          avg_seconds: Math.round(firstResponseAvgSeconds),
+          avg_hours: Math.round(firstResponseAvgSeconds / 3600 * 10) / 10,
+          description: 'First response by assignee only',
+        },
+        stage_response: {
+          total: stageResponseTotal,
+          avg_seconds: Math.round(stageResponseAvgSeconds),
+          avg_hours: Math.round(stageResponseAvgSeconds / 3600 * 10) / 10,
+          description: 'Subsequent responses (tektokan)',
         },
         distribution: {
           under_1_hour: under1Hour,

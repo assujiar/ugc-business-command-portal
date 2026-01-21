@@ -474,3 +474,24 @@ export function getAnalyticsScope(
   // (and any other individual contributors)
   return { scope: 'user', department: null, userId }
 }
+
+// =====================================================
+// Analytics Rankings/Leaderboard Visibility
+// =====================================================
+
+// Staff roles that should NOT see rankings/leaderboard
+const STAFF_ROLES_NO_RANKINGS: UserRole[] = ['DGO', 'VSDO', 'Marcomm', 'salesperson']
+
+// Can user view analytics rankings/leaderboard?
+// - Director, super admin: YES (all roles & departments)
+// - Manager roles, MACX, sales support, Ops: YES (their department)
+// - Staff (DGO, VSDO, Marcomm, salesperson): NO
+export function canViewAnalyticsRankings(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+
+  // Staff roles cannot see rankings
+  if (STAFF_ROLES_NO_RANKINGS.includes(role)) return false
+
+  // Director, super admin, managers, MACX, sales support, Ops can see rankings
+  return true
+}
