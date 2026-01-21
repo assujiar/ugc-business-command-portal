@@ -874,7 +874,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                         {userPerformance.leaderboard?.most_tickets?.[0] ? (
                           <div>
                             <p className="font-semibold">{userPerformance.leaderboard.most_tickets[0].name}</p>
-                            <p className="text-2xl font-bold">{userPerformance.leaderboard.most_tickets[0].tickets?.assigned || 0}</p>
+                            <p className="text-2xl font-bold">{userPerformance.leaderboard.most_tickets[0].as_assignee?.tickets?.assigned || 0}</p>
                             <p className="text-xs text-muted-foreground">tickets assigned</p>
                           </div>
                         ) : (
@@ -893,7 +893,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                         {userPerformance.leaderboard?.highest_completion_rate?.[0] ? (
                           <div>
                             <p className="font-semibold">{userPerformance.leaderboard.highest_completion_rate[0].name}</p>
-                            <p className="text-2xl font-bold">{userPerformance.leaderboard.highest_completion_rate[0].tickets?.completion_rate || 0}%</p>
+                            <p className="text-2xl font-bold">{userPerformance.leaderboard.highest_completion_rate[0].as_assignee?.tickets?.completion_rate || 0}%</p>
                             <p className="text-xs text-muted-foreground">completion rate</p>
                           </div>
                         ) : (
@@ -914,8 +914,8 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                             <p className="font-semibold">{userPerformance.leaderboard.best_sla_compliance[0].name}</p>
                             <p className="text-2xl font-bold">
                               {Math.round(
-                                ((userPerformance.leaderboard.best_sla_compliance[0].sla?.first_response?.compliance_rate || 0) +
-                                (userPerformance.leaderboard.best_sla_compliance[0].sla?.resolution?.compliance_rate || 0)) / 2
+                                ((userPerformance.leaderboard.best_sla_compliance[0].as_assignee?.sla?.first_response?.compliance_rate || 0) +
+                                (userPerformance.leaderboard.best_sla_compliance[0].as_assignee?.sla?.resolution?.compliance_rate || 0)) / 2
                               )}%
                             </p>
                             <p className="text-xs text-muted-foreground">avg SLA compliance</p>
@@ -936,7 +936,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                         {userPerformance.leaderboard?.fastest_first_response?.[0] ? (
                           <div>
                             <p className="font-semibold">{userPerformance.leaderboard.fastest_first_response[0].name}</p>
-                            <p className="text-lg font-bold">{formatDuration(userPerformance.leaderboard.fastest_first_response[0].response?.first_response?.avg_seconds)}</p>
+                            <p className="text-lg font-bold">{formatDuration(userPerformance.leaderboard.fastest_first_response[0].as_assignee?.first_response?.avg_seconds)}</p>
                             <p className="text-xs text-muted-foreground">avg first response (assignee)</p>
                           </div>
                         ) : (
@@ -955,8 +955,8 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                         {userPerformance.leaderboard?.fastest_stage_response?.[0] ? (
                           <div>
                             <p className="font-semibold">{userPerformance.leaderboard.fastest_stage_response[0].name}</p>
-                            <p className="text-lg font-bold">{formatDuration(userPerformance.leaderboard.fastest_stage_response[0].response?.stage_response?.avg_seconds)}</p>
-                            <p className="text-xs text-muted-foreground">avg tektokan</p>
+                            <p className="text-lg font-bold">{formatDuration(userPerformance.leaderboard.fastest_stage_response[0].as_assignee?.stage_response?.avg_seconds)}</p>
+                            <p className="text-xs text-muted-foreground">avg tektokan (assignee)</p>
                           </div>
                         ) : (
                           <p className="text-muted-foreground">No data</p>
@@ -990,99 +990,144 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                                 <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
                               </div>
                             </div>
-                            <div className="flex gap-4 text-sm">
+                            <div className="flex gap-3 text-sm">
                               <div className="text-center">
-                                <p className="font-medium">{user.tickets?.assigned || 0}</p>
-                                <p className="text-xs text-muted-foreground">Total</p>
+                                <p className="font-medium">{user.as_creator?.tickets_created || 0}</p>
+                                <p className="text-xs text-muted-foreground">Created</p>
                               </div>
                               <div className="text-center">
-                                <p className="font-medium">{user.tickets?.completion_rate || 0}%</p>
+                                <p className="font-medium">{user.as_assignee?.tickets?.assigned || 0}</p>
+                                <p className="text-xs text-muted-foreground">Assigned</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="font-medium">{user.as_assignee?.tickets?.completion_rate || 0}%</p>
                                 <p className="text-xs text-muted-foreground">Completion</p>
                               </div>
                               <div className="text-center">
-                                <p className="font-medium">{user.sla?.first_response?.compliance_rate || 0}%</p>
+                                <p className="font-medium">{user.as_assignee?.sla?.first_response?.compliance_rate || 0}%</p>
                                 <p className="text-xs text-muted-foreground">FR SLA</p>
                               </div>
                             </div>
                           </div>
-                          {/* Response Metrics - First Response (assignee) vs Stage Response (tektokan) */}
-                          <div className="grid grid-cols-2 gap-3 pl-11">
-                            {/* First Response - only if user was assignee on any ticket */}
-                            <div className="p-2 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/10 text-xs">
-                              <div className="flex items-center gap-1 mb-1">
-                                <span className="text-blue-600 font-medium">First Response</span>
-                                <span className="text-muted-foreground">(assignee)</span>
-                              </div>
-                              {user.response?.first_response?.count > 0 ? (
+
+                          {/* AS CREATOR - Metrics untuk tiket yang dia BUAT */}
+                          {user.as_creator?.tickets_created > 0 && (
+                            <div className="pl-11">
+                              <div className="p-2 rounded border border-green-200 dark:border-green-900 bg-green-50/30 dark:bg-green-950/10 text-xs">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 border-green-500 text-green-600">CREATOR</Badge>
+                                  <span className="text-muted-foreground">Tiket yang dibuat: {user.as_creator.tickets_created}</span>
+                                </div>
                                 <div className="flex justify-between">
-                                  <span className="text-muted-foreground">{user.response?.first_response?.count || 0} responses</span>
-                                  <span className="font-medium">{formatDurationShort(user.response?.first_response?.avg_seconds)}</span>
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">N/A (creator only)</span>
-                              )}
-                            </div>
-                            {/* Stage Response - tektokan */}
-                            <div className="p-2 rounded border border-purple-200 dark:border-purple-900 bg-purple-50/30 dark:bg-purple-950/10 text-xs">
-                              <div className="flex items-center gap-1 mb-1">
-                                <span className="text-purple-600 font-medium">Stage Response</span>
-                                <span className="text-muted-foreground">(tektokan)</span>
-                              </div>
-                              {user.response?.stage_response?.count > 0 ? (
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">{user.response?.stage_response?.count || 0} responses</span>
-                                  <span className="font-medium">{formatDurationShort(user.response?.stage_response?.avg_seconds)}</span>
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">No stage responses</span>
-                              )}
-                            </div>
-                          </div>
-                          {/* Type Breakdown */}
-                          <div className="grid grid-cols-2 gap-3 pl-11">
-                            {/* RFQ */}
-                            <div className="p-2 rounded bg-muted/50 text-xs">
-                              <div className="flex items-center gap-1 mb-1">
-                                <Badge variant="default" className="text-[10px] px-1 py-0">RFQ</Badge>
-                                <span className="text-muted-foreground">{user.by_type?.RFQ?.tickets?.assigned || 0} tickets</span>
-                              </div>
-                              <div className="grid grid-cols-3 gap-2">
-                                <div>
-                                  <span className="text-muted-foreground">Comp:</span>
-                                  <span className="font-medium ml-1">{user.by_type?.RFQ?.tickets?.completion_rate || 0}%</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">Win:</span>
-                                  <span className="font-medium ml-1">{user.by_type?.RFQ?.win_loss?.win_rate || 0}%</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">SLA:</span>
-                                  <span className="font-medium ml-1">{user.by_type?.RFQ?.sla?.first_response?.compliance_rate || 0}%</span>
+                                  <span className="text-muted-foreground">Stage Response (tektokan):</span>
+                                  {user.as_creator?.stage_response?.count > 0 ? (
+                                    <span className="font-medium">
+                                      {user.as_creator.stage_response.count} responses, avg {formatDurationShort(user.as_creator.stage_response.avg_seconds)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">Belum ada</span>
+                                  )}
                                 </div>
                               </div>
                             </div>
-                            {/* GEN */}
-                            <div className="p-2 rounded bg-muted/50 text-xs">
-                              <div className="flex items-center gap-1 mb-1">
-                                <Badge variant="secondary" className="text-[10px] px-1 py-0">GEN</Badge>
-                                <span className="text-muted-foreground">{user.by_type?.GEN?.tickets?.assigned || 0} tickets</span>
+                          )}
+
+                          {/* AS ASSIGNEE - Metrics untuk tiket yang di-ASSIGN ke dia */}
+                          {user.as_assignee?.tickets?.assigned > 0 && (
+                            <>
+                              <div className="pl-11">
+                                <div className="p-2 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/10 text-xs mb-2">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Badge variant="outline" className="text-[10px] px-1 py-0 border-blue-500 text-blue-600">ASSIGNEE</Badge>
+                                    <span className="text-muted-foreground">Tiket yang di-assign: {user.as_assignee.tickets.assigned}</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {/* First Response */}
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">First Response:</span>
+                                      {user.as_assignee?.first_response?.count > 0 ? (
+                                        <span className="font-medium">
+                                          {user.as_assignee.first_response.count}x, avg {formatDurationShort(user.as_assignee.first_response.avg_seconds)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">Belum ada</span>
+                                      )}
+                                    </div>
+                                    {/* Stage Response */}
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Stage Response:</span>
+                                      {user.as_assignee?.stage_response?.count > 0 ? (
+                                        <span className="font-medium">
+                                          {user.as_assignee.stage_response.count}x, avg {formatDurationShort(user.as_assignee.stage_response.avg_seconds)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">Belum ada</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {/* First Quote for OPS */}
+                                  {user.as_assignee?.first_quote && (
+                                    <div className="flex justify-between mt-1 pt-1 border-t border-blue-200 dark:border-blue-800">
+                                      <span className="text-blue-600 font-medium">First Quote (OPS):</span>
+                                      {user.as_assignee.first_quote.count > 0 ? (
+                                        <span className="font-medium">
+                                          {user.as_assignee.first_quote.count}x, avg {formatDurationShort(user.as_assignee.first_quote.avg_seconds)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">Belum ada</span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="grid grid-cols-3 gap-2">
-                                <div>
-                                  <span className="text-muted-foreground">Comp:</span>
-                                  <span className="font-medium ml-1">{user.by_type?.GEN?.tickets?.completion_rate || 0}%</span>
+
+                              {/* Type Breakdown - Only for assigned tickets */}
+                              <div className="grid grid-cols-2 gap-3 pl-11">
+                                {/* RFQ */}
+                                <div className="p-2 rounded bg-muted/50 text-xs">
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <Badge variant="default" className="text-[10px] px-1 py-0">RFQ</Badge>
+                                    <span className="text-muted-foreground">{user.as_assignee?.by_type?.RFQ?.tickets?.assigned || 0} tickets</span>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                      <span className="text-muted-foreground">Comp:</span>
+                                      <span className="font-medium ml-1">{user.as_assignee?.by_type?.RFQ?.tickets?.completion_rate || 0}%</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Win:</span>
+                                      <span className="font-medium ml-1">{user.as_assignee?.by_type?.RFQ?.win_loss?.win_rate || 0}%</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">SLA:</span>
+                                      <span className="font-medium ml-1">{user.as_assignee?.by_type?.RFQ?.sla?.first_response?.compliance_rate || 0}%</span>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div>
-                                  <span className="text-muted-foreground">Active:</span>
-                                  <span className="font-medium ml-1">{user.by_type?.GEN?.tickets?.active || 0}</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">SLA:</span>
-                                  <span className="font-medium ml-1">{user.by_type?.GEN?.sla?.first_response?.compliance_rate || 0}%</span>
+                                {/* GEN */}
+                                <div className="p-2 rounded bg-muted/50 text-xs">
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <Badge variant="secondary" className="text-[10px] px-1 py-0">GEN</Badge>
+                                    <span className="text-muted-foreground">{user.as_assignee?.by_type?.GEN?.tickets?.assigned || 0} tickets</span>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                      <span className="text-muted-foreground">Comp:</span>
+                                      <span className="font-medium ml-1">{user.as_assignee?.by_type?.GEN?.tickets?.completion_rate || 0}%</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Active:</span>
+                                      <span className="font-medium ml-1">{user.as_assignee?.by_type?.GEN?.tickets?.active || 0}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">SLA:</span>
+                                      <span className="font-medium ml-1">{user.as_assignee?.by_type?.GEN?.sla?.first_response?.compliance_rate || 0}%</span>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </div>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>

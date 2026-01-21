@@ -130,41 +130,71 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
-    // TRACK USERS BY ROLE: ASSIGNEE vs CREATOR
+    // TRACK USERS WITH SEPARATED METRICS:
+    // as_creator vs as_assignee
     // ============================================
-    // Assignee metrics: assigned_tickets, resolved, closed, SLA, first_response, stage_response, resolution_time
-    // Creator metrics: created_tickets, stage_response ONLY (no first_response)
 
     interface UserMetrics {
       user_id: string
       name: string
       role: string
-      // Assignee metrics (tiket yang di-assign ke dia)
-      assigned_tickets: number
-      resolved_tickets: number
-      closed_tickets: number
-      won_tickets: number
-      lost_tickets: number
-      sla_fr_met: number
-      sla_fr_breached: number
-      sla_res_met: number
-      sla_res_breached: number
-      total_resolution_hours: number
-      by_status: Record<string, number>
-      by_priority: Record<string, number>
-      by_type: {
-        RFQ: { assigned: number; resolved: number; closed: number; won: number; lost: number; sla_fr_met: number; sla_fr_breached: number; total_res_hours: number; first_quote_seconds: number; first_quote_count: number }
-        GEN: { assigned: number; resolved: number; closed: number; sla_fr_met: number; sla_fr_breached: number; total_res_hours: number }
-      }
-      // Creator metrics (tiket yang dia buat)
-      created_tickets: number
-      // Response metrics
-      first_response_count: number
-      first_response_total_seconds: number
-      stage_response_count: number
-      stage_response_total_seconds: number
-      // Flag apakah user ini OPS department
       is_ops: boolean
+
+      // ========== AS CREATOR (tiket yang dia BUAT) ==========
+      as_creator: {
+        tickets_created: number
+        // Stage response di tiket yang dia buat
+        stage_response_count: number
+        stage_response_total_seconds: number
+      }
+
+      // ========== AS ASSIGNEE (tiket yang di-ASSIGN ke dia) ==========
+      as_assignee: {
+        tickets_assigned: number
+        tickets_resolved: number
+        tickets_closed: number
+        tickets_won: number
+        tickets_lost: number
+        // SLA metrics
+        sla_fr_met: number
+        sla_fr_breached: number
+        sla_res_met: number
+        sla_res_breached: number
+        // Resolution time
+        total_resolution_hours: number
+        // First response di tiket yang di-assign ke dia
+        first_response_count: number
+        first_response_total_seconds: number
+        // Stage response di tiket yang di-assign ke dia
+        stage_response_count: number
+        stage_response_total_seconds: number
+        // First quote (OPS only)
+        first_quote_count: number
+        first_quote_total_seconds: number
+        // By type
+        by_type: {
+          RFQ: {
+            assigned: number
+            resolved: number
+            closed: number
+            won: number
+            lost: number
+            sla_fr_met: number
+            sla_fr_breached: number
+            total_res_hours: number
+          }
+          GEN: {
+            assigned: number
+            resolved: number
+            closed: number
+            sla_fr_met: number
+            sla_fr_breached: number
+            total_res_hours: number
+          }
+        }
+        by_status: Record<string, number>
+        by_priority: Record<string, number>
+      }
     }
 
     const userMetrics: Record<string, UserMetrics> = {}
@@ -174,50 +204,79 @@ export async function GET(request: NextRequest) {
       user_id: userId,
       name,
       role,
-      assigned_tickets: 0,
-      resolved_tickets: 0,
-      closed_tickets: 0,
-      won_tickets: 0,
-      lost_tickets: 0,
-      sla_fr_met: 0,
-      sla_fr_breached: 0,
-      sla_res_met: 0,
-      sla_res_breached: 0,
-      total_resolution_hours: 0,
-      by_status: {},
-      by_priority: { urgent: 0, high: 0, medium: 0, low: 0 },
-      by_type: {
-        RFQ: { assigned: 0, resolved: 0, closed: 0, won: 0, lost: 0, sla_fr_met: 0, sla_fr_breached: 0, total_res_hours: 0, first_quote_seconds: 0, first_quote_count: 0 },
-        GEN: { assigned: 0, resolved: 0, closed: 0, sla_fr_met: 0, sla_fr_breached: 0, total_res_hours: 0 },
-      },
-      created_tickets: 0,
-      first_response_count: 0,
-      first_response_total_seconds: 0,
-      stage_response_count: 0,
-      stage_response_total_seconds: 0,
       is_ops: isOps,
+      as_creator: {
+        tickets_created: 0,
+        stage_response_count: 0,
+        stage_response_total_seconds: 0,
+      },
+      as_assignee: {
+        tickets_assigned: 0,
+        tickets_resolved: 0,
+        tickets_closed: 0,
+        tickets_won: 0,
+        tickets_lost: 0,
+        sla_fr_met: 0,
+        sla_fr_breached: 0,
+        sla_res_met: 0,
+        sla_res_breached: 0,
+        total_resolution_hours: 0,
+        first_response_count: 0,
+        first_response_total_seconds: 0,
+        stage_response_count: 0,
+        stage_response_total_seconds: 0,
+        first_quote_count: 0,
+        first_quote_total_seconds: 0,
+        by_type: {
+          RFQ: { assigned: 0, resolved: 0, closed: 0, won: 0, lost: 0, sla_fr_met: 0, sla_fr_breached: 0, total_res_hours: 0 },
+          GEN: { assigned: 0, resolved: 0, closed: 0, sla_fr_met: 0, sla_fr_breached: 0, total_res_hours: 0 },
+        },
+        by_status: {},
+        by_priority: { urgent: 0, high: 0, medium: 0, low: 0 },
+      },
     })
 
-    // Process tickets - track ASSIGNEE metrics
+    // Build ticket lookup for comment processing
+    const ticketLookup: Record<string, any> = {}
+    for (const ticket of tickets || []) {
+      ticketLookup[ticket.id] = ticket
+    }
+
+    // Process tickets
     for (const ticket of tickets || []) {
       const assigneeId = ticket.assigned_to
       const creatorId = ticket.created_by
+      const ticketType = ticket.ticket_type as 'RFQ' | 'GEN'
+      const isOps = OPS_DEPARTMENTS.includes(ticket.department)
 
-      // Track ASSIGNEE metrics (only if ticket has assignee)
+      // ========== Track CREATOR metrics ==========
+      if (creatorId && ticket.creator) {
+        if (!userMetrics[creatorId]) {
+          userMetrics[creatorId] = initUserMetrics(
+            creatorId,
+            ticket.creator?.name || 'Unknown',
+            ticket.creator?.role || 'Unknown',
+            false // Creator's OPS status doesn't matter for creator metrics
+          )
+        }
+        userMetrics[creatorId].as_creator.tickets_created++
+      }
+
+      // ========== Track ASSIGNEE metrics ==========
       if (assigneeId && ticket.assignee) {
-        const assigneeName = ticket.assignee?.name || 'Unknown'
-        const assigneeRole = ticket.assignee?.role || 'Unknown'
-        const isOps = OPS_DEPARTMENTS.includes(ticket.department)
-
         if (!userMetrics[assigneeId]) {
-          userMetrics[assigneeId] = initUserMetrics(assigneeId, assigneeName, assigneeRole, isOps)
+          userMetrics[assigneeId] = initUserMetrics(
+            assigneeId,
+            ticket.assignee?.name || 'Unknown',
+            ticket.assignee?.role || 'Unknown',
+            isOps
+          )
         }
 
-        const metrics = userMetrics[assigneeId]
-        metrics.assigned_tickets++
+        const metrics = userMetrics[assigneeId].as_assignee
+        metrics.tickets_assigned++
 
         // Track by ticket type
-        const ticketType = ticket.ticket_type as 'RFQ' | 'GEN'
         if (ticketType && metrics.by_type[ticketType]) {
           metrics.by_type[ticketType].assigned++
         }
@@ -232,24 +291,24 @@ export async function GET(request: NextRequest) {
 
         // Resolved/closed
         if (ticket.status === 'resolved') {
-          metrics.resolved_tickets++
+          metrics.tickets_resolved++
           if (ticketType && metrics.by_type[ticketType]) {
             metrics.by_type[ticketType].resolved++
           }
         }
         if (ticket.status === 'closed') {
-          metrics.closed_tickets++
+          metrics.tickets_closed++
           if (ticketType && metrics.by_type[ticketType]) {
             metrics.by_type[ticketType].closed++
           }
           if (ticket.close_outcome === 'won') {
-            metrics.won_tickets++
+            metrics.tickets_won++
             if (ticketType === 'RFQ') {
               metrics.by_type.RFQ.won++
             }
           }
           if (ticket.close_outcome === 'lost') {
-            metrics.lost_tickets++
+            metrics.tickets_lost++
             if (ticketType === 'RFQ') {
               metrics.by_type.RFQ.lost++
             }
@@ -288,27 +347,16 @@ export async function GET(request: NextRequest) {
 
         // First quote time (for OPS with RFQ tickets)
         if (ticketType === 'RFQ' && ticket.metrics?.[0]?.time_to_first_quote_seconds) {
-          metrics.by_type.RFQ.first_quote_seconds += ticket.metrics[0].time_to_first_quote_seconds
-          metrics.by_type.RFQ.first_quote_count++
+          metrics.first_quote_count++
+          metrics.first_quote_total_seconds += ticket.metrics[0].time_to_first_quote_seconds
         }
-      }
-
-      // Track CREATOR (just the count, for context)
-      if (creatorId && ticket.creator) {
-        const creatorName = ticket.creator?.name || 'Unknown'
-        const creatorRole = ticket.creator?.role || 'Unknown'
-
-        if (!userMetrics[creatorId]) {
-          userMetrics[creatorId] = initUserMetrics(creatorId, creatorName, creatorRole, false)
-        }
-        userMetrics[creatorId].created_tickets++
       }
     }
 
     // ============================================
     // Process COMMENTS for response metrics
+    // SEPARATED by as_creator vs as_assignee
     // ============================================
-    // Group outbound comments by ticket
     const outboundComments = (comments || []).filter((c: any) => c.response_direction === 'outbound')
 
     const commentsByTicket: Record<string, any[]> = {}
@@ -330,17 +378,20 @@ export async function GET(request: NextRequest) {
     // Process comments per ticket
     for (const ticketId in commentsByTicket) {
       const ticketComments = commentsByTicket[ticketId]
+      const ticket = ticketLookup[ticketId] || ticketComments[0]?.ticket
       let foundFirstAssigneeResponse = false
 
       for (const comment of ticketComments) {
         const userId = comment.user_id
-        const isAssignee = userId === comment.ticket?.assigned_to
-        const isCreator = userId === comment.ticket?.created_by
+        const ticketCreatorId = comment.ticket?.created_by || ticket?.created_by
+        const ticketAssigneeId = comment.ticket?.assigned_to || ticket?.assigned_to
+        const isAssignee = userId === ticketAssigneeId
+        const isCreator = userId === ticketCreatorId
         const responseSeconds = comment.response_time_seconds || 0
 
         // Ensure user exists in metrics
         if (!userMetrics[userId] && comment.user) {
-          const isOps = OPS_DEPARTMENTS.includes(comment.ticket?.department || '')
+          const isOps = OPS_DEPARTMENTS.includes(comment.ticket?.department || ticket?.department || '')
           userMetrics[userId] = initUserMetrics(
             userId,
             comment.user.name || 'Unknown',
@@ -351,39 +402,46 @@ export async function GET(request: NextRequest) {
 
         if (!userMetrics[userId]) continue
 
-        // Determine response type:
-        // - FIRST RESPONSE: Only for ASSIGNEE's first response on a ticket
-        // - STAGE RESPONSE: All other responses (creator responses, subsequent assignee responses)
-        if (isAssignee && !foundFirstAssigneeResponse) {
-          // First response by assignee on this ticket
-          userMetrics[userId].first_response_count++
-          userMetrics[userId].first_response_total_seconds += responseSeconds
-          foundFirstAssigneeResponse = true
-        } else {
-          // Stage response (tektokan)
-          // - Creator's responses are ALWAYS stage responses
-          // - Assignee's subsequent responses are stage responses
-          userMetrics[userId].stage_response_count++
-          userMetrics[userId].stage_response_total_seconds += responseSeconds
+        // ========== Assign response to correct category ==========
+        if (isAssignee) {
+          // User is ASSIGNEE of this ticket
+          if (!foundFirstAssigneeResponse) {
+            // First Response (assignee's first response)
+            userMetrics[userId].as_assignee.first_response_count++
+            userMetrics[userId].as_assignee.first_response_total_seconds += responseSeconds
+            foundFirstAssigneeResponse = true
+          } else {
+            // Stage Response (assignee's subsequent responses)
+            userMetrics[userId].as_assignee.stage_response_count++
+            userMetrics[userId].as_assignee.stage_response_total_seconds += responseSeconds
+          }
+        } else if (isCreator) {
+          // User is CREATOR of this ticket (all their responses are stage responses)
+          userMetrics[userId].as_creator.stage_response_count++
+          userMetrics[userId].as_creator.stage_response_total_seconds += responseSeconds
         }
+        // If user is neither creator nor assignee, we skip (shouldn't happen normally)
       }
     }
 
     // ============================================
     // Build final user performance data
     // ============================================
-    // ONLY include users who have been ASSIGNED at least 1 ticket
-    // (creators without assigned tickets are not in the leaderboard)
     const userPerformance = Object.values(userMetrics)
-      .filter(metrics => metrics.assigned_tickets > 0) // Only users with assigned tickets
+      .filter(metrics =>
+        // Include if user has assigned tickets OR created tickets
+        metrics.as_assignee.tickets_assigned > 0 || metrics.as_creator.tickets_created > 0
+      )
       .map((metrics) => {
-        const completedTickets = metrics.resolved_tickets + metrics.closed_tickets
+        const assignee = metrics.as_assignee
+        const creator = metrics.as_creator
+        const completedTickets = assignee.tickets_resolved + assignee.tickets_closed
 
-        // Calculate by_type detailed metrics
+        // Calculate by_type detailed metrics (for assignee only)
         const byTypeDetailed: Record<string, any> = {}
 
         // RFQ type metrics
-        const rfqData = metrics.by_type.RFQ
+        const rfqData = assignee.by_type.RFQ
         const rfqCompleted = rfqData.resolved + rfqData.closed
         byTypeDetailed['RFQ'] = {
           tickets: {
@@ -409,17 +467,10 @@ export async function GET(request: NextRequest) {
           },
           avg_resolution_seconds: rfqCompleted > 0 ? Math.round((rfqData.total_res_hours * 3600) / rfqCompleted) : 0,
           avg_resolution_hours: rfqCompleted > 0 ? Math.round((rfqData.total_res_hours / rfqCompleted) * 10) / 10 : 0,
-          // First quote time (only for OPS departments)
-          first_quote: metrics.is_ops ? {
-            count: rfqData.first_quote_count,
-            avg_seconds: rfqData.first_quote_count > 0
-              ? Math.round(rfqData.first_quote_seconds / rfqData.first_quote_count)
-              : 0,
-          } : null,
         }
 
         // GEN type metrics
-        const genData = metrics.by_type.GEN
+        const genData = assignee.by_type.GEN
         const genCompleted = genData.resolved + genData.closed
         byTypeDetailed['GEN'] = {
           tickets: {
@@ -447,113 +498,133 @@ export async function GET(request: NextRequest) {
           name: metrics.name,
           role: metrics.role,
           is_ops: metrics.is_ops,
-          tickets: {
-            assigned: metrics.assigned_tickets,
-            created: metrics.created_tickets,
-            resolved: metrics.resolved_tickets,
-            closed: metrics.closed_tickets,
-            active: metrics.assigned_tickets - completedTickets,
-            completion_rate: metrics.assigned_tickets > 0
-              ? Math.round((completedTickets / metrics.assigned_tickets) * 100)
-              : 0,
-          },
-          win_loss: {
-            won: metrics.won_tickets,
-            lost: metrics.lost_tickets,
-            win_rate: metrics.closed_tickets > 0
-              ? Math.round((metrics.won_tickets / metrics.closed_tickets) * 100)
-              : 0,
-          },
-          sla: {
-            first_response: {
-              met: metrics.sla_fr_met,
-              breached: metrics.sla_fr_breached,
-              compliance_rate: (metrics.sla_fr_met + metrics.sla_fr_breached) > 0
-                ? Math.round((metrics.sla_fr_met / (metrics.sla_fr_met + metrics.sla_fr_breached)) * 100)
-                : 0,
-            },
-            resolution: {
-              met: metrics.sla_res_met,
-              breached: metrics.sla_res_breached,
-              compliance_rate: (metrics.sla_res_met + metrics.sla_res_breached) > 0
-                ? Math.round((metrics.sla_res_met / (metrics.sla_res_met + metrics.sla_res_breached)) * 100)
-                : 0,
-            },
-          },
-          response: {
-            // First Response - ONLY for assignees (response pertama assignee)
-            first_response: {
-              count: metrics.first_response_count,
-              avg_seconds: metrics.first_response_count > 0
-                ? Math.round(metrics.first_response_total_seconds / metrics.first_response_count)
-                : 0,
-            },
-            // Stage Response - tektokan (semua respons lanjutan)
+
+          // ========== AS CREATOR (tiket yang dia BUAT) ==========
+          as_creator: {
+            tickets_created: creator.tickets_created,
             stage_response: {
-              count: metrics.stage_response_count,
-              avg_seconds: metrics.stage_response_count > 0
-                ? Math.round(metrics.stage_response_total_seconds / metrics.stage_response_count)
+              count: creator.stage_response_count,
+              avg_seconds: creator.stage_response_count > 0
+                ? Math.round(creator.stage_response_total_seconds / creator.stage_response_count)
                 : 0,
             },
-            total_responses: metrics.first_response_count + metrics.stage_response_count,
           },
-          avg_resolution_seconds: completedTickets > 0
-            ? Math.round((metrics.total_resolution_hours * 3600) / completedTickets)
-            : 0,
-          avg_resolution_hours: completedTickets > 0
-            ? Math.round((metrics.total_resolution_hours / completedTickets) * 10) / 10
-            : 0,
-          by_type: byTypeDetailed,
-          by_status: metrics.by_status,
-          by_priority: metrics.by_priority,
+
+          // ========== AS ASSIGNEE (tiket yang di-ASSIGN ke dia) ==========
+          as_assignee: {
+            tickets: {
+              assigned: assignee.tickets_assigned,
+              resolved: assignee.tickets_resolved,
+              closed: assignee.tickets_closed,
+              active: assignee.tickets_assigned - completedTickets,
+              completion_rate: assignee.tickets_assigned > 0
+                ? Math.round((completedTickets / assignee.tickets_assigned) * 100)
+                : 0,
+            },
+            win_loss: {
+              won: assignee.tickets_won,
+              lost: assignee.tickets_lost,
+              win_rate: assignee.tickets_closed > 0
+                ? Math.round((assignee.tickets_won / assignee.tickets_closed) * 100)
+                : 0,
+            },
+            sla: {
+              first_response: {
+                met: assignee.sla_fr_met,
+                breached: assignee.sla_fr_breached,
+                compliance_rate: (assignee.sla_fr_met + assignee.sla_fr_breached) > 0
+                  ? Math.round((assignee.sla_fr_met / (assignee.sla_fr_met + assignee.sla_fr_breached)) * 100)
+                  : 0,
+              },
+              resolution: {
+                met: assignee.sla_res_met,
+                breached: assignee.sla_res_breached,
+                compliance_rate: (assignee.sla_res_met + assignee.sla_res_breached) > 0
+                  ? Math.round((assignee.sla_res_met / (assignee.sla_res_met + assignee.sla_res_breached)) * 100)
+                  : 0,
+              },
+            },
+            first_response: {
+              count: assignee.first_response_count,
+              avg_seconds: assignee.first_response_count > 0
+                ? Math.round(assignee.first_response_total_seconds / assignee.first_response_count)
+                : 0,
+            },
+            stage_response: {
+              count: assignee.stage_response_count,
+              avg_seconds: assignee.stage_response_count > 0
+                ? Math.round(assignee.stage_response_total_seconds / assignee.stage_response_count)
+                : 0,
+            },
+            first_quote: metrics.is_ops ? {
+              count: assignee.first_quote_count,
+              avg_seconds: assignee.first_quote_count > 0
+                ? Math.round(assignee.first_quote_total_seconds / assignee.first_quote_count)
+                : 0,
+            } : null,
+            avg_resolution_seconds: completedTickets > 0
+              ? Math.round((assignee.total_resolution_hours * 3600) / completedTickets)
+              : 0,
+            avg_resolution_hours: completedTickets > 0
+              ? Math.round((assignee.total_resolution_hours / completedTickets) * 10) / 10
+              : 0,
+            by_type: byTypeDetailed,
+            by_status: assignee.by_status,
+            by_priority: assignee.by_priority,
+          },
         }
       })
 
-    // Sort by assigned tickets
-    userPerformance.sort((a, b) => b.tickets.assigned - a.tickets.assigned)
+    // Sort by assigned tickets (primary) then created tickets (secondary)
+    userPerformance.sort((a, b) => {
+      const aAssigned = a.as_assignee.tickets.assigned
+      const bAssigned = b.as_assignee.tickets.assigned
+      if (bAssigned !== aAssigned) return bAssigned - aAssigned
+      return b.as_creator.tickets_created - a.as_creator.tickets_created
+    })
 
     // Check if user can view rankings
     const showRankings = canViewAnalyticsRankings(profile.role)
 
     // ============================================
-    // LEADERBOARD - NO THRESHOLDS
+    // LEADERBOARD - Only users with assigned tickets
     // ============================================
-    // If user has at least 1 assigned ticket, they're in the leaderboard
-    // No minimum requirements like >= 5 tickets or >= 3 responses
+    const usersWithAssignedTickets = userPerformance.filter(u => u.as_assignee.tickets.assigned > 0)
+
     const leaderboard = showRankings ? {
       // Most assigned tickets
-      most_tickets: [...userPerformance]
-        .sort((a, b) => b.tickets.assigned - a.tickets.assigned)
+      most_tickets: [...usersWithAssignedTickets]
+        .sort((a, b) => b.as_assignee.tickets.assigned - a.as_assignee.tickets.assigned)
         .slice(0, 5),
 
-      // Highest completion rate (must have at least completed 1 ticket)
-      highest_completion_rate: [...userPerformance]
-        .filter(u => (u.tickets.resolved + u.tickets.closed) > 0)
-        .sort((a, b) => b.tickets.completion_rate - a.tickets.completion_rate)
+      // Highest completion rate (must have completed at least 1 ticket)
+      highest_completion_rate: [...usersWithAssignedTickets]
+        .filter(u => (u.as_assignee.tickets.resolved + u.as_assignee.tickets.closed) > 0)
+        .sort((a, b) => b.as_assignee.tickets.completion_rate - a.as_assignee.tickets.completion_rate)
         .slice(0, 5),
 
       // Best SLA compliance (must have SLA data)
-      best_sla_compliance: [...userPerformance]
+      best_sla_compliance: [...usersWithAssignedTickets]
         .filter(u =>
-          (u.sla.first_response.met + u.sla.first_response.breached +
-           u.sla.resolution.met + u.sla.resolution.breached) > 0
+          (u.as_assignee.sla.first_response.met + u.as_assignee.sla.first_response.breached +
+           u.as_assignee.sla.resolution.met + u.as_assignee.sla.resolution.breached) > 0
         )
         .sort((a, b) =>
-          ((b.sla.first_response.compliance_rate + b.sla.resolution.compliance_rate) / 2) -
-          ((a.sla.first_response.compliance_rate + a.sla.resolution.compliance_rate) / 2)
+          ((b.as_assignee.sla.first_response.compliance_rate + b.as_assignee.sla.resolution.compliance_rate) / 2) -
+          ((a.as_assignee.sla.first_response.compliance_rate + a.as_assignee.sla.resolution.compliance_rate) / 2)
         )
         .slice(0, 5),
 
-      // Fastest first response (must have at least 1 first response)
-      fastest_first_response: [...userPerformance]
-        .filter(u => u.response.first_response.count > 0 && u.response.first_response.avg_seconds > 0)
-        .sort((a, b) => a.response.first_response.avg_seconds - b.response.first_response.avg_seconds)
+      // Fastest first response (must have at least 1 first response as assignee)
+      fastest_first_response: [...usersWithAssignedTickets]
+        .filter(u => u.as_assignee.first_response.count > 0 && u.as_assignee.first_response.avg_seconds > 0)
+        .sort((a, b) => a.as_assignee.first_response.avg_seconds - b.as_assignee.first_response.avg_seconds)
         .slice(0, 5),
 
-      // Fastest stage response (must have at least 1 stage response)
-      fastest_stage_response: [...userPerformance]
-        .filter(u => u.response.stage_response.count > 0 && u.response.stage_response.avg_seconds > 0)
-        .sort((a, b) => a.response.stage_response.avg_seconds - b.response.stage_response.avg_seconds)
+      // Fastest stage response (assignee stage response only)
+      fastest_stage_response: [...usersWithAssignedTickets]
+        .filter(u => u.as_assignee.stage_response.count > 0 && u.as_assignee.stage_response.avg_seconds > 0)
+        .sort((a, b) => a.as_assignee.stage_response.avg_seconds - b.as_assignee.stage_response.avg_seconds)
         .slice(0, 5),
     } : {
       most_tickets: [],
