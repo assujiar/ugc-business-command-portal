@@ -85,8 +85,8 @@ export async function GET(request: NextRequest) {
         close_outcome,
         creator:profiles!tickets_created_by_fkey(user_id, name, email, role),
         assignee:profiles!tickets_assigned_to_fkey(user_id, name, email, role),
-        sla_tracking:ticket_sla_tracking(first_response_met, resolution_met),
-        metrics:ticket_response_metrics(time_to_first_quote_seconds)
+        sla_tracking:ticket_sla_tracking!ticket_sla_tracking_ticket_id_fkey(first_response_met, resolution_met),
+        metrics:ticket_response_metrics!ticket_response_metrics_ticket_id_fkey(time_to_first_quote_seconds)
       `)
       .gte('created_at', startDate.toISOString())
 
