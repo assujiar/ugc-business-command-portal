@@ -9,6 +9,7 @@ interface QuotationData {
   quotation_number: string
   status: string
   created_at: string
+  updated_at: string
   valid_until: string
   is_expired: boolean
   customer_name: string
@@ -96,6 +97,28 @@ export default function QuotationVerifyPage() {
       month: 'long',
       year: 'numeric',
     })
+  }
+
+  const formatDateTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  // Quotation status display config
+  const getQuotationStatusConfig = (status: string) => {
+    const config: Record<string, { label: string; color: string; bg: string }> = {
+      draft: { label: 'DRAFT', color: 'text-gray-700', bg: 'bg-gray-100' },
+      sent: { label: 'ACTIVE', color: 'text-emerald-700', bg: 'bg-emerald-100' },
+      accepted: { label: 'ACCEPTED', color: 'text-blue-700', bg: 'bg-blue-100' },
+      rejected: { label: 'REJECTED', color: 'text-red-700', bg: 'bg-red-100' },
+      expired: { label: 'EXPIRED', color: 'text-amber-700', bg: 'bg-amber-100' },
+    }
+    return config[status] || config.draft
   }
 
   if (loading) {
@@ -219,6 +242,10 @@ export default function QuotationVerifyPage() {
                 <div className="text-center sm:text-left">
                   <p className="text-white/80 text-sm font-medium">Quotation Number</p>
                   <p className="text-2xl font-bold text-white tracking-wide">{data.quotation_number}</p>
+                  {/* Status Badge */}
+                  <span className={`inline-block mt-2 px-3 py-1 rounded text-xs font-bold ${getQuotationStatusConfig(data.status).bg} ${getQuotationStatusConfig(data.status).color}`}>
+                    {getQuotationStatusConfig(data.status).label}
+                  </span>
                 </div>
                 <div className="text-center sm:text-right">
                   <p className="text-white/80 text-sm font-medium">Total Amount</p>
@@ -247,14 +274,18 @@ export default function QuotationVerifyPage() {
               <div className="space-y-3">
                 <h3 className="font-semibold text-[#ff4600] flex items-center gap-2 text-sm uppercase tracking-wide">
                   <Calendar className="h-4 w-4" />
-                  Validity Period
+                  Important Dates
                 </h3>
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Issued:</span>
-                    <span className="font-medium text-gray-900">{formatDate(data.created_at)}</span>
+                    <span className="text-gray-500">Issue Date:</span>
+                    <span className="font-medium text-gray-900">{formatDateTime(data.created_at)}</span>
                   </div>
-                  <div className="flex justify-between text-sm mt-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Status Update:</span>
+                    <span className="font-medium text-gray-900">{formatDateTime(data.updated_at)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Valid Until:</span>
                     <span className={`font-medium ${data.is_expired ? 'text-red-600' : 'text-gray-900'}`}>
                       {formatDate(data.valid_until)}

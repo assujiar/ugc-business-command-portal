@@ -33,6 +33,16 @@ const formatDate = (date: string | Date): string => {
   })
 }
 
+const formatDateTime = (date: string | Date): string => {
+  return new Date(date).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 const UGC_INFO = {
   name: 'PT. Utama Global Indo Cargo',
   shortName: 'UGC Logistics',
@@ -42,9 +52,19 @@ const UGC_INFO = {
   web: 'www.utamaglobalindocargo.com',
 }
 
-const generateQuotationHTML = (quotation: any, profile: ProfileData, validationUrl: string): string => {
+// Status display config
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  draft: { label: 'DRAFT', color: '#6b7280', bg: '#f3f4f6' },
+  sent: { label: 'ACTIVE', color: '#059669', bg: '#d1fae5' },
+  accepted: { label: 'ACCEPTED', color: '#2563eb', bg: '#dbeafe' },
+  rejected: { label: 'REJECTED', color: '#dc2626', bg: '#fee2e2' },
+  expired: { label: 'EXPIRED', color: '#d97706', bg: '#fef3c7' },
+}
+
+const generateQuotationHTML = (quotation: any, profile: ProfileData, validationUrl: string, printDate: string): string => {
   const items = quotation.items || []
   const isBreakdown = quotation.rate_structure === 'breakdown'
+  const status = STATUS_CONFIG[quotation.status] || STATUS_CONFIG.draft
 
   let rateHTML = ''
   if (isBreakdown && items.length > 0) {
@@ -107,10 +127,16 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     .doc{text-align:right}
     .doc .t{font-size:20px;font-weight:700;letter-spacing:2px}
     .doc .n{font-size:11px;font-weight:600;margin-top:3px;opacity:0.95}
-    .doc .d{font-size:7px;margin-top:5px;opacity:0.9}
+    .doc .status-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:8px;font-weight:700;margin-top:4px}
 
     /* Content area */
     .content{flex:1;padding:12px 0.8cm 10px 0.8cm}
+
+    /* Date info bar */
+    .date-bar{display:flex;gap:15px;margin-bottom:10px;padding:6px 10px;background:#f8f9fa;border-radius:4px;font-size:7px}
+    .date-bar .item{display:flex;gap:4px}
+    .date-bar .label{color:#666}
+    .date-bar .value{font-weight:600;color:#1a1a1a}
 
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
     .box{background:#f8f9fa;border:1px solid #e5e5e5;border-radius:4px;padding:6px 8px}
@@ -194,12 +220,20 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
       <div class="doc">
         <div class="t">QUOTATION</div>
         <div class="n">${quotation.quotation_number}</div>
-        <div class="d">Date: ${formatDate(quotation.created_at)} | Valid: ${formatDate(quotation.valid_until)}</div>
+        <div class="status-badge" style="background:${status.bg};color:${status.color}">${status.label}</div>
       </div>
     </div>
 
     <!-- Content -->
     <div class="content">
+      <!-- Date Info Bar -->
+      <div class="date-bar keep">
+        <div class="item"><span class="label">Issue:</span><span class="value">${formatDateTime(quotation.created_at)}</span></div>
+        <div class="item"><span class="label">Status Update:</span><span class="value">${formatDateTime(quotation.updated_at)}</span></div>
+        <div class="item"><span class="label">Valid Until:</span><span class="value">${formatDate(quotation.valid_until)}</span></div>
+        <div class="item"><span class="label">Print:</span><span class="value">${printDate}</span></div>
+      </div>
+
       <div class="grid keep">
         <div class="box">
           <h3>Customer</h3>
@@ -310,6 +344,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params
     const supabase = await createClient()
+    const printDate = formatDateTime(new Date())
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -346,7 +381,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
-    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl)
+    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl, printDate)
 
     return NextResponse.json({
       success: true,
@@ -364,6 +399,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params
     const supabase = await createClient()
+    const printDate = formatDateTime(new Date())
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -400,7 +436,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
-    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl)
+    const html = generateQuotationHTML(quotation, creatorProfile, validationUrl, printDate)
 
     return new NextResponse(html, {
       headers: { 'Content-Type': 'text/html' },
