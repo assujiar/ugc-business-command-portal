@@ -39,6 +39,9 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
   const items = quotation.items || []
   const isBreakdown = quotation.rate_structure === 'breakdown'
 
+  // UGC accent color
+  const accentColor = '#ff4600'
+
   // Build items table for breakdown
   let itemsTableHTML = ''
   if (isBreakdown && items.length > 0) {
@@ -124,7 +127,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: 30px;
-          border-bottom: 3px solid #1a365d;
+          border-bottom: 3px solid ${accentColor};
           padding-bottom: 20px;
         }
         .logo {
@@ -140,7 +143,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           text-align: center;
           font-size: 24px;
           font-weight: bold;
-          color: #1a365d;
+          color: ${accentColor};
           margin: 20px 0;
           text-transform: uppercase;
           letter-spacing: 2px;
@@ -149,9 +152,10 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           display: flex;
           justify-content: space-between;
           margin-bottom: 25px;
-          background: #f8f9fa;
+          background: #fff5f0;
           padding: 15px;
           border-radius: 5px;
+          border-left: 4px solid ${accentColor};
         }
         .info-box {
           flex: 1;
@@ -172,8 +176,8 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         .section-title {
           font-size: 14px;
           font-weight: bold;
-          color: #1a365d;
-          border-bottom: 1px solid #e2e8f0;
+          color: ${accentColor};
+          border-bottom: 2px solid ${accentColor};
           padding-bottom: 8px;
           margin-bottom: 15px;
         }
@@ -182,6 +186,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           padding: 15px;
           border-radius: 5px;
           margin-bottom: 20px;
+          border-left: 4px solid ${accentColor};
         }
         .customer-info p {
           margin: 3px 0;
@@ -189,6 +194,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         .customer-name {
           font-size: 14px;
           font-weight: bold;
+          color: ${accentColor};
         }
         .service-details {
           display: grid;
@@ -200,6 +206,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           background: #f8f9fa;
           padding: 10px;
           border-radius: 5px;
+          border-left: 3px solid #ddd;
         }
         .detail-label {
           font-size: 9px;
@@ -216,7 +223,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           margin: 20px 0;
         }
         .items-table th {
-          background: #1a365d;
+          background: ${accentColor};
           color: white;
           padding: 10px;
           text-align: left;
@@ -227,8 +234,11 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           border-bottom: 1px solid #e2e8f0;
         }
         .items-table .total-row {
-          background: #f8f9fa;
+          background: #fff5f0;
           font-weight: bold;
+        }
+        .items-table .total-row td {
+          border-bottom: 2px solid ${accentColor};
         }
         .terms-section {
           display: grid;
@@ -244,7 +254,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           font-size: 12px;
           font-weight: bold;
           margin-bottom: 10px;
-          color: #1a365d;
+          color: ${accentColor};
         }
         .terms-box ul {
           margin-left: 20px;
@@ -254,14 +264,14 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           margin: 5px 0;
         }
         .scope-notes {
-          background: #fff3cd;
-          border-left: 4px solid #ffc107;
+          background: #fff5f0;
+          border-left: 4px solid ${accentColor};
           padding: 15px;
           margin: 20px 0;
         }
         .validity-box {
-          background: #d4edda;
-          border-left: 4px solid #28a745;
+          background: #fff5f0;
+          border-left: 4px solid ${accentColor};
           padding: 15px;
           margin: 20px 0;
         }
@@ -269,36 +279,57 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           margin-top: 40px;
           display: flex;
           justify-content: space-between;
-          align-items: flex-end;
+          align-items: flex-start;
+          border-top: 2px solid #eee;
+          padding-top: 30px;
         }
-        .signature {
+        .signature-section {
+          display: flex;
+          align-items: flex-start;
+          gap: 30px;
+        }
+        .qr-signature {
           text-align: center;
         }
-        .signature-line {
-          width: 200px;
-          border-top: 1px solid #333;
-          margin-top: 60px;
+        .qr-code {
+          width: 100px;
+          height: 100px;
+          border: 2px solid ${accentColor};
+          padding: 5px;
+          border-radius: 8px;
+        }
+        .qr-label {
+          font-size: 9px;
+          color: #666;
+          margin-top: 5px;
+        }
+        .signature-info {
+          text-align: left;
           padding-top: 10px;
         }
         .signature-name {
           font-weight: bold;
-          font-size: 12px;
+          font-size: 14px;
+          color: ${accentColor};
         }
         .signature-title {
           color: #666;
+          font-size: 11px;
+          margin-top: 3px;
+        }
+        .signature-date {
+          color: #999;
           font-size: 10px;
-        }
-        .qr-section {
-          text-align: center;
-        }
-        .qr-code {
-          width: 80px;
-          height: 80px;
-        }
-        .qr-text {
-          font-size: 8px;
-          color: #666;
           margin-top: 5px;
+        }
+        .verify-text {
+          text-align: right;
+          font-size: 9px;
+          color: #999;
+        }
+        .verify-text a {
+          color: ${accentColor};
+          text-decoration: none;
         }
         @media print {
           body { padding: 20px; }
@@ -308,7 +339,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     <body>
       <div class="header">
         <div>
-          <img src="/logo/logougctaglinefull.png" class="logo" alt="UGC Logo" style="max-height: 60px; width: auto;"/>
+          <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinefull.png" class="logo" alt="UGC Logo" style="max-height: 60px; width: auto;"/>
         </div>
         <div class="company-info">
           <strong>PT. UGC Logistics</strong><br/>
@@ -475,15 +506,20 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
       </div>
 
       <div class="footer">
-        <div class="signature">
-          <div class="signature-line">
+        <div class="signature-section">
+          <div class="qr-signature">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=ff4600" class="qr-code" alt="Digital Signature"/>
+            <div class="qr-label">Digital Signature</div>
+          </div>
+          <div class="signature-info">
             <div class="signature-name">${profile.name}</div>
             <div class="signature-title">Sales & Commercial Executive</div>
+            <div class="signature-date">Issued: ${formatDate(quotation.created_at)}</div>
           </div>
         </div>
-        <div class="qr-section">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(validationUrl)}" class="qr-code" alt="QR Code"/>
-          <div class="qr-text">Scan to verify this quotation</div>
+        <div class="verify-text">
+          Verify this quotation at:<br/>
+          <a href="${validationUrl}">${validationUrl}</a>
         </div>
       </div>
     </body>
@@ -527,8 +563,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
 
-    // Build validation URL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    // Build validation URL (use production URL)
+    const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
 
     // Generate HTML
@@ -584,7 +620,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = 'https://ugc-business-command-portal.vercel.app'
     const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
 
     const html = generateQuotationHTML(quotation, profileData, validationUrl)
