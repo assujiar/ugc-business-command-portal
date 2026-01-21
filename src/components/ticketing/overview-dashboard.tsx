@@ -135,63 +135,97 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
 
       {/* Summary Stats */}
       {summary && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Tickets</CardTitle>
-              <Ticket className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary.total_tickets}</div>
-              <p className="text-xs text-muted-foreground">
-                {summary.activity?.created_today || 0} created today
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active</CardTitle>
-              <AlertCircle className="h-4 w-4 text-destructive" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-destructive">{summary.active_tickets}</div>
-              <p className="text-xs text-muted-foreground">
-                {summary.by_priority?.urgent || 0} urgent, {summary.by_priority?.high || 0} high
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed</CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-success" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-success">{summary.completed_tickets}</div>
-              <p className="text-xs text-muted-foreground">
-                {summary.activity?.resolved_today || 0} resolved today
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Resolution Rate</CardTitle>
-              <TrendingUp className="h-4 w-4 text-brand" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {summary.total_tickets > 0
-                  ? Math.round((summary.completed_tickets / summary.total_tickets) * 100)
-                  : 0}%
-              </div>
-              <Progress
-                value={summary.total_tickets > 0
-                  ? (summary.completed_tickets / summary.total_tickets) * 100
-                  : 0}
-                className="h-2 mt-2"
-              />
-            </CardContent>
-          </Card>
-        </div>
+        <>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Tickets</CardTitle>
+                <Ticket className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{summary.total_tickets}</div>
+                <p className="text-xs text-muted-foreground">
+                  {summary.activity?.created_today || 0} created today
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active</CardTitle>
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-destructive">{summary.active_tickets}</div>
+                <p className="text-xs text-muted-foreground">
+                  {summary.by_priority?.urgent || 0} urgent, {summary.by_priority?.high || 0} high
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Completed</CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-success" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-success">{summary.completed_tickets}</div>
+                <p className="text-xs text-muted-foreground">
+                  {summary.activity?.resolved_today || 0} resolved today
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Resolution Rate</CardTitle>
+                <TrendingUp className="h-4 w-4 text-brand" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {summary.total_tickets > 0
+                    ? Math.round((summary.completed_tickets / summary.total_tickets) * 100)
+                    : 0}%
+                </div>
+                <Progress
+                  value={summary.total_tickets > 0
+                    ? (summary.completed_tickets / summary.total_tickets) * 100
+                    : 0}
+                  className="h-2 mt-2"
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Ticket Type Breakdown */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="border-blue-200 dark:border-blue-900">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Badge variant="default" className="text-xs">RFQ</Badge>
+                  Request for Quotation
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{summary.by_type?.RFQ || 0}</div>
+                <p className="text-xs text-muted-foreground">
+                  Tickets requiring price quotes
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-purple-200 dark:border-purple-900">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Badge variant="secondary" className="text-xs">GEN</Badge>
+                  General Request
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{summary.by_type?.GEN || 0}</div>
+                <p className="text-xs text-muted-foreground">
+                  General inquiries and requests
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </>
       )}
 
       {/* Status Distribution */}
@@ -228,6 +262,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
         <TabsContent value="sla" className="space-y-4">
           {slaMetrics && (
             <>
+              {/* Overall SLA Cards */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                   <CardHeader className="pb-2">
@@ -297,6 +332,87 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* SLA by Ticket Type */}
+              {slaMetrics.by_type && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>SLA by Ticket Type</CardTitle>
+                    <CardDescription>Comparison between RFQ and General Request tickets</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-6 md:grid-cols-2">
+                      {/* RFQ */}
+                      <div className="p-4 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="default">RFQ</Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {slaMetrics.by_type.RFQ?.total || 0} tickets
+                            </span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">First Response</p>
+                            <p className="text-2xl font-bold">
+                              {slaMetrics.by_type.RFQ?.first_response_compliance || 100}%
+                            </p>
+                            <Progress
+                              value={slaMetrics.by_type.RFQ?.first_response_compliance || 100}
+                              className="h-1.5 mt-1"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Resolution</p>
+                            <p className="text-2xl font-bold">
+                              {slaMetrics.by_type.RFQ?.resolution_compliance || 100}%
+                            </p>
+                            <Progress
+                              value={slaMetrics.by_type.RFQ?.resolution_compliance || 100}
+                              className="h-1.5 mt-1"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* GEN */}
+                      <div className="p-4 rounded-lg border bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">GEN</Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {slaMetrics.by_type.GEN?.total || 0} tickets
+                            </span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">First Response</p>
+                            <p className="text-2xl font-bold">
+                              {slaMetrics.by_type.GEN?.first_response_compliance || 100}%
+                            </p>
+                            <Progress
+                              value={slaMetrics.by_type.GEN?.first_response_compliance || 100}
+                              className="h-1.5 mt-1"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Resolution</p>
+                            <p className="text-2xl font-bold">
+                              {slaMetrics.by_type.GEN?.resolution_compliance || 100}%
+                            </p>
+                            <Progress
+                              value={slaMetrics.by_type.GEN?.resolution_compliance || 100}
+                              className="h-1.5 mt-1"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* SLA by Department */}
               {slaMetrics.by_department && (

@@ -34,6 +34,7 @@ import {
   ThumbsUp,
   RotateCcw,
   Forward,
+  Bell,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -167,6 +168,9 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const [lostReasonNote, setLostReasonNote] = useState('')
   const [lostCompetitor, setLostCompetitor] = useState('')
   const [lostCompetitorCost, setLostCompetitorCost] = useState('')
+
+  // Reminder state
+  const [sendingReminder, setSendingReminder] = useState(false)
 
   // Permission checks
   const canAssign = canAssignTickets(profile.role)
@@ -456,6 +460,43 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     } finally {
       setSubmittingComment(false)
+    }
+  }
+
+  // Send reminder (for GEN tickets)
+  const handleSendReminder = async () => {
+    setSendingReminder(true)
+    try {
+      const response = await fetch(`/api/ticketing/tickets/${ticket.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: '🔔 **Reminder**: Mohon update status request ini. Terima kasih.',
+          is_internal: false,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to send reminder')
+      }
+
+      toast({
+        title: 'Reminder sent',
+        description: 'Reminder has been sent to the assignee',
+      })
+
+      await refreshTicket()
+      fetchData()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to send reminder',
+        variant: 'destructive',
+      })
+    } finally {
+      setSendingReminder(false)
     }
   }
 
@@ -1522,6 +1563,134 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                                   ) : null}
                                   Confirm Lost
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Creator Actions for GEN tickets */}
+                  {isCreator && ticket.ticket_type === 'GEN' && (
+                    <>
+                      {/* Send Reminder - available when ticket is not yet resolved/closed */}
+                      {!['resolved', 'closed'].includes(ticket.status) && (
+                        <Button
+                          onClick={handleSendReminder}
+                          disabled={sendingReminder}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          {sendingReminder ? (
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Bell className="mr-2 h-4 w-4" />
+                          )}
+                          Send Reminder
+                        </Button>
+                      )}
+
+                      {/* Resolved/Closed Buttons - available after ops responds */}
+                      {(comments.length > 0 || ticket.status !== 'open') && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            onClick={() => executeAction('mark_won')}
+                            disabled={actionLoading === 'mark_won'}
+                            className="w-full bg-green-600 hover:bg-green-700"
+                          >
+                            {actionLoading === 'mark_won' ? (
+                              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="mr-2 h-4 w-4" />
+                            )}
+                            Resolved
+                          </Button>
+
+                          <Dialog open={lostDialogOpen} onOpenChange={setLostDialogOpen}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="destructive"
+                                className="w-full"
+                              >
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Closed
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Close Ticket</DialogTitle>
+                                <DialogDescription>
+                                  Please provide a reason for closing this ticket.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div>
+                                  <Label htmlFor="close-reason">Alasan Close *</Label>
+                                  <Select value={lostReason} onValueChange={setLostReason}>
+                                    <SelectTrigger id="close-reason">
+                                      <SelectValue placeholder="Pilih alasan close" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="no_longer_needed">Tidak Diperlukan Lagi</SelectItem>
+                                      <SelectItem value="duplicate">Duplikat Request</SelectItem>
+                                      <SelectItem value="resolved_elsewhere">Sudah Diselesaikan di Tempat Lain</SelectItem>
+                                      <SelectItem value="cannot_be_fulfilled">Tidak Dapat Dipenuhi</SelectItem>
+                                      <SelectItem value="other">Lainnya</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {/* Show note field for "other" reason */}
+                                {lostReason === 'other' && (
+                                  <div>
+                                    <Label htmlFor="close-reason-note">Keterangan *</Label>
+                                    <Textarea
+                                      id="close-reason-note"
+                                      name="close-reason-note"
+                                      placeholder="Jelaskan alasan close..."
+                                      value={lostReasonNote}
+                                      onChange={(e) => setLostReasonNote(e.target.value)}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Optional note for non-other reasons */}
+                                {lostReason && lostReason !== 'other' && (
+                                  <div>
+                                    <Label htmlFor="close-reason-note">Catatan Tambahan (opsional)</Label>
+                                    <Textarea
+                                      id="close-reason-note"
+                                      name="close-reason-note"
+                                      placeholder="Tambahkan catatan jika perlu..."
+                                      value={lostReasonNote}
+                                      onChange={(e) => setLostReasonNote(e.target.value)}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => {
+                                  setLostDialogOpen(false)
+                                  setLostReason('')
+                                  setLostReasonNote('')
+                                }}>
+                                  Cancel
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  onClick={handleMarkLost}
+                                  disabled={
+                                    actionLoading === 'mark_lost' ||
+                                    !lostReason ||
+                                    (lostReason === 'other' && !lostReasonNote)
+                                  }
+                                >
+                                  {actionLoading === 'mark_lost' ? (
+                                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : null}
+                                  Confirm Close
                                 </Button>
                               </DialogFooter>
                             </DialogContent>
