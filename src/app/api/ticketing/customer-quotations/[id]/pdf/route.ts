@@ -13,6 +13,7 @@ interface ProfileData {
   user_id: string
   role: UserRole
   name: string
+  email: string
 }
 
 // Format currency
@@ -38,6 +39,7 @@ const formatDate = (date: string | Date): string => {
 const UGC_INFO = {
   name: 'PT. Utama Global Indo Cargo',
   shortName: 'UGC Logistics',
+  tagline: 'Your Trusted Logistics Partner',
   address: 'Graha Fadillah, Jl Prof. Soepomo SH No. 45 BZ Blok C',
   city: 'Tebet, Jakarta Selatan, Indonesia 12810',
   phone: '+6221 8350778',
@@ -47,7 +49,7 @@ const UGC_INFO = {
   web: 'www.utamaglobalindocargo.com',
 }
 
-// Generate HTML for PDF - Modern & Attractive Design
+// Generate HTML for PDF - Letterhead Style Design
 const generateQuotationHTML = (quotation: any, profile: ProfileData, validationUrl: string): string => {
   const items = quotation.items || []
   const isBreakdown = quotation.rate_structure === 'breakdown'
@@ -60,8 +62,8 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         <thead>
           <tr>
             <th style="width: 5%">#</th>
-            <th style="width: 55%">Description</th>
-            <th style="width: 15%">Unit</th>
+            <th style="width: 50%">Description</th>
+            <th style="width: 20%">Unit</th>
             <th style="width: 25%">Amount</th>
           </tr>
         </thead>
@@ -96,6 +98,15 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     ? quotation.terms_excludes.map((t: string) => `<li><span class="icon-cross">✗</span>${t}</li>`).join('')
     : ''
 
+  // Build cargo details grid
+  const cargoDetails = []
+  if (quotation.commodity) cargoDetails.push({ label: 'Commodity', value: quotation.commodity })
+  if (quotation.cargo_weight) cargoDetails.push({ label: 'Weight', value: `${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}` })
+  if (quotation.cargo_volume) cargoDetails.push({ label: 'Volume', value: `${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}` })
+  if (quotation.estimated_cargo_value) cargoDetails.push({ label: 'Cargo Value', value: formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR') })
+  if (quotation.estimated_leadtime) cargoDetails.push({ label: 'Est. Leadtime', value: quotation.estimated_leadtime })
+  if (quotation.fleet_type) cargoDetails.push({ label: 'Fleet', value: `${quotation.fleet_type}${quotation.fleet_quantity ? ` × ${quotation.fleet_quantity}` : ''}` })
+
   return `
     <!DOCTYPE html>
     <html>
@@ -107,12 +118,15 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
-        @page { size: A4; margin: 0; }
+        @page {
+          size: A4;
+          margin: 0;
+        }
 
         body {
           font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
-          font-size: 9px;
-          line-height: 1.5;
+          font-size: 10px;
+          line-height: 1.6;
           color: #1e293b;
           background: white;
         }
@@ -120,99 +134,256 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         .page {
           width: 210mm;
           min-height: 297mm;
-          padding: 12mm 15mm;
+          padding: 0;
           position: relative;
+          background: white;
         }
 
-        /* Decorative corner accent */
-        .page::before {
+        /* ===== DECORATIVE BORDERS ===== */
+        .left-border {
+          position: fixed;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 8mm;
+          background: linear-gradient(180deg,
+            #ff4600 0%, #ff4600 25%,
+            #1e293b 25%, #1e293b 50%,
+            #94a3b8 50%, #94a3b8 75%,
+            #ff4600 75%, #ff4600 100%
+          );
+          z-index: 100;
+        }
+
+        .left-border::before {
           content: '';
           position: absolute;
           top: 0;
+          left: 0;
           right: 0;
-          width: 80mm;
-          height: 80mm;
-          background: linear-gradient(135deg, transparent 50%, rgba(255, 70, 0, 0.03) 50%);
-          pointer-events: none;
+          bottom: 0;
+          background:
+            linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.1) 50%),
+            linear-gradient(-135deg, transparent 50%, rgba(0,0,0,0.1) 50%);
+          background-size: 4mm 4mm;
         }
 
-        /* ===== HEADER ===== */
-        .header {
+        .right-border {
+          position: fixed;
+          right: 0;
+          top: 0;
+          bottom: 0;
+          width: 8mm;
+          background: linear-gradient(180deg,
+            #94a3b8 0%, #94a3b8 25%,
+            #1e293b 25%, #1e293b 50%,
+            #ff4600 50%, #ff4600 75%,
+            #1e293b 75%, #1e293b 100%
+          );
+          z-index: 100;
+        }
+
+        .right-border::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background:
+            linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.1) 50%),
+            linear-gradient(-135deg, transparent 50%, rgba(0,0,0,0.1) 50%);
+          background-size: 4mm 4mm;
+        }
+
+        /* Corner decorations */
+        .corner-top-right {
+          position: absolute;
+          top: 0;
+          right: 8mm;
+          width: 0;
+          height: 0;
+          border-style: solid;
+          border-width: 0 30mm 30mm 0;
+          border-color: transparent #f1f5f9 transparent transparent;
+        }
+
+        .corner-bottom-left {
+          position: absolute;
+          bottom: 0;
+          left: 8mm;
+          width: 0;
+          height: 0;
+          border-style: solid;
+          border-width: 30mm 0 0 30mm;
+          border-color: transparent transparent transparent #f1f5f9;
+        }
+
+        /* ===== CONTENT AREA ===== */
+        .content {
+          margin-left: 12mm;
+          margin-right: 12mm;
+          padding: 10mm 8mm;
+        }
+
+        /* ===== HEADER BANNER ===== */
+        .header-banner {
+          background: linear-gradient(135deg, #ff4600 0%, #ea580c 100%);
+          padding: 5mm 6mm;
+          border-radius: 3mm;
           display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
+          align-items: center;
+          gap: 4mm;
           margin-bottom: 6mm;
-          padding-bottom: 4mm;
-          border-bottom: 0.5mm solid #ff4600;
+          box-shadow: 0 2mm 4mm rgba(255, 70, 0, 0.2);
         }
 
-        .logo-section { display: flex; align-items: center; gap: 4mm; }
-        .logo-section img { height: 14mm; width: auto; }
+        .header-banner img {
+          height: 14mm;
+          width: auto;
+        }
 
-        .company-info { font-size: 7px; color: #64748b; line-height: 1.6; }
-        .company-info .name { font-size: 9px; font-weight: 700; color: #1e293b; margin-bottom: 1mm; }
+        .header-banner .brand-text {
+          color: white;
+        }
 
-        .doc-info { text-align: right; }
-        .doc-title {
-          font-size: 20px;
+        .header-banner .brand-name {
+          font-size: 14px;
           font-weight: 800;
-          color: #ff4600;
-          letter-spacing: 1px;
-          text-transform: uppercase;
-        }
-        .doc-number {
-          font-size: 11px;
-          font-weight: 600;
-          color: #1e293b;
-          margin-top: 1mm;
-          padding: 1.5mm 3mm;
-          background: #fff7ed;
-          border-radius: 2mm;
-          display: inline-block;
-        }
-
-        /* ===== META INFO BAR ===== */
-        .meta-bar {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 3mm;
-          margin-bottom: 5mm;
-        }
-
-        .meta-item {
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-          padding: 3mm;
-          border-radius: 2mm;
-          border-left: 1mm solid #ff4600;
-        }
-
-        .meta-item .label {
-          font-size: 6px;
-          font-weight: 600;
-          color: #94a3b8;
-          text-transform: uppercase;
           letter-spacing: 0.5px;
         }
 
-        .meta-item .value {
+        .header-banner .brand-tagline {
+          font-size: 8px;
+          opacity: 0.9;
+          margin-top: 1mm;
+        }
+
+        /* ===== LETTERHEAD INFO ===== */
+        .letterhead-info {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 6mm;
+          padding-bottom: 4mm;
+          border-bottom: 0.5mm solid #e2e8f0;
+        }
+
+        .sender-info { max-width: 55%; }
+        .sender-name {
+          font-size: 14px;
+          font-weight: 800;
+          color: #1e293b;
+          margin-bottom: 1mm;
+        }
+        .sender-title {
           font-size: 9px;
+          color: #64748b;
+          margin-bottom: 3mm;
+        }
+        .sender-company {
+          font-size: 11px;
+          font-weight: 700;
+          color: #ff4600;
+          margin-bottom: 2mm;
+        }
+        .sender-detail {
+          font-size: 8px;
+          color: #64748b;
+          line-height: 1.8;
+        }
+        .sender-detail span {
+          color: #ff4600;
+          font-weight: 600;
+        }
+
+        .doc-date {
+          text-align: right;
+        }
+        .doc-date .label {
+          font-size: 8px;
+          color: #94a3b8;
+          margin-bottom: 1mm;
+        }
+        .doc-date .value {
+          font-size: 11px;
           font-weight: 600;
           color: #1e293b;
-          margin-top: 0.5mm;
+        }
+
+        /* ===== DOCUMENT TITLE ===== */
+        .doc-header {
+          background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+          border: 0.5mm solid #fed7aa;
+          border-radius: 3mm;
+          padding: 4mm 5mm;
+          margin-bottom: 5mm;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .doc-title-section {}
+        .doc-title {
+          font-size: 18px;
+          font-weight: 800;
+          color: #ff4600;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        .doc-number {
+          font-size: 12px;
+          font-weight: 600;
+          color: #1e293b;
+          margin-top: 1mm;
+        }
+
+        .doc-meta {
+          text-align: right;
+          font-size: 8px;
+          color: #64748b;
+        }
+        .doc-meta .value {
+          font-weight: 600;
+          color: #1e293b;
+        }
+
+        /* ===== GREETING ===== */
+        .greeting {
+          font-size: 11px;
+          margin-bottom: 4mm;
+        }
+        .greeting-to {
+          font-weight: 700;
+          color: #1e293b;
+        }
+        .greeting-company {
+          color: #64748b;
+        }
+
+        /* ===== INTRO TEXT ===== */
+        .intro-text {
+          font-size: 10px;
+          color: #475569;
+          line-height: 1.8;
+          margin-bottom: 5mm;
+          text-align: justify;
         }
 
         /* ===== SECTIONS ===== */
-        .section { margin-bottom: 4mm; }
+        .section {
+          margin-bottom: 5mm;
+          page-break-inside: avoid;
+        }
 
         .section-title {
-          font-size: 9px;
+          font-size: 10px;
           font-weight: 700;
           color: #ff4600;
           text-transform: uppercase;
           letter-spacing: 0.5px;
           padding-bottom: 2mm;
           margin-bottom: 3mm;
-          border-bottom: 0.3mm solid #fed7aa;
+          border-bottom: 0.5mm solid #fed7aa;
           display: flex;
           align-items: center;
           gap: 2mm;
@@ -223,71 +394,85 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           width: 3mm;
           height: 3mm;
           background: #ff4600;
-          border-radius: 0.5mm;
+          border-radius: 1mm;
         }
 
         /* ===== TWO COLUMN LAYOUT ===== */
-        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+        .two-col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 4mm;
+        }
 
         /* ===== CUSTOMER CARD ===== */
         .customer-card {
-          background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
           padding: 4mm;
           border-radius: 3mm;
-          border: 0.3mm solid #fed7aa;
+          border-left: 1mm solid #ff4600;
         }
 
         .customer-name {
-          font-size: 11px;
+          font-size: 12px;
           font-weight: 700;
-          color: #ea580c;
+          color: #1e293b;
           margin-bottom: 1mm;
         }
 
-        .customer-company { font-size: 9px; font-weight: 600; color: #1e293b; margin-bottom: 2mm; }
-        .customer-detail { font-size: 8px; color: #64748b; line-height: 1.6; }
+        .customer-company {
+          font-size: 10px;
+          font-weight: 600;
+          color: #ff4600;
+          margin-bottom: 2mm;
+        }
+
+        .customer-detail {
+          font-size: 9px;
+          color: #64748b;
+          line-height: 1.6;
+        }
 
         /* ===== ROUTE DISPLAY ===== */
-        .route-box {
-          background: linear-gradient(90deg, #fff7ed 0%, white 50%, #fff7ed 100%);
+        .route-card {
+          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
           padding: 4mm;
           border-radius: 3mm;
-          border: 0.3mm solid #fed7aa;
+          border-left: 1mm solid #ff4600;
+        }
+
+        .route-box {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-bottom: 3mm;
         }
 
         .route-point { text-align: center; flex: 1; }
         .route-city { font-size: 12px; font-weight: 700; color: #1e293b; }
         .route-country { font-size: 8px; color: #64748b; margin-top: 0.5mm; }
+        .route-port { font-size: 7px; color: #94a3b8; margin-top: 0.5mm; }
 
         .route-arrow {
-          font-size: 16px;
+          font-size: 20px;
           color: #ff4600;
           padding: 0 3mm;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
         }
-        .route-arrow::before { content: '✈'; font-size: 12px; }
 
         /* ===== DETAILS GRID ===== */
         .details-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 2mm;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 3mm;
         }
 
         .detail-item {
           background: #f8fafc;
-          padding: 2.5mm 3mm;
+          padding: 3mm;
           border-radius: 2mm;
+          border-left: 0.8mm solid #ff4600;
         }
 
         .detail-item .label {
-          font-size: 6px;
+          font-size: 7px;
           font-weight: 600;
           color: #94a3b8;
           text-transform: uppercase;
@@ -295,10 +480,10 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         }
 
         .detail-item .value {
-          font-size: 8px;
+          font-size: 10px;
           font-weight: 600;
           color: #1e293b;
-          margin-top: 0.5mm;
+          margin-top: 1mm;
         }
 
         /* ===== CARGO DESCRIPTION BOX ===== */
@@ -306,34 +491,39 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           background: #fffbeb;
           border: 0.3mm solid #fde68a;
           border-radius: 2mm;
-          padding: 3mm;
-          margin-top: 2mm;
+          padding: 3mm 4mm;
+          margin-top: 3mm;
         }
 
         .cargo-desc .label {
-          font-size: 7px;
+          font-size: 8px;
           font-weight: 600;
           color: #92400e;
           text-transform: uppercase;
         }
 
-        .cargo-desc .value { font-size: 9px; color: #78350f; margin-top: 1mm; }
+        .cargo-desc .value {
+          font-size: 10px;
+          color: #78350f;
+          margin-top: 1mm;
+          line-height: 1.6;
+        }
 
         /* ===== RATE TABLE ===== */
         .rate-table {
           width: 100%;
           border-collapse: collapse;
-          font-size: 8px;
-          margin-bottom: 2mm;
+          font-size: 9px;
+          margin-bottom: 3mm;
         }
 
         .rate-table th {
           background: linear-gradient(135deg, #ff4600 0%, #ea580c 100%);
           color: white;
-          padding: 2.5mm 3mm;
+          padding: 3mm;
           text-align: left;
           font-weight: 600;
-          font-size: 7px;
+          font-size: 8px;
           text-transform: uppercase;
           letter-spacing: 0.3px;
         }
@@ -342,14 +532,16 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         .rate-table th:last-child { border-radius: 0 2mm 0 0; }
 
         .rate-table td {
-          padding: 2.5mm 3mm;
-          border-bottom: 0.2mm solid #f1f5f9;
+          padding: 3mm;
+          border-bottom: 0.3mm solid #f1f5f9;
         }
 
         .rate-table tr:nth-child(even) { background: #fafafa; }
+        .rate-table tr:last-child td:first-child { border-radius: 0 0 0 2mm; }
+        .rate-table tr:last-child td:last-child { border-radius: 0 0 2mm 0; }
         .rate-table .center { text-align: center; }
         .rate-table .right { text-align: right; font-weight: 600; }
-        .item-desc { font-size: 7px; color: #94a3b8; margin-top: 0.5mm; }
+        .item-desc { font-size: 8px; color: #94a3b8; margin-top: 0.5mm; }
 
         /* Bundling Rate Style */
         .bundling-rate {
@@ -357,11 +549,11 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           padding: 4mm;
           border-radius: 3mm;
           border: 0.3mm solid #fed7aa;
-          margin-bottom: 2mm;
+          margin-bottom: 3mm;
         }
 
-        .bundling-label { font-size: 9px; font-weight: 600; color: #ea580c; }
-        .bundling-route { font-size: 8px; color: #78350f; margin-top: 1mm; }
+        .bundling-label { font-size: 10px; font-weight: 600; color: #ea580c; }
+        .bundling-route { font-size: 9px; color: #78350f; margin-top: 1mm; }
 
         /* ===== TOTAL BOX ===== */
         .total-box {
@@ -372,25 +564,44 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           display: flex;
           justify-content: space-between;
           align-items: center;
+          box-shadow: 0 2mm 4mm rgba(255, 70, 0, 0.3);
         }
 
-        .total-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-        .total-amount { font-size: 18px; font-weight: 800; }
+        .total-label {
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .total-amount {
+          font-size: 20px;
+          font-weight: 800;
+        }
 
         /* ===== TERMS GRID ===== */
-        .terms-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }
-
-        .terms-card {
-          padding: 3mm;
-          border-radius: 2mm;
-          font-size: 7px;
+        .terms-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 4mm;
         }
 
-        .terms-card.included { background: #ecfdf5; border: 0.3mm solid #a7f3d0; }
-        .terms-card.excluded { background: #fef2f2; border: 0.3mm solid #fecaca; }
+        .terms-card {
+          padding: 3mm 4mm;
+          border-radius: 3mm;
+          font-size: 8px;
+        }
+
+        .terms-card.included {
+          background: #ecfdf5;
+          border: 0.3mm solid #a7f3d0;
+        }
+        .terms-card.excluded {
+          background: #fef2f2;
+          border: 0.3mm solid #fecaca;
+        }
 
         .terms-card h4 {
-          font-size: 8px;
+          font-size: 9px;
           font-weight: 700;
           margin-bottom: 2mm;
         }
@@ -399,245 +610,373 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         .terms-card.excluded h4 { color: #dc2626; }
 
         .terms-card ul { list-style: none; }
-        .terms-card li { margin: 1mm 0; display: flex; align-items: flex-start; gap: 1.5mm; line-height: 1.4; }
-        .icon-check { color: #059669; font-weight: bold; font-size: 8px; }
-        .icon-cross { color: #dc2626; font-weight: bold; font-size: 8px; }
+        .terms-card li {
+          margin: 1.5mm 0;
+          display: flex;
+          align-items: flex-start;
+          gap: 2mm;
+          line-height: 1.5;
+        }
+        .icon-check { color: #059669; font-weight: bold; font-size: 9px; }
+        .icon-cross { color: #dc2626; font-weight: bold; font-size: 9px; }
 
         /* ===== SCOPE BOX ===== */
         .scope-box {
           background: #f0fdf4;
           border-left: 1mm solid #22c55e;
-          padding: 3mm;
-          border-radius: 0 2mm 2mm 0;
-          font-size: 8px;
+          padding: 3mm 4mm;
+          border-radius: 0 3mm 3mm 0;
+          font-size: 9px;
           color: #166534;
-          line-height: 1.6;
+          line-height: 1.7;
         }
 
         /* ===== NOTES BOX ===== */
         .notes-box {
           background: #fffbeb;
           border-left: 1mm solid #f59e0b;
-          padding: 3mm;
-          border-radius: 0 2mm 2mm 0;
-          margin-bottom: 3mm;
+          padding: 3mm 4mm;
+          border-radius: 0 3mm 3mm 0;
+          margin-bottom: 4mm;
         }
 
-        .notes-box .label { font-size: 7px; font-weight: 600; color: #92400e; text-transform: uppercase; }
-        .notes-box .value { font-size: 8px; color: #78350f; margin-top: 1mm; }
+        .notes-box .label {
+          font-size: 8px;
+          font-weight: 600;
+          color: #92400e;
+          text-transform: uppercase;
+        }
+        .notes-box .value {
+          font-size: 9px;
+          color: #78350f;
+          margin-top: 1mm;
+          line-height: 1.6;
+        }
 
         /* ===== VALIDITY BANNER ===== */
         .validity-banner {
           background: linear-gradient(90deg, #fff7ed 0%, white 50%, #fff7ed 100%);
           border: 0.5mm dashed #ff4600;
-          padding: 3mm;
-          border-radius: 2mm;
+          padding: 3mm 4mm;
+          border-radius: 3mm;
           text-align: center;
-          font-size: 8px;
+          font-size: 9px;
           color: #78350f;
-          margin: 3mm 0;
+          margin: 4mm 0;
         }
 
         .validity-banner strong { color: #ea580c; }
 
-        /* ===== FOOTER ===== */
-        .footer {
+        /* ===== SIGNATURE FOOTER ===== */
+        .signature-footer {
           display: flex;
           justify-content: space-between;
-          align-items: flex-start;
-          padding-top: 3mm;
-          border-top: 0.3mm solid #e2e8f0;
-          margin-top: 3mm;
+          align-items: flex-end;
+          padding-top: 5mm;
+          margin-top: 5mm;
+          border-top: 0.5mm solid #e2e8f0;
+          page-break-inside: avoid;
         }
 
-        .signature-section { display: flex; gap: 4mm; align-items: flex-start; }
+        .signature-left {
+          display: flex;
+          gap: 4mm;
+          align-items: flex-start;
+        }
 
         .qr-container { text-align: center; }
         .qr-container img {
-          width: 18mm;
-          height: 18mm;
+          width: 20mm;
+          height: 20mm;
           border: 0.5mm solid #ff4600;
           border-radius: 2mm;
           padding: 1mm;
         }
-        .qr-label { font-size: 6px; color: #94a3b8; margin-top: 1mm; }
+        .qr-label {
+          font-size: 7px;
+          color: #94a3b8;
+          margin-top: 1mm;
+        }
 
-        .signer-info { padding-top: 1mm; }
-        .signer-name { font-size: 10px; font-weight: 700; color: #ea580c; }
-        .signer-title { font-size: 7px; color: #64748b; margin-top: 0.5mm; }
-        .signer-date { font-size: 7px; color: #94a3b8; margin-top: 1mm; }
+        .signature-block {
+          padding-top: 2mm;
+        }
+        .signature-line {
+          font-family: 'Brush Script MT', cursive;
+          font-size: 18px;
+          color: #1e293b;
+          border-bottom: 0.3mm solid #1e293b;
+          padding-bottom: 1mm;
+          margin-bottom: 2mm;
+        }
+        .signer-name {
+          font-size: 11px;
+          font-weight: 700;
+          color: #ff4600;
+        }
+        .signer-title {
+          font-size: 8px;
+          color: #64748b;
+          margin-top: 0.5mm;
+        }
 
-        .verify-section { text-align: right; font-size: 7px; color: #64748b; }
-        .verify-section a { color: #ff4600; text-decoration: none; word-break: break-all; }
+        .signature-right {
+          text-align: right;
+        }
+        .contact-item {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 2mm;
+          font-size: 8px;
+          color: #64748b;
+          margin: 1.5mm 0;
+        }
+        .contact-item .icon {
+          width: 4mm;
+          height: 4mm;
+          background: #ff4600;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-size: 6px;
+        }
+        .contact-item .text {
+          color: #1e293b;
+        }
 
         /* ===== COMPANY FOOTER ===== */
         .company-footer {
           text-align: center;
-          padding-top: 3mm;
-          border-top: 0.3mm solid #f1f5f9;
-          margin-top: 3mm;
-          font-size: 7px;
-          color: #94a3b8;
+          padding: 4mm;
+          margin-top: 4mm;
+          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+          border-radius: 3mm;
+          font-size: 8px;
+          color: #64748b;
         }
 
         .company-footer strong { color: #1e293b; }
+        .company-footer .highlight { color: #ff4600; }
 
+        /* ===== PRINT STYLES ===== */
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .page { padding: 10mm 12mm; }
+
+          .page {
+            page-break-after: always;
+          }
+
+          .section {
+            page-break-inside: avoid;
+          }
+
+          .signature-footer {
+            page-break-inside: avoid;
+          }
+
+          .rate-table {
+            page-break-inside: auto;
+          }
+
+          .rate-table tr {
+            page-break-inside: avoid;
+          }
         }
       </style>
     </head>
     <body>
+      <!-- Decorative Borders -->
+      <div class="left-border"></div>
+      <div class="right-border"></div>
+
       <div class="page">
-        <!-- Header -->
-        <div class="header">
-          <div class="logo-section">
-            <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinefull.png" alt="UGC Logistics"/>
-            <div class="company-info">
-              <div class="name">${UGC_INFO.name}</div>
-              ${UGC_INFO.address}<br/>
-              ${UGC_INFO.city}
+        <div class="corner-top-right"></div>
+        <div class="corner-bottom-left"></div>
+
+        <div class="content">
+          <!-- Header Banner -->
+          <div class="header-banner">
+            <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinewhite.png" alt="UGC Logistics"/>
+            <div class="brand-text">
+              <div class="brand-name">${UGC_INFO.shortName.toUpperCase()}</div>
+              <div class="brand-tagline">${UGC_INFO.tagline}</div>
             </div>
           </div>
-          <div class="doc-info">
-            <div class="doc-title">Quotation</div>
-            <div class="doc-number">${quotation.quotation_number}</div>
-          </div>
-        </div>
 
-        <!-- Meta Info -->
-        <div class="meta-bar">
-          <div class="meta-item">
-            <div class="label">Issue Date</div>
-            <div class="value">${formatDate(quotation.created_at)}</div>
+          <!-- Letterhead Info -->
+          <div class="letterhead-info">
+            <div class="sender-info">
+              <div class="sender-name">${profile.name.toUpperCase()}</div>
+              <div class="sender-title">Sales & Commercial Executive</div>
+              <div class="sender-company">${UGC_INFO.name}</div>
+              <div class="sender-detail">
+                <span>Address:</span> ${UGC_INFO.address}, ${UGC_INFO.city}<br/>
+                <span>Web:</span> ${UGC_INFO.web}<br/>
+                <span>Phone:</span> ${UGC_INFO.phone}
+              </div>
+            </div>
+            <div class="doc-date">
+              <div class="label">Date</div>
+              <div class="value">${formatDate(quotation.created_at)}</div>
+            </div>
           </div>
-          <div class="meta-item">
-            <div class="label">Valid Until</div>
-            <div class="value">${formatDate(quotation.valid_until)}</div>
-          </div>
-          <div class="meta-item">
-            <div class="label">Reference</div>
-            <div class="value">${quotation.ticket?.ticket_code || '-'}</div>
-          </div>
-          <div class="meta-item">
-            <div class="label">Validity</div>
-            <div class="value">${quotation.validity_days} Days</div>
-          </div>
-        </div>
 
-        <!-- Customer & Route Section -->
-        <div class="two-col">
-          <div class="section">
-            <div class="section-title">Customer</div>
-            <div class="customer-card">
-              <div class="customer-name">${quotation.customer_name}</div>
-              ${quotation.customer_company ? `<div class="customer-company">${quotation.customer_company}</div>` : ''}
-              <div class="customer-detail">
-                ${quotation.customer_email ? `✉ ${quotation.customer_email}<br/>` : ''}
-                ${quotation.customer_phone ? `☏ ${quotation.customer_phone}` : ''}
+          <!-- Document Header -->
+          <div class="doc-header">
+            <div class="doc-title-section">
+              <div class="doc-title">Quotation</div>
+              <div class="doc-number">${quotation.quotation_number}</div>
+            </div>
+            <div class="doc-meta">
+              Reference: <span class="value">${quotation.ticket?.ticket_code || '-'}</span><br/>
+              Valid Until: <span class="value">${formatDate(quotation.valid_until)}</span><br/>
+              Validity: <span class="value">${quotation.validity_days} Days</span>
+            </div>
+          </div>
+
+          <!-- Greeting -->
+          <div class="greeting">
+            Dear <span class="greeting-to">${quotation.customer_name}</span>${quotation.customer_company ? `,<br/><span class="greeting-company">${quotation.customer_company}</span>` : ''},
+          </div>
+
+          <!-- Intro Text -->
+          <div class="intro-text">
+            Thank you for your interest in our logistics services. We are pleased to present you with our quotation for ${quotation.service_type || 'logistics services'}${quotation.origin_city && quotation.destination_city ? ` from ${quotation.origin_city} to ${quotation.destination_city}` : ''}. Please find below the details of our proposed service and pricing.
+          </div>
+
+          <!-- Customer & Route Section -->
+          <div class="two-col section">
+            <div>
+              <div class="section-title">Customer Information</div>
+              <div class="customer-card">
+                <div class="customer-name">${quotation.customer_name}</div>
+                ${quotation.customer_company ? `<div class="customer-company">${quotation.customer_company}</div>` : ''}
+                <div class="customer-detail">
+                  ${quotation.customer_email ? `✉ ${quotation.customer_email}<br/>` : ''}
+                  ${quotation.customer_phone ? `☏ ${quotation.customer_phone}` : ''}
+                  ${quotation.customer_address ? `<br/>📍 ${quotation.customer_address}` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="section-title">Route Information</div>
+              <div class="route-card">
+                <div class="route-box">
+                  <div class="route-point">
+                    <div class="route-city">${quotation.origin_city || 'Origin'}</div>
+                    <div class="route-country">${quotation.origin_country || ''}</div>
+                    ${quotation.origin_port ? `<div class="route-port">Port: ${quotation.origin_port}</div>` : ''}
+                  </div>
+                  <div class="route-arrow">→</div>
+                  <div class="route-point">
+                    <div class="route-city">${quotation.destination_city || 'Destination'}</div>
+                    <div class="route-country">${quotation.destination_country || ''}</div>
+                    ${quotation.destination_port ? `<div class="route-port">Port: ${quotation.destination_port}</div>` : ''}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="section">
-            <div class="section-title">Route</div>
-            <div class="route-box">
-              <div class="route-point">
-                <div class="route-city">${quotation.origin_city || 'Origin'}</div>
-                <div class="route-country">${quotation.origin_country || '-'}</div>
+          <!-- Service & Cargo Details -->
+          ${cargoDetails.length > 0 ? `
+            <div class="section">
+              <div class="section-title">Service & Cargo Details</div>
+              <div class="details-grid">
+                ${quotation.service_type ? `<div class="detail-item"><div class="label">Service Type</div><div class="value">${quotation.service_type}</div></div>` : ''}
+                ${quotation.incoterm ? `<div class="detail-item"><div class="label">Incoterm</div><div class="value">${quotation.incoterm}</div></div>` : ''}
+                ${cargoDetails.map(d => `<div class="detail-item"><div class="label">${d.label}</div><div class="value">${d.value}</div></div>`).join('')}
               </div>
-              <div class="route-arrow">→</div>
-              <div class="route-point">
-                <div class="route-city">${quotation.destination_city || 'Destination'}</div>
-                <div class="route-country">${quotation.destination_country || '-'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Service Details -->
-        <div class="section">
-          <div class="section-title">Service Details</div>
-          <div class="details-grid">
-            ${quotation.service_type ? `<div class="detail-item"><div class="label">Service</div><div class="value">${quotation.service_type}</div></div>` : ''}
-            ${quotation.fleet_type ? `<div class="detail-item"><div class="label">Fleet</div><div class="value">${quotation.fleet_type}${quotation.fleet_quantity ? ` × ${quotation.fleet_quantity}` : ''}</div></div>` : ''}
-            ${quotation.incoterm ? `<div class="detail-item"><div class="label">Incoterm</div><div class="value">${quotation.incoterm}</div></div>` : ''}
-            ${quotation.commodity ? `<div class="detail-item"><div class="label">Commodity</div><div class="value">${quotation.commodity}</div></div>` : ''}
-            ${quotation.estimated_leadtime ? `<div class="detail-item"><div class="label">Leadtime</div><div class="value">${quotation.estimated_leadtime}</div></div>` : ''}
-            ${quotation.cargo_weight ? `<div class="detail-item"><div class="label">Weight</div><div class="value">${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}</div></div>` : ''}
-            ${quotation.cargo_volume ? `<div class="detail-item"><div class="label">Volume</div><div class="value">${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}</div></div>` : ''}
-            ${quotation.estimated_cargo_value ? `<div class="detail-item"><div class="label">Cargo Value</div><div class="value">${formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR')}</div></div>` : ''}
-          </div>
-          ${quotation.cargo_description ? `
-            <div class="cargo-desc">
-              <div class="label">Cargo Description</div>
-              <div class="value">${quotation.cargo_description}</div>
+              ${quotation.cargo_description ? `
+                <div class="cargo-desc">
+                  <div class="label">Cargo Description</div>
+                  <div class="value">${quotation.cargo_description}</div>
+                </div>
+              ` : ''}
             </div>
           ` : ''}
-        </div>
 
-        <!-- Rate Quotation -->
-        <div class="section">
-          <div class="section-title">Rate Quotation</div>
-          ${itemsTableHTML}
-          <div class="total-box">
-            <div class="total-label">Total Amount</div>
-            <div class="total-amount">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</div>
-          </div>
-        </div>
-
-        ${quotation.scope_of_work ? `
+          <!-- Rate Quotation -->
           <div class="section">
-            <div class="section-title">Scope of Work</div>
-            <div class="scope-box">${quotation.scope_of_work}</div>
-          </div>
-        ` : ''}
-
-        ${(includesList || excludesList) ? `
-          <div class="section">
-            <div class="section-title">Terms & Conditions</div>
-            <div class="terms-grid">
-              ${includesList ? `<div class="terms-card included"><h4>✓ Included</h4><ul>${includesList}</ul></div>` : ''}
-              ${excludesList ? `<div class="terms-card excluded"><h4>✗ Excluded</h4><ul>${excludesList}</ul></div>` : ''}
+            <div class="section-title">Rate Quotation</div>
+            ${itemsTableHTML}
+            <div class="total-box">
+              <div class="total-label">Total Amount</div>
+              <div class="total-amount">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</div>
             </div>
           </div>
-        ` : ''}
 
-        ${quotation.terms_notes ? `
-          <div class="notes-box">
-            <div class="label">Notes</div>
-            <div class="value">${quotation.terms_notes}</div>
-          </div>
-        ` : ''}
-
-        <div class="validity-banner">
-          ⏰ This quotation is valid for <strong>${quotation.validity_days} days</strong> from issue date (until <strong>${formatDate(quotation.valid_until)}</strong>)
-        </div>
-
-        <!-- Footer -->
-        <div class="footer">
-          <div class="signature-section">
-            <div class="qr-container">
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR"/>
-              <div class="qr-label">Scan to Verify</div>
+          ${quotation.scope_of_work ? `
+            <div class="section">
+              <div class="section-title">Scope of Work</div>
+              <div class="scope-box">${quotation.scope_of_work}</div>
             </div>
-            <div class="signer-info">
-              <div class="signer-name">${profile.name}</div>
-              <div class="signer-title">Sales & Commercial Executive</div>
-              <div class="signer-date">Issued: ${formatDate(quotation.created_at)}</div>
+          ` : ''}
+
+          ${(includesList || excludesList) ? `
+            <div class="section">
+              <div class="section-title">Terms & Conditions</div>
+              <div class="terms-grid">
+                ${includesList ? `<div class="terms-card included"><h4>✓ Included in Quote</h4><ul>${includesList}</ul></div>` : ''}
+                ${excludesList ? `<div class="terms-card excluded"><h4>✗ Not Included</h4><ul>${excludesList}</ul></div>` : ''}
+              </div>
+            </div>
+          ` : ''}
+
+          ${quotation.terms_notes ? `
+            <div class="notes-box">
+              <div class="label">Additional Notes</div>
+              <div class="value">${quotation.terms_notes}</div>
+            </div>
+          ` : ''}
+
+          <div class="validity-banner">
+            ⏰ This quotation is valid for <strong>${quotation.validity_days} days</strong> from issue date (until <strong>${formatDate(quotation.valid_until)}</strong>). Prices are subject to change after validity period.
+          </div>
+
+          <!-- Signature Footer -->
+          <div class="signature-footer">
+            <div class="signature-left">
+              <div class="qr-container">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="QR Code"/>
+                <div class="qr-label">Scan to Verify</div>
+              </div>
+              <div class="signature-block">
+                <div class="signature-line">${profile.name}</div>
+                <div class="signer-name">${profile.name.toUpperCase()}</div>
+                <div class="signer-title">Sales & Commercial Executive</div>
+              </div>
+            </div>
+            <div class="signature-right">
+              <div class="contact-item">
+                <div class="icon">☏</div>
+                <div class="text">${UGC_INFO.phone}</div>
+              </div>
+              <div class="contact-item">
+                <div class="icon">✉</div>
+                <div class="text">${profile.email || UGC_INFO.email}</div>
+              </div>
+              <div class="contact-item">
+                <div class="icon">🌐</div>
+                <div class="text">${UGC_INFO.web}</div>
+              </div>
+              <div class="contact-item">
+                <div class="icon">📍</div>
+                <div class="text">${UGC_INFO.city}</div>
+              </div>
             </div>
           </div>
-          <div class="verify-section">
-            <strong>Verify Document</strong><br/>
-            <a href="${validationUrl}">${validationUrl}</a>
-          </div>
-        </div>
 
-        <div class="company-footer">
-          <strong>${UGC_INFO.name}</strong><br/>
-          ${UGC_INFO.address}, ${UGC_INFO.city}<br/>
-          ☏ ${UGC_INFO.phone} • ✉ ${UGC_INFO.email} • 🌐 ${UGC_INFO.web}
+          <!-- Company Footer -->
+          <div class="company-footer">
+            <strong>${UGC_INFO.name}</strong><br/>
+            ${UGC_INFO.address}, ${UGC_INFO.city}<br/>
+            <span class="highlight">☏ ${UGC_INFO.phone}</span> • <span class="highlight">✉ ${UGC_INFO.email}</span> • <span class="highlight">🌐 ${UGC_INFO.web}</span>
+          </div>
         </div>
       </div>
     </body>
@@ -658,7 +997,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { data: profileData } = await (supabase as any)
       .from('profiles')
-      .select('user_id, role, name')
+      .select('user_id, role, name, email')
       .eq('user_id', user.id)
       .single() as { data: ProfileData | null }
 
@@ -715,7 +1054,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const { data: profileData } = await (supabase as any)
       .from('profiles')
-      .select('user_id, role, name')
+      .select('user_id, role, name, email')
       .eq('user_id', user.id)
       .single() as { data: ProfileData | null }
 
