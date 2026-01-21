@@ -15,6 +15,8 @@ import {
   User,
   Building2,
   RefreshCw,
+  Award,
+  XCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -319,6 +321,7 @@ export function TicketsDashboard({ profile }: TicketsDashboardProps) {
                 <TableHead>Subject</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Outcome</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Account</TableHead>
@@ -329,13 +332,13 @@ export function TicketsDashboard({ profile }: TicketsDashboardProps) {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : tickets.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     <Ticket className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                     <p className="text-muted-foreground">No tickets found</p>
                   </TableCell>
@@ -362,6 +365,29 @@ export function TicketsDashboard({ profile }: TicketsDashboardProps) {
                       <Badge variant={statusVariants[ticket.status as TicketStatus]?.variant || 'outline'}>
                         {statusVariants[ticket.status as TicketStatus]?.label || ticket.status}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {ticket.close_outcome ? (
+                        <div className="flex flex-col gap-1">
+                          <Badge
+                            variant={ticket.close_outcome === 'won' ? 'default' : 'destructive'}
+                            className={ticket.close_outcome === 'won' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}
+                          >
+                            {ticket.close_outcome === 'won' ? (
+                              <><Award className="h-3 w-3 mr-1" /> Won</>
+                            ) : (
+                              <><XCircle className="h-3 w-3 mr-1" /> Lost</>
+                            )}
+                          </Badge>
+                          {ticket.close_outcome === 'lost' && ticket.close_reason && (
+                            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]" title={ticket.close_reason}>
+                              {ticket.close_reason}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={priorityVariants[ticket.priority as TicketPriority]?.variant || 'outline'}>

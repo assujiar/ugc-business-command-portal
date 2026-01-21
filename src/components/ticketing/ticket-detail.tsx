@@ -1945,6 +1945,28 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   </Badge>
                 </div>
               )}
+              {/* Lost Details - only show when outcome is lost */}
+              {ticket.close_outcome === 'lost' && ticket.close_reason && (
+                <div className="p-3 border border-red-200 rounded-lg bg-red-50 dark:bg-red-950/20 dark:border-red-900 space-y-2">
+                  <p className="text-sm font-medium text-red-600 dark:text-red-400">Lost Details</p>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Reason</p>
+                    <p className="text-sm">{ticket.close_reason}</p>
+                  </div>
+                  {ticket.competitor_name && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Competitor</p>
+                      <p className="text-sm">{ticket.competitor_name}</p>
+                    </div>
+                  )}
+                  {ticket.competitor_cost && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Competitor Price</p>
+                      <p className="text-sm font-medium">IDR {Number(ticket.competitor_cost).toLocaleString('id-ID')}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
