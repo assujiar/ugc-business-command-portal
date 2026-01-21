@@ -108,10 +108,10 @@ export async function GET(request: NextRequest) {
     const avgResponseHours = avgResponseSeconds / 3600
     const avgResponseMinutes = avgResponseSeconds / 60
 
-    // Response time distribution
+    // Response time distribution (EXCLUSIVE buckets - only count in ONE category)
     const under1Hour = outboundComments.filter((c: any) => c.response_time_seconds <= 3600).length
-    const under4Hours = outboundComments.filter((c: any) => c.response_time_seconds <= 14400).length
-    const under24Hours = outboundComments.filter((c: any) => c.response_time_seconds <= 86400).length
+    const from1To4Hours = outboundComments.filter((c: any) => c.response_time_seconds > 3600 && c.response_time_seconds <= 14400).length
+    const from4To24Hours = outboundComments.filter((c: any) => c.response_time_seconds > 14400 && c.response_time_seconds <= 86400).length
     const over24Hours = outboundComments.filter((c: any) => c.response_time_seconds > 86400).length
 
     // By department
@@ -130,7 +130,9 @@ export async function GET(request: NextRequest) {
         avg_response_seconds: Math.round(deptAvg),
         avg_response_hours: Math.round(deptAvg / 3600 * 10) / 10,
         under_1_hour: deptComments.filter((c: any) => c.response_time_seconds <= 3600).length,
-        under_4_hours: deptComments.filter((c: any) => c.response_time_seconds <= 14400).length,
+        from_1_to_4_hours: deptComments.filter((c: any) => c.response_time_seconds > 3600 && c.response_time_seconds <= 14400).length,
+        from_4_to_24_hours: deptComments.filter((c: any) => c.response_time_seconds > 14400 && c.response_time_seconds <= 86400).length,
+        over_24_hours: deptComments.filter((c: any) => c.response_time_seconds > 86400).length,
       }
     }
 
@@ -295,8 +297,8 @@ export async function GET(request: NextRequest) {
       avg_response_hours: Math.round(rfqAvgResponseSeconds / 3600 * 10) / 10,
       distribution: {
         under_1_hour: rfqOutbound.filter((c: any) => c.response_time_seconds <= 3600).length,
-        under_4_hours: rfqOutbound.filter((c: any) => c.response_time_seconds <= 14400).length,
-        under_24_hours: rfqOutbound.filter((c: any) => c.response_time_seconds <= 86400).length,
+        from_1_to_4_hours: rfqOutbound.filter((c: any) => c.response_time_seconds > 3600 && c.response_time_seconds <= 14400).length,
+        from_4_to_24_hours: rfqOutbound.filter((c: any) => c.response_time_seconds > 14400 && c.response_time_seconds <= 86400).length,
         over_24_hours: rfqOutbound.filter((c: any) => c.response_time_seconds > 86400).length,
       },
     }
@@ -314,8 +316,8 @@ export async function GET(request: NextRequest) {
       avg_response_hours: Math.round(genAvgResponseSeconds / 3600 * 10) / 10,
       distribution: {
         under_1_hour: genOutbound.filter((c: any) => c.response_time_seconds <= 3600).length,
-        under_4_hours: genOutbound.filter((c: any) => c.response_time_seconds <= 14400).length,
-        under_24_hours: genOutbound.filter((c: any) => c.response_time_seconds <= 86400).length,
+        from_1_to_4_hours: genOutbound.filter((c: any) => c.response_time_seconds > 3600 && c.response_time_seconds <= 14400).length,
+        from_4_to_24_hours: genOutbound.filter((c: any) => c.response_time_seconds > 14400 && c.response_time_seconds <= 86400).length,
         over_24_hours: genOutbound.filter((c: any) => c.response_time_seconds > 86400).length,
       },
     }
@@ -345,14 +347,14 @@ export async function GET(request: NextRequest) {
         },
         distribution: {
           under_1_hour: under1Hour,
-          under_4_hours: under4Hours,
-          under_24_hours: under24Hours,
+          from_1_to_4_hours: from1To4Hours,
+          from_4_to_24_hours: from4To24Hours,
           over_24_hours: over24Hours,
         },
         distribution_percentages: {
           under_1_hour: totalResponses > 0 ? Math.round((under1Hour / totalResponses) * 100) : 0,
-          under_4_hours: totalResponses > 0 ? Math.round((under4Hours / totalResponses) * 100) : 0,
-          under_24_hours: totalResponses > 0 ? Math.round((under24Hours / totalResponses) * 100) : 0,
+          from_1_to_4_hours: totalResponses > 0 ? Math.round((from1To4Hours / totalResponses) * 100) : 0,
+          from_4_to_24_hours: totalResponses > 0 ? Math.round((from4To24Hours / totalResponses) * 100) : 0,
           over_24_hours: totalResponses > 0 ? Math.round((over24Hours / totalResponses) * 100) : 0,
         },
         by_department: byDepartment,

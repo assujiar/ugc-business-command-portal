@@ -596,24 +596,70 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
         </Card>
       )}
 
-      {/* Status Distribution */}
+      {/* Status Distribution - Separated by Created vs Assigned */}
       {summary && (
         <Card>
           <CardHeader>
             <CardTitle>Status Distribution</CardTitle>
-            <CardDescription>Tickets by current status</CardDescription>
+            <CardDescription>Tickets by current status - separated by creator vs assignee role</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-8">
-              {Object.entries(summary.by_status || {}).map(([status, count]) => (
-                <div key={status} className="text-center p-3 rounded-lg bg-muted">
-                  <p className="text-2xl font-bold">{count as number}</p>
-                  <p className="text-xs text-muted-foreground capitalize">
-                    {status.replace('_', ' ')}
-                  </p>
+          <CardContent className="space-y-4">
+            {/* My Created Tickets */}
+            {summary.created_count > 0 && (
+              <div className="p-3 rounded-lg border border-green-200 dark:border-green-900 bg-green-50/30 dark:bg-green-950/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className="border-green-500 text-green-600">CREATOR</Badge>
+                  <span className="text-sm text-muted-foreground">Tiket yang saya buat ({summary.created_count})</span>
                 </div>
-              ))}
-            </div>
+                <div className="grid gap-2 grid-cols-4 lg:grid-cols-8">
+                  {Object.entries(summary.by_status_created || {}).map(([status, count]) => (
+                    <div key={`created-${status}`} className="text-center p-2 rounded bg-green-50 dark:bg-green-950/30">
+                      <p className="text-lg font-bold">{count as number}</p>
+                      <p className="text-[10px] text-muted-foreground capitalize">
+                        {status.replace('_', ' ')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* My Assigned Tickets */}
+            {summary.assigned_count > 0 && (
+              <div className="p-3 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className="border-blue-500 text-blue-600">ASSIGNEE</Badge>
+                  <span className="text-sm text-muted-foreground">Tiket yang di-assign ke saya ({summary.assigned_count})</span>
+                </div>
+                <div className="grid gap-2 grid-cols-4 lg:grid-cols-8">
+                  {Object.entries(summary.by_status_assigned || {}).map(([status, count]) => (
+                    <div key={`assigned-${status}`} className="text-center p-2 rounded bg-blue-50 dark:bg-blue-950/30">
+                      <p className="text-lg font-bold">{count as number}</p>
+                      <p className="text-[10px] text-muted-foreground capitalize">
+                        {status.replace('_', ' ')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Overall (for admins/directors or if no personal data) */}
+            {(isAllScope || (summary.created_count === 0 && summary.assigned_count === 0)) && (
+              <div>
+                <p className="text-sm font-medium mb-2 text-muted-foreground">Overall</p>
+                <div className="grid gap-2 md:grid-cols-4 lg:grid-cols-8">
+                  {Object.entries(summary.by_status || {}).map(([status, count]) => (
+                    <div key={status} className="text-center p-2 rounded-lg bg-muted">
+                      <p className="text-lg font-bold">{count as number}</p>
+                      <p className="text-[10px] text-muted-foreground capitalize">
+                        {status.replace('_', ' ')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -927,12 +973,12 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                       <p className="text-xs text-muted-foreground">&lt; 1 jam</p>
                     </div>
                     <div className="p-3 rounded-lg bg-muted/50 text-center">
-                      <p className="text-lg font-bold">{responseTime.by_type?.RFQ?.distribution?.under_4_hours || 0}</p>
-                      <p className="text-xs text-muted-foreground">&lt; 4 jam</p>
+                      <p className="text-lg font-bold">{responseTime.by_type?.RFQ?.distribution?.from_1_to_4_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">1-4 jam</p>
                     </div>
                     <div className="p-3 rounded-lg bg-muted/50 text-center">
-                      <p className="text-lg font-bold">{responseTime.by_type?.RFQ?.distribution?.under_24_hours || 0}</p>
-                      <p className="text-xs text-muted-foreground">&lt; 24 jam</p>
+                      <p className="text-lg font-bold">{responseTime.by_type?.RFQ?.distribution?.from_4_to_24_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">4-24 jam</p>
                     </div>
                     <div className="p-3 rounded-lg bg-muted/50 text-center">
                       <p className="text-lg font-bold text-red-600">{responseTime.by_type?.RFQ?.distribution?.over_24_hours || 0}</p>
@@ -966,12 +1012,12 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                       <p className="text-xs text-muted-foreground">&lt; 1 jam</p>
                     </div>
                     <div className="p-3 rounded-lg bg-muted/50 text-center">
-                      <p className="text-lg font-bold">{responseTime.by_type?.GEN?.distribution?.under_4_hours || 0}</p>
-                      <p className="text-xs text-muted-foreground">&lt; 4 jam</p>
+                      <p className="text-lg font-bold">{responseTime.by_type?.GEN?.distribution?.from_1_to_4_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">1-4 jam</p>
                     </div>
                     <div className="p-3 rounded-lg bg-muted/50 text-center">
-                      <p className="text-lg font-bold">{responseTime.by_type?.GEN?.distribution?.under_24_hours || 0}</p>
-                      <p className="text-xs text-muted-foreground">&lt; 24 jam</p>
+                      <p className="text-lg font-bold">{responseTime.by_type?.GEN?.distribution?.from_4_to_24_hours || 0}</p>
+                      <p className="text-xs text-muted-foreground">4-24 jam</p>
                     </div>
                     <div className="p-3 rounded-lg bg-muted/50 text-center">
                       <p className="text-lg font-bold text-red-600">{responseTime.by_type?.GEN?.distribution?.over_24_hours || 0}</p>
@@ -1202,11 +1248,11 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                 {/* Leaderboard - Only shown for managers/directors */}
                 {userPerformance.can_view_rankings && (
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                    <Card>
+                    <Card className="border-blue-200 dark:border-blue-900">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <Trophy className="h-4 w-4 text-yellow-500" />
-                          Most Tickets
+                          Most Tickets (Assigned)
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -1214,18 +1260,18 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                           <div>
                             <p className="font-semibold">{userPerformance.leaderboard.most_tickets[0].name}</p>
                             <p className="text-2xl font-bold">{userPerformance.leaderboard.most_tickets[0].as_assignee?.tickets?.assigned || 0}</p>
-                            <p className="text-xs text-muted-foreground">tickets assigned</p>
+                            <p className="text-xs text-muted-foreground">tickets assigned (assignee)</p>
                           </div>
                         ) : (
                           <p className="text-muted-foreground">No data</p>
                         )}
                       </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-blue-200 dark:border-blue-900">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          Best Completion
+                          Best Completion (Assigned)
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -1233,18 +1279,18 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                           <div>
                             <p className="font-semibold">{userPerformance.leaderboard.highest_completion_rate[0].name}</p>
                             <p className="text-2xl font-bold">{userPerformance.leaderboard.highest_completion_rate[0].as_assignee?.tickets?.completion_rate || 0}%</p>
-                            <p className="text-xs text-muted-foreground">completion rate</p>
+                            <p className="text-xs text-muted-foreground">completion rate (assignee)</p>
                           </div>
                         ) : (
                           <p className="text-muted-foreground">No data</p>
                         )}
                       </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-blue-200 dark:border-blue-900">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <Target className="h-4 w-4 text-blue-500" />
-                          Best SLA
+                          Best SLA (Assigned)
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -1257,7 +1303,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                                 (userPerformance.leaderboard.best_sla_compliance[0].as_assignee?.sla?.resolution?.compliance_rate || 0)) / 2
                               )}%
                             </p>
-                            <p className="text-xs text-muted-foreground">avg SLA compliance</p>
+                            <p className="text-xs text-muted-foreground">avg SLA compliance (assignee)</p>
                           </div>
                         ) : (
                           <p className="text-muted-foreground">No data</p>

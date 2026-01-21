@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, getAnalyticsScope, canViewAnalyticsRankings } from '@/lib/permissions'
+import { canAccessTicketing, getAnalyticsScope, canViewAnalyticsRankings, getUserTicketingDepartment } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -132,7 +132,17 @@ export async function GET(request: NextRequest) {
     // ============================================
     // TRACK USERS WITH SEPARATED METRICS:
     // as_creator vs as_assignee
+    //
+    // STAGE RESPONSE CALCULATION (per user request):
+    // 1. Per tiket: avg = sum(response_times) / count(responses)
+    // 2. Lintas tiket: final_avg = sum(per_ticket_avgs) / count(tickets)
     // ============================================
+
+    interface PerTicketResponse {
+      ticketId: string
+      totalSeconds: number
+      count: number
+    }
 
     interface UserMetrics {
       user_id: string
@@ -143,9 +153,8 @@ export async function GET(request: NextRequest) {
       // ========== AS CREATOR (tiket yang dia BUAT) ==========
       as_creator: {
         tickets_created: number
-        // Stage response di tiket yang dia buat
-        stage_response_count: number
-        stage_response_total_seconds: number
+        // Stage response per ticket (untuk hitung avg of avgs)
+        stage_response_per_ticket: PerTicketResponse[]
       }
 
       // ========== AS ASSIGNEE (tiket yang di-ASSIGN ke dia) ==========
@@ -162,12 +171,10 @@ export async function GET(request: NextRequest) {
         sla_res_breached: number
         // Resolution time
         total_resolution_hours: number
-        // First response di tiket yang di-assign ke dia
-        first_response_count: number
-        first_response_total_seconds: number
-        // Stage response di tiket yang di-assign ke dia
-        stage_response_count: number
-        stage_response_total_seconds: number
+        // First response per ticket
+        first_response_per_ticket: PerTicketResponse[]
+        // Stage response per ticket
+        stage_response_per_ticket: PerTicketResponse[]
         // First quote (OPS only)
         first_quote_count: number
         first_quote_total_seconds: number
@@ -207,8 +214,7 @@ export async function GET(request: NextRequest) {
       is_ops: isOps,
       as_creator: {
         tickets_created: 0,
-        stage_response_count: 0,
-        stage_response_total_seconds: 0,
+        stage_response_per_ticket: [],
       },
       as_assignee: {
         tickets_assigned: 0,
@@ -221,10 +227,8 @@ export async function GET(request: NextRequest) {
         sla_res_met: 0,
         sla_res_breached: 0,
         total_resolution_hours: 0,
-        first_response_count: 0,
-        first_response_total_seconds: 0,
-        stage_response_count: 0,
-        stage_response_total_seconds: 0,
+        first_response_per_ticket: [],
+        stage_response_per_ticket: [],
         first_quote_count: 0,
         first_quote_total_seconds: 0,
         by_type: {
@@ -235,6 +239,31 @@ export async function GET(request: NextRequest) {
         by_priority: { urgent: 0, high: 0, medium: 0, low: 0 },
       },
     })
+
+    // Helper to add response to per-ticket tracking
+    const addPerTicketResponse = (arr: PerTicketResponse[], ticketId: string, seconds: number) => {
+      const existing = arr.find(r => r.ticketId === ticketId)
+      if (existing) {
+        existing.totalSeconds += seconds
+        existing.count++
+      } else {
+        arr.push({ ticketId, totalSeconds: seconds, count: 1 })
+      }
+    }
+
+    // Helper to calculate avg of avgs from per-ticket data
+    const calcAvgOfAvgs = (perTicket: PerTicketResponse[]): { count: number, avgSeconds: number } => {
+      if (perTicket.length === 0) return { count: 0, avgSeconds: 0 }
+
+      // For each ticket, calculate avg
+      const perTicketAvgs = perTicket.map(t => t.count > 0 ? t.totalSeconds / t.count : 0)
+      // Sum of per-ticket avgs / number of tickets
+      const avgOfAvgs = perTicketAvgs.reduce((sum, avg) => sum + avg, 0) / perTicket.length
+      // Total response count across all tickets
+      const totalCount = perTicket.reduce((sum, t) => sum + t.count, 0)
+
+      return { count: totalCount, avgSeconds: Math.round(avgOfAvgs) }
+    }
 
     // Build ticket lookup for comment processing
     const ticketLookup: Record<string, any> = {}
@@ -403,22 +432,21 @@ export async function GET(request: NextRequest) {
         if (!userMetrics[userId]) continue
 
         // ========== Assign response to correct category ==========
+        // Stage response = gap waktu antara respon (berlaku untuk KEDUA creator dan assignee)
         if (isAssignee) {
           // User is ASSIGNEE of this ticket
           if (!foundFirstAssigneeResponse) {
-            // First Response (assignee's first response)
-            userMetrics[userId].as_assignee.first_response_count++
-            userMetrics[userId].as_assignee.first_response_total_seconds += responseSeconds
+            // First Response (assignee's first response on this ticket)
+            addPerTicketResponse(userMetrics[userId].as_assignee.first_response_per_ticket, ticketId, responseSeconds)
             foundFirstAssigneeResponse = true
           } else {
             // Stage Response (assignee's subsequent responses)
-            userMetrics[userId].as_assignee.stage_response_count++
-            userMetrics[userId].as_assignee.stage_response_total_seconds += responseSeconds
+            addPerTicketResponse(userMetrics[userId].as_assignee.stage_response_per_ticket, ticketId, responseSeconds)
           }
         } else if (isCreator) {
           // User is CREATOR of this ticket (all their responses are stage responses)
-          userMetrics[userId].as_creator.stage_response_count++
-          userMetrics[userId].as_creator.stage_response_total_seconds += responseSeconds
+          // Stage response = waktu respon creator ke assignee (tektokan)
+          addPerTicketResponse(userMetrics[userId].as_creator.stage_response_per_ticket, ticketId, responseSeconds)
         }
         // If user is neither creator nor assignee, we skip (shouldn't happen normally)
       }
@@ -427,15 +455,35 @@ export async function GET(request: NextRequest) {
     // ============================================
     // Build final user performance data
     // ============================================
+
+    // Determine which department to filter users by
+    const filterDepartment = analyticsScope.scope === 'department' ? analyticsScope.department : departmentFilter
+
     const userPerformance = Object.values(userMetrics)
-      .filter(metrics =>
+      .filter(metrics => {
         // Include if user has assigned tickets OR created tickets
-        metrics.as_assignee.tickets_assigned > 0 || metrics.as_creator.tickets_created > 0
-      )
+        if (!(metrics.as_assignee.tickets_assigned > 0 || metrics.as_creator.tickets_created > 0)) {
+          return false
+        }
+
+        // If department filter is active, only include users whose role belongs to that department
+        if (filterDepartment) {
+          const userRoleDepartment = getUserTicketingDepartment(metrics.role as any)
+          // Include user only if their role's department matches the filter
+          return userRoleDepartment === filterDepartment
+        }
+
+        return true
+      })
       .map((metrics) => {
         const assignee = metrics.as_assignee
         const creator = metrics.as_creator
         const completedTickets = assignee.tickets_resolved + assignee.tickets_closed
+
+        // Calculate avg-of-avgs for response times (per user request)
+        const creatorStageResponse = calcAvgOfAvgs(creator.stage_response_per_ticket)
+        const assigneeFirstResponse = calcAvgOfAvgs(assignee.first_response_per_ticket)
+        const assigneeStageResponse = calcAvgOfAvgs(assignee.stage_response_per_ticket)
 
         // Calculate by_type detailed metrics (for assignee only)
         const byTypeDetailed: Record<string, any> = {}
@@ -502,11 +550,11 @@ export async function GET(request: NextRequest) {
           // ========== AS CREATOR (tiket yang dia BUAT) ==========
           as_creator: {
             tickets_created: creator.tickets_created,
+            // Stage response: avg of per-ticket avgs (tektokan creator ke assignee)
             stage_response: {
-              count: creator.stage_response_count,
-              avg_seconds: creator.stage_response_count > 0
-                ? Math.round(creator.stage_response_total_seconds / creator.stage_response_count)
-                : 0,
+              count: creatorStageResponse.count,
+              tickets_count: creator.stage_response_per_ticket.length,
+              avg_seconds: creatorStageResponse.avgSeconds,
             },
           },
 
@@ -544,17 +592,17 @@ export async function GET(request: NextRequest) {
                   : 0,
               },
             },
+            // First response: avg of per-ticket avgs (assignee's first response per ticket)
             first_response: {
-              count: assignee.first_response_count,
-              avg_seconds: assignee.first_response_count > 0
-                ? Math.round(assignee.first_response_total_seconds / assignee.first_response_count)
-                : 0,
+              count: assigneeFirstResponse.count,
+              tickets_count: assignee.first_response_per_ticket.length,
+              avg_seconds: assigneeFirstResponse.avgSeconds,
             },
+            // Stage response: avg of per-ticket avgs (tektokan assignee ke creator)
             stage_response: {
-              count: assignee.stage_response_count,
-              avg_seconds: assignee.stage_response_count > 0
-                ? Math.round(assignee.stage_response_total_seconds / assignee.stage_response_count)
-                : 0,
+              count: assigneeStageResponse.count,
+              tickets_count: assignee.stage_response_per_ticket.length,
+              avg_seconds: assigneeStageResponse.avgSeconds,
             },
             first_quote: metrics.is_ops ? {
               count: assignee.first_quote_count,
@@ -617,13 +665,13 @@ export async function GET(request: NextRequest) {
 
       // Fastest first response (must have at least 1 first response as assignee)
       fastest_first_response: [...usersWithAssignedTickets]
-        .filter(u => u.as_assignee.first_response.count > 0 && u.as_assignee.first_response.avg_seconds > 0)
+        .filter(u => u.as_assignee.first_response.tickets_count > 0 && u.as_assignee.first_response.avg_seconds > 0)
         .sort((a, b) => a.as_assignee.first_response.avg_seconds - b.as_assignee.first_response.avg_seconds)
         .slice(0, 5),
 
       // Fastest stage response (assignee stage response only)
       fastest_stage_response: [...usersWithAssignedTickets]
-        .filter(u => u.as_assignee.stage_response.count > 0 && u.as_assignee.stage_response.avg_seconds > 0)
+        .filter(u => u.as_assignee.stage_response.tickets_count > 0 && u.as_assignee.stage_response.avg_seconds > 0)
         .sort((a, b) => a.as_assignee.stage_response.avg_seconds - b.as_assignee.stage_response.avg_seconds)
         .slice(0, 5),
     } : {
