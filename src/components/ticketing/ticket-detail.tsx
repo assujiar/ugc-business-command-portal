@@ -117,6 +117,27 @@ const departmentLabels: Record<TicketingDepartment, string> = {
   TRF: 'Traffic & Warehouse',
 }
 
+// Lost reason options
+const lostReasonOptions = [
+  { value: 'price_too_high', label: 'Tarif terlalu mahal', requiresCompetitor: true },
+  { value: 'competitor_cheaper', label: 'Kompetitor lebih murah', requiresCompetitor: true },
+  { value: 'budget_not_fit', label: 'Budget customer tidak masuk', requiresCompetitor: true },
+  { value: 'service_not_fit', label: 'Layanan tidak sesuai kebutuhan customer', requiresCompetitor: false },
+  { value: 'timeline_not_match', label: 'Timeline tidak cocok', requiresCompetitor: false },
+  { value: 'chose_another_vendor', label: 'Customer pilih vendor lain', requiresCompetitor: true },
+  { value: 'project_cancelled', label: 'Proyek dibatalkan', requiresCompetitor: false },
+  { value: 'no_response', label: 'Tidak ada respons dari customer', requiresCompetitor: false },
+  { value: 'scope_changed', label: 'Scope of work berubah', requiresCompetitor: false },
+  { value: 'internal_decision', label: 'Keputusan internal customer', requiresCompetitor: false },
+  { value: 'other', label: 'Lainnya', requiresCompetitor: false },
+]
+
+// Check if lost reason requires competitor info
+const isCompetitorRequired = (reason: string): boolean => {
+  const option = lostReasonOptions.find(o => o.value === reason)
+  return option?.requiresCompetitor || false
+}
+
 export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -143,6 +164,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   // Lost dialog state
   const [lostDialogOpen, setLostDialogOpen] = useState(false)
   const [lostReason, setLostReason] = useState('')
+  const [lostReasonNote, setLostReasonNote] = useState('')
   const [lostCompetitor, setLostCompetitor] = useState('')
   const [lostCompetitorCost, setLostCompetitorCost] = useState('')
 
@@ -669,8 +691,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     })
 
-    // Sort by created_at ascending
-    items.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    // Sort by created_at descending (newest first)
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     return items
   }
@@ -745,17 +767,32 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   // Calculate response time for each timeline item
   const getTimelineWithResponseTimes = () => {
     const timeline = buildUnifiedTimeline()
-    let lastTimestamp = new Date(ticket.created_at).getTime()
 
-    return timeline.map((item) => {
+    // Sort ascending for response time calculation
+    const sortedAsc = [...timeline].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+
+    let lastTimestamp = new Date(ticket.created_at).getTime()
+    const responseMap = new Map<string, { seconds: number; formatted: string }>()
+
+    sortedAsc.forEach((item) => {
       const itemTime = new Date(item.created_at).getTime()
       const responseSeconds = Math.floor((itemTime - lastTimestamp) / 1000)
       lastTimestamp = itemTime
+      responseMap.set(item.id, {
+        seconds: responseSeconds,
+        formatted: formatShortDuration(responseSeconds),
+      })
+    })
 
+    // Return timeline in original order (descending - newest first) with response times
+    return timeline.map((item) => {
+      const response = responseMap.get(item.id) || { seconds: 0, formatted: '0s' }
       return {
         ...item,
-        responseSeconds,
-        responseFormatted: formatShortDuration(responseSeconds),
+        responseSeconds: response.seconds,
+        responseFormatted: response.formatted,
       }
     })
   }
@@ -787,8 +824,17 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
 
   // Handle mark lost
   const handleMarkLost = async () => {
+    // Build the full reason text
+    const reasonOption = lostReasonOptions.find(o => o.value === lostReason)
+    const reasonLabel = reasonOption?.label || lostReason
+    const fullReason = lostReason === 'other'
+      ? `Lainnya: ${lostReasonNote}`
+      : lostReasonNote
+        ? `${reasonLabel} - ${lostReasonNote}`
+        : reasonLabel
+
     const success = await executeAction('mark_lost', {
-      reason: lostReason || null,
+      reason: fullReason,
       competitor_name: lostCompetitor || null,
       competitor_cost: lostCompetitorCost ? parseFloat(lostCompetitorCost) : null,
     })
@@ -796,6 +842,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     if (success) {
       setLostDialogOpen(false)
       setLostReason('')
+      setLostReasonNote('')
       setLostCompetitor('')
       setLostCompetitorCost('')
     }
@@ -1286,45 +1333,104 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                               </DialogHeader>
                               <div className="space-y-4">
                                 <div>
-                                  <Label htmlFor="lost-reason">Reason</Label>
-                                  <Textarea
-                                    id="lost-reason"
-                                    name="lost-reason"
-                                    placeholder="Why was this lost?"
-                                    value={lostReason}
-                                    onChange={(e) => setLostReason(e.target.value)}
-                                  />
+                                  <Label htmlFor="lost-reason">Alasan Lost *</Label>
+                                  <Select value={lostReason} onValueChange={setLostReason}>
+                                    <SelectTrigger id="lost-reason">
+                                      <SelectValue placeholder="Pilih alasan lost" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {lostReasonOptions.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                          {option.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                 </div>
-                                <div>
-                                  <Label htmlFor="lost-competitor">Competitor Name (optional)</Label>
-                                  <Input
-                                    id="lost-competitor"
-                                    name="lost-competitor"
-                                    placeholder="Who won the deal?"
-                                    value={lostCompetitor}
-                                    onChange={(e) => setLostCompetitor(e.target.value)}
-                                  />
-                                </div>
-                                <div>
-                                  <Label htmlFor="lost-competitor-cost">Competitor Cost (optional)</Label>
-                                  <Input
-                                    id="lost-competitor-cost"
-                                    name="lost-competitor-cost"
-                                    type="number"
-                                    placeholder="Competitor's price"
-                                    value={lostCompetitorCost}
-                                    onChange={(e) => setLostCompetitorCost(e.target.value)}
-                                  />
-                                </div>
+
+                                {/* Show note field for "other" reason */}
+                                {lostReason === 'other' && (
+                                  <div>
+                                    <Label htmlFor="lost-reason-note">Keterangan *</Label>
+                                    <Textarea
+                                      id="lost-reason-note"
+                                      name="lost-reason-note"
+                                      placeholder="Jelaskan alasan lost..."
+                                      value={lostReasonNote}
+                                      onChange={(e) => setLostReasonNote(e.target.value)}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Show competitor fields for price-related reasons */}
+                                {isCompetitorRequired(lostReason) && (
+                                  <>
+                                    <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                                      <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                                        Alasan terkait harga memerlukan informasi kompetitor/budget
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <Label htmlFor="lost-competitor">
+                                        {lostReason === 'budget_not_fit' ? 'Nama Customer' : 'Nama Kompetitor'} *
+                                      </Label>
+                                      <Input
+                                        id="lost-competitor"
+                                        name="lost-competitor"
+                                        placeholder={lostReason === 'budget_not_fit' ? 'Siapa customernya?' : 'Siapa kompetitornya?'}
+                                        value={lostCompetitor}
+                                        onChange={(e) => setLostCompetitor(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor="lost-competitor-cost">
+                                        {lostReason === 'budget_not_fit' ? 'Budget Customer' : 'Harga Kompetitor'} *
+                                      </Label>
+                                      <Input
+                                        id="lost-competitor-cost"
+                                        name="lost-competitor-cost"
+                                        type="number"
+                                        placeholder={lostReason === 'budget_not_fit' ? 'Berapa budget customer?' : 'Berapa harga kompetitor?'}
+                                        value={lostCompetitorCost}
+                                        onChange={(e) => setLostCompetitorCost(e.target.value)}
+                                      />
+                                    </div>
+                                  </>
+                                )}
+
+                                {/* Optional note for non-other reasons */}
+                                {lostReason && lostReason !== 'other' && (
+                                  <div>
+                                    <Label htmlFor="lost-reason-note">Catatan Tambahan (opsional)</Label>
+                                    <Textarea
+                                      id="lost-reason-note"
+                                      name="lost-reason-note"
+                                      placeholder="Tambahkan catatan jika perlu..."
+                                      value={lostReasonNote}
+                                      onChange={(e) => setLostReasonNote(e.target.value)}
+                                    />
+                                  </div>
+                                )}
                               </div>
                               <DialogFooter>
-                                <Button variant="outline" onClick={() => setLostDialogOpen(false)}>
+                                <Button variant="outline" onClick={() => {
+                                  setLostDialogOpen(false)
+                                  setLostReason('')
+                                  setLostReasonNote('')
+                                  setLostCompetitor('')
+                                  setLostCompetitorCost('')
+                                }}>
                                   Cancel
                                 </Button>
                                 <Button
                                   variant="destructive"
                                   onClick={handleMarkLost}
-                                  disabled={actionLoading === 'mark_lost'}
+                                  disabled={
+                                    actionLoading === 'mark_lost' ||
+                                    !lostReason ||
+                                    (lostReason === 'other' && !lostReasonNote) ||
+                                    (isCompetitorRequired(lostReason) && (!lostCompetitor || !lostCompetitorCost))
+                                  }
                                 >
                                   {actionLoading === 'mark_lost' ? (
                                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
