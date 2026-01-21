@@ -34,46 +34,52 @@ const formatDate = (date: string | Date): string => {
   })
 }
 
+// UGC Company Info
+const UGC_INFO = {
+  name: 'PT. Utama Global Indo Cargo',
+  shortName: 'UGC Logistics',
+  address: 'Graha Fadillah, Jl Prof. Soepomo SH No. 45 BZ Blok C',
+  city: 'Tebet, Jakarta Selatan, Indonesia 12810',
+  phone: '+6221 8350778',
+  fax: '+6221 8300219',
+  whatsapp: '+62812 8459 6614',
+  email: 'service@ugc.co.id',
+  web: 'www.utamaglobalindocargo.com',
+}
+
 // Generate HTML for PDF
 const generateQuotationHTML = (quotation: any, profile: ProfileData, validationUrl: string): string => {
   const items = quotation.items || []
   const isBreakdown = quotation.rate_structure === 'breakdown'
 
-  // UGC accent color
-  const accentColor = '#ff4600'
-
   // Build items table for breakdown
   let itemsTableHTML = ''
   if (isBreakdown && items.length > 0) {
     itemsTableHTML = `
-      <table class="items-table">
+      <table class="rate-table">
         <thead>
           <tr>
             <th style="width: 5%">No</th>
-            <th style="width: 45%">Description</th>
-            <th style="width: 25%">Unit</th>
+            <th style="width: 50%">Description</th>
+            <th style="width: 20%">Unit</th>
             <th style="width: 25%">Amount</th>
           </tr>
         </thead>
         <tbody>
           ${items.map((item: any, index: number) => `
             <tr>
-              <td>${index + 1}</td>
-              <td>${item.component_name || item.component_type}</td>
-              <td>${item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}</td>
-              <td style="text-align: right">${formatCurrency(item.selling_rate, quotation.currency)}</td>
+              <td class="center">${index + 1}</td>
+              <td>${item.component_name || item.component_type}${item.description ? `<br/><span class="item-desc">${item.description}</span>` : ''}</td>
+              <td class="center">${item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}</td>
+              <td class="right">${formatCurrency(item.selling_rate, quotation.currency)}</td>
             </tr>
           `).join('')}
-          <tr class="total-row">
-            <td colspan="3" style="text-align: right"><strong>TOTAL</strong></td>
-            <td style="text-align: right"><strong>${formatCurrency(quotation.total_selling_rate, quotation.currency)}</strong></td>
-          </tr>
         </tbody>
       </table>
     `
   } else {
     itemsTableHTML = `
-      <table class="items-table">
+      <table class="rate-table">
         <thead>
           <tr>
             <th style="width: 75%">Description</th>
@@ -83,11 +89,10 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         <tbody>
           <tr>
             <td>
-              <strong>Logistics Service</strong><br/>
-              ${quotation.service_type || 'Door to Door Delivery'}<br/>
-              ${quotation.origin_city || ''} → ${quotation.destination_city || ''}
+              <strong>Logistics Service - ${quotation.service_type || 'Door to Door Delivery'}</strong><br/>
+              <span class="item-desc">${quotation.origin_city || 'Origin'} → ${quotation.destination_city || 'Destination'}</span>
             </td>
-            <td style="text-align: right"><strong>${formatCurrency(quotation.total_selling_rate, quotation.currency)}</strong></td>
+            <td class="right"><strong>${formatCurrency(quotation.total_selling_rate, quotation.currency)}</strong></td>
           </tr>
         </tbody>
       </table>
@@ -96,12 +101,12 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
 
   // Build includes list
   const includesList = Array.isArray(quotation.terms_includes)
-    ? quotation.terms_includes.map((t: string) => `<li>${t}</li>`).join('')
+    ? quotation.terms_includes.map((t: string) => `<li><span class="check">✓</span> ${t}</li>`).join('')
     : ''
 
   // Build excludes list
   const excludesList = Array.isArray(quotation.terms_excludes)
-    ? quotation.terms_excludes.map((t: string) => `<li>${t}</li>`).join('')
+    ? quotation.terms_excludes.map((t: string) => `<li><span class="cross">✗</span> ${t}</li>`).join('')
     : ''
 
   return `
@@ -109,417 +114,683 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     <html>
     <head>
       <meta charset="UTF-8">
+      <title>Quotation ${quotation.quotation_number}</title>
       <style>
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        :root {
+          --orange: #ff4600;
+          --orange-light: #ff6b35;
+          --orange-bg: #fff8f5;
+          --dark: #1a1a2e;
+          --gray: #6b7280;
+          --light-gray: #f3f4f6;
         }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-          font-family: 'Helvetica Neue', Arial, sans-serif;
-          font-size: 11px;
+          font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+          font-size: 10px;
           line-height: 1.5;
-          color: #333;
-          padding: 40px;
+          color: var(--dark);
+          background: white;
         }
+
+        .page {
+          max-width: 210mm;
+          margin: 0 auto;
+          padding: 15mm;
+        }
+
+        /* Header */
         .header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          margin-bottom: 30px;
-          border-bottom: 3px solid ${accentColor};
-          padding-bottom: 20px;
+          padding-bottom: 15px;
+          border-bottom: 3px solid var(--orange);
+          margin-bottom: 20px;
         }
-        .logo {
-          width: 150px;
-          height: auto;
+
+        .logo-section img {
+          height: 50px;
+          width: auto;
         }
-        .company-info {
+
+        .company-details {
           text-align: right;
-          font-size: 10px;
-          color: #666;
-        }
-        .quotation-title {
-          text-align: center;
-          font-size: 24px;
-          font-weight: bold;
-          color: ${accentColor};
-          margin: 20px 0;
-          text-transform: uppercase;
-          letter-spacing: 2px;
-        }
-        .quotation-info {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 25px;
-          background: #fff5f0;
-          padding: 15px;
-          border-radius: 5px;
-          border-left: 4px solid ${accentColor};
-        }
-        .info-box {
-          flex: 1;
-        }
-        .info-box h4 {
-          font-size: 10px;
-          color: #666;
-          text-transform: uppercase;
-          margin-bottom: 5px;
-        }
-        .info-box p {
-          font-size: 12px;
-          font-weight: 500;
-        }
-        .section {
-          margin-bottom: 25px;
-        }
-        .section-title {
-          font-size: 14px;
-          font-weight: bold;
-          color: ${accentColor};
-          border-bottom: 2px solid ${accentColor};
-          padding-bottom: 8px;
-          margin-bottom: 15px;
-        }
-        .customer-info {
-          background: #f8f9fa;
-          padding: 15px;
-          border-radius: 5px;
-          margin-bottom: 20px;
-          border-left: 4px solid ${accentColor};
-        }
-        .customer-info p {
-          margin: 3px 0;
-        }
-        .customer-name {
-          font-size: 14px;
-          font-weight: bold;
-          color: ${accentColor};
-        }
-        .service-details {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 15px;
-          margin-bottom: 20px;
-        }
-        .detail-item {
-          background: #f8f9fa;
-          padding: 10px;
-          border-radius: 5px;
-          border-left: 3px solid #ddd;
-        }
-        .detail-label {
           font-size: 9px;
-          color: #666;
-          text-transform: uppercase;
+          color: var(--gray);
+          line-height: 1.6;
         }
-        .detail-value {
-          font-size: 12px;
-          font-weight: 500;
+
+        .company-details strong {
+          color: var(--dark);
+          font-size: 11px;
         }
-        .items-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 20px 0;
-        }
-        .items-table th {
-          background: ${accentColor};
+
+        /* Title Banner */
+        .title-banner {
+          background: linear-gradient(135deg, var(--orange) 0%, var(--orange-light) 100%);
           color: white;
-          padding: 10px;
-          text-align: left;
-          font-size: 11px;
-        }
-        .items-table td {
-          padding: 10px;
-          border-bottom: 1px solid #e2e8f0;
-        }
-        .items-table .total-row {
-          background: #fff5f0;
-          font-weight: bold;
-        }
-        .items-table .total-row td {
-          border-bottom: 2px solid ${accentColor};
-        }
-        .terms-section {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 20px;
-        }
-        .terms-box {
-          background: #f8f9fa;
-          padding: 15px;
-          border-radius: 5px;
-        }
-        .terms-box h4 {
-          font-size: 12px;
-          font-weight: bold;
-          margin-bottom: 10px;
-          color: ${accentColor};
-        }
-        .terms-box ul {
-          margin-left: 20px;
-          font-size: 10px;
-        }
-        .terms-box li {
-          margin: 5px 0;
-        }
-        .scope-notes {
-          background: #fff5f0;
-          border-left: 4px solid ${accentColor};
-          padding: 15px;
-          margin: 20px 0;
-        }
-        .validity-box {
-          background: #fff5f0;
-          border-left: 4px solid ${accentColor};
-          padding: 15px;
-          margin: 20px 0;
-        }
-        .footer {
-          margin-top: 40px;
+          padding: 20px 25px;
+          margin: -15mm -15mm 20px -15mm;
           display: flex;
           justify-content: space-between;
-          align-items: flex-start;
-          border-top: 2px solid #eee;
-          padding-top: 30px;
+          align-items: center;
         }
-        .signature-section {
-          display: flex;
-          align-items: flex-start;
-          gap: 30px;
+
+        .title-banner h1 {
+          font-size: 22px;
+          font-weight: 700;
+          letter-spacing: 3px;
+          text-transform: uppercase;
         }
-        .qr-signature {
-          text-align: center;
+
+        .quote-number {
+          text-align: right;
         }
-        .qr-code {
-          width: 100px;
-          height: 100px;
-          border: 2px solid ${accentColor};
-          padding: 5px;
-          border-radius: 8px;
-        }
-        .qr-label {
+
+        .quote-number .label {
           font-size: 9px;
-          color: #666;
-          margin-top: 5px;
+          opacity: 0.9;
+          text-transform: uppercase;
+          letter-spacing: 1px;
         }
-        .signature-info {
-          text-align: left;
-          padding-top: 10px;
-        }
-        .signature-name {
-          font-weight: bold;
-          font-size: 14px;
-          color: ${accentColor};
-        }
-        .signature-title {
-          color: #666;
-          font-size: 11px;
+
+        .quote-number .number {
+          font-size: 16px;
+          font-weight: 700;
           margin-top: 3px;
         }
-        .signature-date {
-          color: #999;
+
+        /* Info Grid */
+        .info-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 12px;
+          margin-bottom: 20px;
+        }
+
+        .info-card {
+          background: var(--light-gray);
+          padding: 12px;
+          border-radius: 6px;
+          border-left: 3px solid var(--orange);
+        }
+
+        .info-card .label {
+          font-size: 8px;
+          color: var(--gray);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 4px;
+        }
+
+        .info-card .value {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--dark);
+        }
+
+        /* Sections */
+        .section {
+          margin-bottom: 18px;
+        }
+
+        .section-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 12px;
+          padding-bottom: 6px;
+          border-bottom: 2px solid var(--orange);
+        }
+
+        .section-icon {
+          width: 20px;
+          height: 20px;
+          background: var(--orange);
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
           font-size: 10px;
+        }
+
+        .section-title {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--orange);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+
+        /* Customer Box */
+        .customer-box {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 15px;
+        }
+
+        .customer-card {
+          background: var(--orange-bg);
+          padding: 15px;
+          border-radius: 8px;
+          border: 1px solid #ffe4d6;
+        }
+
+        .customer-card .name {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--orange);
+          margin-bottom: 5px;
+        }
+
+        .customer-card p {
+          color: var(--gray);
+          font-size: 10px;
+          margin: 2px 0;
+        }
+
+        /* Details Grid */
+        .details-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+        }
+
+        .detail-box {
+          background: var(--light-gray);
+          padding: 10px 12px;
+          border-radius: 6px;
+        }
+
+        .detail-box .label {
+          font-size: 8px;
+          color: var(--gray);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .detail-box .value {
+          font-size: 11px;
+          font-weight: 500;
+          color: var(--dark);
+          margin-top: 2px;
+        }
+
+        /* Route Display */
+        .route-display {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 15px;
+          background: linear-gradient(135deg, var(--orange-bg) 0%, #fff 100%);
+          padding: 15px;
+          border-radius: 8px;
+          margin: 10px 0;
+          border: 1px solid #ffe4d6;
+        }
+
+        .route-point {
+          text-align: center;
+          flex: 1;
+        }
+
+        .route-point .city {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--dark);
+        }
+
+        .route-point .country {
+          font-size: 9px;
+          color: var(--gray);
+        }
+
+        .route-arrow {
+          font-size: 24px;
+          color: var(--orange);
+        }
+
+        /* Rate Table */
+        .rate-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 10px 0;
+          font-size: 10px;
+        }
+
+        .rate-table th {
+          background: var(--orange);
+          color: white;
+          padding: 10px 12px;
+          text-align: left;
+          font-weight: 600;
+          font-size: 9px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .rate-table td {
+          padding: 10px 12px;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .rate-table tr:hover { background: var(--light-gray); }
+
+        .rate-table .center { text-align: center; }
+        .rate-table .right { text-align: right; }
+
+        .item-desc {
+          font-size: 9px;
+          color: var(--gray);
+        }
+
+        /* Total Box */
+        .total-box {
+          background: linear-gradient(135deg, var(--orange) 0%, var(--orange-light) 100%);
+          color: white;
+          padding: 15px 20px;
+          border-radius: 8px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 15px;
+        }
+
+        .total-label {
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+
+        .total-amount {
+          font-size: 22px;
+          font-weight: 700;
+        }
+
+        /* Terms */
+        .terms-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 15px;
+        }
+
+        .terms-card {
+          padding: 12px;
+          border-radius: 8px;
+          font-size: 9px;
+        }
+
+        .terms-card.included {
+          background: #ecfdf5;
+          border: 1px solid #a7f3d0;
+        }
+
+        .terms-card.excluded {
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+        }
+
+        .terms-card h4 {
+          font-size: 10px;
+          font-weight: 700;
+          margin-bottom: 8px;
+        }
+
+        .terms-card.included h4 { color: #059669; }
+        .terms-card.excluded h4 { color: #dc2626; }
+
+        .terms-card ul {
+          list-style: none;
+        }
+
+        .terms-card li {
+          margin: 4px 0;
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+        }
+
+        .check { color: #059669; font-weight: bold; }
+        .cross { color: #dc2626; font-weight: bold; }
+
+        /* Validity Banner */
+        .validity-banner {
+          background: var(--orange-bg);
+          border: 2px dashed var(--orange);
+          padding: 12px 15px;
+          border-radius: 8px;
+          margin: 15px 0;
+          text-align: center;
+        }
+
+        .validity-banner strong {
+          color: var(--orange);
+        }
+
+        /* Footer */
+        .footer {
+          margin-top: 25px;
+          padding-top: 20px;
+          border-top: 2px solid var(--light-gray);
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+        }
+
+        .signature-block {
+          display: flex;
+          gap: 20px;
+          align-items: flex-start;
+        }
+
+        .qr-box {
+          text-align: center;
+        }
+
+        .qr-box img {
+          width: 80px;
+          height: 80px;
+          border: 2px solid var(--orange);
+          border-radius: 8px;
+          padding: 4px;
+        }
+
+        .qr-box .qr-label {
+          font-size: 8px;
+          color: var(--gray);
           margin-top: 5px;
         }
-        .verify-text {
-          text-align: right;
+
+        .signer-info {
+          padding-top: 5px;
+        }
+
+        .signer-name {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--orange);
+        }
+
+        .signer-title {
+          font-size: 10px;
+          color: var(--gray);
+          margin-top: 2px;
+        }
+
+        .signer-date {
           font-size: 9px;
-          color: #999;
+          color: var(--gray);
+          margin-top: 5px;
         }
-        .verify-text a {
-          color: ${accentColor};
+
+        .verify-info {
+          text-align: right;
+          font-size: 8px;
+          color: var(--gray);
+        }
+
+        .verify-info a {
+          color: var(--orange);
           text-decoration: none;
+          word-break: break-all;
         }
+
+        .company-footer {
+          text-align: center;
+          margin-top: 20px;
+          padding-top: 15px;
+          border-top: 1px solid var(--light-gray);
+          font-size: 8px;
+          color: var(--gray);
+        }
+
+        .company-footer strong {
+          color: var(--dark);
+        }
+
         @media print {
-          body { padding: 20px; }
+          .page { padding: 10mm; }
+          .title-banner { margin: -10mm -10mm 15px -10mm; }
         }
       </style>
     </head>
     <body>
-      <div class="header">
-        <div>
-          <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinefull.png" class="logo" alt="UGC Logo" style="max-height: 60px; width: auto;"/>
-        </div>
-        <div class="company-info">
-          <strong>PT. UGC Logistics</strong><br/>
-          Jl. Raya Example No. 123<br/>
-          Jakarta, Indonesia 12345<br/>
-          Tel: +62 21 1234567<br/>
-          Email: info@ugclogistics.com
-        </div>
-      </div>
-
-      <h1 class="quotation-title">Quotation</h1>
-
-      <div class="quotation-info">
-        <div class="info-box">
-          <h4>Quotation Number</h4>
-          <p>${quotation.quotation_number}</p>
-        </div>
-        <div class="info-box">
-          <h4>Date</h4>
-          <p>${formatDate(quotation.created_at)}</p>
-        </div>
-        <div class="info-box">
-          <h4>Valid Until</h4>
-          <p>${formatDate(quotation.valid_until)}</p>
-        </div>
-        <div class="info-box">
-          <h4>Reference</h4>
-          <p>${quotation.ticket?.ticket_code || '-'}</p>
-        </div>
-      </div>
-
-      <div class="section">
-        <h3 class="section-title">Customer Information</h3>
-        <div class="customer-info">
-          <p class="customer-name">${quotation.customer_name}</p>
-          ${quotation.customer_company ? `<p>${quotation.customer_company}</p>` : ''}
-          ${quotation.customer_address ? `<p>${quotation.customer_address}</p>` : ''}
-          ${quotation.customer_email ? `<p>Email: ${quotation.customer_email}</p>` : ''}
-          ${quotation.customer_phone ? `<p>Phone: ${quotation.customer_phone}</p>` : ''}
-        </div>
-      </div>
-
-      <div class="section">
-        <h3 class="section-title">Service Details</h3>
-        <div class="service-details">
-          ${quotation.service_type ? `
-            <div class="detail-item">
-              <div class="detail-label">Service Type</div>
-              <div class="detail-value">${quotation.service_type}</div>
-            </div>
-          ` : ''}
-          ${quotation.incoterm ? `
-            <div class="detail-item">
-              <div class="detail-label">Incoterm</div>
-              <div class="detail-value">${quotation.incoterm}</div>
-            </div>
-          ` : ''}
-          ${quotation.fleet_type ? `
-            <div class="detail-item">
-              <div class="detail-label">Fleet Type</div>
-              <div class="detail-value">${quotation.fleet_type}${quotation.fleet_quantity ? ` x ${quotation.fleet_quantity}` : ''}</div>
-            </div>
-          ` : ''}
-          ${quotation.commodity ? `
-            <div class="detail-item">
-              <div class="detail-label">Commodity</div>
-              <div class="detail-value">${quotation.commodity}</div>
-            </div>
-          ` : ''}
-        </div>
-
-        <div class="service-details">
-          <div class="detail-item">
-            <div class="detail-label">Origin</div>
-            <div class="detail-value">
-              ${[quotation.origin_address, quotation.origin_city, quotation.origin_country].filter(Boolean).join(', ') || '-'}
-              ${quotation.origin_port ? `<br/>Port: ${quotation.origin_port}` : ''}
-            </div>
+      <div class="page">
+        <!-- Header -->
+        <div class="header">
+          <div class="logo-section">
+            <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinefull.png" alt="UGC Logo"/>
           </div>
-          <div class="detail-item">
-            <div class="detail-label">Destination</div>
-            <div class="detail-value">
-              ${[quotation.destination_address, quotation.destination_city, quotation.destination_country].filter(Boolean).join(', ') || '-'}
-              ${quotation.destination_port ? `<br/>Port: ${quotation.destination_port}` : ''}
+          <div class="company-details">
+            <strong>${UGC_INFO.name}</strong><br/>
+            ${UGC_INFO.address}<br/>
+            ${UGC_INFO.city}<br/>
+            Tel: ${UGC_INFO.phone} | Fax: ${UGC_INFO.fax}<br/>
+            Email: ${UGC_INFO.email}
+          </div>
+        </div>
+
+        <!-- Title Banner -->
+        <div class="title-banner">
+          <h1>Quotation</h1>
+          <div class="quote-number">
+            <div class="label">Document No.</div>
+            <div class="number">${quotation.quotation_number}</div>
+          </div>
+        </div>
+
+        <!-- Info Grid -->
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="label">Issue Date</div>
+            <div class="value">${formatDate(quotation.created_at)}</div>
+          </div>
+          <div class="info-card">
+            <div class="label">Valid Until</div>
+            <div class="value">${formatDate(quotation.valid_until)}</div>
+          </div>
+          <div class="info-card">
+            <div class="label">Reference</div>
+            <div class="value">${quotation.ticket?.ticket_code || '-'}</div>
+          </div>
+          <div class="info-card">
+            <div class="label">Validity</div>
+            <div class="value">${quotation.validity_days} Days</div>
+          </div>
+        </div>
+
+        <!-- Customer Section -->
+        <div class="section">
+          <div class="section-header">
+            <div class="section-icon">👤</div>
+            <span class="section-title">Customer Information</span>
+          </div>
+          <div class="customer-box">
+            <div class="customer-card">
+              <div class="name">${quotation.customer_name}</div>
+              ${quotation.customer_company ? `<p><strong>${quotation.customer_company}</strong></p>` : ''}
+              ${quotation.customer_address ? `<p>${quotation.customer_address}</p>` : ''}
+            </div>
+            <div class="customer-card">
+              ${quotation.customer_email ? `<p>📧 ${quotation.customer_email}</p>` : ''}
+              ${quotation.customer_phone ? `<p>📱 ${quotation.customer_phone}</p>` : ''}
             </div>
           </div>
         </div>
 
-        ${quotation.cargo_description || quotation.cargo_weight || quotation.cargo_volume ? `
-          <div class="service-details">
-            ${quotation.cargo_description ? `
-              <div class="detail-item">
-                <div class="detail-label">Cargo Description</div>
-                <div class="detail-value">${quotation.cargo_description}</div>
+        <!-- Service Details -->
+        <div class="section">
+          <div class="section-header">
+            <div class="section-icon">📦</div>
+            <span class="section-title">Service Details</span>
+          </div>
+
+          ${(quotation.origin_city || quotation.destination_city) ? `
+            <div class="route-display">
+              <div class="route-point">
+                <div class="city">${quotation.origin_city || 'Origin'}</div>
+                <div class="country">${quotation.origin_country || ''}</div>
+                ${quotation.origin_port ? `<div class="country">Port: ${quotation.origin_port}</div>` : ''}
+              </div>
+              <div class="route-arrow">→</div>
+              <div class="route-point">
+                <div class="city">${quotation.destination_city || 'Destination'}</div>
+                <div class="country">${quotation.destination_country || ''}</div>
+                ${quotation.destination_port ? `<div class="country">Port: ${quotation.destination_port}</div>` : ''}
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="details-grid">
+            ${quotation.service_type ? `
+              <div class="detail-box">
+                <div class="label">Service Type</div>
+                <div class="value">${quotation.service_type}</div>
               </div>
             ` : ''}
-            <div class="detail-item">
-              <div class="detail-label">Cargo Details</div>
-              <div class="detail-value">
-                ${quotation.cargo_weight ? `Weight: ${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}` : ''}
-                ${quotation.cargo_volume ? `<br/>Volume: ${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}` : ''}
-                ${quotation.cargo_quantity ? `<br/>Quantity: ${quotation.cargo_quantity} ${quotation.cargo_quantity_unit || 'units'}` : ''}
+            ${quotation.incoterm ? `
+              <div class="detail-box">
+                <div class="label">Incoterm</div>
+                <div class="value">${quotation.incoterm}</div>
               </div>
-            </div>
-          </div>
-        ` : ''}
-
-        ${quotation.estimated_leadtime || quotation.estimated_cargo_value ? `
-          <div class="service-details">
+            ` : ''}
+            ${quotation.fleet_type ? `
+              <div class="detail-box">
+                <div class="label">Fleet</div>
+                <div class="value">${quotation.fleet_type}${quotation.fleet_quantity ? ` × ${quotation.fleet_quantity}` : ''}</div>
+              </div>
+            ` : ''}
+            ${quotation.commodity ? `
+              <div class="detail-box">
+                <div class="label">Commodity</div>
+                <div class="value">${quotation.commodity}</div>
+              </div>
+            ` : ''}
             ${quotation.estimated_leadtime ? `
-              <div class="detail-item">
-                <div class="detail-label">Estimated Leadtime</div>
-                <div class="detail-value">${quotation.estimated_leadtime}</div>
+              <div class="detail-box">
+                <div class="label">Est. Leadtime</div>
+                <div class="value">${quotation.estimated_leadtime}</div>
+              </div>
+            ` : ''}
+            ${quotation.cargo_weight ? `
+              <div class="detail-box">
+                <div class="label">Weight</div>
+                <div class="value">${quotation.cargo_weight} ${quotation.cargo_weight_unit || 'kg'}</div>
+              </div>
+            ` : ''}
+            ${quotation.cargo_volume ? `
+              <div class="detail-box">
+                <div class="label">Volume</div>
+                <div class="value">${quotation.cargo_volume} ${quotation.cargo_volume_unit || 'cbm'}</div>
               </div>
             ` : ''}
             ${quotation.estimated_cargo_value ? `
-              <div class="detail-item">
-                <div class="detail-label">Estimated Cargo Value</div>
-                <div class="detail-value">${formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR')}</div>
+              <div class="detail-box">
+                <div class="label">Cargo Value</div>
+                <div class="value">${formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR')}</div>
               </div>
             ` : ''}
           </div>
+
+          ${quotation.cargo_description ? `
+            <div style="background: var(--orange-bg); border: 1px solid #ffe4d6; border-radius: 8px; padding: 12px; margin-top: 12px;">
+              <div style="font-size: 8px; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Cargo Description</div>
+              <div style="font-size: 11px; color: var(--dark);">${quotation.cargo_description}</div>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Rate Section -->
+        <div class="section">
+          <div class="section-header">
+            <div class="section-icon">💰</div>
+            <span class="section-title">Rate Quotation</span>
+          </div>
+          ${itemsTableHTML}
+          <div class="total-box">
+            <div class="total-label">Total Amount</div>
+            <div class="total-amount">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</div>
+          </div>
+        </div>
+
+        ${quotation.scope_of_work ? `
+          <div class="section">
+            <div class="section-header">
+              <div class="section-icon">📋</div>
+              <span class="section-title">Scope of Work</span>
+            </div>
+            <div class="detail-box" style="background: var(--orange-bg); border-left: 3px solid var(--orange);">
+              <div class="value">${quotation.scope_of_work}</div>
+            </div>
+          </div>
         ` : ''}
-      </div>
 
-      <div class="section">
-        <h3 class="section-title">Rate Quotation</h3>
-        ${itemsTableHTML}
-      </div>
-
-      ${quotation.scope_of_work ? `
-        <div class="scope-notes">
-          <strong>Scope of Work:</strong><br/>
-          ${quotation.scope_of_work}
-        </div>
-      ` : ''}
-
-      <div class="section">
-        <h3 class="section-title">Terms & Conditions</h3>
-        <div class="terms-section">
-          ${includesList ? `
-            <div class="terms-box">
-              <h4>Included:</h4>
-              <ul>${includesList}</ul>
+        <!-- Terms Section -->
+        ${(includesList || excludesList) ? `
+          <div class="section">
+            <div class="section-header">
+              <div class="section-icon">📝</div>
+              <span class="section-title">Terms & Conditions</span>
             </div>
-          ` : ''}
-          ${excludesList ? `
-            <div class="terms-box">
-              <h4>Excluded:</h4>
-              <ul>${excludesList}</ul>
+            <div class="terms-grid">
+              ${includesList ? `
+                <div class="terms-card included">
+                  <h4>✓ Included</h4>
+                  <ul>${includesList}</ul>
+                </div>
+              ` : ''}
+              ${excludesList ? `
+                <div class="terms-card excluded">
+                  <h4>✗ Excluded</h4>
+                  <ul>${excludesList}</ul>
+                </div>
+              ` : ''}
             </div>
-          ` : ''}
-        </div>
+          </div>
+        ` : ''}
+
         ${quotation.terms_notes ? `
-          <div class="scope-notes" style="margin-top: 15px;">
-            <strong>Notes:</strong><br/>
-            ${quotation.terms_notes}
+          <div class="detail-box" style="background: #fef3c7; border-left: 3px solid #f59e0b; margin-bottom: 15px;">
+            <div class="label" style="color: #92400e;">Notes</div>
+            <div class="value">${quotation.terms_notes}</div>
           </div>
         ` : ''}
-      </div>
 
-      <div class="validity-box">
-        <strong>Validity:</strong> This quotation is valid for <strong>${quotation.validity_days} days</strong> from the date of issue (until ${formatDate(quotation.valid_until)}).
-      </div>
+        <!-- Validity -->
+        <div class="validity-banner">
+          ⏰ This quotation is valid for <strong>${quotation.validity_days} days</strong> from the date of issue (until <strong>${formatDate(quotation.valid_until)}</strong>)
+        </div>
 
-      <div class="footer">
-        <div class="signature-section">
-          <div class="qr-signature">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=ff4600" class="qr-code" alt="Digital Signature"/>
-            <div class="qr-label">Digital Signature</div>
+        <!-- Footer -->
+        <div class="footer">
+          <div class="signature-block">
+            <div class="qr-box">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=ff4600" alt="Verify"/>
+              <div class="qr-label">Scan to Verify</div>
+            </div>
+            <div class="signer-info">
+              <div class="signer-name">${profile.name}</div>
+              <div class="signer-title">Sales & Commercial Executive</div>
+              <div class="signer-date">Issued: ${formatDate(quotation.created_at)}</div>
+            </div>
           </div>
-          <div class="signature-info">
-            <div class="signature-name">${profile.name}</div>
-            <div class="signature-title">Sales & Commercial Executive</div>
-            <div class="signature-date">Issued: ${formatDate(quotation.created_at)}</div>
+          <div class="verify-info">
+            <strong>Verify this document:</strong><br/>
+            <a href="${validationUrl}">${validationUrl}</a>
           </div>
         </div>
-        <div class="verify-text">
-          Verify this quotation at:<br/>
-          <a href="${validationUrl}">${validationUrl}</a>
+
+        <!-- Company Footer -->
+        <div class="company-footer">
+          <strong>${UGC_INFO.name}</strong> | ${UGC_INFO.address}, ${UGC_INFO.city}<br/>
+          Tel: ${UGC_INFO.phone} | WhatsApp: ${UGC_INFO.whatsapp} | Email: ${UGC_INFO.email} | Web: ${UGC_INFO.web}
         </div>
       </div>
     </body>
