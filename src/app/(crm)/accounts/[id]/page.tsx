@@ -39,7 +39,7 @@ export default async function AccountDetailPage({ params }: AccountDetailPagePro
         name,
         stage,
         estimated_value,
-        expected_close_date,
+        next_step_due_date,
         owner_user_id
       )
     `)
