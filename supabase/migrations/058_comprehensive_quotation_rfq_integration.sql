@@ -651,6 +651,205 @@ CREATE TRIGGER trg_sync_quotation_status_change
     EXECUTE FUNCTION public.trigger_sync_quotation_status_change();
 
 -- ============================================
+-- NEW: sync_opportunity_to_ticket - Close ticket when opportunity closes
+-- ============================================
+
+CREATE OR REPLACE FUNCTION public.sync_opportunity_to_ticket(
+    p_opportunity_id TEXT,
+    p_outcome TEXT -- 'won' or 'lost'
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_ticket RECORD;
+    v_new_status TEXT := 'closed';
+    v_close_outcome TEXT;
+    v_updated_count INTEGER := 0;
+BEGIN
+    -- Determine close outcome based on opportunity outcome
+    IF p_outcome = 'won' THEN
+        v_close_outcome := 'won';
+    ELSIF p_outcome = 'lost' THEN
+        v_close_outcome := 'lost';
+    ELSE
+        RETURN jsonb_build_object('success', FALSE, 'error', 'Invalid outcome: ' || p_outcome);
+    END IF;
+
+    -- Find all tickets linked to this opportunity
+    FOR v_ticket IN
+        SELECT * FROM public.tickets
+        WHERE opportunity_id = p_opportunity_id
+        AND status NOT IN ('closed', 'resolved')
+    LOOP
+        -- Update ticket status
+        UPDATE public.tickets
+        SET
+            status = v_new_status,
+            close_outcome = v_close_outcome,
+            close_reason = 'Pipeline closed as ' || v_close_outcome,
+            closed_at = NOW(),
+            resolved_at = COALESCE(resolved_at, NOW()),
+            updated_at = NOW()
+        WHERE id = v_ticket.id;
+
+        -- Create audit event
+        INSERT INTO public.ticket_events (
+            ticket_id,
+            event_type,
+            actor_user_id,
+            new_value,
+            notes
+        ) VALUES (
+            v_ticket.id,
+            'closed',
+            COALESCE(auth.uid(), v_ticket.created_by),
+            jsonb_build_object('status', 'closed', 'outcome', v_close_outcome, 'synced_from', 'opportunity'),
+            'Auto-closed: Pipeline marked as ' || v_close_outcome
+        );
+
+        v_updated_count := v_updated_count + 1;
+    END LOOP;
+
+    RETURN jsonb_build_object(
+        'success', TRUE,
+        'updated_count', v_updated_count,
+        'outcome', v_close_outcome
+    );
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN jsonb_build_object('success', FALSE, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================
+-- UPDATE: sync_opportunity_to_quotation to also sync to ticket
+-- ============================================
+
+CREATE OR REPLACE FUNCTION public.sync_opportunity_to_quotation(
+    p_opportunity_id TEXT,
+    p_outcome TEXT -- 'won' or 'lost'
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_quotation RECORD;
+    v_new_status TEXT;
+    v_updated_count INTEGER := 0;
+    v_ticket_sync_result JSONB;
+BEGIN
+    -- Determine new quotation status based on outcome
+    IF p_outcome = 'won' THEN
+        v_new_status := 'accepted';
+    ELSIF p_outcome = 'lost' THEN
+        v_new_status := 'rejected';
+    ELSE
+        RETURN jsonb_build_object('success', FALSE, 'error', 'Invalid outcome: ' || p_outcome);
+    END IF;
+
+    -- Update all active quotations for this opportunity
+    UPDATE public.customer_quotations
+    SET
+        status = v_new_status,
+        updated_at = NOW()
+    WHERE opportunity_id = p_opportunity_id
+    AND status IN ('sent', 'draft');
+
+    GET DIAGNOSTICS v_updated_count = ROW_COUNT;
+
+    -- Update opportunity quotation_status
+    UPDATE public.opportunities
+    SET
+        quotation_status = v_new_status,
+        updated_at = NOW()
+    WHERE opportunity_id = p_opportunity_id;
+
+    -- Also sync to linked tickets
+    v_ticket_sync_result := public.sync_opportunity_to_ticket(p_opportunity_id, p_outcome);
+
+    RETURN jsonb_build_object(
+        'success', TRUE,
+        'updated_quotation_count', v_updated_count,
+        'new_status', v_new_status,
+        'ticket_sync', v_ticket_sync_result
+    );
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN jsonb_build_object('success', FALSE, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================
+-- NEW: sync_lead_to_quotation - Update quotation when lead is disqualified
+-- ============================================
+
+CREATE OR REPLACE FUNCTION public.sync_lead_to_quotation(
+    p_lead_id TEXT,
+    p_new_status TEXT -- 'Disqualified'
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_updated_count INTEGER := 0;
+BEGIN
+    -- Only handle Disqualified status - mark quotations as rejected
+    IF p_new_status = 'Disqualified' THEN
+        UPDATE public.customer_quotations
+        SET
+            status = 'rejected',
+            updated_at = NOW()
+        WHERE lead_id = p_lead_id
+        AND status IN ('sent', 'draft');
+
+        GET DIAGNOSTICS v_updated_count = ROW_COUNT;
+
+        -- Update lead quotation_status
+        UPDATE public.leads
+        SET
+            quotation_status = 'rejected',
+            updated_at = NOW()
+        WHERE lead_id = p_lead_id;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', TRUE,
+        'updated_count', v_updated_count,
+        'lead_status', p_new_status
+    );
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN jsonb_build_object('success', FALSE, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================
+-- UPDATE: trigger for opportunity close - add ticket sync
+-- ============================================
+
+CREATE OR REPLACE FUNCTION trigger_sync_quotation_on_opportunity_close()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Only trigger when stage changes to Closed Won or Closed Lost
+  IF OLD.stage IS DISTINCT FROM NEW.stage THEN
+    IF NEW.stage = 'Closed Won' THEN
+      -- Sync to quotations AND tickets
+      PERFORM public.sync_opportunity_to_quotation(NEW.opportunity_id, 'won');
+    ELSIF NEW.stage = 'Closed Lost' THEN
+      -- Sync to quotations AND tickets
+      PERFORM public.sync_opportunity_to_quotation(NEW.opportunity_id, 'lost');
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Recreate trigger (it will use updated function)
+DROP TRIGGER IF EXISTS trg_sync_quotation_on_opportunity_close ON opportunities;
+
+CREATE TRIGGER trg_sync_quotation_on_opportunity_close
+  AFTER UPDATE ON opportunities
+  FOR EACH ROW
+  WHEN (OLD.stage IS DISTINCT FROM NEW.stage AND NEW.stage IN ('Closed Won', 'Closed Lost'))
+  EXECUTE FUNCTION trigger_sync_quotation_on_opportunity_close();
+
+-- ============================================
 -- GRANT PERMISSIONS
 -- ============================================
 
@@ -661,6 +860,9 @@ GRANT EXECUTE ON FUNCTION public.request_quotation_adjustment(UUID, UUID, TEXT) 
 GRANT EXECUTE ON FUNCTION public.check_ticket_has_quotation(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_ticket_quote_sent_to_customer(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_quotation_sequence_label(INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_opportunity_to_ticket(TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_opportunity_to_quotation(TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_lead_to_quotation(TEXT, TEXT) TO authenticated;
 
 -- ============================================
 -- COMMENTS
@@ -671,3 +873,6 @@ COMMENT ON FUNCTION public.request_quotation_adjustment IS 'Marks quotation as r
 COMMENT ON FUNCTION public.check_ticket_has_quotation IS 'Checks if a ticket has an associated customer quotation';
 COMMENT ON FUNCTION public.get_quotation_sequence_label IS 'Returns human-readable sequence label (1st, 2nd, etc.)';
 COMMENT ON TRIGGER trg_sync_quotation_status_change ON customer_quotations IS 'Auto-sync quotation status changes to all linked entities';
+COMMENT ON FUNCTION public.sync_opportunity_to_ticket IS 'Closes linked tickets when opportunity is closed';
+COMMENT ON FUNCTION public.sync_opportunity_to_quotation IS 'Syncs quotation status and closes linked tickets when opportunity closes';
+COMMENT ON FUNCTION public.sync_lead_to_quotation IS 'Updates quotation status when lead is disqualified';
