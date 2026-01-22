@@ -35,7 +35,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Fetch quotation with items
+    // Fetch quotation with items, lead, and opportunity
     const { data: quotation, error } = await (supabase as any)
       .from('customer_quotations')
       .select(`
@@ -44,6 +44,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           id, ticket_code, subject, rfq_data, status,
           account:accounts!tickets_account_id_fkey(account_id, company_name, address, city, country),
           contact:contacts!tickets_contact_id_fkey(contact_id, first_name, last_name, email, phone)
+        ),
+        lead:leads!customer_quotations_lead_id_fkey(
+          lead_id, company_name, contact_name, source, status
+        ),
+        opportunity:opportunities!customer_quotations_opportunity_id_fkey(
+          opportunity_id, opportunity_name, stage, expected_revenue, probability
         ),
         operational_cost:ticket_rate_quotes!customer_quotations_operational_cost_id_fkey(
           id, quote_number, amount, currency
@@ -56,6 +62,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (error || !quotation) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
+    }
+
+    // Sort items by sort_order
+    if (quotation.items && Array.isArray(quotation.items)) {
+      quotation.items.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
     }
 
     return NextResponse.json({

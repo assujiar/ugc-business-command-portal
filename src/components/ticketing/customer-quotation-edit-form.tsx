@@ -961,6 +961,26 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
                       <span className="text-sm">{t.term_text}</span>
                     </div>
                   ))}
+                  {/* Show custom terms that are not in templates */}
+                  {termsIncludes
+                    .filter(term => !includeTemplates.some(t => t.term_text === term))
+                    .map((term, i) => (
+                      <div key={`custom-inc-${i}`} className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 rounded px-2 py-1">
+                        <Checkbox
+                          checked={true}
+                          onCheckedChange={() => toggleIncludeTerm(term)}
+                        />
+                        <span className="text-sm flex-1">{term}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => toggleIncludeTerm(term)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
                   <div className="flex gap-2 mt-2">
                     <Input
                       value={customInclude}
@@ -984,6 +1004,26 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
                       <span className="text-sm">{t.term_text}</span>
                     </div>
                   ))}
+                  {/* Show custom terms that are not in templates */}
+                  {termsExcludes
+                    .filter(term => !excludeTemplates.some(t => t.term_text === term))
+                    .map((term, i) => (
+                      <div key={`custom-exc-${i}`} className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">
+                        <Checkbox
+                          checked={true}
+                          onCheckedChange={() => toggleExcludeTerm(term)}
+                        />
+                        <span className="text-sm flex-1">{term}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => toggleExcludeTerm(term)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
                   <div className="flex gap-2 mt-2">
                     <Input
                       value={customExclude}

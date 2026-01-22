@@ -27,6 +27,8 @@ import {
   Truck,
   Pencil,
   Download,
+  Users,
+  TrendingUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -881,12 +883,12 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
             </CardContent>
           </Card>
 
-          {/* Related Ticket */}
+          {/* Reference Ticket */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Ticket className="h-4 w-4" />
-                Related Ticket
+                Reference Ticket
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -912,6 +914,86 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 </div>
               ) : (
                 <p className="text-muted-foreground">No ticket linked</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Lead */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Lead
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {quotation.lead ? (
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Company</p>
+                    <p className="font-medium">{quotation.lead.company_name || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Contact</p>
+                    <p>{quotation.lead.contact_name || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Source</p>
+                    <Badge variant="outline">{quotation.lead.source || '—'}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <Badge variant="secondary">{quotation.lead.status || '—'}</Badge>
+                  </div>
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href={`/leads/${quotation.lead.lead_id}`}>View Lead</Link>
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No lead linked</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pipeline / Opportunity */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Pipeline
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {quotation.opportunity ? (
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Opportunity Name</p>
+                    <p className="font-medium">{quotation.opportunity.opportunity_name || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Stage</p>
+                    <Badge variant="secondary">{quotation.opportunity.stage || '—'}</Badge>
+                  </div>
+                  {quotation.opportunity.expected_revenue && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Expected Revenue</p>
+                      <p className="font-medium text-green-600">
+                        {formatCurrency(quotation.opportunity.expected_revenue, 'IDR')}
+                      </p>
+                    </div>
+                  )}
+                  {quotation.opportunity.probability && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Probability</p>
+                      <p className="font-medium">{quotation.opportunity.probability}%</p>
+                    </div>
+                  )}
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href={`/opportunities/${quotation.opportunity.opportunity_id}`}>View Pipeline</Link>
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No pipeline linked</p>
               )}
             </CardContent>
           </Card>
