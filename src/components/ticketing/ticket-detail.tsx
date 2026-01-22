@@ -819,6 +819,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         badge_label: sentOrdinal,
         extra_data: {
           sent_count: (event.new_value as any)?.sent_count || index + 1,
+          quotation_id: (event.new_value as any)?.quotation_id,
+          quotation_number: (event.new_value as any)?.quotation_number,
         },
       })
     })
@@ -2262,9 +2264,20 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                               )}
 
                               {item.badge_type === 'sent_to_customer' && (
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Forward className="h-4 w-4 text-purple-500" />
-                                  <span className="text-sm font-medium text-purple-500">Sent to Customer</span>
+                                <div className="space-y-1 mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <Forward className="h-4 w-4 text-purple-500" />
+                                    <span className="text-sm font-medium text-purple-500">Sent to Customer</span>
+                                  </div>
+                                  {item.extra_data?.quotation_id && (
+                                    <Link
+                                      href={`/customer-quotations/${item.extra_data.quotation_id}`}
+                                      className="inline-flex items-center gap-1 text-xs text-brand hover:underline ml-6"
+                                    >
+                                      <FileText className="h-3 w-3" />
+                                      View Quotation {item.extra_data.quotation_number ? `(${item.extra_data.quotation_number})` : ''}
+                                    </Link>
+                                  )}
                                 </div>
                               )}
 
