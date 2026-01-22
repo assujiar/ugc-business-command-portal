@@ -381,6 +381,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
     }
 
+    // Sort items by sort_order for proper display
+    if (quotation.items && Array.isArray(quotation.items)) {
+      quotation.items.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+    }
+
     // Use creator's profile for PDF, fallback to current user
     const creatorProfile: ProfileData = quotation.creator || profileData
 
@@ -434,6 +439,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (error || !quotation) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
+    }
+
+    // Sort items by sort_order for proper display
+    if (quotation.items && Array.isArray(quotation.items)) {
+      quotation.items.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
     }
 
     // Use creator's profile for PDF, fallback to current user
