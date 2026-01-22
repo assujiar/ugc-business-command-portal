@@ -47,6 +47,16 @@ export async function GET(request: NextRequest) {
       .from('ticket_rate_quotes')
       .select(`
         *,
+        items:ticket_rate_quote_items(
+          id,
+          component_type,
+          component_name,
+          description,
+          cost_amount,
+          quantity,
+          unit,
+          sort_order
+        ),
         ticket:tickets!ticket_rate_quotes_ticket_id_fkey(
           id,
           ticket_code,
@@ -146,16 +156,39 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json()
-    const { ticket_id, amount, currency, valid_until, terms, notes } = body
+    const { ticket_id, amount, currency, valid_until, terms, notes, rate_structure, items } = body
 
     if (!ticket_id) {
       return NextResponse.json({ error: 'Ticket ID is required' }, { status: 400 })
     }
-    if (!amount || amount <= 0) {
+
+    // Validate rate_structure
+    const validRateStructure = rate_structure === 'breakdown' ? 'breakdown' : 'bundling'
+
+    // For breakdown, calculate total from items; for bundling, use amount directly
+    let totalAmount = amount
+    if (validRateStructure === 'breakdown' && Array.isArray(items) && items.length > 0) {
+      totalAmount = items.reduce((sum: number, item: any) => sum + (parseFloat(item.cost_amount) || 0), 0)
+    }
+
+    if (!totalAmount || totalAmount <= 0) {
       return NextResponse.json({ error: 'Valid amount is required' }, { status: 400 })
     }
     if (!valid_until) {
       return NextResponse.json({ error: 'Valid until date is required' }, { status: 400 })
+    }
+
+    // Validate breakdown items if rate_structure is breakdown
+    if (validRateStructure === 'breakdown') {
+      if (!Array.isArray(items) || items.length === 0) {
+        return NextResponse.json({ error: 'Breakdown items are required when using breakdown rate structure' }, { status: 400 })
+      }
+      // Validate each item has required fields
+      for (const item of items) {
+        if (!item.component_type) {
+          return NextResponse.json({ error: 'Each breakdown item must have a component type' }, { status: 400 })
+        }
+      }
     }
 
     // Validate ticket is RFQ
@@ -176,10 +209,12 @@ export async function POST(request: NextRequest) {
     // Call RPC to create cost atomically
     const { data: result, error } = await (supabase as any).rpc('rpc_ticket_create_quote', {
       p_ticket_id: ticket_id,
-      p_amount: amount,
+      p_amount: totalAmount,
       p_currency: currency || 'IDR',
       p_valid_until: valid_until,
       p_terms: terms || null,
+      p_rate_structure: validRateStructure,
+      p_items: validRateStructure === 'breakdown' ? items : [],
     })
 
     if (error) {

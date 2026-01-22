@@ -108,13 +108,11 @@ export async function POST(request: NextRequest) {
     const ticket_id = body.ticket_id || null
     const lead_id = body.lead_id || null
     const opportunity_id = body.opportunity_id || null
-    const source_type = body.source_type || 'ticket'
+    // Determine source type: standalone if no source is provided
+    const source_type = body.source_type || (ticket_id ? 'ticket' : lead_id ? 'lead' : opportunity_id ? 'opportunity' : 'standalone')
     const operational_cost_id = body.operational_cost_id || null
 
-    // At least one source must be provided
-    if (!ticket_id && !lead_id && !opportunity_id) {
-      return NextResponse.json({ error: 'Either ticket_id, lead_id, or opportunity_id is required' }, { status: 400 })
-    }
+    // All sources are now optional - quotations can be created standalone
 
     // Get flat values directly from body (dialog sends flat fields)
     const customer_name = body.customer_name || ''
@@ -184,7 +182,7 @@ export async function POST(request: NextRequest) {
     valid_until.setDate(valid_until.getDate() + validity_days)
     const valid_until_str = valid_until.toISOString().split('T')[0]
 
-    // Get sequence number for the source
+    // Get sequence number for the source (only if a source is provided)
     let sequence_number = 1
     if (ticket_id || lead_id || opportunity_id) {
       const { data: seqData } = await (supabase as any).rpc('get_next_quotation_sequence', {
@@ -196,6 +194,7 @@ export async function POST(request: NextRequest) {
         sequence_number = seqData
       }
     }
+    // For standalone quotations, sequence_number remains 1
 
     // Insert quotation directly (bypass RPC to avoid JSONB serialization issues)
     const { data: quotation, error: insertError } = await (supabase as any)

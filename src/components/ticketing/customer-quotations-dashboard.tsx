@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Plus,
   Ticket,
+  ChevronDown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,6 +49,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { canViewAllTickets } from '@/lib/permissions'
 import { CustomerQuotationDialog } from './customer-quotation-dialog'
 import type { Database } from '@/types/database'
@@ -140,8 +147,14 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
     }
   }
 
+  // Create standalone quotation (no source)
+  const handleCreateStandalone = () => {
+    setSelectedTicket(null)
+    setQuotationDialogOpen(true)
+  }
+
   // Open ticket selection dialog
-  const handleCreateNew = () => {
+  const handleCreateFromTicket = () => {
     setTicketSelectDialogOpen(true)
     fetchRfqTickets()
   }
@@ -238,10 +251,25 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
             Manage customer quotations sent from RFQ tickets
           </p>
         </div>
-        <Button onClick={handleCreateNew} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create Quotation
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Create Quotation
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleCreateStandalone}>
+              <FileText className="h-4 w-4 mr-2" />
+              Create New
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleCreateFromTicket}>
+              <Ticket className="h-4 w-4 mr-2" />
+              Create from Ticket
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Stats Cards */}
@@ -512,18 +540,16 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
         </DialogContent>
       </Dialog>
 
-      {/* Customer Quotation Dialog */}
-      {selectedTicket && (
-        <CustomerQuotationDialog
-          ticket={selectedTicket}
-          open={quotationDialogOpen}
-          onOpenChange={(open) => {
-            setQuotationDialogOpen(open)
-            if (!open) setSelectedTicket(null)
-          }}
-          onCreated={handleQuotationCreated}
-        />
-      )}
+      {/* Customer Quotation Dialog - supports both ticket-linked and standalone */}
+      <CustomerQuotationDialog
+        ticket={selectedTicket || undefined}
+        open={quotationDialogOpen}
+        onOpenChange={(open) => {
+          setQuotationDialogOpen(open)
+          if (!open) setSelectedTicket(null)
+        }}
+        onCreated={handleQuotationCreated}
+      />
     </div>
   )
 }
