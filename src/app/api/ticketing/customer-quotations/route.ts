@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
+    console.log('[CustomerQuotations GET] Query params:', { ticketId, leadId, opportunityId, status, limit, offset })
+
     let query = (supabase as any)
       .from('customer_quotations')
       .select(`
@@ -64,6 +66,11 @@ export async function GET(request: NextRequest) {
     query = query.range(offset, offset + limit - 1)
 
     const { data, error, count } = await query
+
+    console.log('[CustomerQuotations GET] Query result:', { count, error: error?.message, dataLength: data?.length })
+    if (data && data.length > 0) {
+      console.log('[CustomerQuotations GET] First quotation:', data[0])
+    }
 
     if (error) {
       console.error('Error fetching customer quotations:', error)
