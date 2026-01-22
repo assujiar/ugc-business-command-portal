@@ -225,8 +225,8 @@ export function CustomerQuotationDialog({
   onSuccess,
   onCreated,
 }: CustomerQuotationDialogProps) {
-  // Determine the source type
-  const sourceType = lead ? 'lead' : opportunity ? 'opportunity' : 'ticket'
+  // Determine the source type (standalone if no source is provided)
+  const sourceType = lead ? 'lead' : opportunity ? 'opportunity' : (ticket?.id || legacyTicketId) ? 'ticket' : 'standalone'
 
   // Support both legacy and new prop patterns
   const ticketId = ticket?.id || legacyTicketId || ''
@@ -245,7 +245,7 @@ export function CustomerQuotationDialog({
     ? `Opportunity: ${opportunity.name}`
     : ticketData.ticket_code
     ? `${ticketData.ticket_code} - ${ticketData.subject}`
-    : 'New Quotation'
+    : 'Standalone Quotation (No linked ticket/lead/opportunity)'
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
@@ -421,7 +421,11 @@ export function CustomerQuotationDialog({
       }
 
       fetchTermTemplates()
+      return
     }
+
+    // Standalone mode - no source provided, just fetch templates
+    fetchTermTemplates()
   }, [open, ticketData, operationalCost, lead, opportunity])
 
   // Fetch term templates
