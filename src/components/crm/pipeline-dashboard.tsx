@@ -130,6 +130,9 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
   const [showQuotationOptions, setShowQuotationOptions] = useState(false)
   const [creatingQuotation, setCreatingQuotation] = useState(false)
 
+  // Shipment details from linked lead (for update dialog)
+  const [updateDialogShipment, setUpdateDialogShipment] = useState<any>(null)
+
   // Set current time only on client-side to avoid hydration mismatch
   useEffect(() => {
     setMounted(true)
@@ -256,13 +259,29 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     setGeoError(null)
     setShowQuotationOptions(false)
     setCreatingQuotation(false)
+    setUpdateDialogShipment(null)
   }
 
-  const openUpdateDialog = (opportunity: Opportunity) => {
+  const openUpdateDialog = async (opportunity: Opportunity) => {
     resetForm()
+    setUpdateDialogShipment(null)
     setUpdateDialog({ open: true, opportunity })
     // Auto-get location when dialog opens
     getCurrentLocation()
+
+    // Fetch shipment details from linked lead if available
+    if (opportunity.lead_id) {
+      try {
+        const response = await fetch(`/api/crm/leads/${opportunity.lead_id}`)
+        if (response.ok) {
+          const result = await response.json()
+          console.log('[PipelineDashboard] Fetched shipment from lead:', result.data?.shipment_details)
+          setUpdateDialogShipment(result.data?.shipment_details || null)
+        }
+      } catch (error) {
+        console.error('[PipelineDashboard] Error fetching lead shipment:', error)
+      }
+    }
   }
 
   const openDetailDialog = (opportunityId: string) => {
@@ -344,6 +363,37 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
   const handleCreateTicketFromUpdate = () => {
     if (!updateDialog.opportunity) return
     const opp = updateDialog.opportunity
+
+    // Store shipment data in sessionStorage for ticket form to read
+    if (updateDialogShipment) {
+      console.log('[PipelineDashboard] Storing shipment for ticket:', updateDialogShipment)
+      sessionStorage.setItem('prefill_ticket_shipment', JSON.stringify({
+        service_type_code: updateDialogShipment.service_type_code,
+        department: updateDialogShipment.department,
+        fleet_type: updateDialogShipment.fleet_type,
+        fleet_quantity: updateDialogShipment.fleet_quantity,
+        incoterm: updateDialogShipment.incoterm,
+        cargo_category: updateDialogShipment.cargo_category,
+        cargo_description: updateDialogShipment.cargo_description,
+        origin_address: updateDialogShipment.origin_address,
+        origin_city: updateDialogShipment.origin_city,
+        origin_country: updateDialogShipment.origin_country,
+        destination_address: updateDialogShipment.destination_address,
+        destination_city: updateDialogShipment.destination_city,
+        destination_country: updateDialogShipment.destination_country,
+        quantity: updateDialogShipment.quantity,
+        unit_of_measure: updateDialogShipment.unit_of_measure,
+        weight_per_unit_kg: updateDialogShipment.weight_per_unit_kg,
+        weight_total_kg: updateDialogShipment.weight_total_kg,
+        length_cm: updateDialogShipment.length_cm,
+        width_cm: updateDialogShipment.width_cm,
+        height_cm: updateDialogShipment.height_cm,
+        volume_total_cbm: updateDialogShipment.volume_total_cbm,
+        scope_of_work: updateDialogShipment.scope_of_work,
+        additional_services: updateDialogShipment.additional_services,
+      }))
+    }
+
     const params = new URLSearchParams({
       from: 'opportunity',
       opportunity_id: opp.opportunity_id,
@@ -366,9 +416,31 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           opportunity_id: opp.opportunity_id,
+          lead_id: opp.lead_id,
           source_type: 'opportunity',
           customer_name: opp.account_name || opp.name || '',
           customer_company: opp.account_name,
+          // Shipment details from linked lead
+          service_type: updateDialogShipment?.service_type_code,
+          department: updateDialogShipment?.department,
+          fleet_type: updateDialogShipment?.fleet_type,
+          fleet_quantity: updateDialogShipment?.fleet_quantity,
+          incoterm: updateDialogShipment?.incoterm,
+          commodity: updateDialogShipment?.cargo_category,
+          cargo_description: updateDialogShipment?.cargo_description,
+          cargo_weight: updateDialogShipment?.weight_total_kg,
+          cargo_weight_unit: 'kg',
+          cargo_volume: updateDialogShipment?.volume_total_cbm,
+          cargo_volume_unit: 'cbm',
+          cargo_quantity: updateDialogShipment?.quantity,
+          cargo_quantity_unit: updateDialogShipment?.unit_of_measure,
+          origin_address: updateDialogShipment?.origin_address,
+          origin_city: updateDialogShipment?.origin_city,
+          origin_country: updateDialogShipment?.origin_country,
+          destination_address: updateDialogShipment?.destination_address,
+          destination_city: updateDialogShipment?.destination_city,
+          destination_country: updateDialogShipment?.destination_country,
+          scope_of_work: updateDialogShipment?.scope_of_work,
         }),
       })
 
