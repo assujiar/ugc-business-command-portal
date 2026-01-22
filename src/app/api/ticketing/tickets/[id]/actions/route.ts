@@ -64,12 +64,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     switch (action) {
       case 'submit_quote':
         // Assignee submits quote to creator
-        ({ data: result, error } = await (supabase as any).rpc('rpc_ticket_submit_quote', {
+        // Use rpc_ticket_create_quote which supports rate_structure and items
+        ({ data: result, error } = await (supabase as any).rpc('rpc_ticket_create_quote', {
           p_ticket_id: id,
           p_amount: actionData.amount,
           p_currency: actionData.currency || 'IDR',
           p_valid_until: actionData.valid_until || null,
           p_terms: actionData.terms || null,
+          p_rate_structure: actionData.rate_structure || 'bundling',
+          p_items: actionData.items || [],
         }))
         break
 
