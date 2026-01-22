@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessTicketing } from '@/lib/permissions'
 import { sendEmail, isEmailServiceConfigured } from '@/lib/email'
 import type { UserRole } from '@/types/database'
@@ -584,8 +585,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!isResend) {
       const sentTo = method === 'email' ? quotation.customer_email : quotation.customer_phone
 
+      // Use admin client for status updates to bypass RLS
+      const adminClient = createAdminClient()
+
       // Update quotation status
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await (adminClient as any)
         .from('customer_quotations')
         .update({
           status: 'sent',
@@ -600,10 +604,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (updateError) {
         console.error('Error updating quotation status:', updateError)
         // Continue anyway - email was sent successfully
+      } else {
+        console.log('Quotation status updated to sent')
       }
 
       // Sync quotation status to all linked entities (ticket, lead, opportunity)
-      const { error: syncError } = await (supabase as any).rpc('sync_quotation_to_all', {
+      const { data: syncResult, error: syncError } = await (adminClient as any).rpc('sync_quotation_to_all', {
         p_quotation_id: id,
         p_new_status: 'sent',
         p_actor_user_id: user.id
@@ -612,6 +618,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (syncError) {
         console.error('Error syncing quotation status:', syncError)
         // Continue anyway - main operation succeeded
+      } else {
+        console.log('Quotation synced to all entities:', syncResult)
       }
     }
 
