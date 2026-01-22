@@ -1922,20 +1922,39 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                               {/* Breakdown Mode - Itemized Costs */}
                               {costRateStructure === 'breakdown' && (
                                 <div className="space-y-3">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-sm text-muted-foreground">Add cost components</span>
-                                    <Button type="button" size="sm" variant="outline" onClick={addCostItem}>
-                                      <Plus className="h-4 w-4 mr-1" />
-                                      Add Item
-                                    </Button>
+                                  {/* Total and Add Item - Always visible at top */}
+                                  <div className="sticky top-0 bg-background z-10 pb-2 space-y-3">
+                                    {/* Total Display */}
+                                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                                      <span className="text-xs text-muted-foreground block">Total Cost</span>
+                                      <span className="text-xl font-bold font-mono text-green-700 dark:text-green-400">
+                                        {new Intl.NumberFormat('id-ID', {
+                                          style: 'currency',
+                                          currency: costCurrency,
+                                          minimumFractionDigits: 0,
+                                        }).format(totalBreakdownCost)}
+                                      </span>
+                                    </div>
+
+                                    {/* Add Item Button */}
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm text-muted-foreground">
+                                        {costItems.length} component{costItems.length !== 1 ? 's' : ''} added
+                                      </span>
+                                      <Button type="button" size="sm" variant="outline" onClick={addCostItem}>
+                                        <Plus className="h-4 w-4 mr-1" />
+                                        Add Item
+                                      </Button>
+                                    </div>
                                   </div>
 
+                                  {/* Items List */}
                                   {costItems.length === 0 ? (
                                     <div className="text-center py-6 text-muted-foreground border border-dashed rounded-lg">
                                       No items added. Click "Add Item" to start.
                                     </div>
                                   ) : (
-                                    <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                                    <div className="space-y-3 max-h-[250px] overflow-y-auto">
                                       {costItems.map((item, index) => (
                                         <div key={item.id} className="p-3 border rounded-lg space-y-3 bg-muted/30">
                                           <div className="flex items-center justify-between">
@@ -2021,20 +2040,6 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                           </div>
                                         </div>
                                       ))}
-                                    </div>
-                                  )}
-
-                                  {/* Total */}
-                                  {costItems.length > 0 && (
-                                    <div className="flex items-center justify-between p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                                      <span className="font-medium">Total Cost</span>
-                                      <span className="text-xl font-bold font-mono text-green-700 dark:text-green-400">
-                                        {new Intl.NumberFormat('id-ID', {
-                                          style: 'currency',
-                                          currency: costCurrency,
-                                          minimumFractionDigits: 0,
-                                        }).format(totalBreakdownCost)}
-                                      </span>
                                     </div>
                                   )}
                                 </div>

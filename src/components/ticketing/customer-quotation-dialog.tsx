@@ -325,6 +325,20 @@ export function CustomerQuotationDialog({
     }
   }, [rateStructure, totalCost, targetMarginPercent, items])
 
+  // Calculate total cost for breakdown mode
+  const totalBreakdownCost = useMemo(() => {
+    return items.reduce((sum, item) => sum + (item.cost_amount || 0), 0)
+  }, [items])
+
+  // Calculate total margin percentage for breakdown mode
+  const totalMarginPercent = useMemo(() => {
+    if (rateStructure === 'bundling') {
+      return targetMarginPercent
+    }
+    if (totalBreakdownCost <= 0) return 0
+    return ((totalSellingRate - totalBreakdownCost) / totalBreakdownCost) * 100
+  }, [rateStructure, targetMarginPercent, totalBreakdownCost, totalSellingRate])
+
   // Initialize from ticket, lead, or opportunity data
   useEffect(() => {
     if (!open) return
@@ -1233,20 +1247,49 @@ export function CustomerQuotationDialog({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Add rate components</span>
-                    <Button size="sm" variant="outline" onClick={addItem}>
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Item
-                    </Button>
+                  {/* Summary and Add Item - Always visible at top */}
+                  <div className="sticky top-0 bg-background z-10 pb-2 space-y-3">
+                    {/* Totals Display */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="p-3 bg-muted/50 rounded-lg">
+                        <span className="text-xs text-muted-foreground block">Total Cost</span>
+                        <span className="text-lg font-bold font-mono">
+                          {formatCurrency(totalBreakdownCost)}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                        <span className="text-xs text-muted-foreground block">Total Margin</span>
+                        <span className={`text-lg font-bold font-mono ${totalMarginPercent >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600'}`}>
+                          {totalMarginPercent.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                        <span className="text-xs text-muted-foreground block">Total Selling</span>
+                        <span className="text-lg font-bold font-mono text-green-700 dark:text-green-400">
+                          {formatCurrency(totalSellingRate)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Add Item Button */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        {items.length} component{items.length !== 1 ? 's' : ''} added
+                      </span>
+                      <Button size="sm" variant="outline" onClick={addItem}>
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Item
+                      </Button>
+                    </div>
                   </div>
 
+                  {/* Items List */}
                   {items.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
                       No items added. Click "Add Item" to start.
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-3 max-h-[350px] overflow-y-auto">
                       {items.map((item, index) => (
                         <div key={item.id} className="p-3 border rounded-lg space-y-3 bg-muted/30">
                           <div className="flex items-center justify-between">
@@ -1340,13 +1383,6 @@ export function CustomerQuotationDialog({
                           </div>
                         </div>
                       ))}
-
-                      <div className="flex items-center justify-between p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                        <span className="font-medium">Total Selling Rate</span>
-                        <span className="text-xl font-bold font-mono text-green-700 dark:text-green-400">
-                          {formatCurrency(totalSellingRate)}
-                        </span>
-                      </div>
                     </div>
                   )}
                 </div>
