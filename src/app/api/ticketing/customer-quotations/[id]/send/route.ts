@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessTicketing } from '@/lib/permissions'
 import { sendEmail, isEmailServiceConfigured } from '@/lib/email'
 import type { UserRole } from '@/types/database'
@@ -50,6 +51,9 @@ const UGC_INFO = {
 
 // Production base URL
 const PRODUCTION_URL = 'https://ugc-business-command-portal.vercel.app'
+
+// Sales Manager Email for CC (can be configured via environment variable)
+const SALES_MANAGER_EMAIL = process.env.SALES_MANAGER_EMAIL || ''
 
 // Generate WhatsApp text - clean formatting, no problematic characters
 const generateWhatsAppText = (quotation: any, profile: ProfileData, validationUrl: string, pdfUrl: string): string => {
@@ -111,7 +115,7 @@ ${UGC_INFO.phone}`
   return text
 }
 
-// Generate Email HTML - modern, attractive design with QR code
+// Generate Email HTML - email-client compatible design with QR code
 const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: string, pdfUrl: string): string => {
   const customerName = quotation.customer_name || 'Bapak/Ibu'
   const companyName = quotation.customer_company || ''
@@ -129,56 +133,58 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
   let itemsTable = ''
   if (quotation.rate_structure === 'breakdown' && quotation.items?.length > 0) {
     const itemRows = quotation.items.map((item: any, index: number) => `
-      <tr style="background: ${index % 2 === 0 ? '#ffffff' : '#fafafa'};">
-        <td style="padding: 12px 15px; border-bottom: 1px solid #f0f0f0; color: #374151;">${item.component_name || item.component_type}${item.quantity && item.unit ? ` <span style="color: #9ca3af; font-size: 12px;">(${item.quantity} ${item.unit})</span>` : ''}</td>
-        <td style="padding: 12px 15px; border-bottom: 1px solid #f0f0f0; text-align: right; font-weight: 500; color: #1f2937;">${formatCurrency(item.selling_rate, quotation.currency)}</td>
+      <tr${index % 2 === 0 ? '' : ' bgcolor="#fafafa"'}>
+        <td style="padding: 12px 15px; border-bottom: 1px solid #f0f0f0; color: #374151; font-family: Arial, sans-serif; font-size: 14px;">${item.component_name || item.component_type}${item.quantity && item.unit ? ` <span style="color: #9ca3af; font-size: 12px;">(${item.quantity} ${item.unit})</span>` : ''}</td>
+        <td style="padding: 12px 15px; border-bottom: 1px solid #f0f0f0; text-align: right; font-weight: bold; color: #1f2937; font-family: Arial, sans-serif; font-size: 14px;">${formatCurrency(item.selling_rate, quotation.currency)}</td>
       </tr>
     `).join('')
 
     itemsTable = `
-      <table style="width: 100%; border-collapse: collapse; margin: 0; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        <thead>
-          <tr style="background: linear-gradient(135deg, #ff4600 0%, #ff6b35 100%);">
-            <th style="padding: 14px 15px; text-align: left; color: white; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Deskripsi</th>
-            <th style="padding: 14px 15px; text-align: right; color: white; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Rate</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemRows}
-          <tr style="background: linear-gradient(135deg, #fff5f0 0%, #ffffff 100%);">
-            <td style="padding: 16px 15px; font-weight: 700; color: #ff4600; font-size: 15px; border-top: 2px solid #ff4600;">TOTAL</td>
-            <td style="padding: 16px 15px; text-align: right; font-weight: 700; color: #ff4600; font-size: 18px; border-top: 2px solid #ff4600;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</td>
-          </tr>
-        </tbody>
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; border: 1px solid #e5e7eb;">
+        <tr bgcolor="#ff4600">
+          <th style="padding: 14px 15px; text-align: left; color: white; font-weight: bold; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Deskripsi</th>
+          <th style="padding: 14px 15px; text-align: right; color: white; font-weight: bold; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Rate</th>
+        </tr>
+        ${itemRows}
+        <tr bgcolor="#fff5f0">
+          <td style="padding: 16px 15px; font-weight: bold; color: #ff4600; font-size: 15px; border-top: 2px solid #ff4600; font-family: Arial, sans-serif;">TOTAL</td>
+          <td style="padding: 16px 15px; text-align: right; font-weight: bold; color: #ff4600; font-size: 18px; border-top: 2px solid #ff4600; font-family: Arial, sans-serif;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</td>
+        </tr>
       </table>
     `
   }
 
   return `
-<!DOCTYPE html>
-<html lang="id">
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quotation ${quotation.quotation_number}</title>
+  <!--[if mso]>
+  <style type="text/css">
+    table {border-collapse: collapse;}
+    .button-link {padding: 14px 30px !important;}
+  </style>
+  <![endif]-->
 </head>
-<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f4f6">
     <tr>
-      <td style="padding: 20px 0;">
-        <table role="presentation" style="width: 100%; max-width: 620px; margin: 0 auto; border-collapse: collapse;">
+      <td align="center" style="padding: 20px 10px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%;">
 
           <!-- Header Banner -->
           <tr>
-            <td style="background: linear-gradient(135deg, #ff4600 0%, #ff6b35 50%, #ff8c42 100%); padding: 0; border-radius: 12px 12px 0 0;">
-              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+            <td bgcolor="#ff4600" style="padding: 0; border-radius: 12px 12px 0 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="padding: 30px 35px;">
-                    <img src="${PRODUCTION_URL}/logo/logougctaglinewhite.png" alt="UGC Logistics" style="height: 48px; display: block;" />
+                  <td style="padding: 25px 30px;" valign="middle">
+                    <img src="${PRODUCTION_URL}/logo/logougctaglinewhite.png" alt="UGC Logistics" width="160" height="auto" style="display: block; border: 0;" />
                   </td>
-                  <td style="padding: 30px 35px; text-align: right;">
-                    <p style="margin: 0; color: rgba(255,255,255,0.9); font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Quotation</p>
-                    <p style="margin: 5px 0 0; color: white; font-size: 20px; font-weight: 700;">${quotation.quotation_number}</p>
+                  <td style="padding: 25px 30px; text-align: right;" valign="middle">
+                    <p style="margin: 0; color: #ffffff; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-family: Arial, sans-serif; opacity: 0.9;">Quotation</p>
+                    <p style="margin: 5px 0 0; color: #ffffff; font-size: 18px; font-weight: bold; font-family: Arial, sans-serif;">${quotation.quotation_number}</p>
                   </td>
                 </tr>
               </table>
@@ -187,17 +193,17 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
 
           <!-- Quotation Info Strip -->
           <tr>
-            <td style="background: #1f2937; padding: 15px 35px;">
-              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+            <td bgcolor="#1f2937" style="padding: 12px 30px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="color: rgba(255,255,255,0.7); font-size: 12px;">
-                    Tanggal: <span style="color: white; font-weight: 500;">${formatDate(quotation.created_at)}</span>
+                  <td style="color: #9ca3af; font-size: 12px; font-family: Arial, sans-serif;">
+                    Tanggal: <span style="color: #ffffff; font-weight: bold;">${formatDate(quotation.created_at)}</span>
                   </td>
-                  <td style="text-align: center; color: rgba(255,255,255,0.7); font-size: 12px;">
-                    ${quotation.service_type ? `Layanan: <span style="color: white; font-weight: 500;">${quotation.service_type}</span>` : ''}
+                  <td style="text-align: center; color: #9ca3af; font-size: 12px; font-family: Arial, sans-serif;">
+                    ${quotation.service_type ? `Layanan: <span style="color: #ffffff; font-weight: bold;">${quotation.service_type}</span>` : '&nbsp;'}
                   </td>
-                  <td style="text-align: right; color: rgba(255,255,255,0.7); font-size: 12px;">
-                    Berlaku: <span style="color: #10b981; font-weight: 500;">${formatDate(quotation.valid_until)}</span>
+                  <td style="text-align: right; color: #9ca3af; font-size: 12px; font-family: Arial, sans-serif;">
+                    Berlaku: <span style="color: #10b981; font-weight: bold;">${formatDate(quotation.valid_until)}</span>
                   </td>
                 </tr>
               </table>
@@ -206,36 +212,37 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
 
           <!-- Main Content -->
           <tr>
-            <td style="background: #ffffff; padding: 35px;">
+            <td bgcolor="#ffffff" style="padding: 30px;">
 
               <!-- Greeting -->
-              <p style="margin: 0 0 5px; color: #6b7280; font-size: 13px;">Kepada Yth.</p>
+              <p style="margin: 0 0 5px; color: #6b7280; font-size: 13px; font-family: Arial, sans-serif;">Kepada Yth.</p>
               ${companyName ? `
-                <p style="margin: 0 0 3px; font-size: 18px; font-weight: 700; color: #1f2937;">${companyName}</p>
-                <p style="margin: 0 0 20px; color: #4b5563;">U.p ${customerName}</p>
+                <p style="margin: 0 0 3px; font-size: 18px; font-weight: bold; color: #1f2937; font-family: Arial, sans-serif;">${companyName}</p>
+                <p style="margin: 0 0 20px; color: #4b5563; font-family: Arial, sans-serif;">U.p ${customerName}</p>
               ` : `
-                <p style="margin: 0 0 20px; font-size: 18px; font-weight: 700; color: #1f2937;">${customerName}</p>
+                <p style="margin: 0 0 20px; font-size: 18px; font-weight: bold; color: #1f2937; font-family: Arial, sans-serif;">${customerName}</p>
               `}
 
-              <p style="margin: 0 0 25px; color: #4b5563; line-height: 1.7;">
+              <p style="margin: 0 0 25px; color: #4b5563; line-height: 1.6; font-family: Arial, sans-serif; font-size: 14px;">
                 Terima kasih atas kepercayaan Anda kepada <strong style="color: #ff4600;">UGC Logistics</strong>.
                 Dengan senang hati kami sampaikan penawaran harga${routeDisplay ? ` untuk pengiriman rute <strong>${routeDisplay}</strong>` : ''} sebagai berikut:
               </p>
 
-              <!-- Route & Service Card -->
-              ${(routeDisplay || quotation.fleet_type || quotation.commodity) ? `
-              <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+              <!-- Route & Service Info -->
+              ${(routeDisplay || quotation.fleet_type) ? `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px;">
                 <tr>
                   ${routeDisplay ? `
-                  <td style="background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%); padding: 18px 20px; border-radius: 10px; width: 50%; vertical-align: top;">
-                    <p style="margin: 0 0 5px; color: #92400e; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Rute Pengiriman</p>
-                    <p style="margin: 0; color: #78350f; font-size: 15px; font-weight: 700;">${routeDisplay}</p>
+                  <td width="${quotation.fleet_type ? '48%' : '100%'}" bgcolor="#fef3c7" style="padding: 15px 18px; border-radius: 8px; vertical-align: top;">
+                    <p style="margin: 0 0 5px; color: #92400e; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold; font-family: Arial, sans-serif;">Rute Pengiriman</p>
+                    <p style="margin: 0; color: #78350f; font-size: 15px; font-weight: bold; font-family: Arial, sans-serif;">${routeDisplay}</p>
                   </td>
+                  ${quotation.fleet_type ? '<td width="4%">&nbsp;</td>' : ''}
                   ` : ''}
                   ${quotation.fleet_type ? `
-                  <td style="background: linear-gradient(135deg, #e0e7ff 0%, #eef2ff 100%); padding: 18px 20px; border-radius: 10px; ${routeDisplay ? 'width: 50%;' : 'width: 100%;'} vertical-align: top; ${routeDisplay ? 'margin-left: 10px;' : ''}">
-                    <p style="margin: 0 0 5px; color: #3730a3; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Armada</p>
-                    <p style="margin: 0; color: #312e81; font-size: 15px; font-weight: 700;">${quotation.fleet_type}${quotation.fleet_quantity > 1 ? ` x ${quotation.fleet_quantity} unit` : ''}</p>
+                  <td width="${routeDisplay ? '48%' : '100%'}" bgcolor="#e0e7ff" style="padding: 15px 18px; border-radius: 8px; vertical-align: top;">
+                    <p style="margin: 0 0 5px; color: #3730a3; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold; font-family: Arial, sans-serif;">Armada</p>
+                    <p style="margin: 0; color: #312e81; font-size: 15px; font-weight: bold; font-family: Arial, sans-serif;">${quotation.fleet_type}${quotation.fleet_quantity > 1 ? ` x ${quotation.fleet_quantity} unit` : ''}</p>
                   </td>
                   ` : ''}
                 </tr>
@@ -244,107 +251,144 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
 
               <!-- Cargo Details -->
               ${(quotation.commodity || quotation.cargo_weight || quotation.cargo_volume) ? `
-              <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px; margin-bottom: 25px;">
-                <p style="margin: 0 0 15px; color: #374151; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Detail Cargo</p>
-                <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                  ${quotation.commodity ? `<tr><td style="padding: 6px 0; color: #6b7280; width: 35%;">Commodity</td><td style="padding: 6px 0; color: #1f2937; font-weight: 500;">${quotation.commodity}</td></tr>` : ''}
-                  ${quotation.cargo_description ? `<tr><td style="padding: 6px 0; color: #6b7280; width: 35%;">Deskripsi</td><td style="padding: 6px 0; color: #1f2937;">${quotation.cargo_description}</td></tr>` : ''}
-                  ${quotation.cargo_weight ? `<tr><td style="padding: 6px 0; color: #6b7280; width: 35%;">Berat</td><td style="padding: 6px 0; color: #1f2937; font-weight: 500;">${quotation.cargo_weight.toLocaleString()} ${quotation.cargo_weight_unit || 'kg'}</td></tr>` : ''}
-                  ${quotation.cargo_volume ? `<tr><td style="padding: 6px 0; color: #6b7280; width: 35%;">Volume</td><td style="padding: 6px 0; color: #1f2937; font-weight: 500;">${quotation.cargo_volume.toLocaleString()} ${quotation.cargo_volume_unit || 'cbm'}</td></tr>` : ''}
-                </table>
-              </div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f9fafb" style="border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 20px;">
+                <tr>
+                  <td style="padding: 18px;">
+                    <p style="margin: 0 0 12px; color: #374151; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Detail Cargo</p>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      ${quotation.commodity ? `<tr><td style="padding: 5px 0; color: #6b7280; width: 35%; font-family: Arial, sans-serif; font-size: 13px;">Commodity</td><td style="padding: 5px 0; color: #1f2937; font-weight: bold; font-family: Arial, sans-serif; font-size: 13px;">${quotation.commodity}</td></tr>` : ''}
+                      ${quotation.cargo_description ? `<tr><td style="padding: 5px 0; color: #6b7280; width: 35%; font-family: Arial, sans-serif; font-size: 13px;">Deskripsi</td><td style="padding: 5px 0; color: #1f2937; font-family: Arial, sans-serif; font-size: 13px;">${quotation.cargo_description}</td></tr>` : ''}
+                      ${quotation.cargo_weight ? `<tr><td style="padding: 5px 0; color: #6b7280; width: 35%; font-family: Arial, sans-serif; font-size: 13px;">Berat</td><td style="padding: 5px 0; color: #1f2937; font-weight: bold; font-family: Arial, sans-serif; font-size: 13px;">${quotation.cargo_weight.toLocaleString()} ${quotation.cargo_weight_unit || 'kg'}</td></tr>` : ''}
+                      ${quotation.cargo_volume ? `<tr><td style="padding: 5px 0; color: #6b7280; width: 35%; font-family: Arial, sans-serif; font-size: 13px;">Volume</td><td style="padding: 5px 0; color: #1f2937; font-weight: bold; font-family: Arial, sans-serif; font-size: 13px;">${quotation.cargo_volume.toLocaleString()} ${quotation.cargo_volume_unit || 'cbm'}</td></tr>` : ''}
+                    </table>
+                  </td>
+                </tr>
+              </table>
               ` : ''}
 
               <!-- Rate Section -->
               ${itemsTable ? `
-                <p style="margin: 0 0 15px; color: #374151; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Rincian Biaya</p>
+                <p style="margin: 0 0 12px; color: #374151; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Rincian Biaya</p>
                 ${itemsTable}
               ` : `
                 <!-- Total Amount Card -->
-                <div style="background: linear-gradient(135deg, #fff5f0 0%, #ffffff 100%); border: 2px solid #ff4600; border-radius: 12px; padding: 30px; text-align: center; margin-bottom: 25px;">
-                  <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px;">Total Penawaran</p>
-                  <p style="margin: 0; color: #ff4600; font-size: 36px; font-weight: 800; letter-spacing: -1px;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</p>
-                </div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fff5f0" style="border: 2px solid #ff4600; border-radius: 10px; margin-bottom: 20px;">
+                  <tr>
+                    <td style="padding: 25px; text-align: center;">
+                      <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px; font-family: Arial, sans-serif;">Total Penawaran</p>
+                      <p style="margin: 0; color: #ff4600; font-size: 32px; font-weight: bold; font-family: Arial, sans-serif;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</p>
+                    </td>
+                  </tr>
+                </table>
               `}
 
               <!-- Scope of Work -->
               ${quotation.scope_of_work ? `
-              <div style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 18px 20px; margin: 25px 0; border-radius: 0 10px 10px 0;">
-                <p style="margin: 0 0 10px; color: #166534; font-size: 12px; font-weight: 600; text-transform: uppercase;">Scope of Work</p>
-                <p style="margin: 0; color: #15803d; white-space: pre-line; line-height: 1.6;">${quotation.scope_of_work}</p>
-              </div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f0fdf4" style="border-left: 4px solid #22c55e; margin: 20px 0;">
+                <tr>
+                  <td style="padding: 15px 18px;">
+                    <p style="margin: 0 0 8px; color: #166534; font-size: 11px; font-weight: bold; text-transform: uppercase; font-family: Arial, sans-serif;">Scope of Work</p>
+                    <p style="margin: 0; color: #15803d; white-space: pre-line; line-height: 1.6; font-family: Arial, sans-serif; font-size: 13px;">${quotation.scope_of_work}</p>
+                  </td>
+                </tr>
+              </table>
               ` : ''}
 
               <!-- Validity Notice -->
-              <div style="background: linear-gradient(135deg, #fef3c7 0%, #fefce8 100%); border-radius: 10px; padding: 18px 20px; margin: 25px 0;">
-                <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                  <tr>
-                    <td style="width: 30px; vertical-align: top; padding-top: 2px;">
-                      <span style="font-size: 20px;">⏰</span>
-                    </td>
-                    <td>
-                      <p style="margin: 0; color: #92400e; font-weight: 600;">Validitas Penawaran</p>
-                      <p style="margin: 5px 0 0; color: #78350f; font-size: 14px;">Quotation ini berlaku selama <strong>${quotation.validity_days} hari</strong> hingga <strong>${formatDate(quotation.valid_until)}</strong></p>
-                    </td>
-                  </tr>
-                </table>
-              </div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fef3c7" style="border-radius: 8px; margin: 20px 0;">
+                <tr>
+                  <td width="40" style="padding: 15px 5px 15px 15px; vertical-align: top;">
+                    <span style="font-size: 20px;">⏰</span>
+                  </td>
+                  <td style="padding: 15px 15px 15px 5px;">
+                    <p style="margin: 0; color: #92400e; font-weight: bold; font-family: Arial, sans-serif; font-size: 14px;">Validitas Penawaran</p>
+                    <p style="margin: 5px 0 0; color: #78350f; font-size: 13px; font-family: Arial, sans-serif;">Quotation ini berlaku selama <strong>${quotation.validity_days} hari</strong> hingga <strong>${formatDate(quotation.valid_until)}</strong></p>
+                  </td>
+                </tr>
+              </table>
 
               <!-- CTA Section with QR -->
-              <div style="background: #f8fafc; border-radius: 12px; padding: 25px; margin: 30px 0; text-align: center;">
-                <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                  <tr>
-                    <td style="vertical-align: middle; text-align: left; padding-right: 25px;">
-                      <p style="margin: 0 0 15px; color: #1f2937; font-weight: 600; font-size: 15px;">Lihat Detail Quotation</p>
-                      <p style="margin: 0 0 20px; color: #6b7280; font-size: 13px; line-height: 1.5;">Scan QR code atau klik tombol di bawah untuk melihat detail lengkap dan download PDF.</p>
-                      <a href="${validationUrl}" style="display: inline-block; background: linear-gradient(135deg, #ff4600 0%, #ff6b35 100%); color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 14px rgba(255,70,0,0.3);">Lihat Quotation Online</a>
-                      <br/>
-                      <a href="${pdfUrl}" style="display: inline-block; margin-top: 12px; background: white; color: #ff4600; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 13px; border: 2px solid #ff4600;">Download PDF</a>
-                    </td>
-                    <td style="vertical-align: middle; text-align: center; width: 150px;">
-                      <div style="background: white; padding: 12px; border-radius: 12px; display: inline-block; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                        <img src="${qrCodeUrl}" alt="QR Code" style="width: 120px; height: 120px; display: block;" />
-                      </div>
-                      <p style="margin: 10px 0 0; color: #9ca3af; font-size: 11px;">Scan untuk verifikasi</p>
-                    </td>
-                  </tr>
-                </table>
-              </div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f8fafc" style="border-radius: 10px; margin: 25px 0;">
+                <tr>
+                  <td style="padding: 25px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="vertical-align: top; padding-right: 20px;">
+                          <p style="margin: 0 0 12px; color: #1f2937; font-weight: bold; font-size: 15px; font-family: Arial, sans-serif;">Lihat Detail Quotation</p>
+                          <p style="margin: 0 0 18px; color: #6b7280; font-size: 13px; line-height: 1.5; font-family: Arial, sans-serif;">Scan QR code atau klik tombol untuk melihat detail lengkap dan download PDF.</p>
 
-              <p style="margin: 0 0 25px; color: #4b5563; line-height: 1.7;">
+                          <!-- Primary Button -->
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 10px;">
+                            <tr>
+                              <td bgcolor="#ff4600" style="border-radius: 6px;">
+                                <a href="${validationUrl}" target="_blank" style="display: inline-block; padding: 12px 24px; color: #ffffff; text-decoration: none; font-weight: bold; font-size: 13px; font-family: Arial, sans-serif;">Lihat Quotation Online</a>
+                              </td>
+                            </tr>
+                          </table>
+
+                          <!-- Secondary Button -->
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                              <td style="border: 2px solid #ff4600; border-radius: 6px;">
+                                <a href="${pdfUrl}" target="_blank" style="display: inline-block; padding: 10px 20px; color: #ff4600; text-decoration: none; font-weight: bold; font-size: 12px; font-family: Arial, sans-serif;">Download PDF</a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                        <td width="140" style="vertical-align: top; text-align: center;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="border-radius: 8px; border: 1px solid #e5e7eb;">
+                            <tr>
+                              <td style="padding: 10px;">
+                                <img src="${qrCodeUrl}" alt="QR Code" width="100" height="100" style="display: block; border: 0;" />
+                              </td>
+                            </tr>
+                          </table>
+                          <p style="margin: 8px 0 0; color: #9ca3af; font-size: 10px; font-family: Arial, sans-serif;">Scan untuk verifikasi</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 20px; color: #4b5563; line-height: 1.6; font-family: Arial, sans-serif; font-size: 14px;">
                 Jika Bapak/Ibu memiliki pertanyaan atau membutuhkan informasi tambahan, silakan menghubungi kami. Kami siap membantu.
               </p>
 
               <!-- Signature -->
-              <div style="border-top: 1px solid #e5e7eb; padding-top: 25px; margin-top: 30px;">
-                <p style="margin: 0 0 3px; color: #6b7280; font-size: 13px;">Hormat kami,</p>
-                <p style="margin: 12px 0 3px; color: #ff4600; font-size: 16px; font-weight: 700;">${profile.name}</p>
-                <p style="margin: 0 0 3px; color: #4b5563; font-size: 13px;">Sales & Commercial Executive</p>
-                <p style="margin: 0 0 12px; color: #4b5563; font-size: 13px;">${UGC_INFO.shortName}</p>
-                <p style="margin: 0; color: #6b7280; font-size: 12px;">
-                  ${profile.email} | ${UGC_INFO.phone}
-                </p>
-              </div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 25px;">
+                <tr>
+                  <td style="padding-top: 20px;">
+                    <p style="margin: 0 0 3px; color: #6b7280; font-size: 13px; font-family: Arial, sans-serif;">Hormat kami,</p>
+                    <p style="margin: 12px 0 3px; color: #ff4600; font-size: 16px; font-weight: bold; font-family: Arial, sans-serif;">${profile.name}</p>
+                    <p style="margin: 0 0 3px; color: #4b5563; font-size: 13px; font-family: Arial, sans-serif;">Sales & Commercial Executive</p>
+                    <p style="margin: 0 0 10px; color: #4b5563; font-size: 13px; font-family: Arial, sans-serif;">${UGC_INFO.shortName}</p>
+                    <p style="margin: 0; color: #6b7280; font-size: 12px; font-family: Arial, sans-serif;">
+                      ${profile.email} | ${UGC_INFO.phone}
+                    </p>
+                  </td>
+                </tr>
+              </table>
 
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td style="background: #1f2937; padding: 30px 35px; border-radius: 0 0 12px 12px;">
-              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+            <td bgcolor="#1f2937" style="padding: 25px 30px; border-radius: 0 0 12px 12px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td>
-                    <p style="margin: 0 0 5px; color: white; font-weight: 700; font-size: 14px;">${UGC_INFO.name}</p>
-                    <p style="margin: 0; color: rgba(255,255,255,0.7); font-size: 12px; line-height: 1.5;">${UGC_INFO.address}</p>
-                    <p style="margin: 10px 0 0; color: rgba(255,255,255,0.7); font-size: 12px;">
+                    <p style="margin: 0 0 5px; color: #ffffff; font-weight: bold; font-size: 14px; font-family: Arial, sans-serif;">${UGC_INFO.name}</p>
+                    <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.5; font-family: Arial, sans-serif;">${UGC_INFO.address}</p>
+                    <p style="margin: 10px 0 0; color: #9ca3af; font-size: 12px; font-family: Arial, sans-serif;">
                       Tel: ${UGC_INFO.phone} | Email: ${UGC_INFO.email}
                     </p>
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 20px;">
-                    <p style="margin: 0; color: rgba(255,255,255,0.5); font-size: 10px; text-align: center;">
+                  <td style="padding-top: 18px; border-top: 1px solid #374151; margin-top: 18px;">
+                    <p style="margin: 0; padding-top: 15px; color: #6b7280; font-size: 10px; text-align: center; font-family: Arial, sans-serif;">
                       Email ini dikirim otomatis dari UGC Business Command Portal. Jika Anda menerima email ini karena kesalahan, mohon abaikan.
                     </p>
                   </td>
@@ -536,35 +580,81 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       // Check if email service is configured
       if (!isEmailServiceConfigured()) {
+        // Even without SMTP, update status to 'sent' when using fallback
+        if (!isResend) {
+          const adminClient = createAdminClient()
+          await (adminClient as any)
+            .from('customer_quotations')
+            .update({
+              status: 'sent',
+              sent_via: 'email',
+              sent_to: quotation.customer_email,
+              sent_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', id)
+
+          // Sync status to linked entities
+          await (adminClient as any).rpc('sync_quotation_to_all', {
+            p_quotation_id: id,
+            p_new_status: 'sent',
+            p_actor_user_id: user.id
+          })
+        }
+
         return NextResponse.json({
-          error: 'Email service is not configured. Please set SMTP environment variables (SMTP_HOST, SMTP_USER, SMTP_PASS).',
-          fallback: {
+          success: true,
+          message: 'Email service not configured. Opening email client as fallback.',
+          fallback: true,
+          data: {
             email_subject: emailSubject,
             email_html: emailHtml,
             email_text: emailText,
             recipient_email: quotation.customer_email,
+            validation_url: validationUrl,
+            pdf_url: pdfDownloadUrl,
           }
-        }, { status: 503 })
+        })
+      }
+
+      // Build CC list: sender's email + sales manager (if configured)
+      const ccList: string[] = []
+
+      // CC to the sender (current user)
+      if (profileData.email && profileData.email !== quotation.customer_email) {
+        ccList.push(profileData.email)
+      }
+
+      // CC to sales manager (if configured and different from sender)
+      if (SALES_MANAGER_EMAIL &&
+          SALES_MANAGER_EMAIL !== profileData.email &&
+          SALES_MANAGER_EMAIL !== quotation.customer_email) {
+        ccList.push(SALES_MANAGER_EMAIL)
       }
 
       // Send email via SMTP (Nodemailer)
       // Reply-To is set to quotation creator's email so customer replies go to the right person
+      // CC to sender and sales manager for tracking
       const emailResult = await sendEmail({
         to: quotation.customer_email,
         subject: emailSubject,
         html: emailHtml,
         text: emailText,
         replyTo: creatorEmail, // Reply goes to quotation creator
+        cc: ccList.length > 0 ? ccList : undefined,
       })
 
       if (!emailResult.success) {
+        // Email failed but provide fallback - still update status if using fallback
         return NextResponse.json({
-          error: emailResult.error || 'Failed to send email',
+          error: emailResult.error || 'Failed to send email via SMTP',
           fallback: {
             email_subject: emailSubject,
             email_html: emailHtml,
             email_text: emailText,
             recipient_email: quotation.customer_email,
+            validation_url: validationUrl,
+            pdf_url: pdfDownloadUrl,
           }
         }, { status: 500 })
       }
@@ -575,6 +665,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         message_id: emailResult.messageId,
         email_subject: emailSubject,
         recipient_email: quotation.customer_email,
+        cc_emails: ccList.length > 0 ? ccList : undefined,
         pdf_url: pdfDownloadUrl,
         validation_url: validationUrl,
       }
@@ -584,8 +675,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!isResend) {
       const sentTo = method === 'email' ? quotation.customer_email : quotation.customer_phone
 
+      // Use admin client for status updates to bypass RLS
+      const adminClient = createAdminClient()
+
       // Update quotation status
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await (adminClient as any)
         .from('customer_quotations')
         .update({
           status: 'sent',
@@ -600,10 +694,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (updateError) {
         console.error('Error updating quotation status:', updateError)
         // Continue anyway - email was sent successfully
+      } else {
+        console.log('Quotation status updated to sent')
       }
 
       // Sync quotation status to all linked entities (ticket, lead, opportunity)
-      const { error: syncError } = await (supabase as any).rpc('sync_quotation_to_all', {
+      const { data: syncResult, error: syncError } = await (adminClient as any).rpc('sync_quotation_to_all', {
         p_quotation_id: id,
         p_new_status: 'sent',
         p_actor_user_id: user.id
@@ -612,6 +708,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (syncError) {
         console.error('Error syncing quotation status:', syncError)
         // Continue anyway - main operation succeeded
+      } else {
+        console.log('Quotation synced to all entities:', syncResult)
       }
     }
 
