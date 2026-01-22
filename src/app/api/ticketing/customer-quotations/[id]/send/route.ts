@@ -52,6 +52,9 @@ const UGC_INFO = {
 // Production base URL
 const PRODUCTION_URL = 'https://ugc-business-command-portal.vercel.app'
 
+// Sales Manager Email for CC (can be configured via environment variable)
+const SALES_MANAGER_EMAIL = process.env.SALES_MANAGER_EMAIL || ''
+
 // Generate WhatsApp text - clean formatting, no problematic characters
 const generateWhatsAppText = (quotation: any, profile: ProfileData, validationUrl: string, pdfUrl: string): string => {
   const greeting = getTimeBasedGreeting()
@@ -614,14 +617,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         })
       }
 
+      // Build CC list: sender's email + sales manager (if configured)
+      const ccList: string[] = []
+
+      // CC to the sender (current user)
+      if (profileData.email && profileData.email !== quotation.customer_email) {
+        ccList.push(profileData.email)
+      }
+
+      // CC to sales manager (if configured and different from sender)
+      if (SALES_MANAGER_EMAIL &&
+          SALES_MANAGER_EMAIL !== profileData.email &&
+          SALES_MANAGER_EMAIL !== quotation.customer_email) {
+        ccList.push(SALES_MANAGER_EMAIL)
+      }
+
       // Send email via SMTP (Nodemailer)
       // Reply-To is set to quotation creator's email so customer replies go to the right person
+      // CC to sender and sales manager for tracking
       const emailResult = await sendEmail({
         to: quotation.customer_email,
         subject: emailSubject,
         html: emailHtml,
         text: emailText,
         replyTo: creatorEmail, // Reply goes to quotation creator
+        cc: ccList.length > 0 ? ccList : undefined,
       })
 
       if (!emailResult.success) {
@@ -645,6 +665,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         message_id: emailResult.messageId,
         email_subject: emailSubject,
         recipient_email: quotation.customer_email,
+        cc_emails: ccList.length > 0 ? ccList : undefined,
         pdf_url: pdfDownloadUrl,
         validation_url: validationUrl,
       }
