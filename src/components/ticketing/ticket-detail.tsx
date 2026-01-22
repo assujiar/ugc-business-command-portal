@@ -2490,7 +2490,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                     {customerQuotations.map((quotation: any) => (
                       <Link
                         key={quotation.id}
-                        href={`/ticketing/quotations/${quotation.id}`}
+                        href={`/customer-quotations/${quotation.id}`}
                         className="block p-3 rounded-lg border hover:bg-muted/50 transition-colors"
                       >
                         <div className="flex items-center justify-between mb-2">
