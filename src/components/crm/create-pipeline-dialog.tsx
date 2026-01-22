@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/select'
 import {
   SERVICE_TYPES,
+  SERVICE_SCOPES,
   DOMESTICS_SERVICE_CODES,
   EXIM_SERVICE_CODES,
   FLEET_TYPES,
@@ -43,6 +44,8 @@ import {
   ADDITIONAL_SERVICES,
   COUNTRIES,
   ACCOUNT_STATUSES,
+  getServicesByScope,
+  getServiceTypeDisplayLabel,
 } from '@/lib/constants'
 import { toast } from '@/hooks/use-toast'
 import type { AccountStatus } from '@/types/database'
@@ -337,16 +340,11 @@ export function CreatePipelineDialog({ trigger }: CreatePipelineDialogProps) {
     }
   }
 
-  // Group services by department
-  const domesticsServices = SERVICE_TYPES.filter(
-    (s) => s.department === 'Domestics Operations'
-  )
-  const eximServices = SERVICE_TYPES.filter(
-    (s) => s.department === 'Exim Operations'
-  )
-  const dtdServices = SERVICE_TYPES.filter(
-    (s) => s.department === 'Import DTD Operations'
-  )
+  // Group services by scope
+  const domesticsServices = getServicesByScope('Domestics')
+  const exportServices = getServicesByScope('Export')
+  const importServices = getServicesByScope('Import')
+  const importDtdServices = getServicesByScope('Import DTD')
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -540,26 +538,34 @@ export function CreatePipelineDialog({ trigger }: CreatePipelineDialogProps) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectLabel>Domestics Operations</SelectLabel>
+                          <SelectLabel>Domestics Service (Domestics Ops Dept)</SelectLabel>
                           {domesticsServices.map((service) => (
                             <SelectItem key={service.code} value={service.code}>
-                              {service.name}
+                              {service.scope} | {service.name}
                             </SelectItem>
                           ))}
                         </SelectGroup>
                         <SelectGroup>
-                          <SelectLabel>Exim Operations</SelectLabel>
-                          {eximServices.map((service) => (
+                          <SelectLabel>Export (Exim Ops Dept)</SelectLabel>
+                          {exportServices.map((service) => (
                             <SelectItem key={service.code} value={service.code}>
-                              {service.name}
+                              {service.scope} | {service.name}
                             </SelectItem>
                           ))}
                         </SelectGroup>
                         <SelectGroup>
-                          <SelectLabel>Import DTD Operations</SelectLabel>
-                          {dtdServices.map((service) => (
+                          <SelectLabel>Import (Exim Ops Dept)</SelectLabel>
+                          {importServices.map((service) => (
                             <SelectItem key={service.code} value={service.code}>
-                              {service.name}
+                              {service.scope} | {service.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                        <SelectGroup>
+                          <SelectLabel>Import DTD (Import DTD Ops Dept)</SelectLabel>
+                          {importDtdServices.map((service) => (
+                            <SelectItem key={service.code} value={service.code}>
+                              {service.scope} | {service.name}
                             </SelectItem>
                           ))}
                         </SelectGroup>

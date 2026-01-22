@@ -142,41 +142,127 @@ export const PRIORITY_LEVELS = [
 // SHIPMENT RELATED CONSTANTS
 // =====================================================
 
-// Service Types with Department Mapping
+// Service Scope (Network) - defines the category/scope of service
+export type ServiceScope = 'Domestics' | 'Export' | 'Import' | 'Import DTD'
+
+// Service Scope to Department Owner Mapping
+export const SERVICE_SCOPE_OWNERS: Record<ServiceScope, string> = {
+  'Domestics': 'Domestics Ops Dept',
+  'Export': 'Exim Ops Dept',
+  'Import': 'Exim Ops Dept',
+  'Import DTD': 'Import DTD Ops Dept',
+}
+
+// Service Scope to Ticketing Department Mapping
+export const SERVICE_SCOPE_TO_TICKETING_DEPT: Record<ServiceScope, string> = {
+  'Domestics': 'DOM',
+  'Export': 'EXI',
+  'Import': 'EXI',
+  'Import DTD': 'DTD',
+}
+
+// Service Types with Scope and Department Mapping
+// Format: [Scope] | [Service Name]
 export const SERVICE_TYPES = [
-  // Domestics Operations
-  { code: 'LTL', name: 'LTL', department: 'Domestics Operations' },
-  { code: 'FTL', name: 'FTL', department: 'Domestics Operations' },
-  { code: 'AF', name: 'AF', department: 'Domestics Operations' },
-  { code: 'LCL', name: 'LCL', department: 'Domestics Operations' },
-  { code: 'FCL', name: 'FCL', department: 'Domestics Operations' },
-  { code: 'WAREHOUSING', name: 'WAREHOUSING', department: 'Domestics Operations' },
-  { code: 'FULFILLMENT', name: 'FULFILLMENT', department: 'Domestics Operations' },
-  // Exim Operations
-  { code: 'LCL_EXPORT', name: 'LCL Export', department: 'Exim Operations' },
-  { code: 'FCL_EXPORT', name: 'FCL Export', department: 'Exim Operations' },
-  { code: 'AIRFREIGHT_EXPORT', name: 'Airfreight Export', department: 'Exim Operations' },
-  { code: 'LCL_IMPORT', name: 'LCL Import', department: 'Exim Operations' },
-  { code: 'FCL_IMPORT', name: 'FCL Import', department: 'Exim Operations' },
-  { code: 'AIRFREIGHT_IMPORT', name: 'Airfreight Import', department: 'Exim Operations' },
-  { code: 'CUSTOMS_CLEARANCE', name: 'Customs Clearance', department: 'Exim Operations' },
-  // Import DTD Operations
-  { code: 'LCL_DTD', name: 'LCL DTD', department: 'Import DTD Operations' },
-  { code: 'FCL_DTD', name: 'FCL DTD', department: 'Import DTD Operations' },
-  { code: 'AIRFREIGHT_DTD', name: 'Airfreight DTD', department: 'Import DTD Operations' },
+  // Domestics Service (owner: Domestics Ops Dept)
+  { code: 'DOM_AIRFREIGHT', scope: 'Domestics' as ServiceScope, name: 'Airfreight', department: 'Domestics Ops Dept', ticketingDept: 'DOM' },
+  { code: 'DOM_LTL', scope: 'Domestics' as ServiceScope, name: 'LTL (Less than Truck Load)', department: 'Domestics Ops Dept', ticketingDept: 'DOM' },
+  { code: 'DOM_FTL', scope: 'Domestics' as ServiceScope, name: 'FTL (Full Trucking Load)', department: 'Domestics Ops Dept', ticketingDept: 'DOM' },
+  { code: 'DOM_SEAFREIGHT_LCL', scope: 'Domestics' as ServiceScope, name: 'Seafreight LCL', department: 'Domestics Ops Dept', ticketingDept: 'DOM' },
+  { code: 'DOM_SEAFREIGHT_FCL', scope: 'Domestics' as ServiceScope, name: 'Seafreight FCL', department: 'Domestics Ops Dept', ticketingDept: 'DOM' },
+  { code: 'DOM_WAREHOUSING', scope: 'Domestics' as ServiceScope, name: 'Warehousing', department: 'Domestics Ops Dept', ticketingDept: 'DOM' },
+  { code: 'DOM_FULFILLMENT', scope: 'Domestics' as ServiceScope, name: 'Fulfillment', department: 'Domestics Ops Dept', ticketingDept: 'DOM' },
+  { code: 'DOM_WAREHOUSING_FULFILLMENT', scope: 'Domestics' as ServiceScope, name: 'Warehousing-Fulfillment', department: 'Domestics Ops Dept', ticketingDept: 'DOM' },
+
+  // Export (owner: Exim Ops Dept)
+  { code: 'EXP_AIRFREIGHT', scope: 'Export' as ServiceScope, name: 'Airfreight', department: 'Exim Ops Dept', ticketingDept: 'EXI' },
+  { code: 'EXP_SEAFREIGHT_LCL', scope: 'Export' as ServiceScope, name: 'Seafreight LCL', department: 'Exim Ops Dept', ticketingDept: 'EXI' },
+  { code: 'EXP_SEAFREIGHT_FCL', scope: 'Export' as ServiceScope, name: 'Seafreight FCL', department: 'Exim Ops Dept', ticketingDept: 'EXI' },
+  { code: 'EXP_CUSTOMS_CLEARANCE', scope: 'Export' as ServiceScope, name: 'Customs Clearance', department: 'Exim Ops Dept', ticketingDept: 'EXI' },
+
+  // Import (owner: Exim Ops Dept)
+  { code: 'IMP_AIRFREIGHT', scope: 'Import' as ServiceScope, name: 'Airfreight', department: 'Exim Ops Dept', ticketingDept: 'EXI' },
+  { code: 'IMP_SEAFREIGHT_LCL', scope: 'Import' as ServiceScope, name: 'Seafreight LCL', department: 'Exim Ops Dept', ticketingDept: 'EXI' },
+  { code: 'IMP_SEAFREIGHT_FCL', scope: 'Import' as ServiceScope, name: 'Seafreight FCL', department: 'Exim Ops Dept', ticketingDept: 'EXI' },
+  { code: 'IMP_CUSTOMS_CLEARANCE', scope: 'Import' as ServiceScope, name: 'Customs Clearance', department: 'Exim Ops Dept', ticketingDept: 'EXI' },
+
+  // Import DTD (owner: Import DTD Ops Dept)
+  { code: 'DTD_AIRFREIGHT', scope: 'Import DTD' as ServiceScope, name: 'Airfreight', department: 'Import DTD Ops Dept', ticketingDept: 'DTD' },
+  { code: 'DTD_SEAFREIGHT_LCL', scope: 'Import DTD' as ServiceScope, name: 'Seafreight LCL', department: 'Import DTD Ops Dept', ticketingDept: 'DTD' },
+  { code: 'DTD_SEAFREIGHT_FCL', scope: 'Import DTD' as ServiceScope, name: 'Seafreight FCL', department: 'Import DTD Ops Dept', ticketingDept: 'DTD' },
 ] as const
 
 export type ServiceType = typeof SERVICE_TYPES[number]
 
-// Domestics service codes for conditional rendering
-export const DOMESTICS_SERVICE_CODES = ['LTL', 'FTL', 'AF', 'LCL', 'FCL', 'WAREHOUSING', 'FULFILLMENT'] as const
+// Helper function to get display label: "[Scope] | [Service Name]"
+export function getServiceTypeDisplayLabel(code: string): string {
+  const service = SERVICE_TYPES.find(s => s.code === code)
+  if (!service) return code
+  return `${service.scope} | ${service.name}`
+}
+
+// Helper function to get service by code
+export function getServiceByCode(code: string): ServiceType | undefined {
+  return SERVICE_TYPES.find(s => s.code === code)
+}
+
+// Helper function to get ticketing department by service code
+export function getTicketingDeptByServiceCode(code: string): string | undefined {
+  const service = SERVICE_TYPES.find(s => s.code === code)
+  return service?.ticketingDept
+}
+
+// Service Scopes for grouping in UI
+export const SERVICE_SCOPES: { value: ServiceScope; label: string; owner: string }[] = [
+  { value: 'Domestics', label: 'Domestics Service', owner: 'Domestics Ops Dept' },
+  { value: 'Export', label: 'Export', owner: 'Exim Ops Dept' },
+  { value: 'Import', label: 'Import', owner: 'Exim Ops Dept' },
+  { value: 'Import DTD', label: 'Import DTD', owner: 'Import DTD Ops Dept' },
+]
+
+// Get services by scope
+export function getServicesByScope(scope: ServiceScope): ServiceType[] {
+  return SERVICE_TYPES.filter(s => s.scope === scope)
+}
+
+// Domestics service codes for conditional rendering (shows fleet type)
+export const DOMESTICS_SERVICE_CODES = [
+  'DOM_AIRFREIGHT', 'DOM_LTL', 'DOM_FTL', 'DOM_SEAFREIGHT_LCL', 'DOM_SEAFREIGHT_FCL',
+  'DOM_WAREHOUSING', 'DOM_FULFILLMENT', 'DOM_WAREHOUSING_FULFILLMENT'
+] as const
 
 // Export/Import service codes for conditional rendering (shows incoterms)
 export const EXIM_SERVICE_CODES = [
-  'LCL_EXPORT', 'FCL_EXPORT', 'AIRFREIGHT_EXPORT',
-  'LCL_IMPORT', 'FCL_IMPORT', 'AIRFREIGHT_IMPORT',
-  'CUSTOMS_CLEARANCE', 'LCL_DTD', 'FCL_DTD', 'AIRFREIGHT_DTD'
+  'EXP_AIRFREIGHT', 'EXP_SEAFREIGHT_LCL', 'EXP_SEAFREIGHT_FCL', 'EXP_CUSTOMS_CLEARANCE',
+  'IMP_AIRFREIGHT', 'IMP_SEAFREIGHT_LCL', 'IMP_SEAFREIGHT_FCL', 'IMP_CUSTOMS_CLEARANCE',
+  'DTD_AIRFREIGHT', 'DTD_SEAFREIGHT_LCL', 'DTD_SEAFREIGHT_FCL'
 ] as const
+
+// Legacy code mapping for backward compatibility
+export const LEGACY_SERVICE_CODE_MAP: Record<string, string> = {
+  'LTL': 'DOM_LTL',
+  'FTL': 'DOM_FTL',
+  'AF': 'DOM_AIRFREIGHT',
+  'LCL': 'DOM_SEAFREIGHT_LCL',
+  'FCL': 'DOM_SEAFREIGHT_FCL',
+  'WAREHOUSING': 'DOM_WAREHOUSING',
+  'FULFILLMENT': 'DOM_FULFILLMENT',
+  'LCL_EXPORT': 'EXP_SEAFREIGHT_LCL',
+  'FCL_EXPORT': 'EXP_SEAFREIGHT_FCL',
+  'AIRFREIGHT_EXPORT': 'EXP_AIRFREIGHT',
+  'LCL_IMPORT': 'IMP_SEAFREIGHT_LCL',
+  'FCL_IMPORT': 'IMP_SEAFREIGHT_FCL',
+  'AIRFREIGHT_IMPORT': 'IMP_AIRFREIGHT',
+  'CUSTOMS_CLEARANCE': 'IMP_CUSTOMS_CLEARANCE',
+  'LCL_DTD': 'DTD_SEAFREIGHT_LCL',
+  'FCL_DTD': 'DTD_SEAFREIGHT_FCL',
+  'AIRFREIGHT_DTD': 'DTD_AIRFREIGHT',
+}
+
+// Convert legacy code to new code
+export function convertLegacyServiceCode(legacyCode: string): string {
+  return LEGACY_SERVICE_CODE_MAP[legacyCode] || legacyCode
+}
 
 // Fleet Types (for Domestics Operations)
 export const FLEET_TYPES = [

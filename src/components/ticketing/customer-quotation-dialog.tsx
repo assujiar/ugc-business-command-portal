@@ -48,6 +48,12 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { RATE_COMPONENTS, RATE_COMPONENTS_BY_CATEGORY, getRateComponentLabel } from '@/lib/constants/rate-components'
+import {
+  SERVICE_TYPES as GLOBAL_SERVICE_TYPES,
+  SERVICE_SCOPES,
+  getServicesByScope,
+  getServiceTypeDisplayLabel,
+} from '@/lib/constants'
 
 interface CustomerQuotationDialogProps {
   open: boolean
@@ -158,38 +164,11 @@ const INCOTERMS = [
   'FAS', 'FOB', 'CFR', 'CIF',
 ]
 
-// Service types (matching shipment details)
-const SERVICE_TYPES = [
-  // Domestics Operations
-  { value: 'LTL', label: 'LTL (Less Than Truckload)', department: 'Domestics Operations' },
-  { value: 'FTL', label: 'FTL (Full Truckload)', department: 'Domestics Operations' },
-  { value: 'AF', label: 'AF (Air Freight Domestic)', department: 'Domestics Operations' },
-  { value: 'LCL', label: 'LCL (Less Container Load)', department: 'Domestics Operations' },
-  { value: 'FCL', label: 'FCL (Full Container Load)', department: 'Domestics Operations' },
-  { value: 'WAREHOUSING', label: 'Warehousing', department: 'Domestics Operations' },
-  { value: 'FULFILLMENT', label: 'Fulfillment', department: 'Domestics Operations' },
-  // Exim Operations
-  { value: 'LCL Export', label: 'LCL Export', department: 'Exim Operations' },
-  { value: 'FCL Export', label: 'FCL Export', department: 'Exim Operations' },
-  { value: 'Airfreight Export', label: 'Airfreight Export', department: 'Exim Operations' },
-  { value: 'LCL Import', label: 'LCL Import', department: 'Exim Operations' },
-  { value: 'FCL Import', label: 'FCL Import', department: 'Exim Operations' },
-  { value: 'Airfreight Import', label: 'Airfreight Import', department: 'Exim Operations' },
-  { value: 'Customs Clearance', label: 'Customs Clearance', department: 'Exim Operations' },
-  // Import DTD Operations
-  { value: 'LCL DTD', label: 'LCL DTD (Door to Door)', department: 'Import DTD Operations' },
-  { value: 'FCL DTD', label: 'FCL DTD (Door to Door)', department: 'Import DTD Operations' },
-  { value: 'Airfreight DTD', label: 'Airfreight DTD (Door to Door)', department: 'Import DTD Operations' },
-]
-
-// Group service types by department
-const SERVICE_TYPES_BY_DEPARTMENT = SERVICE_TYPES.reduce((acc, type) => {
-  if (!acc[type.department]) {
-    acc[type.department] = []
-  }
-  acc[type.department].push(type)
-  return acc
-}, {} as Record<string, typeof SERVICE_TYPES>)
+// Service types grouped by scope (using global SERVICE_TYPES from constants)
+const domesticsServices = getServicesByScope('Domestics')
+const exportServices = getServicesByScope('Export')
+const importServices = getServicesByScope('Import')
+const importDtdServices = getServicesByScope('Import DTD')
 
 // Fleet types (matching shipment details)
 const FLEET_TYPES = [
@@ -910,14 +889,30 @@ export function CustomerQuotationDialog({
                       <SelectValue placeholder="Select service type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(SERVICE_TYPES_BY_DEPARTMENT).map(([dept, types]) => (
-                        <SelectGroup key={dept}>
-                          <SelectLabel>{dept}</SelectLabel>
-                          {types.map((type) => (
-                            <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ))}
+                      <SelectGroup>
+                        <SelectLabel>Domestics Service (Domestics Ops Dept)</SelectLabel>
+                        {domesticsServices.map((s) => (
+                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>Export (Exim Ops Dept)</SelectLabel>
+                        {exportServices.map((s) => (
+                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>Import (Exim Ops Dept)</SelectLabel>
+                        {importServices.map((s) => (
+                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>Import DTD (Import DTD Ops Dept)</SelectLabel>
+                        {importDtdServices.map((s) => (
+                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </div>
