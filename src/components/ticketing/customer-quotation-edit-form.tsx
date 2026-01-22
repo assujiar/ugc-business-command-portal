@@ -25,12 +25,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import type { Database } from '@/types/database'
+import {
+  SERVICE_TYPES as GLOBAL_SERVICE_TYPES,
+  SERVICE_SCOPES,
+  getServicesByScope,
+  getServiceTypeDisplayLabel,
+} from '@/lib/constants'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -58,16 +66,11 @@ interface TermTemplate {
   is_default: boolean
 }
 
-const SERVICE_TYPES = [
-  { value: 'LTL', label: 'LTL (Less Than Truckload)' },
-  { value: 'FTL', label: 'FTL (Full Truckload)' },
-  { value: 'FCL', label: 'FCL (Full Container Load)' },
-  { value: 'LCL', label: 'LCL (Less Container Load)' },
-  { value: 'Air Freight', label: 'Air Freight' },
-  { value: 'Sea Freight', label: 'Sea Freight' },
-  { value: 'Door to Door', label: 'Door to Door' },
-  { value: 'Customs Clearance', label: 'Customs Clearance' },
-]
+// Service types grouped by scope (using global SERVICE_TYPES from constants)
+const domesticsServices = getServicesByScope('Domestics')
+const exportServices = getServicesByScope('Export')
+const importServices = getServicesByScope('Import')
+const importDtdServices = getServicesByScope('Import DTD')
 
 const FLEET_TYPES = [
   'Blindvan', 'Pickup', 'CDE Box', 'CDE Bak', 'CDD Box', 'CDD Bak', 'CDD Long Box',
@@ -588,9 +591,30 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
                     <SelectValue placeholder="Select service" />
                   </SelectTrigger>
                   <SelectContent>
-                    {SERVICE_TYPES.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                    ))}
+                    <SelectGroup>
+                      <SelectLabel>Domestics Service (Domestics Ops Dept)</SelectLabel>
+                      {domesticsServices.map((s) => (
+                        <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Export (Exim Ops Dept)</SelectLabel>
+                      {exportServices.map((s) => (
+                        <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Import (Exim Ops Dept)</SelectLabel>
+                      {importServices.map((s) => (
+                        <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Import DTD (Import DTD Ops Dept)</SelectLabel>
+                      {importDtdServices.map((s) => (
+                        <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>
