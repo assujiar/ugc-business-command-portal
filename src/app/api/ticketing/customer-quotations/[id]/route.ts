@@ -172,11 +172,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updates.sent_at = new Date().toISOString()
     }
 
-    // Track if this is a status change that needs ticket sync
-    const needsTicketSync = status !== undefined &&
+    // Track if this is a status change that needs sync (to ticket, lead, and/or opportunity)
+    const needsSync = status !== undefined &&
       ['sent', 'accepted', 'rejected'].includes(status) &&
-      quotation.status !== status &&
-      quotation.ticket_id
+      quotation.status !== status
 
     // Update quotation
     const { data: updatedQuotation, error } = await (supabase as any)
@@ -221,24 +220,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Sync quotation status to ticket (bidirectional sync)
+    // Sync quotation status to all linked entities (ticket, lead, opportunity)
     let syncResult = null
-    if (needsTicketSync) {
-      const { data: syncData, error: syncError } = await (supabase as any).rpc('sync_quotation_to_ticket', {
+    if (needsSync) {
+      const { data: syncData, error: syncError } = await (supabase as any).rpc('sync_quotation_to_all', {
         p_quotation_id: id,
         p_new_status: status,
         p_actor_user_id: user.id
       })
       syncResult = syncData
       if (syncError) {
-        console.error('Error syncing quotation to ticket:', syncError)
+        console.error('Error syncing quotation:', syncError)
       }
     }
 
     return NextResponse.json({
       success: true,
       data: updatedQuotation,
-      ticket_sync: syncResult,
+      sync_result: syncResult,
     })
   } catch (err) {
     console.error('Unexpected error:', err)

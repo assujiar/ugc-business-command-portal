@@ -6,7 +6,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Eye, Pencil, X, Check, FileText, Download, Paperclip, Package, MapPin, Truck } from 'lucide-react'
+import { Loader2, Eye, Pencil, X, Check, FileText, Download, Paperclip, Package, MapPin, Truck, Plus, Send, Ticket, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -92,6 +92,10 @@ interface Lead {
   creator_is_marketing?: boolean | null
   // Shipment details
   shipment_details?: ShipmentDetails | null
+  // Quotation tracking
+  quotation_status?: string | null
+  quotation_count?: number
+  latest_quotation_id?: string | null
 }
 
 interface Attachment {
@@ -138,6 +142,12 @@ export function LeadDetailDialog({
   const [error, setError] = React.useState<string | null>(null)
   const [attachments, setAttachments] = React.useState<Attachment[]>([])
   const [loadingAttachments, setLoadingAttachments] = React.useState(false)
+
+  // Quotation state
+  const [quotations, setQuotations] = React.useState<any[]>([])
+  const [loadingQuotations, setLoadingQuotations] = React.useState(false)
+  const [showCreateOptions, setShowCreateOptions] = React.useState(false)
+  const [creatingQuotation, setCreatingQuotation] = React.useState(false)
 
   const [editData, setEditData] = React.useState({
     company_name: '',
@@ -215,6 +225,110 @@ export function LeadDetailDialog({
 
     fetchAttachments()
   }, [lead, open])
+
+  // Fetch quotations for this lead
+  React.useEffect(() => {
+    const fetchQuotations = async () => {
+      if (!lead || !open) return
+
+      setLoadingQuotations(true)
+      try {
+        const response = await fetch(`/api/ticketing/customer-quotations?lead_id=${lead.lead_id}`)
+        if (response.ok) {
+          const result = await response.json()
+          setQuotations(result.data || [])
+        }
+      } catch (err) {
+        console.error('Error fetching quotations:', err)
+      } finally {
+        setLoadingQuotations(false)
+      }
+    }
+
+    fetchQuotations()
+  }, [lead, open])
+
+  // Check if lead can create quotation (must be Qualified or higher)
+  const canCreateQuotation = React.useMemo(() => {
+    if (!lead) return false
+    return ['Qualified', 'Handed Over', 'Assigned to Sales'].includes(lead.triage_status)
+  }, [lead])
+
+  // Create RFQ ticket from lead
+  const handleCreateTicket = () => {
+    if (!lead) return
+    // Navigate to ticket creation with lead data pre-filled
+    const params = new URLSearchParams({
+      from: 'lead',
+      lead_id: lead.lead_id,
+      company_name: lead.company_name,
+      contact_name: lead.contact_name || '',
+      contact_email: lead.contact_email || '',
+      contact_phone: lead.contact_phone || '',
+    })
+    router.push(`/tickets/new?${params.toString()}`)
+    onOpenChange(false)
+  }
+
+  // Create quotation directly from lead
+  const handleCreateQuotation = async () => {
+    if (!lead) return
+
+    setCreatingQuotation(true)
+    try {
+      // Create quotation via RPC
+      const response = await fetch('/api/ticketing/customer-quotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lead_id: lead.lead_id,
+          source_type: 'lead',
+          customer_name: lead.contact_name || lead.company_name,
+          customer_company: lead.company_name,
+          customer_email: lead.contact_email,
+          customer_phone: lead.contact_phone,
+          // Shipment details if available
+          service_type: lead.shipment_details?.service_type_code,
+          fleet_type: lead.shipment_details?.fleet_type,
+          fleet_quantity: lead.shipment_details?.fleet_quantity,
+          incoterm: lead.shipment_details?.incoterm,
+          commodity: lead.shipment_details?.cargo_category,
+          cargo_description: lead.shipment_details?.cargo_description,
+          cargo_weight: lead.shipment_details?.weight_total_kg,
+          cargo_volume: lead.shipment_details?.volume_total_cbm,
+          origin_address: lead.shipment_details?.origin_address,
+          origin_city: lead.shipment_details?.origin_city,
+          origin_country: lead.shipment_details?.origin_country,
+          destination_address: lead.shipment_details?.destination_address,
+          destination_city: lead.shipment_details?.destination_city,
+          destination_country: lead.shipment_details?.destination_country,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: 'Quotation Created',
+          description: `Quotation ${result.quotation_number} created successfully`,
+        })
+        // Navigate to quotation editor
+        router.push(`/customer-quotations/${result.quotation_id}`)
+        onOpenChange(false)
+      } else {
+        throw new Error(result.error || 'Failed to create quotation')
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setCreatingQuotation(false)
+    }
+  }
 
   // Format file size
   const formatFileSize = (bytes: number | null) => {
@@ -779,6 +893,138 @@ export function LeadDetailDialog({
               </p>
             )}
           </div>
+
+          {/* Quotations Section - for Qualified leads */}
+          {canCreateQuotation && (
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground border-b pb-2 flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Customer Quotations
+                {quotations.length > 0 && (
+                  <Badge variant="secondary" className="ml-auto">{quotations.length}</Badge>
+                )}
+              </h4>
+
+              {/* Create Options */}
+              {!showCreateOptions ? (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCreateOptions(true)}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Create Ticket / Quotation
+                  </Button>
+                </div>
+              ) : (
+                <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
+                  <p className="text-sm font-medium">Choose how to proceed:</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCreateTicket}
+                      className="flex-1"
+                    >
+                      <Ticket className="h-4 w-4 mr-2" />
+                      Create RFQ Ticket
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleCreateQuotation}
+                      disabled={creatingQuotation}
+                      className="flex-1"
+                    >
+                      {creatingQuotation ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <FileText className="h-4 w-4 mr-2" />
+                      )}
+                      Create Quotation
+                    </Button>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCreateOptions(false)}
+                    className="w-full"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+
+              {/* Existing Quotations List */}
+              {loadingQuotations ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading quotations...</span>
+                </div>
+              ) : quotations.length > 0 ? (
+                <div className="space-y-2">
+                  {quotations.map((quotation, index) => (
+                    <div
+                      key={quotation.id}
+                      className="flex items-center justify-between p-3 border rounded-md bg-muted/30 cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/customer-quotations/${quotation.id}`)}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">
+                            {quotation.quotation_number}
+                            <span className="text-xs text-muted-foreground ml-2">
+                              (#{quotation.sequence_number || index + 1})
+                            </span>
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Badge
+                              variant={
+                                quotation.status === 'accepted' ? 'default' :
+                                quotation.status === 'rejected' ? 'destructive' :
+                                quotation.status === 'sent' ? 'secondary' : 'outline'
+                              }
+                              className={
+                                quotation.status === 'accepted' ? 'bg-green-500' : ''
+                              }
+                            >
+                              {quotation.status}
+                            </Badge>
+                            {quotation.total_selling_rate && (
+                              <span>
+                                {quotation.currency} {Number(quotation.total_selling_rate).toLocaleString('id-ID')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  No quotations yet
+                </p>
+              )}
+
+              {/* Quotation Status Summary */}
+              {lead.quotation_status && (
+                <div className="p-3 rounded-lg bg-muted/50 text-sm">
+                  <span className="text-muted-foreground">Latest status: </span>
+                  <Badge variant={
+                    lead.quotation_status === 'accepted' ? 'default' :
+                    lead.quotation_status === 'rejected' ? 'destructive' :
+                    lead.quotation_status === 'sent' ? 'secondary' : 'outline'
+                  } className={lead.quotation_status === 'accepted' ? 'bg-green-500' : ''}>
+                    Quotation {lead.quotation_status}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Metadata */}
           <div className="space-y-4">

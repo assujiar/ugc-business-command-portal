@@ -90,6 +90,41 @@ interface CustomerQuotationDialogProps {
       phone?: string
     }
   }
+  // Lead prop (for marketing flow)
+  lead?: {
+    lead_id: string
+    company_name: string
+    contact_name?: string
+    contact_email?: string
+    contact_phone?: string
+    shipment_details?: {
+      service_type_code?: string
+      fleet_type?: string
+      fleet_quantity?: number
+      incoterm?: string
+      cargo_category?: string
+      cargo_description?: string
+      weight_total_kg?: number
+      volume_total_cbm?: number
+      origin_address?: string
+      origin_city?: string
+      origin_country?: string
+      destination_address?: string
+      destination_city?: string
+      destination_country?: string
+    }
+  }
+  // Opportunity prop (for sales pipeline flow)
+  opportunity?: {
+    opportunity_id: string
+    name: string
+    company_name?: string
+    pic_name?: string
+    pic_email?: string
+    pic_phone?: string
+    address?: string
+    city?: string
+  }
   operationalCost?: {
     amount: number
     currency: string
@@ -184,10 +219,15 @@ export function CustomerQuotationDialog({
   ticketId: legacyTicketId,
   ticketData: legacyTicketData,
   ticket,
+  lead,
+  opportunity,
   operationalCost,
   onSuccess,
   onCreated,
 }: CustomerQuotationDialogProps) {
+  // Determine the source type
+  const sourceType = lead ? 'lead' : opportunity ? 'opportunity' : 'ticket'
+
   // Support both legacy and new prop patterns
   const ticketId = ticket?.id || legacyTicketId || ''
   const ticketData = ticket ? {
@@ -197,6 +237,15 @@ export function CustomerQuotationDialog({
     account: ticket.account,
     contact: ticket.contact,
   } : legacyTicketData || { ticket_code: '', subject: '' }
+
+  // Get reference info for header
+  const referenceInfo = lead
+    ? `Lead: ${lead.lead_id} - ${lead.company_name}`
+    : opportunity
+    ? `Opportunity: ${opportunity.name}`
+    : ticketData.ticket_code
+    ? `${ticketData.ticket_code} - ${ticketData.subject}`
+    : 'New Quotation'
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
@@ -276,9 +325,54 @@ export function CustomerQuotationDialog({
     }
   }, [rateStructure, totalCost, targetMarginPercent, items])
 
-  // Initialize from ticket data
+  // Initialize from ticket, lead, or opportunity data
   useEffect(() => {
-    if (open && ticketData) {
+    if (!open) return
+
+    // Initialize from Lead (marketing flow)
+    if (lead) {
+      setCustomerName(lead.contact_name || '')
+      setCustomerCompany(lead.company_name || '')
+      setCustomerEmail(lead.contact_email || '')
+      setCustomerPhone(lead.contact_phone || '')
+
+      // Shipment details from lead
+      if (lead.shipment_details) {
+        const sd = lead.shipment_details
+        setServiceType(sd.service_type_code || '')
+        setFleetType(sd.fleet_type || '')
+        setFleetQuantity(sd.fleet_quantity || 1)
+        setIncoterm(sd.incoterm || '')
+        setCommodity(sd.cargo_category || '')
+        setCargoDescription(sd.cargo_description || '')
+        setCargoWeight(sd.weight_total_kg || null)
+        setCargoVolume(sd.volume_total_cbm || null)
+        setOriginAddress(sd.origin_address || '')
+        setOriginCity(sd.origin_city || '')
+        setOriginCountry(sd.origin_country || '')
+        setDestinationAddress(sd.destination_address || '')
+        setDestinationCity(sd.destination_city || '')
+        setDestinationCountry(sd.destination_country || '')
+      }
+
+      fetchTermTemplates()
+      return
+    }
+
+    // Initialize from Opportunity (sales pipeline flow)
+    if (opportunity) {
+      setCustomerName(opportunity.pic_name || '')
+      setCustomerCompany(opportunity.company_name || '')
+      setCustomerEmail(opportunity.pic_email || '')
+      setCustomerPhone(opportunity.pic_phone || '')
+      setCustomerAddress([opportunity.address, opportunity.city].filter(Boolean).join(', '))
+
+      fetchTermTemplates()
+      return
+    }
+
+    // Initialize from Ticket data (existing flow)
+    if (ticketData) {
       // Customer info from contact/account
       if (ticketData.contact) {
         const fullName = [ticketData.contact.first_name, ticketData.contact.last_name]
@@ -326,10 +420,9 @@ export function CustomerQuotationDialog({
         setCurrency(operationalCost.currency || 'IDR')
       }
 
-      // Fetch term templates
       fetchTermTemplates()
     }
-  }, [open, ticketData, operationalCost])
+  }, [open, ticketData, operationalCost, lead, opportunity])
 
   // Fetch term templates
   const fetchTermTemplates = async () => {
@@ -449,7 +542,10 @@ export function CustomerQuotationDialog({
     setSaving(true)
     try {
       const payload = {
-        ticket_id: ticketId,
+        ticket_id: ticketId || null,
+        lead_id: lead?.lead_id || null,
+        opportunity_id: opportunity?.opportunity_id || null,
+        source_type: sourceType,
         customer_name: customerName,
         customer_company: customerCompany || null,
         customer_email: customerEmail || null,
@@ -706,7 +802,7 @@ export function CustomerQuotationDialog({
             Create Customer Quotation
           </DialogTitle>
           <DialogDescription>
-            Reference: {ticketData.ticket_code} - {ticketData.subject}
+            Reference: {referenceInfo}
           </DialogDescription>
         </DialogHeader>
 
