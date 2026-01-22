@@ -324,9 +324,21 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         setCustomerQuotations(quotationsData.data || [])
       }
 
-      // Fetch lead data with shipment_details if ticket is linked to a lead
-      if (ticket.lead_id) {
-        const leadRes = await fetch(`/api/crm/leads/${ticket.lead_id}`)
+      // Fetch lead data with shipment_details
+      // Priority: direct lead_id > opportunity's source_lead_id
+      let leadIdToFetch = ticket.lead_id
+
+      // If no direct lead_id but has opportunity, get lead from opportunity's source_lead_id
+      if (!leadIdToFetch && ticket.opportunity_id) {
+        const oppRes = await fetch(`/api/crm/opportunities/${ticket.opportunity_id}`)
+        const oppResult = await oppRes.json()
+        if (oppResult.data?.source_lead_id) {
+          leadIdToFetch = oppResult.data.source_lead_id
+        }
+      }
+
+      if (leadIdToFetch) {
+        const leadRes = await fetch(`/api/crm/leads/${leadIdToFetch}`)
         const leadResult = await leadRes.json()
         if (leadResult.data) {
           setLeadData(leadResult.data)
