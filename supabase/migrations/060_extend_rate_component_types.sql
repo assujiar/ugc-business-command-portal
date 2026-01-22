@@ -4,8 +4,87 @@
 -- and fix sync function type casting
 -- ============================================
 
+-- ============================================
+-- Fix quote_status enum - add missing values
+-- ============================================
+DO $$
+BEGIN
+    -- Add 'sent_to_customer' to quote_status
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'sent_to_customer' AND enumtypid = 'quote_status'::regtype) THEN
+        ALTER TYPE quote_status ADD VALUE 'sent_to_customer';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    -- Add 'won' to quote_status
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'won' AND enumtypid = 'quote_status'::regtype) THEN
+        ALTER TYPE quote_status ADD VALUE 'won';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    -- Add 'revise_requested' to quote_status
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'revise_requested' AND enumtypid = 'quote_status'::regtype) THEN
+        ALTER TYPE quote_status ADD VALUE 'revise_requested';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- ============================================
+-- Fix ticket_event_type enum - add missing values
+-- ============================================
+DO $$
+BEGIN
+    -- Add 'request_adjustment' to ticket_event_type
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'request_adjustment' AND enumtypid = 'ticket_event_type'::regtype) THEN
+        ALTER TYPE ticket_event_type ADD VALUE 'request_adjustment';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    -- Add 'customer_quotation_sent' to ticket_event_type if not exists
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'customer_quotation_sent' AND enumtypid = 'ticket_event_type'::regtype) THEN
+        ALTER TYPE ticket_event_type ADD VALUE 'customer_quotation_sent';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    -- Add 'customer_quotation_accepted' to ticket_event_type if not exists
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'customer_quotation_accepted' AND enumtypid = 'ticket_event_type'::regtype) THEN
+        ALTER TYPE ticket_event_type ADD VALUE 'customer_quotation_accepted';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    -- Add 'customer_quotation_rejected' to ticket_event_type if not exists
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'customer_quotation_rejected' AND enumtypid = 'ticket_event_type'::regtype) THEN
+        ALTER TYPE ticket_event_type ADD VALUE 'customer_quotation_rejected';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    -- Add 'quote_sent_to_customer' to ticket_event_type if not exists
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'quote_sent_to_customer' AND enumtypid = 'ticket_event_type'::regtype) THEN
+        ALTER TYPE ticket_event_type ADD VALUE 'quote_sent_to_customer';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- ============================================
 -- Add missing enum values to rate_component_type
--- PostgreSQL doesn't support IF NOT EXISTS for enum values, so we check manually
+-- ============================================
 
 DO $$
 DECLARE
