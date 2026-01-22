@@ -38,7 +38,9 @@ import {
   SERVICE_SCOPES,
   getServicesByScope,
   getServiceTypeDisplayLabel,
+  INCOTERMS,
 } from '@/lib/constants'
+import { RATE_COMPONENTS, RATE_COMPONENTS_BY_CATEGORY, getRateComponentLabel } from '@/lib/constants/rate-components'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -79,17 +81,16 @@ const FLEET_TYPES = [
   'Container 20ft', 'Container 40ft', 'Container 40ft HC', 'Lowbed', 'Flatbed', 'Car Carrier',
 ]
 
-const RATE_COMPONENTS = [
-  { value: 'freight', label: 'Freight Charge' },
-  { value: 'handling', label: 'Handling Fee' },
-  { value: 'customs', label: 'Customs Clearance' },
-  { value: 'documentation', label: 'Documentation Fee' },
-  { value: 'insurance', label: 'Cargo Insurance' },
-  { value: 'storage', label: 'Storage/Warehousing' },
-  { value: 'delivery', label: 'Delivery Fee' },
-  { value: 'pickup', label: 'Pickup Fee' },
-  { value: 'other', label: 'Other' },
-]
+// Helper to check if service type is domestic
+const isDomesticService = (serviceType: string): boolean => {
+  return serviceType.toLowerCase().startsWith('domestics')
+}
+
+// Helper to check if service type is export/import
+const isExportImportService = (serviceType: string): boolean => {
+  const lower = serviceType.toLowerCase()
+  return lower.startsWith('export') || lower.startsWith('import')
+}
 
 export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuotationEditFormProps) {
   const router = useRouter()
@@ -618,20 +619,57 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label htmlFor="fleet-type">Fleet Type</Label>
-                <Select value={fleetType} onValueChange={setFleetType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select fleet" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FLEET_TYPES.map((f) => (
-                      <SelectItem key={f} value={f}>{f}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Conditional: Fleet Type for Domestics, Incoterm for Export/Import */}
+              {isDomesticService(serviceType) ? (
+                <div>
+                  <Label htmlFor="fleet-type">Fleet Type</Label>
+                  <Select value={fleetType} onValueChange={setFleetType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select fleet" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FLEET_TYPES.map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : isExportImportService(serviceType) ? (
+                <div>
+                  <Label htmlFor="incoterm">Incoterm</Label>
+                  <Select value={incoterm} onValueChange={setIncoterm}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select incoterm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INCOTERMS.map((term) => (
+                        <SelectItem key={term.code} value={term.code}>{term.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <Label htmlFor="fleet-type">Fleet Type / Incoterm</Label>
+                  <p className="text-sm text-muted-foreground mt-2">Select service type first</p>
+                </div>
+              )}
             </div>
+            {/* Fleet quantity for domestic services */}
+            {isDomesticService(serviceType) && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="fleet-quantity">Fleet Quantity</Label>
+                  <Input
+                    id="fleet-quantity"
+                    type="number"
+                    min={1}
+                    value={fleetQuantity}
+                    onChange={(e) => setFleetQuantity(parseInt(e.target.value) || 1)}
+                  />
+                </div>
+              </div>
+            )}
             <div>
               <Label htmlFor="cargo-description">Cargo Description</Label>
               <Textarea
@@ -772,13 +810,26 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
                 {items.map((item) => (
                   <div key={item.id} className="flex gap-2 items-start p-3 border rounded-lg">
                     <div className="flex-1 grid grid-cols-4 gap-2">
-                      <Select value={item.component_type} onValueChange={(v) => updateItem(item.id, 'component_type', v)}>
+                      <Select value={item.component_type} onValueChange={(v) => {
+                        updateItem(item.id, 'component_type', v)
+                        // Auto-fill component name from type
+                        if (!item.component_name) {
+                          updateItem(item.id, 'component_name', getRateComponentLabel(v))
+                        }
+                      }}>
                         <SelectTrigger>
                           <SelectValue placeholder="Type" />
                         </SelectTrigger>
-                        <SelectContent>
-                          {RATE_COMPONENTS.map((c) => (
-                            <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                        <SelectContent className="max-h-[300px]">
+                          {Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => (
+                            <SelectGroup key={category}>
+                              <SelectLabel className="font-semibold text-xs text-muted-foreground">{category}</SelectLabel>
+                              {components.map((comp) => (
+                                <SelectItem key={comp.value} value={comp.value}>
+                                  {comp.label}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
                           ))}
                         </SelectContent>
                       </Select>
