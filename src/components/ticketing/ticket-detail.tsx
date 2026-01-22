@@ -849,8 +849,10 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     })
 
-    // Add other important events (request_adjustment, won, lost, etc.)
-    const otherEventTypes = ['request_adjustment', 'won', 'lost', 'assigned', 'reassigned', 'priority_changed']
+    // Add ALL other events - include customer quotation events and everything else
+    // Exclude events already processed above: status_changed, quote_sent_to_customer
+    const processedEventTypes = ['status_changed', 'quote_sent_to_customer']
+
     const eventLabelsMap: Record<string, string> = {
       'request_adjustment': 'Request Adjustment',
       'won': 'Won',
@@ -858,7 +860,21 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       'assigned': 'Assigned',
       'reassigned': 'Reassigned',
       'priority_changed': 'Priority Changed',
+      'customer_quotation_created': 'Quotation Created',
+      'customer_quotation_sent': 'Quotation Sent',
+      'customer_quotation_accepted': 'Quotation Accepted',
+      'customer_quotation_rejected': 'Quotation Rejected',
+      'quote_created': 'Cost Created',
+      'quote_sent': 'Cost Sent',
+      'cost_sent': 'Cost Sent',
+      'comment_added': 'Comment',
+      'attachment_added': 'Attachment',
+      'created': 'Created',
+      'resolved': 'Resolved',
+      'closed': 'Closed',
+      'reopened': 'Reopened',
     }
+
     const eventBadgeTypes: Record<string, string> = {
       'request_adjustment': 'adjustment',
       'won': 'won',
@@ -866,9 +882,22 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       'assigned': 'assigned',
       'reassigned': 'assigned',
       'priority_changed': 'priority',
+      'customer_quotation_created': 'quotation',
+      'customer_quotation_sent': 'quotation_sent',
+      'customer_quotation_accepted': 'accepted',
+      'customer_quotation_rejected': 'rejected',
+      'quote_created': 'cost',
+      'quote_sent': 'cost',
+      'cost_sent': 'cost',
+      'comment_added': 'comment',
+      'attachment_added': 'attachment',
+      'created': 'created',
+      'resolved': 'resolved',
+      'closed': 'closed',
+      'reopened': 'reopened',
     }
 
-    events.filter(e => otherEventTypes.includes(e.event_type)).forEach((event) => {
+    events.filter(e => !processedEventTypes.includes(e.event_type)).forEach((event) => {
       const isCreatorEvent = event.actor_user_id === ticket.created_by
       items.push({
         id: `event-other-${event.id}`,
@@ -881,7 +910,11 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         content: event.notes || eventLabelsMap[event.event_type] || event.event_type,
         badge_type: eventBadgeTypes[event.event_type] || 'event',
         badge_label: eventLabelsMap[event.event_type] || event.event_type,
-        extra_data: { event_type: event.event_type },
+        extra_data: {
+          event_type: event.event_type,
+          old_value: event.old_value,
+          new_value: event.new_value,
+        },
       })
     })
 
