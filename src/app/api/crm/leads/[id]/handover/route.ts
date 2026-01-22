@@ -10,7 +10,6 @@ import { createClient } from '@/lib/supabase/server'
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
 import { generateIdempotencyKey } from '@/lib/utils'
-import { sendNewLeadAssignmentEmail } from '@/lib/crm-notification-service'
 
 // POST /api/crm/leads/[id]/handover - Handover lead to sales pool
 export async function POST(
@@ -40,20 +39,6 @@ export async function POST(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-
-    // Send email notification to all salespersons about the new lead
-    // This is done asynchronously to not block the response
-    sendNewLeadAssignmentEmail(id, user.id)
-      .then(result => {
-        if (result.success) {
-          console.log(`[Lead Handover] Email notification sent for lead ${id}`)
-        } else {
-          console.error(`[Lead Handover] Failed to send email notification for lead ${id}:`, result.error)
-        }
-      })
-      .catch(err => {
-        console.error(`[Lead Handover] Error sending email notification for lead ${id}:`, err)
-      })
 
     return NextResponse.json({ data })
   } catch (error) {

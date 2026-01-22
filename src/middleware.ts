@@ -62,8 +62,7 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/auth') ||
     request.nextUrl.pathname.startsWith('/quotation-verify') ||
     request.nextUrl.pathname.startsWith('/api/public') ||
-    request.nextUrl.pathname.startsWith('/api/ticketing/customer-quotations/validate') ||
-    request.nextUrl.pathname.startsWith('/api/crm/notifications/cron') // Cron jobs (authenticated via header)
+    request.nextUrl.pathname.startsWith('/api/ticketing/customer-quotations/validate')
 
   // Redirect unauthenticated users trying to access protected routes
   if (!user && !isPublicRoute) {
