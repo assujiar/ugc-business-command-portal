@@ -93,13 +93,22 @@ CREATE TABLE IF NOT EXISTS crm_notification_schedules (
   email_log_id UUID REFERENCES crm_email_logs(id) ON DELETE SET NULL,
 
   -- Timestamps
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-
-  -- Unique constraint to prevent duplicate reminders
-  UNIQUE (notification_type, lead_id, interval_hours) WHERE lead_id IS NOT NULL,
-  UNIQUE (notification_type, opportunity_id, interval_hours) WHERE opportunity_id IS NOT NULL,
-  UNIQUE (notification_type, user_id, interval_hours) WHERE user_id IS NOT NULL
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Partial unique indexes to prevent duplicate reminders
+-- (PostgreSQL doesn't support WHERE in table-level UNIQUE constraints)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_crm_notification_schedules_lead
+  ON crm_notification_schedules (notification_type, lead_id, interval_hours)
+  WHERE lead_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_crm_notification_schedules_opportunity
+  ON crm_notification_schedules (notification_type, opportunity_id, interval_hours)
+  WHERE opportunity_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_crm_notification_schedules_user
+  ON crm_notification_schedules (notification_type, user_id, interval_hours)
+  WHERE user_id IS NOT NULL;
 
 -- =====================================================
 -- Indexes for better query performance
