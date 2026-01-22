@@ -297,6 +297,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- on linked ticket and move opportunity to Negotiation
 -- ============================================
 
+-- Drop any existing overloaded versions first to avoid ambiguity
+DROP FUNCTION IF EXISTS public.request_quotation_adjustment(UUID);
+DROP FUNCTION IF EXISTS public.request_quotation_adjustment(UUID, UUID);
+DROP FUNCTION IF EXISTS public.request_quotation_adjustment(UUID, UUID, TEXT);
+
 CREATE OR REPLACE FUNCTION public.request_quotation_adjustment(
     p_quotation_id UUID,
     p_actor_user_id UUID,
@@ -853,6 +858,7 @@ CREATE TRIGGER trg_sync_quotation_on_opportunity_close
 -- GRANT PERMISSIONS
 -- ============================================
 
+-- Grant permissions with explicit argument types to avoid ambiguity
 GRANT EXECUTE ON FUNCTION public.sync_quotation_to_ticket(UUID, TEXT, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.sync_quotation_to_all(UUID, TEXT, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.sync_ticket_to_quotation(UUID, TEXT) TO authenticated;
@@ -868,11 +874,12 @@ GRANT EXECUTE ON FUNCTION public.sync_lead_to_quotation(TEXT, TEXT) TO authentic
 -- COMMENTS
 -- ============================================
 
-COMMENT ON FUNCTION public.sync_quotation_to_all IS 'Master sync function that propagates quotation status to ticket, lead, and opportunity';
-COMMENT ON FUNCTION public.request_quotation_adjustment IS 'Marks quotation as rejected and triggers adjustment in linked ticket/opportunity';
-COMMENT ON FUNCTION public.check_ticket_has_quotation IS 'Checks if a ticket has an associated customer quotation';
-COMMENT ON FUNCTION public.get_quotation_sequence_label IS 'Returns human-readable sequence label (1st, 2nd, etc.)';
+-- Comments with explicit argument types to avoid ambiguity
+COMMENT ON FUNCTION public.sync_quotation_to_all(UUID, TEXT, UUID) IS 'Master sync function that propagates quotation status to ticket, lead, and opportunity';
+COMMENT ON FUNCTION public.request_quotation_adjustment(UUID, UUID, TEXT) IS 'Marks quotation as rejected and triggers adjustment in linked ticket/opportunity';
+COMMENT ON FUNCTION public.check_ticket_has_quotation(UUID) IS 'Checks if a ticket has an associated customer quotation';
+COMMENT ON FUNCTION public.get_quotation_sequence_label(INTEGER) IS 'Returns human-readable sequence label (1st, 2nd, etc.)';
 COMMENT ON TRIGGER trg_sync_quotation_status_change ON customer_quotations IS 'Auto-sync quotation status changes to all linked entities';
-COMMENT ON FUNCTION public.sync_opportunity_to_ticket IS 'Closes linked tickets when opportunity is closed';
-COMMENT ON FUNCTION public.sync_opportunity_to_quotation IS 'Syncs quotation status and closes linked tickets when opportunity closes';
-COMMENT ON FUNCTION public.sync_lead_to_quotation IS 'Updates quotation status when lead is disqualified';
+COMMENT ON FUNCTION public.sync_opportunity_to_ticket(TEXT, TEXT) IS 'Closes linked tickets when opportunity is closed';
+COMMENT ON FUNCTION public.sync_opportunity_to_quotation(TEXT, TEXT) IS 'Syncs quotation status and closes linked tickets when opportunity closes';
+COMMENT ON FUNCTION public.sync_lead_to_quotation(TEXT, TEXT) IS 'Updates quotation status when lead is disqualified';
