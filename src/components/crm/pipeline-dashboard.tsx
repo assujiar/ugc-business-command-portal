@@ -51,7 +51,9 @@ import { TrendingUp,
   Loader2,
   Navigation,
   Plus,
+  Ticket,
 } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
 
 interface StageHistory {
   new_stage: OpportunityStage
@@ -112,6 +114,7 @@ const STAGE_CONFIG: { stage: OpportunityStage; label: string; icon: typeof Trend
 
 export function PipelineDashboard({ opportunities, currentUserId, userRole, canUpdate = true }: PipelineDashboardProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const [selectedStage, setSelectedStage] = useState<OpportunityStage | 'all'>('all')
@@ -122,6 +125,10 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     open: boolean
     opportunity: Opportunity | null
   }>({ open: false, opportunity: null })
+
+  // Quotation creation state
+  const [showQuotationOptions, setShowQuotationOptions] = useState(false)
+  const [creatingQuotation, setCreatingQuotation] = useState(false)
 
   // Set current time only on client-side to avoid hydration mismatch
   useEffect(() => {
@@ -247,6 +254,8 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     setCustomerBudget('')
     setGeoLocation(null)
     setGeoError(null)
+    setShowQuotationOptions(false)
+    setCreatingQuotation(false)
   }
 
   const openUpdateDialog = (opportunity: Opportunity) => {
@@ -328,6 +337,63 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
       alert('Terjadi kesalahan')
     } finally {
       setIsLoading(null)
+    }
+  }
+
+  // Create RFQ ticket from opportunity (when updating to Quote Sent)
+  const handleCreateTicketFromUpdate = () => {
+    if (!updateDialog.opportunity) return
+    const opp = updateDialog.opportunity
+    const params = new URLSearchParams({
+      from: 'opportunity',
+      opportunity_id: opp.opportunity_id,
+      company_name: opp.account_name || opp.name || '',
+    })
+    setUpdateDialog({ open: false, opportunity: null })
+    resetForm()
+    router.push(`/tickets/new?${params.toString()}`)
+  }
+
+  // Create quotation directly from opportunity (when updating to Quote Sent)
+  const handleCreateQuotationFromUpdate = async () => {
+    if (!updateDialog.opportunity) return
+    const opp = updateDialog.opportunity
+
+    setCreatingQuotation(true)
+    try {
+      const response = await fetch('/api/ticketing/customer-quotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunity_id: opp.opportunity_id,
+          source_type: 'opportunity',
+          customer_name: opp.account_name || opp.name || '',
+          customer_company: opp.account_name,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: 'Quotation Created',
+          description: `Quotation ${result.quotation_number} berhasil dibuat`,
+        })
+        setUpdateDialog({ open: false, opportunity: null })
+        resetForm()
+        router.push(`/customer-quotations/${result.quotation_id}`)
+      } else {
+        throw new Error(result.error || 'Failed to create quotation')
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setCreatingQuotation(false)
     }
   }
 
@@ -750,6 +816,48 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Quote Sent - Quotation/Ticket Creation Options */}
+            {newStage === 'Quote Sent' && (
+              <div className="p-4 border border-amber-500/50 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 space-y-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-amber-600" />
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                    Buat Ticket/Quotation untuk status Quote Sent
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Sebelum update ke Quote Sent, pastikan sudah ada quotation yang dikirim ke customer.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCreateTicketFromUpdate}
+                    className="flex-1"
+                  >
+                    <Ticket className="h-4 w-4 mr-2" />
+                    Buat RFQ Ticket
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={handleCreateQuotationFromUpdate}
+                    disabled={creatingQuotation}
+                    className="flex-1 bg-amber-600 hover:bg-amber-700"
+                  >
+                    {creatingQuotation ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4 mr-2" />
+                    )}
+                    {creatingQuotation ? 'Creating...' : 'Buat Quotation Langsung'}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Approach Method */}
             <div className="space-y-2">
