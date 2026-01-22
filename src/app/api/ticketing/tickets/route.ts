@@ -136,9 +136,23 @@ export async function POST(request: NextRequest) {
       sender_phone,
       show_sender_to_ops = true,
       // CRM references for linking ticket to lead/opportunity
-      lead_id,
       opportunity_id,
     } = body
+
+    // Handle lead_id - inherit from opportunity if not provided
+    let lead_id = body.lead_id || null
+    if (opportunity_id && !lead_id) {
+      // Look up lead_id from opportunity's source_lead_id
+      const { data: opportunity } = await (supabase as any)
+        .from('opportunities')
+        .select('source_lead_id')
+        .eq('opportunity_id', opportunity_id)
+        .single()
+
+      if (opportunity && opportunity.source_lead_id) {
+        lead_id = opportunity.source_lead_id
+      }
+    }
 
     // Validate required fields
     if (!ticket_type || !subject || !department) {
