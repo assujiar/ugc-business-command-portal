@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       .getPublicUrl(fileName)
 
     // Update profile with new avatar URL
-    const { data: profile, error: updateError } = await supabase
+    const { data: profile, error: updateError } = await (supabase as any)
       .from('profiles')
       .update({ avatar_url: publicUrl })
       .eq('user_id', user.id)
@@ -140,7 +140,7 @@ export async function DELETE() {
     }
 
     // Update profile to remove avatar URL
-    const { data: profile, error: updateError } = await supabase
+    const { data: profile, error: updateError } = await (supabase as any)
       .from('profiles')
       .update({ avatar_url: null })
       .eq('user_id', user.id)
