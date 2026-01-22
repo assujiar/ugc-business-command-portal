@@ -2637,6 +2637,15 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
             phone: ticket.sender_phone || undefined,
           } : undefined,
         }}
+        // Pass opportunity data if ticket is linked to a pipeline
+        opportunity={ticket.opportunity ? {
+          opportunity_id: ticket.opportunity.opportunity_id,
+          name: ticket.opportunity.name,
+          company_name: ticket.account?.company_name,
+          pic_name: ticket.sender_name || undefined,
+          pic_email: ticket.sender_email || undefined,
+          pic_phone: ticket.sender_phone || undefined,
+        } : undefined}
         operationalCost={costs.length > 0 ? {
           amount: costs[costs.length - 1]?.amount || 0,
           currency: costs[costs.length - 1]?.currency || 'IDR',

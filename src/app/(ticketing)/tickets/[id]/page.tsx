@@ -27,14 +27,15 @@ export default async function TicketDetailPage({ params }: TicketDetailPageProps
   const { id } = await params
   const supabase = await createClient()
 
-  // Fetch ticket with relations
+  // Fetch ticket with relations including opportunity for quotation linking
   const { data: ticket, error } = await supabase
     .from('tickets')
     .select(`
       *,
       creator:profiles!tickets_created_by_fkey(user_id, name, email),
       assignee:profiles!tickets_assigned_to_fkey(user_id, name, email),
-      account:accounts!tickets_account_id_fkey(account_id, company_name)
+      account:accounts!tickets_account_id_fkey(account_id, company_name),
+      opportunity:opportunities!tickets_opportunity_id_fkey(opportunity_id, name, stage)
     `)
     .eq('id', id)
     .single()

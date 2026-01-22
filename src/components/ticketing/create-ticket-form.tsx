@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { useForm } from 'react-hook-form'
 import {
@@ -130,6 +130,7 @@ const serviceDepartmentToTicketingDept: Record<string, TicketingDepartment> = {
 
 export function CreateTicketForm({ profile }: CreateTicketFormProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -141,6 +142,10 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
   const [senderPhone, setSenderPhone] = useState('')
   const [showSenderToOps, setShowSenderToOps] = useState(true)
   const [loadingContacts, setLoadingContacts] = useState(false)
+
+  // Source references from URL params (for linking ticket to lead/opportunity)
+  const [opportunityId, setOpportunityId] = useState<string | null>(null)
+  const [leadId, setLeadId] = useState<string | null>(null)
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     defaultValues: {
@@ -248,6 +253,14 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  // Read URL params for lead/opportunity linking
+  useEffect(() => {
+    const oppId = searchParams.get('opportunity_id')
+    const lId = searchParams.get('lead_id')
+    if (oppId) setOpportunityId(oppId)
+    if (lId) setLeadId(lId)
+  }, [searchParams])
 
   // Fetch accounts for dropdown
   useEffect(() => {
@@ -497,6 +510,9 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
           sender_email: senderEmail || null,
           sender_phone: senderPhone || null,
           show_sender_to_ops: showSenderToOps,
+          // Link to lead/opportunity if created from CRM
+          lead_id: leadId || null,
+          opportunity_id: opportunityId || null,
         }),
       })
 

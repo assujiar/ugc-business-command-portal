@@ -1124,6 +1124,8 @@ export interface Ticket {
   department: TicketingDepartment
   account_id: string | null
   contact_id: string | null
+  lead_id: string | null
+  opportunity_id: string | null
   created_by: string
   assigned_to: string | null
   rfq_data: RFQData | null
@@ -1156,6 +1158,16 @@ export interface Ticket {
   account?: {
     account_id: string
     company_name: string
+  } | null
+  // Opportunity relation (when joined)
+  opportunity?: {
+    opportunity_id: string
+    name: string
+    stage: OpportunityStage
+    company_name?: string
+    pic_name?: string
+    pic_email?: string
+    pic_phone?: string
   } | null
 }
 
