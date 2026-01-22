@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           lead_id, company_name, contact_name, source, status
         ),
         opportunity:opportunities!customer_quotations_opportunity_id_fkey(
-          opportunity_id, opportunity_name, stage, expected_revenue, probability
+          opportunity_id, name, stage, estimated_value, probability
         ),
         operational_cost:ticket_rate_quotes!customer_quotations_operational_cost_id_fkey(
           id, quote_number, amount, currency
