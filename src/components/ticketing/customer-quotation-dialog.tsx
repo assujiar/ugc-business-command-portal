@@ -315,6 +315,14 @@ export function CustomerQuotationDialog({
     return items.reduce((sum, item) => sum + (item.cost_amount || 0), 0)
   }, [items])
 
+  // Calculate total margin Rp for breakdown mode
+  const totalMarginRp = useMemo(() => {
+    if (rateStructure === 'bundling') {
+      return totalSellingRate - totalCost
+    }
+    return totalSellingRate - totalBreakdownCost
+  }, [rateStructure, totalSellingRate, totalCost, totalBreakdownCost])
+
   // Calculate total margin percentage for breakdown mode
   const totalMarginPercent = useMemo(() => {
     if (rateStructure === 'bundling') {
@@ -1269,7 +1277,7 @@ export function CustomerQuotationDialog({
                   {/* Summary and Add Item - Always visible at top */}
                   <div className="sticky top-0 bg-background z-10 pb-2 space-y-3">
                     {/* Totals Display */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-4 gap-3">
                       <div className="p-3 bg-muted/50 rounded-lg">
                         <span className="text-xs text-muted-foreground block">Total Cost</span>
                         <span className="text-lg font-bold font-mono">
@@ -1277,7 +1285,13 @@ export function CustomerQuotationDialog({
                         </span>
                       </div>
                       <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <span className="text-xs text-muted-foreground block">Total Margin</span>
+                        <span className="text-xs text-muted-foreground block">Margin (Rp)</span>
+                        <span className={`text-lg font-bold font-mono ${totalMarginRp >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600'}`}>
+                          {formatCurrency(totalMarginRp)}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                        <span className="text-xs text-muted-foreground block">Margin (%)</span>
                         <span className={`text-lg font-bold font-mono ${totalMarginPercent >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600'}`}>
                           {totalMarginPercent.toFixed(1)}%
                         </span>
