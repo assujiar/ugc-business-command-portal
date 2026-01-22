@@ -17,7 +17,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await (supabase as any)
       .from('profiles')
       .select('*')
       .eq('user_id', user.id)
@@ -72,7 +72,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
     }
 
-    const { data: profile, error: updateError } = await supabase
+    const { data: profile, error: updateError } = await (supabase as any)
       .from('profiles')
       .update(updateData)
       .eq('user_id', user.id)
