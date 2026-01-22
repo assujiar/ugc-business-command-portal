@@ -35,6 +35,18 @@ EXCEPTION WHEN others THEN NULL;
 END $$;
 
 -- ============================================
+-- Fix customer_quotation_status enum - add missing values
+-- ============================================
+DO $$
+BEGIN
+    -- Add 'revoked' to customer_quotation_status
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'revoked' AND enumtypid = 'customer_quotation_status'::regtype) THEN
+        ALTER TYPE customer_quotation_status ADD VALUE 'revoked';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- ============================================
 -- Fix ticket_event_type enum - add missing values
 -- ============================================
 DO $$
@@ -78,6 +90,24 @@ BEGIN
     -- Add 'quote_sent_to_customer' to ticket_event_type if not exists
     IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'quote_sent_to_customer' AND enumtypid = 'ticket_event_type'::regtype) THEN
         ALTER TYPE ticket_event_type ADD VALUE 'quote_sent_to_customer';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    -- Add 'customer_quotation_created' to ticket_event_type if not exists
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'customer_quotation_created' AND enumtypid = 'ticket_event_type'::regtype) THEN
+        ALTER TYPE ticket_event_type ADD VALUE 'customer_quotation_created';
+    END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    -- Add 'cost_sent' to ticket_event_type if not exists
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'cost_sent' AND enumtypid = 'ticket_event_type'::regtype) THEN
+        ALTER TYPE ticket_event_type ADD VALUE 'cost_sent';
     END IF;
 EXCEPTION WHEN others THEN NULL;
 END $$;
