@@ -76,6 +76,7 @@ export interface Database {
           department: string | null
           is_active: boolean
           avatar_url: string | null
+          phone: string | null
           created_at: string
           updated_at: string
         }
@@ -87,6 +88,7 @@ export interface Database {
           department?: string | null
           is_active?: boolean
           avatar_url?: string | null
+          phone?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -98,6 +100,7 @@ export interface Database {
           department?: string | null
           is_active?: boolean
           avatar_url?: string | null
+          phone?: string | null
           created_at?: string
           updated_at?: string
         }
