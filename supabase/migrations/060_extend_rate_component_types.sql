@@ -282,3 +282,20 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION public.sync_quotation_to_all(UUID, TEXT, UUID) TO authenticated;
 
 COMMENT ON FUNCTION public.sync_quotation_to_all(UUID, TEXT, UUID) IS 'Master sync function that propagates quotation status to ticket, lead, and opportunity - accepts TEXT status';
+
+-- ============================================
+-- Fix trigger function to cast enum to TEXT
+-- ============================================
+
+CREATE OR REPLACE FUNCTION public.trigger_sync_quotation_status_change()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Only trigger when status changes to sent, accepted, or rejected
+    -- Cast status to TEXT to match function signature
+    IF OLD.status IS DISTINCT FROM NEW.status AND NEW.status IN ('sent', 'accepted', 'rejected') THEN
+        PERFORM public.sync_quotation_to_all(NEW.id, NEW.status::TEXT, NEW.created_by);
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
