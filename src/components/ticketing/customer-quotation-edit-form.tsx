@@ -157,13 +157,31 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
   const [includeTemplates, setIncludeTemplates] = useState<TermTemplate[]>([])
   const [excludeTemplates, setExcludeTemplates] = useState<TermTemplate[]>([])
 
+  // Calculate totals for breakdown mode
+  const totalBreakdownCost = useMemo(() => {
+    return items.reduce((sum, item) => sum + (item.cost_amount || 0), 0)
+  }, [items])
+
+  const totalBreakdownSelling = useMemo(() => {
+    return items.reduce((sum, item) => sum + (item.selling_rate || 0), 0)
+  }, [items])
+
+  const totalBreakdownMarginRp = useMemo(() => {
+    return totalBreakdownSelling - totalBreakdownCost
+  }, [totalBreakdownSelling, totalBreakdownCost])
+
+  const totalBreakdownMarginPercent = useMemo(() => {
+    if (totalBreakdownCost === 0) return 0
+    return ((totalBreakdownSelling - totalBreakdownCost) / totalBreakdownCost) * 100
+  }, [totalBreakdownSelling, totalBreakdownCost])
+
   // Calculate selling rate based on cost and margin
   const totalSellingRate = useMemo(() => {
     if (rateStructure === 'breakdown') {
-      return items.reduce((sum, item) => sum + (item.selling_rate || 0), 0)
+      return totalBreakdownSelling
     }
     return Math.round(totalCost * (1 + targetMarginPercent / 100))
-  }, [rateStructure, totalCost, targetMarginPercent, items])
+  }, [rateStructure, totalCost, targetMarginPercent, totalBreakdownSelling])
 
   // Fetch quotation data
   useEffect(() => {
@@ -320,6 +338,19 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
       return
     }
 
+    // Validate breakdown items have component_type
+    if (rateStructure === 'breakdown') {
+      const validItems = items.filter(item => item.component_type)
+      if (validItems.length === 0) {
+        toast({
+          title: 'Validation Error',
+          description: 'Breakdown mode requires at least one item with a component type selected',
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
     setSaving(true)
     try {
       const payload = {
@@ -357,8 +388,8 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
         },
         rate_data: {
           rate_structure: rateStructure,
-          total_cost: totalCost,
-          target_margin_percent: targetMarginPercent,
+          total_cost: rateStructure === 'breakdown' ? totalBreakdownCost : totalCost,
+          target_margin_percent: rateStructure === 'breakdown' ? totalBreakdownMarginPercent : targetMarginPercent,
           total_selling_rate: totalSellingRate,
           currency,
         },
@@ -369,17 +400,19 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
           terms_notes: termsNotes || null,
           validity_days: validityDays,
         },
-        items: rateStructure === 'breakdown' ? items.map((item, index) => ({
-          component_type: item.component_type,
-          component_name: item.component_name,
-          description: item.description,
-          cost_amount: item.cost_amount,
-          target_margin_percent: item.target_margin_percent,
-          selling_rate: item.selling_rate,
-          quantity: item.quantity,
-          unit: item.unit,
-          sort_order: index,
-        })) : [],
+        items: rateStructure === 'breakdown' ? items
+          .filter(item => item.component_type) // Only include items with valid component_type
+          .map((item, index) => ({
+            component_type: item.component_type,
+            component_name: item.component_name || item.component_type,
+            description: item.description,
+            cost_amount: item.cost_amount,
+            target_margin_percent: item.target_margin_percent,
+            selling_rate: item.selling_rate,
+            quantity: item.quantity,
+            unit: item.unit,
+            sort_order: index,
+          })) : [],
       }
 
       const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}`, {
@@ -806,63 +839,92 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                {items.map((item) => (
-                  <div key={item.id} className="flex gap-2 items-start p-3 border rounded-lg">
-                    <div className="flex-1 grid grid-cols-4 gap-2">
-                      <Select value={item.component_type} onValueChange={(v) => {
-                        updateItem(item.id, 'component_type', v)
-                        // Auto-fill component name from type
-                        if (!item.component_name) {
-                          updateItem(item.id, 'component_name', getRateComponentLabel(v))
-                        }
-                      }}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Type" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          {Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => (
-                            <SelectGroup key={category}>
-                              <SelectLabel className="font-semibold text-xs text-muted-foreground">{category}</SelectLabel>
-                              {components.map((comp) => (
-                                <SelectItem key={comp.value} value={comp.value}>
-                                  {comp.label}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        value={item.cost_amount}
-                        onChange={(e) => updateItem(item.id, 'cost_amount', parseFloat(e.target.value) || 0)}
-                        placeholder="Cost"
-                      />
-                      <Input
-                        type="number"
-                        value={item.target_margin_percent}
-                        onChange={(e) => updateItem(item.id, 'target_margin_percent', parseFloat(e.target.value) || 0)}
-                        placeholder="Margin %"
-                      />
-                      <Input
-                        value={item.selling_rate.toLocaleString()}
-                        disabled
-                        className="bg-muted"
-                      />
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+              <div className="space-y-4">
+                {/* Totals Summary */}
+                <div className="grid grid-cols-4 gap-3 p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Total Cost</span>
+                    <span className="text-lg font-bold font-mono">
+                      {currency} {totalBreakdownCost.toLocaleString()}
+                    </span>
                   </div>
-                ))}
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Margin (Rp)</span>
+                    <span className={`text-lg font-bold font-mono ${totalBreakdownMarginRp >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      {currency} {totalBreakdownMarginRp.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Margin (%)</span>
+                    <span className={`text-lg font-bold font-mono ${totalBreakdownMarginPercent >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      {totalBreakdownMarginPercent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="bg-green-100 dark:bg-green-900/30 rounded-lg p-2 -m-2">
+                    <span className="text-xs text-muted-foreground block">Total Selling</span>
+                    <span className="text-lg font-bold font-mono text-green-700 dark:text-green-400">
+                      {currency} {totalBreakdownSelling.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Items List */}
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <div key={item.id} className="flex gap-2 items-start p-3 border rounded-lg">
+                      <div className="flex-1 grid grid-cols-4 gap-2">
+                        <Select value={item.component_type} onValueChange={(v) => {
+                          updateItem(item.id, 'component_type', v)
+                          // Auto-fill component name from type
+                          if (!item.component_name) {
+                            updateItem(item.id, 'component_name', getRateComponentLabel(v))
+                          }
+                        }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            {Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => (
+                              <SelectGroup key={category}>
+                                <SelectLabel className="font-semibold text-xs text-muted-foreground">{category}</SelectLabel>
+                                {components.map((comp) => (
+                                  <SelectItem key={comp.value} value={comp.value}>
+                                    {comp.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          value={item.cost_amount}
+                          onChange={(e) => updateItem(item.id, 'cost_amount', parseFloat(e.target.value) || 0)}
+                          placeholder="Cost"
+                        />
+                        <Input
+                          type="number"
+                          value={item.target_margin_percent}
+                          onChange={(e) => updateItem(item.id, 'target_margin_percent', parseFloat(e.target.value) || 0)}
+                          placeholder="Margin %"
+                        />
+                        <Input
+                          value={item.selling_rate.toLocaleString()}
+                          disabled
+                          className="bg-muted"
+                        />
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
                 <Button variant="outline" onClick={addItem}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add Item
                 </Button>
-                <div className="text-right text-lg font-bold">
-                  Total: {currency} {totalSellingRate.toLocaleString()}
-                </div>
               </div>
             )}
           </CardContent>

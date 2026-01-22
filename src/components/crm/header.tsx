@@ -6,6 +6,8 @@
 
 'use client'
 
+import Image from 'next/image'
+import Link from 'next/link'
 import { LogOut, User, Settings, Menu } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Button } from '@/components/ui/button'
@@ -64,25 +66,52 @@ export function Header({ profile, onMenuClick }: HeaderProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
-              <div className="w-8 h-8 bg-brand/10 rounded-full flex items-center justify-center">
-                <User className="h-4 w-4 text-brand" />
-              </div>
+              {profile.avatar_url ? (
+                <Image
+                  src={profile.avatar_url}
+                  alt={profile.name}
+                  width={32}
+                  height={32}
+                  className="rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-8 h-8 bg-brand/10 rounded-full flex items-center justify-center">
+                  <User className="h-4 w-4 text-brand" />
+                </div>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
-              <div>
-                <p className="font-medium truncate">{profile.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
+              <div className="flex items-center gap-3">
+                {profile.avatar_url ? (
+                  <Image
+                    src={profile.avatar_url}
+                    alt={profile.name}
+                    width={40}
+                    height={40}
+                    className="rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-brand/10 rounded-full flex items-center justify-center">
+                    <User className="h-5 w-5 text-brand" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{profile.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
+                </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
+            <DropdownMenuItem asChild>
+              <Link href="/profile" className="cursor-pointer">
+                <User className="mr-2 h-4 w-4" />
+                Profile Settings
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+            <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
               <LogOut className="mr-2 h-4 w-4" />
               Log out
             </DropdownMenuItem>

@@ -315,6 +315,14 @@ export function CustomerQuotationDialog({
     return items.reduce((sum, item) => sum + (item.cost_amount || 0), 0)
   }, [items])
 
+  // Calculate total margin Rp for breakdown mode
+  const totalMarginRp = useMemo(() => {
+    if (rateStructure === 'bundling') {
+      return totalSellingRate - totalCost
+    }
+    return totalSellingRate - totalBreakdownCost
+  }, [rateStructure, totalSellingRate, totalCost, totalBreakdownCost])
+
   // Calculate total margin percentage for breakdown mode
   const totalMarginPercent = useMemo(() => {
     if (rateStructure === 'bundling') {
@@ -542,6 +550,19 @@ export function CustomerQuotationDialog({
       return
     }
 
+    // Validate breakdown items have component_type
+    if (rateStructure === 'breakdown') {
+      const validItems = items.filter(item => item.component_type)
+      if (validItems.length === 0) {
+        toast({
+          title: 'Validation Error',
+          description: 'Breakdown mode requires at least one item with a component type selected',
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
     setSaving(true)
     try {
       const payload = {
@@ -578,8 +599,8 @@ export function CustomerQuotationDialog({
         estimated_cargo_value: estimatedCargoValue,
         cargo_value_currency: cargoValueCurrency,
         rate_structure: rateStructure,
-        total_cost: totalCost,
-        target_margin_percent: targetMarginPercent,
+        total_cost: rateStructure === 'breakdown' ? totalBreakdownCost : totalCost,
+        target_margin_percent: rateStructure === 'breakdown' ? totalMarginPercent : targetMarginPercent,
         total_selling_rate: totalSellingRate,
         currency,
         scope_of_work: scopeOfWork || null,
@@ -587,17 +608,19 @@ export function CustomerQuotationDialog({
         terms_excludes: termsExcludes,
         terms_notes: termsNotes || null,
         validity_days: validityDays,
-        items: rateStructure === 'breakdown' ? items.map((item, index) => ({
-          component_type: item.component_type,
-          component_name: item.component_name,
-          description: item.description,
-          cost_amount: item.cost_amount,
-          target_margin_percent: item.target_margin_percent,
-          selling_rate: item.selling_rate,
-          quantity: item.quantity,
-          unit: item.unit,
-          sort_order: index,
-        })) : [],
+        items: rateStructure === 'breakdown' ? items
+          .filter(item => item.component_type) // Only include items with valid component_type
+          .map((item, index) => ({
+            component_type: item.component_type,
+            component_name: item.component_name || item.component_type,
+            description: item.description,
+            cost_amount: item.cost_amount,
+            target_margin_percent: item.target_margin_percent,
+            selling_rate: item.selling_rate,
+            quantity: item.quantity,
+            unit: item.unit,
+            sort_order: index,
+          })) : [],
       }
 
       const response = await fetch('/api/ticketing/customer-quotations', {
@@ -1269,7 +1292,7 @@ export function CustomerQuotationDialog({
                   {/* Summary and Add Item - Always visible at top */}
                   <div className="sticky top-0 bg-background z-10 pb-2 space-y-3">
                     {/* Totals Display */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-4 gap-3">
                       <div className="p-3 bg-muted/50 rounded-lg">
                         <span className="text-xs text-muted-foreground block">Total Cost</span>
                         <span className="text-lg font-bold font-mono">
@@ -1277,7 +1300,13 @@ export function CustomerQuotationDialog({
                         </span>
                       </div>
                       <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <span className="text-xs text-muted-foreground block">Total Margin</span>
+                        <span className="text-xs text-muted-foreground block">Margin (Rp)</span>
+                        <span className={`text-lg font-bold font-mono ${totalMarginRp >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600'}`}>
+                          {formatCurrency(totalMarginRp)}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                        <span className="text-xs text-muted-foreground block">Margin (%)</span>
                         <span className={`text-lg font-bold font-mono ${totalMarginPercent >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600'}`}>
                           {totalMarginPercent.toFixed(1)}%
                         </span>
