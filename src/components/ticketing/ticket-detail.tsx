@@ -2655,6 +2655,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
           pic_phone: ticket.sender_phone || undefined,
         } : undefined}
         operationalCost={costs.length > 0 ? {
+          id: costs[costs.length - 1]?.id,  // Link to operational cost
           amount: costs[costs.length - 1]?.amount || 0,
           currency: costs[costs.length - 1]?.currency || 'IDR',
         } : undefined}

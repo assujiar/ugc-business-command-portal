@@ -378,9 +378,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Get creator email for reply-to (fallback to current user if not found)
     const creatorEmail = quotation.creator?.email || profileData.email
 
-    // Build URLs using production URL
+    // Build URLs using production URL - use public endpoints for customer access
     const validationUrl = `${PRODUCTION_URL}/quotation-verify/${quotation.validation_code}`
-    const pdfDownloadUrl = pdf_url || `${PRODUCTION_URL}/api/ticketing/customer-quotations/${id}/pdf`
+    // Use public PDF endpoint with validation code (no auth required)
+    const pdfDownloadUrl = pdf_url || `${PRODUCTION_URL}/api/public/quotation/${quotation.validation_code}/pdf`
 
     let responseData: any = {
       quotation_id: id,
