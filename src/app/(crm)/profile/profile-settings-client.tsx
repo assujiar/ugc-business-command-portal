@@ -44,14 +44,16 @@ interface ProfileSettingsClientProps {
 
 // Avatar templates available in public/ava
 const AVATAR_TEMPLATES = [
-  '/ava/avatar-1.svg',
-  '/ava/avatar-2.svg',
-  '/ava/avatar-3.svg',
-  '/ava/avatar-4.svg',
-  '/ava/avatar-5.svg',
-  '/ava/avatar-6.svg',
-  '/ava/avatar-7.svg',
-  '/ava/avatar-8.svg',
+  { src: '/ava/ava-female (1).png', label: 'Female 1' },
+  { src: '/ava/ava-female (2).png', label: 'Female 2' },
+  { src: '/ava/ava-female (3).png', label: 'Female 3' },
+  { src: '/ava/ava-female (4).png', label: 'Female 4' },
+  { src: '/ava/ava-female (5).png', label: 'Female 5' },
+  { src: '/ava/ava-male (1).png', label: 'Male 1' },
+  { src: '/ava/ava-male (2).png', label: 'Male 2' },
+  { src: '/ava/ava-male (3).png', label: 'Male 3' },
+  { src: '/ava/ava-male (4).png', label: 'Male 4' },
+  { src: '/ava/ava-male (5).png', label: 'Male 5' },
 ]
 
 export function ProfileSettingsClient({ profile: initialProfile, userEmail }: ProfileSettingsClientProps) {
@@ -471,29 +473,30 @@ export function ProfileSettingsClient({ profile: initialProfile, userEmail }: Pr
             {/* Template Selection */}
             <div>
               <Label className="text-sm font-medium">Choose from templates</Label>
-              <div className="grid grid-cols-4 gap-4 mt-3">
+              <div className="grid grid-cols-5 gap-3 mt-3">
                 {AVATAR_TEMPLATES.map((template) => (
                   <button
-                    key={template}
-                    onClick={() => handleSelectTemplate(template)}
+                    key={template.src}
+                    onClick={() => handleSelectTemplate(template.src)}
                     disabled={saving || uploadingAvatar}
-                    className={`relative rounded-full overflow-hidden border-2 transition-all hover:border-primary ${
-                      selectedTemplate === template ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'
-                    } ${profile.avatar_url === template ? 'ring-2 ring-green-500' : ''}`}
+                    className={`relative rounded-full overflow-hidden border-2 transition-all hover:border-primary aspect-square ${
+                      selectedTemplate === template.src ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'
+                    } ${profile.avatar_url === template.src ? 'ring-2 ring-green-500' : ''}`}
+                    title={template.label}
                   >
                     <Image
-                      src={template}
-                      alt="Avatar template"
+                      src={template.src}
+                      alt={template.label}
                       width={80}
                       height={80}
-                      className="object-cover"
+                      className="object-cover w-full h-full"
                     />
-                    {profile.avatar_url === template && (
+                    {profile.avatar_url === template.src && (
                       <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
                         <Check className="h-6 w-6 text-green-600" />
                       </div>
                     )}
-                    {selectedTemplate === template && saving && (
+                    {selectedTemplate === template.src && saving && (
                       <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                         <RefreshCw className="h-6 w-6 text-white animate-spin" />
                       </div>
