@@ -221,10 +221,21 @@ export async function POST(request: NextRequest) {
 
     // Create shipment details if provided (save even without service_type_code)
     if (shipment_details) {
+      // Map department from constants to database enum values
+      const mapDepartmentToEnum = (dept: string | null): string | null => {
+        if (!dept) return null
+        const mapping: Record<string, string> = {
+          'Domestics Ops Dept': 'Domestics Operations',
+          'Exim Ops Dept': 'Exim Operations',
+          'Import DTD Ops Dept': 'Import DTD Operations',
+        }
+        return mapping[dept] || dept
+      }
+
       const shipmentInsertData = {
         lead_id: leadResult.lead_id,
         service_type_code: shipment_details.service_type_code || null,
-        department: shipment_details.department || null,
+        department: mapDepartmentToEnum(shipment_details.department),
         fleet_type: shipment_details.fleet_type || null,
         fleet_quantity: shipment_details.fleet_quantity || 1,
         incoterm: shipment_details.incoterm || null,
