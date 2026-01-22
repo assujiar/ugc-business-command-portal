@@ -278,6 +278,9 @@ export function PipelineDetailDialog({
   const [showCreateOptions, setShowCreateOptions] = useState(false)
   const [creatingQuotation, setCreatingQuotation] = useState(false)
 
+  // Shipment details from linked lead
+  const [shipmentDetails, setShipmentDetails] = useState<any>(null)
+
   // Prevent hydration mismatch - only render dynamic content after mount
   useEffect(() => {
     setMounted(true)
@@ -290,8 +293,29 @@ export function PipelineDetailDialog({
     } else {
       setData(null)
       setQuotations([])
+      setShipmentDetails(null)
     }
   }, [open, opportunityId])
+
+  // Fetch shipment details from linked lead when data is loaded
+  useEffect(() => {
+    const fetchShipmentDetails = async () => {
+      if (!data?.lead_id) {
+        setShipmentDetails(null)
+        return
+      }
+      try {
+        const response = await fetch(`/api/crm/leads/${data.lead_id}`)
+        if (response.ok) {
+          const result = await response.json()
+          setShipmentDetails(result.data?.shipment_details || null)
+        }
+      } catch (error) {
+        console.error('Error fetching shipment details:', error)
+      }
+    }
+    fetchShipmentDetails()
+  }, [data?.lead_id])
 
   const fetchPipelineDetails = async (oppId: string) => {
     setLoading(true)
@@ -326,6 +350,36 @@ export function PipelineDetailDialog({
   // Create RFQ ticket from opportunity
   const handleCreateTicket = () => {
     if (!data) return
+
+    // Store shipment data in sessionStorage for ticket form to read
+    if (shipmentDetails) {
+      sessionStorage.setItem('prefill_ticket_shipment', JSON.stringify({
+        service_type_code: shipmentDetails.service_type_code,
+        department: shipmentDetails.department,
+        fleet_type: shipmentDetails.fleet_type,
+        fleet_quantity: shipmentDetails.fleet_quantity,
+        incoterm: shipmentDetails.incoterm,
+        cargo_category: shipmentDetails.cargo_category,
+        cargo_description: shipmentDetails.cargo_description,
+        origin_address: shipmentDetails.origin_address,
+        origin_city: shipmentDetails.origin_city,
+        origin_country: shipmentDetails.origin_country,
+        destination_address: shipmentDetails.destination_address,
+        destination_city: shipmentDetails.destination_city,
+        destination_country: shipmentDetails.destination_country,
+        quantity: shipmentDetails.quantity,
+        unit_of_measure: shipmentDetails.unit_of_measure,
+        weight_per_unit_kg: shipmentDetails.weight_per_unit_kg,
+        weight_total_kg: shipmentDetails.weight_total_kg,
+        length_cm: shipmentDetails.length_cm,
+        width_cm: shipmentDetails.width_cm,
+        height_cm: shipmentDetails.height_cm,
+        volume_total_cbm: shipmentDetails.volume_total_cbm,
+        scope_of_work: shipmentDetails.scope_of_work,
+        additional_services: shipmentDetails.additional_services,
+      }))
+    }
+
     const params = new URLSearchParams({
       from: 'opportunity',
       opportunity_id: data.opportunity_id,
@@ -349,12 +403,34 @@ export function PipelineDetailDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           opportunity_id: data.opportunity_id,
+          lead_id: data.lead_id,
           source_type: 'opportunity',
           customer_name: data.pic_name || data.company_name || '',
           customer_company: data.company_name,
           customer_email: data.pic_email,
           customer_phone: data.pic_phone,
           customer_address: [data.address, data.city].filter(Boolean).join(', '),
+          // Shipment details from linked lead
+          service_type: shipmentDetails?.service_type_code,
+          department: shipmentDetails?.department,
+          fleet_type: shipmentDetails?.fleet_type,
+          fleet_quantity: shipmentDetails?.fleet_quantity,
+          incoterm: shipmentDetails?.incoterm,
+          commodity: shipmentDetails?.cargo_category,
+          cargo_description: shipmentDetails?.cargo_description,
+          cargo_weight: shipmentDetails?.weight_total_kg,
+          cargo_weight_unit: 'kg',
+          cargo_volume: shipmentDetails?.volume_total_cbm,
+          cargo_volume_unit: 'cbm',
+          cargo_quantity: shipmentDetails?.quantity,
+          cargo_quantity_unit: shipmentDetails?.unit_of_measure,
+          origin_address: shipmentDetails?.origin_address,
+          origin_city: shipmentDetails?.origin_city,
+          origin_country: shipmentDetails?.origin_country,
+          destination_address: shipmentDetails?.destination_address,
+          destination_city: shipmentDetails?.destination_city,
+          destination_country: shipmentDetails?.destination_country,
+          scope_of_work: shipmentDetails?.scope_of_work,
         }),
       })
 
