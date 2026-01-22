@@ -42,9 +42,15 @@ function verifyCronAuth(request: NextRequest): boolean {
     return true
   }
 
-  // Check for Vercel cron header (Vercel sends '1' as the value)
+  // Check for Vercel cron header
   const vercelCronHeader = request.headers.get('x-vercel-cron')
   if (vercelCronHeader) {
+    return true
+  }
+
+  // Check for Vercel cron user-agent (most reliable method)
+  const userAgent = request.headers.get('user-agent')
+  if (userAgent?.startsWith('vercel-cron/')) {
     return true
   }
 
