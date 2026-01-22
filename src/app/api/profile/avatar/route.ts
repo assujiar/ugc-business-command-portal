@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       .from('profiles')
       .select('avatar_url')
       .eq('user_id', user.id)
-      .single()
+      .single() as { data: { avatar_url: string | null } | null }
 
     if (currentProfile?.avatar_url && currentProfile.avatar_url.includes('avatars/')) {
       // Extract the path from the URL
@@ -128,7 +128,7 @@ export async function DELETE() {
       .from('profiles')
       .select('avatar_url')
       .eq('user_id', user.id)
-      .single()
+      .single() as { data: { avatar_url: string | null } | null }
 
     // Delete from storage if exists
     if (currentProfile?.avatar_url && currentProfile.avatar_url.includes('avatars/')) {

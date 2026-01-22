@@ -338,6 +338,19 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
       return
     }
 
+    // Validate breakdown items have component_type
+    if (rateStructure === 'breakdown') {
+      const validItems = items.filter(item => item.component_type)
+      if (validItems.length === 0) {
+        toast({
+          title: 'Validation Error',
+          description: 'Breakdown mode requires at least one item with a component type selected',
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
     setSaving(true)
     try {
       const payload = {
@@ -375,8 +388,8 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
         },
         rate_data: {
           rate_structure: rateStructure,
-          total_cost: totalCost,
-          target_margin_percent: targetMarginPercent,
+          total_cost: rateStructure === 'breakdown' ? totalBreakdownCost : totalCost,
+          target_margin_percent: rateStructure === 'breakdown' ? totalBreakdownMarginPercent : targetMarginPercent,
           total_selling_rate: totalSellingRate,
           currency,
         },
@@ -387,17 +400,19 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
           terms_notes: termsNotes || null,
           validity_days: validityDays,
         },
-        items: rateStructure === 'breakdown' ? items.map((item, index) => ({
-          component_type: item.component_type,
-          component_name: item.component_name,
-          description: item.description,
-          cost_amount: item.cost_amount,
-          target_margin_percent: item.target_margin_percent,
-          selling_rate: item.selling_rate,
-          quantity: item.quantity,
-          unit: item.unit,
-          sort_order: index,
-        })) : [],
+        items: rateStructure === 'breakdown' ? items
+          .filter(item => item.component_type) // Only include items with valid component_type
+          .map((item, index) => ({
+            component_type: item.component_type,
+            component_name: item.component_name || item.component_type,
+            description: item.description,
+            cost_amount: item.cost_amount,
+            target_margin_percent: item.target_margin_percent,
+            selling_rate: item.selling_rate,
+            quantity: item.quantity,
+            unit: item.unit,
+            sort_order: index,
+          })) : [],
       }
 
       const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}`, {
