@@ -474,7 +474,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Update quotation status to 'sent' only if not a resend
     if (!isResend) {
       const sentTo = method === 'email' ? quotation.customer_email : quotation.customer_phone
-      await (supabase as any)
+
+      // Update quotation status
+      const { error: updateError } = await (supabase as any)
         .from('customer_quotations')
         .update({
           status: 'sent',
@@ -486,12 +488,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         })
         .eq('id', id)
 
+      if (updateError) {
+        console.error('Error updating quotation status:', updateError)
+        // Continue anyway - email was sent successfully
+      }
+
       // Sync quotation status to all linked entities (ticket, lead, opportunity)
-      await (supabase as any).rpc('sync_quotation_to_all', {
+      const { error: syncError } = await (supabase as any).rpc('sync_quotation_to_all', {
         p_quotation_id: id,
         p_new_status: 'sent',
         p_actor_user_id: user.id
       })
+
+      if (syncError) {
+        console.error('Error syncing quotation status:', syncError)
+        // Continue anyway - main operation succeeded
+      }
     }
 
     return NextResponse.json({
@@ -499,9 +511,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       data: responseData,
       message: isResend
         ? `Quotation resent via ${method}`
-        : method === 'whatsapp'
-          ? 'WhatsApp text generated. Click the link to send via WhatsApp.'
-          : 'Email content generated. Ready to send.',
+        : method === 'email'
+          ? 'Email sent successfully to customer.'
+          : 'WhatsApp text generated. Click the link to send via WhatsApp.',
     })
   } catch (err) {
     console.error('Unexpected error:', err)
