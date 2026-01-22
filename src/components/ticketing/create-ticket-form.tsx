@@ -263,6 +263,50 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     fetchAccounts()
   }, [])
 
+  // Check sessionStorage for prefilled shipment data from lead/pipeline
+  useEffect(() => {
+    const prefillData = sessionStorage.getItem('prefill_ticket_shipment')
+    if (prefillData) {
+      try {
+        const data = JSON.parse(prefillData)
+        setShipmentData(prev => ({
+          ...prev,
+          service_type_code: data.service_type_code || '',
+          fleet_type: data.fleet_type || '',
+          fleet_quantity: data.fleet_quantity || 1,
+          incoterm: data.incoterm || '',
+          cargo_category: data.cargo_category || 'General Cargo',
+          cargo_description: data.cargo_description || '',
+          origin_address: data.origin_address || '',
+          origin_city: data.origin_city || '',
+          origin_country: data.origin_country || 'Indonesia',
+          destination_address: data.destination_address || '',
+          destination_city: data.destination_city || '',
+          destination_country: data.destination_country || 'Indonesia',
+          quantity: data.quantity || 1,
+          unit_of_measure: data.unit_of_measure || 'Boxes',
+          weight_per_unit_kg: data.weight_per_unit_kg || null,
+          weight_total_kg: data.weight_total_kg || null,
+          length_cm: data.length_cm || null,
+          width_cm: data.width_cm || null,
+          height_cm: data.height_cm || null,
+          volume_total_cbm: data.volume_total_cbm || null,
+          scope_of_work: data.scope_of_work || '',
+          additional_services: data.additional_services || [],
+        }))
+        // Auto-switch to RFQ type if shipment data is present
+        if (data.service_type_code) {
+          setTicketType('RFQ')
+          setValue('ticket_type', 'RFQ')
+        }
+        // Clear the sessionStorage after reading
+        sessionStorage.removeItem('prefill_ticket_shipment')
+      } catch (err) {
+        console.error('Error parsing prefill shipment data:', err)
+      }
+    }
+  }, [])
+
   // Check if selected service is domestics (shows fleet)
   const isDomesticsService = DOMESTICS_SERVICE_CODES.includes(
     shipmentData.service_type_code as any

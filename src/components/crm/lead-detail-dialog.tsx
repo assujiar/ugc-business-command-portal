@@ -257,6 +257,36 @@ export function LeadDetailDialog({
   // Create RFQ ticket from lead
   const handleCreateTicket = () => {
     if (!lead) return
+
+    // Store shipment data in sessionStorage for ticket form to read
+    if (lead.shipment_details) {
+      sessionStorage.setItem('prefill_ticket_shipment', JSON.stringify({
+        service_type_code: lead.shipment_details.service_type_code,
+        department: lead.shipment_details.department,
+        fleet_type: lead.shipment_details.fleet_type,
+        fleet_quantity: lead.shipment_details.fleet_quantity,
+        incoterm: lead.shipment_details.incoterm,
+        cargo_category: lead.shipment_details.cargo_category,
+        cargo_description: lead.shipment_details.cargo_description,
+        origin_address: lead.shipment_details.origin_address,
+        origin_city: lead.shipment_details.origin_city,
+        origin_country: lead.shipment_details.origin_country,
+        destination_address: lead.shipment_details.destination_address,
+        destination_city: lead.shipment_details.destination_city,
+        destination_country: lead.shipment_details.destination_country,
+        quantity: lead.shipment_details.quantity,
+        unit_of_measure: lead.shipment_details.unit_of_measure,
+        weight_per_unit_kg: lead.shipment_details.weight_per_unit_kg,
+        weight_total_kg: lead.shipment_details.weight_total_kg,
+        length_cm: lead.shipment_details.length_cm,
+        width_cm: lead.shipment_details.width_cm,
+        height_cm: lead.shipment_details.height_cm,
+        volume_total_cbm: lead.shipment_details.volume_total_cbm,
+        scope_of_work: lead.shipment_details.scope_of_work,
+        additional_services: lead.shipment_details.additional_services,
+      }))
+    }
+
     // Navigate to ticket creation with lead data pre-filled
     const params = new URLSearchParams({
       from: 'lead',
@@ -289,19 +319,25 @@ export function LeadDetailDialog({
           customer_phone: lead.contact_phone,
           // Shipment details if available
           service_type: lead.shipment_details?.service_type_code,
+          department: lead.shipment_details?.department,
           fleet_type: lead.shipment_details?.fleet_type,
           fleet_quantity: lead.shipment_details?.fleet_quantity,
           incoterm: lead.shipment_details?.incoterm,
           commodity: lead.shipment_details?.cargo_category,
           cargo_description: lead.shipment_details?.cargo_description,
           cargo_weight: lead.shipment_details?.weight_total_kg,
+          cargo_weight_unit: 'kg',
           cargo_volume: lead.shipment_details?.volume_total_cbm,
+          cargo_volume_unit: 'cbm',
+          cargo_quantity: lead.shipment_details?.quantity,
+          cargo_quantity_unit: lead.shipment_details?.unit_of_measure,
           origin_address: lead.shipment_details?.origin_address,
           origin_city: lead.shipment_details?.origin_city,
           origin_country: lead.shipment_details?.origin_country,
           destination_address: lead.shipment_details?.destination_address,
           destination_city: lead.shipment_details?.destination_city,
           destination_country: lead.shipment_details?.destination_country,
+          scope_of_work: lead.shipment_details?.scope_of_work,
         }),
       })
 
