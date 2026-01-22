@@ -143,11 +143,8 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
     additional_services: [],
   })
 
-  // Ref to always have latest shipmentData (avoid stale closure in handleSubmit)
-  const shipmentDataRef = React.useRef<ShipmentData>(shipmentData)
-  React.useEffect(() => {
-    shipmentDataRef.current = shipmentData
-  }, [shipmentData])
+  // Use callback ref to always get latest state (fixes stale closure issue)
+  const getShipmentData = React.useCallback(() => shipmentData, [shipmentData])
 
   // Check if selected service is domestics (shows fleet)
   const isDomesticsService = DOMESTICS_SERVICE_CODES.includes(
@@ -228,8 +225,13 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
     setError(null)
 
     try {
-      // Use ref to get latest shipmentData (avoid stale closure)
-      const currentShipmentData = shipmentDataRef.current
+      // Get latest shipmentData using callback (fixes stale closure issue)
+      const currentShipmentData = getShipmentData()
+
+      // Debug log to verify data is correct
+      if (showShipmentDetails) {
+        console.log('[AddLeadDialog] Submitting with shipment data:', JSON.stringify(currentShipmentData, null, 2))
+      }
 
       // Get current selected service for department
       const currentSelectedService = SERVICE_TYPES.find(
