@@ -53,6 +53,7 @@ import {
   SERVICE_SCOPES,
   getServicesByScope,
   getServiceTypeDisplayLabel,
+  INCOTERMS,
 } from '@/lib/constants'
 
 interface CustomerQuotationDialogProps {
@@ -158,11 +159,16 @@ interface TermTemplate {
   is_default: boolean
 }
 
-// Incoterms for logistics
-const INCOTERMS = [
-  'EXW', 'FCA', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP',
-  'FAS', 'FOB', 'CFR', 'CIF',
-]
+// Helper to check if service type is domestic
+const isDomesticService = (serviceType: string): boolean => {
+  return serviceType.toLowerCase().startsWith('domestics')
+}
+
+// Helper to check if service type is export/import
+const isExportImportService = (serviceType: string): boolean => {
+  const lower = serviceType.toLowerCase()
+  return lower.startsWith('export') || lower.startsWith('import')
+}
 
 // Service types grouped by scope (using global SERVICE_TYPES from constants)
 const domesticsServices = getServicesByScope('Domestics')
@@ -916,42 +922,60 @@ export function CustomerQuotationDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label htmlFor="incoterm">Incoterm</Label>
-                  <Select value={incoterm} onValueChange={setIncoterm}>
-                    <SelectTrigger id="incoterm">
-                      <SelectValue placeholder="Select incoterm" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INCOTERMS.map((term) => (
-                        <SelectItem key={term} value={term}>{term}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="fleet-type">Fleet Type</Label>
-                  <Select value={fleetType} onValueChange={setFleetType}>
-                    <SelectTrigger id="fleet-type">
-                      <SelectValue placeholder="Select fleet type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FLEET_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="fleet-quantity">Quantity</Label>
-                  <Input
-                    id="fleet-quantity"
-                    type="number"
-                    min={1}
-                    value={fleetQuantity}
-                    onChange={(e) => setFleetQuantity(parseInt(e.target.value) || 1)}
-                  />
-                </div>
+                {/* Conditional: Fleet Type for Domestics, Incoterm for Export/Import */}
+                {isDomesticService(serviceType) ? (
+                  <>
+                    <div>
+                      <Label htmlFor="fleet-type">Fleet Type</Label>
+                      <Select value={fleetType} onValueChange={setFleetType}>
+                        <SelectTrigger id="fleet-type">
+                          <SelectValue placeholder="Select fleet type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FLEET_TYPES.map((type) => (
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="fleet-quantity">Quantity</Label>
+                      <Input
+                        id="fleet-quantity"
+                        type="number"
+                        min={1}
+                        value={fleetQuantity}
+                        onChange={(e) => setFleetQuantity(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                  </>
+                ) : isExportImportService(serviceType) ? (
+                  <>
+                    <div>
+                      <Label htmlFor="incoterm">Incoterm</Label>
+                      <Select value={incoterm} onValueChange={setIncoterm}>
+                        <SelectTrigger id="incoterm">
+                          <SelectValue placeholder="Select incoterm" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INCOTERMS.map((term) => (
+                            <SelectItem key={term.code} value={term.code}>{term.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      {/* Empty space for alignment */}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="col-span-2">
+                      <Label>Fleet Type / Incoterm</Label>
+                      <p className="text-sm text-muted-foreground mt-2">Select service type first to show relevant options</p>
+                    </div>
+                  </>
+                )}
                 <div className="col-span-2">
                   <Label htmlFor="commodity">Commodity</Label>
                   <Input
