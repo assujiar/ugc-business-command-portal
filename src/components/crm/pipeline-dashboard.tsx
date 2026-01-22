@@ -399,6 +399,10 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
       opportunity_id: opp.opportunity_id,
       company_name: opp.account_name || opp.name || '',
     })
+    // Also pass lead_id if opportunity was created from a lead
+    if (opp.lead_id) {
+      params.set('lead_id', opp.lead_id)
+    }
     setUpdateDialog({ open: false, opportunity: null })
     resetForm()
     router.push(`/tickets/new?${params.toString()}`)

@@ -135,7 +135,24 @@ export async function POST(request: NextRequest) {
       sender_email,
       sender_phone,
       show_sender_to_ops = true,
+      // CRM references for linking ticket to lead/opportunity
+      opportunity_id,
     } = body
+
+    // Handle lead_id - inherit from opportunity if not provided
+    let lead_id = body.lead_id || null
+    if (opportunity_id && !lead_id) {
+      // Look up lead_id from opportunity's source_lead_id
+      const { data: opportunity } = await (supabase as any)
+        .from('opportunities')
+        .select('source_lead_id')
+        .eq('opportunity_id', opportunity_id)
+        .single()
+
+      if (opportunity && opportunity.source_lead_id) {
+        lead_id = opportunity.source_lead_id
+      }
+    }
 
     // Validate required fields
     if (!ticket_type || !subject || !department) {
@@ -168,17 +185,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: rpcResult.error || 'Failed to create ticket' }, { status: 400 })
     }
 
-    // Update sender info fields if provided
-    if (rpcResult.ticket_id && (sender_name || sender_email || sender_phone || show_sender_to_ops !== undefined)) {
-      await (supabase as any)
-        .from('tickets')
-        .update({
-          sender_name: sender_name || null,
-          sender_email: sender_email || null,
-          sender_phone: sender_phone || null,
-          show_sender_to_ops: show_sender_to_ops ?? true,
-        })
-        .eq('id', rpcResult.ticket_id)
+    // Update sender info and CRM references if provided
+    if (rpcResult.ticket_id) {
+      const updateData: any = {}
+
+      // Sender info
+      if (sender_name) updateData.sender_name = sender_name
+      if (sender_email) updateData.sender_email = sender_email
+      if (sender_phone) updateData.sender_phone = sender_phone
+      if (show_sender_to_ops !== undefined) updateData.show_sender_to_ops = show_sender_to_ops
+
+      // CRM references (link ticket to lead/opportunity)
+      if (lead_id) updateData.lead_id = lead_id
+      if (opportunity_id) updateData.opportunity_id = opportunity_id
+
+      if (Object.keys(updateData).length > 0) {
+        await (supabase as any)
+          .from('tickets')
+          .update(updateData)
+          .eq('id', rpcResult.ticket_id)
+      }
     }
 
     // Auto-assign to department ops/manager

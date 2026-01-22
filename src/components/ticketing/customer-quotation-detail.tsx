@@ -280,7 +280,8 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
           description: `Quotation has been sent to ${result.data.recipient_email}`,
         })
 
-        if (!isResend) fetchQuotation()
+        // Always refresh quotation data to get updated status
+        fetchQuotation()
       } else {
         // Check if there's fallback data (email service not configured)
         if (result.fallback) {

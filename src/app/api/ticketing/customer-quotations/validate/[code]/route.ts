@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,10 +21,10 @@ const formatCurrency = (amount: number, currency: string = 'IDR'): string => {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { code } = await params
-    const supabase = await createClient()
+    const adminClient = createAdminClient()
 
-    // Fetch quotation by validation code (public access - no auth required)
-    const { data: quotation, error } = await (supabase as any)
+    // Fetch quotation by validation code (public access - using admin client to bypass RLS)
+    const { data: quotation, error } = await (adminClient as any)
       .from('customer_quotations')
       .select(`
         id,

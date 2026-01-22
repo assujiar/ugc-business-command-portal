@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
+    console.log('[CustomerQuotations GET] Query params:', { ticketId, leadId, opportunityId, status, limit, offset })
+
     let query = (supabase as any)
       .from('customer_quotations')
       .select(`
@@ -64,6 +66,11 @@ export async function GET(request: NextRequest) {
     query = query.range(offset, offset + limit - 1)
 
     const { data, error, count } = await query
+
+    console.log('[CustomerQuotations GET] Query result:', { count, error: error?.message, dataLength: data?.length })
+    if (data && data.length > 0) {
+      console.log('[CustomerQuotations GET] First quotation:', data[0])
+    }
 
     if (error) {
       console.error('Error fetching customer quotations:', error)
@@ -105,12 +112,40 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    const ticket_id = body.ticket_id || null
-    const lead_id = body.lead_id || null
-    const opportunity_id = body.opportunity_id || null
+    let ticket_id = body.ticket_id || null
+    let lead_id = body.lead_id || null
+    let opportunity_id = body.opportunity_id || null
+    const operational_cost_id = body.operational_cost_id || null
+
+    // If ticket_id is provided, inherit lead_id and opportunity_id from ticket if not already set
+    if (ticket_id && (!lead_id || !opportunity_id)) {
+      const { data: ticket } = await (supabase as any)
+        .from('tickets')
+        .select('lead_id, opportunity_id')
+        .eq('id', ticket_id)
+        .single()
+
+      if (ticket) {
+        if (!lead_id && ticket.lead_id) lead_id = ticket.lead_id
+        if (!opportunity_id && ticket.opportunity_id) opportunity_id = ticket.opportunity_id
+      }
+    }
+
+    // If opportunity_id is provided but not lead_id, inherit lead_id from opportunity
+    if (opportunity_id && !lead_id) {
+      const { data: opportunity } = await (supabase as any)
+        .from('opportunities')
+        .select('source_lead_id')
+        .eq('opportunity_id', opportunity_id)
+        .single()
+
+      if (opportunity && opportunity.source_lead_id) {
+        lead_id = opportunity.source_lead_id
+      }
+    }
+
     // Determine source type: standalone if no source is provided
     const source_type = body.source_type || (ticket_id ? 'ticket' : lead_id ? 'lead' : opportunity_id ? 'opportunity' : 'standalone')
-    const operational_cost_id = body.operational_cost_id || null
 
     // All sources are now optional - quotations can be created standalone
 

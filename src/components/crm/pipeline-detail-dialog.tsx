@@ -341,11 +341,18 @@ export function PipelineDetailDialog({
 
   const fetchQuotations = async (oppId: string) => {
     setLoadingQuotations(true)
+    console.log('[PipelineDetail] Fetching quotations for opportunity_id:', oppId)
     try {
       const response = await fetch(`/api/ticketing/customer-quotations?opportunity_id=${oppId}`)
+      console.log('[PipelineDetail] Quotations API response status:', response.status)
       if (response.ok) {
         const result = await response.json()
+        console.log('[PipelineDetail] Quotations API result:', result)
+        console.log('[PipelineDetail] Quotations data:', result.data)
         setQuotations(result.data || [])
+      } else {
+        const errorText = await response.text()
+        console.error('[PipelineDetail] Quotations API error:', errorText)
       }
     } catch (error) {
       console.error('Error fetching quotations:', error)

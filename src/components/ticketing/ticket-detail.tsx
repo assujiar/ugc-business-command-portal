@@ -2637,7 +2637,25 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
             phone: ticket.sender_phone || undefined,
           } : undefined,
         }}
+        // Pass lead data if ticket is linked to a lead
+        lead={ticket.lead_id ? {
+          lead_id: ticket.lead_id,
+          company_name: ticket.account?.company_name || '',
+          contact_name: ticket.sender_name || undefined,
+          contact_email: ticket.sender_email || undefined,
+          contact_phone: ticket.sender_phone || undefined,
+        } : undefined}
+        // Pass opportunity data if ticket is linked to a pipeline
+        opportunity={ticket.opportunity ? {
+          opportunity_id: ticket.opportunity.opportunity_id,
+          name: ticket.opportunity.name,
+          company_name: ticket.account?.company_name,
+          pic_name: ticket.sender_name || undefined,
+          pic_email: ticket.sender_email || undefined,
+          pic_phone: ticket.sender_phone || undefined,
+        } : undefined}
         operationalCost={costs.length > 0 ? {
+          id: costs[costs.length - 1]?.id,  // Link to operational cost
           amount: costs[costs.length - 1]?.amount || 0,
           currency: costs[costs.length - 1]?.currency || 'IDR',
         } : undefined}

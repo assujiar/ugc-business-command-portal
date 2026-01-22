@@ -133,6 +133,7 @@ interface CustomerQuotationDialogProps {
     city?: string
   }
   operationalCost?: {
+    id?: string  // operational_cost_id for linking
     amount: number
     currency: string
   }
@@ -569,6 +570,7 @@ export function CustomerQuotationDialog({
         ticket_id: ticketId || null,
         lead_id: lead?.lead_id || null,
         opportunity_id: opportunity?.opportunity_id || null,
+        operational_cost_id: operationalCost?.id || null,
         source_type: sourceType,
         customer_name: customerName,
         customer_company: customerCompany || null,
