@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import {
   Dialog,
@@ -37,7 +38,11 @@ import {
   Briefcase,
   UserCircle,
   Circle,
+  Plus,
+  Ticket,
+  Loader2,
 } from 'lucide-react'
+import { toast } from '@/hooks/use-toast'
 
 interface PipelineUpdate {
   update_id: string
@@ -262,9 +267,16 @@ export function PipelineDetailDialog({
   open,
   onOpenChange,
 }: PipelineDetailDialogProps) {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<PipelineDetailData | null>(null)
   const [mounted, setMounted] = useState(false)
+
+  // Quotation state
+  const [quotations, setQuotations] = useState<any[]>([])
+  const [loadingQuotations, setLoadingQuotations] = useState(false)
+  const [showCreateOptions, setShowCreateOptions] = useState(false)
+  const [creatingQuotation, setCreatingQuotation] = useState(false)
 
   // Prevent hydration mismatch - only render dynamic content after mount
   useEffect(() => {
@@ -274,8 +286,10 @@ export function PipelineDetailDialog({
   useEffect(() => {
     if (open && opportunityId) {
       fetchPipelineDetails(opportunityId)
+      fetchQuotations(opportunityId)
     } else {
       setData(null)
+      setQuotations([])
     }
   }, [open, opportunityId])
 
@@ -293,6 +307,83 @@ export function PipelineDetailDialog({
       setLoading(false)
     }
   }
+
+  const fetchQuotations = async (oppId: string) => {
+    setLoadingQuotations(true)
+    try {
+      const response = await fetch(`/api/ticketing/customer-quotations?opportunity_id=${oppId}`)
+      if (response.ok) {
+        const result = await response.json()
+        setQuotations(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error fetching quotations:', error)
+    } finally {
+      setLoadingQuotations(false)
+    }
+  }
+
+  // Create RFQ ticket from opportunity
+  const handleCreateTicket = () => {
+    if (!data) return
+    const params = new URLSearchParams({
+      from: 'opportunity',
+      opportunity_id: data.opportunity_id,
+      company_name: data.company_name || '',
+      contact_name: data.pic_name || '',
+      contact_email: data.pic_email || '',
+      contact_phone: data.pic_phone || '',
+    })
+    router.push(`/tickets/new?${params.toString()}`)
+    onOpenChange(false)
+  }
+
+  // Create quotation directly from opportunity
+  const handleCreateQuotation = async () => {
+    if (!data) return
+
+    setCreatingQuotation(true)
+    try {
+      const response = await fetch('/api/ticketing/customer-quotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunity_id: data.opportunity_id,
+          source_type: 'opportunity',
+          customer_name: data.pic_name || data.company_name || '',
+          customer_company: data.company_name,
+          customer_email: data.pic_email,
+          customer_phone: data.pic_phone,
+          customer_address: [data.address, data.city].filter(Boolean).join(', '),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: 'Quotation Created',
+          description: `Quotation ${result.quotation_number} created successfully`,
+        })
+        router.push(`/customer-quotations/${result.quotation_id}`)
+        onOpenChange(false)
+      } else {
+        throw new Error(result.error || 'Failed to create quotation')
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setCreatingQuotation(false)
+    }
+  }
+
+  // Check if stage allows quotation creation
+  const canCreateQuotation = data && !['Closed Won', 'Closed Lost'].includes(data.stage)
 
   const getStageColor = (stage: OpportunityStage) => {
     switch (stage) {
@@ -536,6 +627,128 @@ export function PipelineDetailDialog({
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Customer Quotations Section */}
+              {canCreateQuotation && (
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Customer Quotations
+                        {quotations.length > 0 && (
+                          <Badge variant="secondary" className="ml-2">{quotations.length}</Badge>
+                        )}
+                      </h3>
+                      {!showCreateOptions && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowCreateOptions(true)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Create
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Create Options */}
+                    {showCreateOptions && (
+                      <div className="p-4 border rounded-lg bg-muted/30 mb-4 space-y-3">
+                        <p className="text-sm font-medium">Choose how to proceed:</p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCreateTicket}
+                            className="flex-1"
+                          >
+                            <Ticket className="h-4 w-4 mr-2" />
+                            Create RFQ Ticket
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={handleCreateQuotation}
+                            disabled={creatingQuotation}
+                            className="flex-1"
+                          >
+                            {creatingQuotation ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <FileText className="h-4 w-4 mr-2" />
+                            )}
+                            Create Quotation
+                          </Button>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowCreateOptions(false)}
+                          className="w-full"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Quotation List */}
+                    {loadingQuotations ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+                      </div>
+                    ) : quotations.length > 0 ? (
+                      <div className="space-y-2">
+                        {quotations.map((quotation, index) => (
+                          <div
+                            key={quotation.id}
+                            onClick={() => {
+                              router.push(`/customer-quotations/${quotation.id}`)
+                              onOpenChange(false)
+                            }}
+                            className="flex items-center justify-between p-3 border rounded-md bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">
+                                  {quotation.quotation_number}
+                                  <span className="text-xs text-muted-foreground ml-2">
+                                    (#{quotation.sequence_number || index + 1})
+                                  </span>
+                                </p>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <Badge
+                                    variant={
+                                      quotation.status === 'accepted' ? 'default' :
+                                      quotation.status === 'rejected' ? 'destructive' :
+                                      quotation.status === 'sent' ? 'secondary' : 'outline'
+                                    }
+                                    className={quotation.status === 'accepted' ? 'bg-green-500' : ''}
+                                  >
+                                    {quotation.status}
+                                  </Badge>
+                                  {quotation.total_selling_rate && (
+                                    <span>
+                                      {quotation.currency} {Number(quotation.total_selling_rate).toLocaleString('id-ID')}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No quotations yet. Create one to proceed.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Pipeline Activity Timeline */}
               <Card className="overflow-hidden">

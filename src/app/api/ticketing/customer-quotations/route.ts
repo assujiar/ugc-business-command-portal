@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
 
     // Parse query params
     const ticketId = searchParams.get('ticket_id')
+    const leadId = searchParams.get('lead_id')
+    const opportunityId = searchParams.get('opportunity_id')
     const status = searchParams.get('status')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
@@ -48,6 +50,12 @@ export async function GET(request: NextRequest) {
 
     if (ticketId) {
       query = query.eq('ticket_id', ticketId)
+    }
+    if (leadId) {
+      query = query.eq('lead_id', leadId)
+    }
+    if (opportunityId) {
+      query = query.eq('opportunity_id', opportunityId)
     }
     if (status) {
       query = query.eq('status', status)
@@ -97,11 +105,15 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    const ticket_id = body.ticket_id
+    const ticket_id = body.ticket_id || null
+    const lead_id = body.lead_id || null
+    const opportunity_id = body.opportunity_id || null
+    const source_type = body.source_type || 'ticket'
     const operational_cost_id = body.operational_cost_id || null
 
-    if (!ticket_id) {
-      return NextResponse.json({ error: 'Ticket ID is required' }, { status: 400 })
+    // At least one source must be provided
+    if (!ticket_id && !lead_id && !opportunity_id) {
+      return NextResponse.json({ error: 'Either ticket_id, lead_id, or opportunity_id is required' }, { status: 400 })
     }
 
     // Get flat values directly from body (dialog sends flat fields)
@@ -172,11 +184,28 @@ export async function POST(request: NextRequest) {
     valid_until.setDate(valid_until.getDate() + validity_days)
     const valid_until_str = valid_until.toISOString().split('T')[0]
 
+    // Get sequence number for the source
+    let sequence_number = 1
+    if (ticket_id || lead_id || opportunity_id) {
+      const { data: seqData } = await (supabase as any).rpc('get_next_quotation_sequence', {
+        p_ticket_id: ticket_id,
+        p_lead_id: lead_id,
+        p_opportunity_id: opportunity_id,
+      })
+      if (seqData) {
+        sequence_number = seqData
+      }
+    }
+
     // Insert quotation directly (bypass RPC to avoid JSONB serialization issues)
     const { data: quotation, error: insertError } = await (supabase as any)
       .from('customer_quotations')
       .insert({
         ticket_id,
+        lead_id,
+        opportunity_id,
+        source_type,
+        sequence_number,
         operational_cost_id,
         quotation_number,
         customer_name,
@@ -255,25 +284,47 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create ticket event
-    await (supabase as any)
-      .from('ticket_events')
-      .insert({
-        ticket_id,
-        event_type: 'customer_quotation_created',
-        actor_user_id: user.id,
-        new_value: { quotation_id, quotation_number },
-        notes: 'Customer quotation created',
+    // Create ticket event if ticket is linked
+    if (ticket_id) {
+      await (supabase as any)
+        .from('ticket_events')
+        .insert({
+          ticket_id,
+          event_type: 'customer_quotation_created',
+          actor_user_id: user.id,
+          new_value: { quotation_id, quotation_number, sequence_number },
+          notes: `Customer quotation #${sequence_number} created`,
+        })
+    }
+
+    // Sync quotation status to lead if linked
+    if (lead_id) {
+      await (supabase as any).rpc('sync_quotation_to_lead', {
+        p_quotation_id: quotation_id,
+        p_new_status: 'draft',
+        p_actor_user_id: user.id,
       })
+    }
+
+    // Sync quotation status to opportunity if linked
+    if (opportunity_id) {
+      await (supabase as any).rpc('sync_quotation_to_opportunity', {
+        p_quotation_id: quotation_id,
+        p_new_status: 'draft',
+        p_actor_user_id: user.id,
+      })
+    }
 
     return NextResponse.json({
       success: true,
       data: {
         id: quotation_id,
         quotation_number,
+        sequence_number,
       },
       quotation_id,
       quotation_number,
+      sequence_number,
     }, { status: 201 })
   } catch (err) {
     console.error('Unexpected error:', err)

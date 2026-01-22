@@ -35,6 +35,7 @@ import {
   RotateCcw,
   Forward,
   Bell,
+  Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -176,6 +177,9 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   // Customer quotation dialog state
   const [quotationDialogOpen, setQuotationDialogOpen] = useState(false)
 
+  // Customer quotations state
+  const [customerQuotations, setCustomerQuotations] = useState<any[]>([])
+
   // Permission checks
   const canAssign = canAssignTickets(profile.role)
   const canTransition = canTransitionTickets(profile.role)
@@ -262,6 +266,13 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       const costsData = await costsRes.json()
       if (costsData.success) {
         setCosts(costsData.data || [])
+      }
+
+      // Fetch customer quotations for this ticket
+      const quotationsRes = await fetch(`/api/ticketing/customer-quotations?ticket_id=${ticket.id}`)
+      const quotationsData = await quotationsRes.json()
+      if (quotationsData.success) {
+        setCustomerQuotations(quotationsData.data || [])
       }
 
       // Fetch SLA details
@@ -1425,10 +1436,32 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                         </Button>
                       )}
 
-                      {/* Cost Sent to Customer - available after ops sends cost */}
+                      {/* Sent to Customer - checks if quotation exists first */}
                       {costs.length > 0 && (
                         <Button
-                          onClick={() => executeAction('quote_sent_to_customer')}
+                          onClick={async () => {
+                            // Check if customer quotation exists
+                            if (customerQuotations.length === 0) {
+                              // No quotation - prompt to create one
+                              toast({
+                                title: 'Quotation Required',
+                                description: 'Please create a customer quotation first before sending to customer.',
+                                variant: 'destructive',
+                              })
+                              setQuotationDialogOpen(true)
+                              return
+                            }
+                            // Has quotation - execute the action
+                            const result = await executeAction('quote_sent_to_customer')
+                            if (result) {
+                              // Refresh quotation status
+                              const quotationsRes = await fetch(`/api/ticketing/customer-quotations?ticket_id=${ticket.id}`)
+                              const quotationsData = await quotationsRes.json()
+                              if (quotationsData.success) {
+                                setCustomerQuotations(quotationsData.data || [])
+                              }
+                            }
+                          }}
                           disabled={actionLoading === 'quote_sent_to_customer'}
                           className="w-full"
                           variant="outline"
@@ -1438,7 +1471,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                           ) : (
                             <Forward className="mr-2 h-4 w-4" />
                           )}
-                          Cost Sent to Customer
+                          {customerQuotations.length > 0 ? 'Mark Sent to Customer' : 'Sent to Customer (Create Quotation First)'}
                         </Button>
                       )}
 
@@ -2155,6 +2188,65 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
               )}
             </CardContent>
           </Card>
+
+          {/* Customer Quotations Card - for RFQ tickets */}
+          {ticket.ticket_type === 'RFQ' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Customer Quotations ({customerQuotations.length})
+                  </div>
+                  {isCreator && !isClosed && costs.length > 0 && (
+                    <Button size="sm" variant="outline" onClick={() => setQuotationDialogOpen(true)}>
+                      <Plus className="h-3 w-3 mr-1" /> New
+                    </Button>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {customerQuotations.length === 0 ? (
+                  <p className="text-muted-foreground text-sm text-center py-4">
+                    No customer quotations yet
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {customerQuotations.map((quotation: any) => (
+                      <Link
+                        key={quotation.id}
+                        href={`/ticketing/quotations/${quotation.id}`}
+                        className="block p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-mono text-sm font-medium">{quotation.quotation_number}</span>
+                          <Badge variant={
+                            quotation.status === 'sent' ? 'default' :
+                            quotation.status === 'accepted' ? 'outline' :
+                            quotation.status === 'rejected' ? 'destructive' :
+                            quotation.status === 'draft' ? 'secondary' : 'outline'
+                          } className={
+                            quotation.status === 'accepted' ? 'border-green-500 text-green-600 bg-green-500/10' : ''
+                          }>
+                            {quotation.status}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {quotation.currency} {Number(quotation.total_selling_rate).toLocaleString('id-ID')}
+                        </div>
+                        {quotation.sent_at && (
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Sent: {formatDate(quotation.sent_at)}
+                          </div>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Ticket Actions Card - for Admin and Ops */}
           {(canAssign || canTransition) && (

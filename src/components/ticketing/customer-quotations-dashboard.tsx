@@ -18,6 +18,8 @@ import {
   MessageSquare,
   Mail,
   ExternalLink,
+  Plus,
+  Ticket,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,7 +40,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { canViewAllTickets } from '@/lib/permissions'
+import { CustomerQuotationDialog } from './customer-quotation-dialog'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -84,7 +95,70 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
     total_value: 0,
   })
 
+  // Ticket selection for new quotation
+  const [ticketSelectDialogOpen, setTicketSelectDialogOpen] = useState(false)
+  const [rfqTickets, setRfqTickets] = useState<any[]>([])
+  const [loadingTickets, setLoadingTickets] = useState(false)
+  const [ticketSearchQuery, setTicketSearchQuery] = useState('')
+  const [selectedTicket, setSelectedTicket] = useState<any>(null)
+  const [quotationDialogOpen, setQuotationDialogOpen] = useState(false)
+
   const canViewAll = canViewAllTickets(profile.role)
+
+  // Fetch RFQ tickets for selection (only those with operational costs)
+  const fetchRfqTickets = async () => {
+    setLoadingTickets(true)
+    try {
+      const params = new URLSearchParams()
+      params.append('ticket_type', 'RFQ')
+      params.append('status', 'need_response,in_progress,waiting_customer,need_adjustment,pending')
+      if (ticketSearchQuery) params.append('search', ticketSearchQuery)
+      params.append('limit', '50')
+
+      const response = await fetch(`/api/ticketing/tickets?${params.toString()}`)
+      const result = await response.json()
+
+      if (result.success) {
+        // Filter tickets that have operational costs
+        const ticketsWithCosts = await Promise.all(
+          (result.data || []).map(async (ticket: any) => {
+            const costsRes = await fetch(`/api/ticketing/tickets/${ticket.id}/quotes`)
+            const costsData = await costsRes.json()
+            return {
+              ...ticket,
+              hasCosts: costsData.success && costsData.data && costsData.data.length > 0,
+              costCount: costsData.data?.length || 0,
+            }
+          })
+        )
+        setRfqTickets(ticketsWithCosts.filter((t: any) => t.hasCosts))
+      }
+    } catch (err) {
+      console.error('Error fetching RFQ tickets:', err)
+    } finally {
+      setLoadingTickets(false)
+    }
+  }
+
+  // Open ticket selection dialog
+  const handleCreateNew = () => {
+    setTicketSelectDialogOpen(true)
+    fetchRfqTickets()
+  }
+
+  // Select ticket and open quotation dialog
+  const handleSelectTicket = (ticket: any) => {
+    setSelectedTicket(ticket)
+    setTicketSelectDialogOpen(false)
+    setQuotationDialogOpen(true)
+  }
+
+  // Handle quotation created
+  const handleQuotationCreated = () => {
+    setQuotationDialogOpen(false)
+    setSelectedTicket(null)
+    fetchQuotations()
+  }
 
   // Fetch customer quotations
   const fetchQuotations = async () => {
@@ -164,6 +238,10 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
             Manage customer quotations sent from RFQ tickets
           </p>
         </div>
+        <Button onClick={handleCreateNew} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Create Quotation
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -366,6 +444,86 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
           </Table>
         </CardContent>
       </Card>
+
+      {/* Ticket Selection Dialog */}
+      <Dialog open={ticketSelectDialogOpen} onOpenChange={setTicketSelectDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Select RFQ Ticket</DialogTitle>
+            <DialogDescription>
+              Choose an RFQ ticket to create a customer quotation. Only tickets with operational costs are shown.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by ticket code or subject..."
+              value={ticketSearchQuery}
+              onChange={(e) => {
+                setTicketSearchQuery(e.target.value)
+                fetchRfqTickets()
+              }}
+              className="pl-10"
+            />
+          </div>
+
+          {/* Ticket List */}
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {loadingTickets ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : rfqTickets.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Ticket className="h-8 w-8 mx-auto mb-2" />
+                <p>No RFQ tickets with operational costs found</p>
+                <p className="text-sm">Create operational costs first from the ticket detail page</p>
+              </div>
+            ) : (
+              rfqTickets.map((ticket) => (
+                <div
+                  key={ticket.id}
+                  onClick={() => handleSelectTicket(ticket)}
+                  className="p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-sm font-medium">{ticket.ticket_code}</span>
+                    <Badge variant="secondary">{ticket.costCount} cost(s)</Badge>
+                  </div>
+                  <p className="text-sm font-medium truncate">{ticket.subject}</p>
+                  {ticket.account && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                      <Building2 className="h-3 w-3" />
+                      {ticket.account.company_name}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTicketSelectDialogOpen(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Customer Quotation Dialog */}
+      {selectedTicket && (
+        <CustomerQuotationDialog
+          ticket={selectedTicket}
+          open={quotationDialogOpen}
+          onOpenChange={(open) => {
+            setQuotationDialogOpen(open)
+            if (!open) setSelectedTicket(null)
+          }}
+          onCreated={handleQuotationCreated}
+        />
+      )}
     </div>
   )
 }
