@@ -62,7 +62,10 @@ USING (
 
 -- ============================================
 -- UPDATE RPC FUNCTION to handle breakdown items
+-- Drop old function with different signature first
 -- ============================================
+DROP FUNCTION IF EXISTS public.rpc_ticket_create_quote(UUID, DECIMAL, VARCHAR, DATE, TEXT);
+
 CREATE OR REPLACE FUNCTION public.rpc_ticket_create_quote(
     p_ticket_id UUID,
     p_amount DECIMAL,
