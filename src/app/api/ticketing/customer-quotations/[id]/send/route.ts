@@ -78,7 +78,15 @@ const generateWhatsAppText = (quotation: any, profile: ProfileData, validationUr
     cargoDetails += '\n'
   }
 
-  const text = `${greeting} ${customerName},
+  // Build greeting with company name and PIC
+  const companyName = quotation.customer_company || ''
+  const greetingLine = companyName
+    ? `*${companyName}*\nU.p Bapak/Ibu ${quotation.customer_name || ''}`
+    : `Bapak/Ibu ${quotation.customer_name || ''}`
+
+  const text = `${greeting},
+
+${greetingLine}
 
 Terima kasih atas kepercayaan Anda pada *${UGC_INFO.shortName}*.
 
@@ -163,7 +171,9 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
 
       <!-- Content -->
       <div style="background: #ffffff; padding: 30px; border: 1px solid #e2e8f0; border-top: none;">
-        <p style="margin-top: 0;">Yth. <strong>${customerName}</strong>${companyName ? `,<br/>${companyName}` : ''},</p>
+        <p style="margin-top: 0;">
+          ${companyName ? `<strong>${companyName}</strong><br/>U.p Bapak/Ibu ${customerName}` : `Yth. Bapak/Ibu <strong>${customerName}</strong>`}
+        </p>
 
         <p>Terima kasih atas kepercayaan Anda kepada <strong style="color: #ff4600;">${UGC_INFO.shortName}</strong>. Dengan senang hati kami sampaikan penawaran harga untuk layanan ${serviceInfo}${routeInfo}.</p>
 
@@ -266,10 +276,15 @@ const generateEmailPlainText = (quotation: any, profile: ProfileData, validation
     if (quotation.estimated_cargo_value) cargoDetails += `\n- Nilai Cargo: ${formatCurrency(quotation.estimated_cargo_value, quotation.cargo_value_currency || 'IDR')}`
   }
 
+  // Build greeting with company name and PIC
+  const greetingLine = companyName
+    ? `${companyName}\nU.p Bapak/Ibu ${customerName}`
+    : `Yth. Bapak/Ibu ${customerName}`
+
   return `
 ${UGC_INFO.shortName} - Quotation ${quotation.quotation_number}
 
-Yth. ${customerName}${companyName ? `, ${companyName}` : ''},
+${greetingLine}
 
 Terima kasih atas kepercayaan Anda kepada ${UGC_INFO.shortName}. Dengan senang hati kami sampaikan penawaran harga untuk layanan ${quotation.service_type || 'pengiriman barang'}${routeInfo}.
 
