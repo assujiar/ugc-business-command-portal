@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendNewLeadAssignmentEmail } from '@/lib/crm-notification-service'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -116,20 +115,6 @@ export async function POST(
           console.error('Error creating handover pool entry:', poolError)
         }
       }
-
-      // Send email notification to all salespersons about the new lead
-      // This is done asynchronously to not block the response
-      sendNewLeadAssignmentEmail(id, user.id)
-        .then(result => {
-          if (result.success) {
-            console.log(`[Lead Triage] Email notification sent for lead ${id}`)
-          } else {
-            console.error(`[Lead Triage] Failed to send email notification for lead ${id}:`, result.error)
-          }
-        })
-        .catch(err => {
-          console.error(`[Lead Triage] Error sending email notification for lead ${id}:`, err)
-        })
     }
 
     // Note: Qualified status stays as Qualified - NO auto-transition
