@@ -226,6 +226,9 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   // Customer quotations state
   const [customerQuotations, setCustomerQuotations] = useState<any[]>([])
 
+  // Lead data for quotation prefill (includes shipment_details)
+  const [leadData, setLeadData] = useState<any>(null)
+
   // Permission checks
   const canAssign = canAssignTickets(profile.role)
   const canTransition = canTransitionTickets(profile.role)
@@ -319,6 +322,15 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       const quotationsData = await quotationsRes.json()
       if (quotationsData.success) {
         setCustomerQuotations(quotationsData.data || [])
+      }
+
+      // Fetch lead data with shipment_details if ticket is linked to a lead
+      if (ticket.lead_id) {
+        const leadRes = await fetch(`/api/crm/leads/${ticket.lead_id}`)
+        const leadResult = await leadRes.json()
+        if (leadResult.data) {
+          setLeadData(leadResult.data)
+        }
       }
 
       // Fetch SLA details
@@ -2637,8 +2649,15 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
             phone: ticket.sender_phone || undefined,
           } : undefined,
         }}
-        // Pass lead data if ticket is linked to a lead
-        lead={ticket.lead_id ? {
+        // Pass lead data with shipment_details if available
+        lead={leadData ? {
+          lead_id: leadData.lead_id,
+          company_name: leadData.company_name || ticket.account?.company_name || '',
+          contact_name: leadData.contact_name || ticket.sender_name || undefined,
+          contact_email: leadData.contact_email || ticket.sender_email || undefined,
+          contact_phone: leadData.contact_phone || ticket.sender_phone || undefined,
+          shipment_details: leadData.shipment_details || undefined,
+        } : ticket.lead_id ? {
           lead_id: ticket.lead_id,
           company_name: ticket.account?.company_name || '',
           contact_name: ticket.sender_name || undefined,
@@ -2658,6 +2677,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
           id: costs[costs.length - 1]?.id,  // Link to operational cost
           amount: costs[costs.length - 1]?.amount || 0,
           currency: costs[costs.length - 1]?.currency || 'IDR',
+          rate_structure: costs[costs.length - 1]?.rate_structure || 'bundling',
+          items: costs[costs.length - 1]?.items || [],
         } : undefined}
         onSuccess={() => {
           setQuotationDialogOpen(false)

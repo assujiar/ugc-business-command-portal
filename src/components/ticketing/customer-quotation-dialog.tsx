@@ -136,6 +136,17 @@ interface CustomerQuotationDialogProps {
     id?: string  // operational_cost_id for linking
     amount: number
     currency: string
+    rate_structure?: 'bundling' | 'breakdown'
+    items?: Array<{
+      id: string
+      component_type: string
+      component_name?: string
+      description?: string
+      cost_amount: number
+      quantity?: number | null
+      unit?: string | null
+      sort_order?: number
+    }>
   }
   onSuccess?: () => void
   onCreated?: () => void
@@ -422,10 +433,36 @@ export function CustomerQuotationDialog({
         setCargoValueCurrency(rfq.cargo_value_currency || 'IDR')
       }
 
-      // Operational cost
+      // Operational cost - including rate structure and items
       if (operationalCost) {
-        setTotalCost(operationalCost.amount)
         setCurrency(operationalCost.currency || 'IDR')
+
+        // Set rate structure from operational cost
+        if (operationalCost.rate_structure) {
+          setRateStructure(operationalCost.rate_structure)
+        }
+
+        // If breakdown with items, populate items with margin calculation
+        if (operationalCost.rate_structure === 'breakdown' && operationalCost.items && operationalCost.items.length > 0) {
+          const defaultMargin = 15 // Default margin percentage
+          const mappedItems: QuotationItem[] = operationalCost.items.map((item, index) => ({
+            id: `item-${Date.now()}-${index}`,
+            component_type: item.component_type,
+            component_name: item.component_name || getRateComponentLabel(item.component_type),
+            description: item.description || '',
+            cost_amount: item.cost_amount,
+            target_margin_percent: defaultMargin,
+            selling_rate: item.cost_amount * (1 + defaultMargin / 100),
+            quantity: item.quantity || null,
+            unit: item.unit || null,
+          }))
+          setItems(mappedItems)
+          // Total cost is sum of all items
+          setTotalCost(operationalCost.items.reduce((sum, item) => sum + item.cost_amount, 0))
+        } else {
+          // Bundling mode
+          setTotalCost(operationalCost.amount)
+        }
       }
 
       fetchTermTemplates()
