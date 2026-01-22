@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessTicketing, getAnalyticsScope, canViewAnalyticsRankings, getUserTicketingDepartment } from '@/lib/permissions'
+import { canAccessTicketing, getAnalyticsScope, canViewAnalyticsRankings, getUserTicketingDepartment, isOps } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -9,9 +9,6 @@ interface ProfileData {
   user_id: string
   role: UserRole
 }
-
-// OPS departments that get first quote metrics
-const OPS_DEPARTMENTS = ['DTD', 'EXI', 'TRF', 'DOM']
 
 // GET /api/ticketing/performance/users - Get user performance metrics
 export async function GET(request: NextRequest) {
@@ -276,16 +273,17 @@ export async function GET(request: NextRequest) {
       const assigneeId = ticket.assigned_to
       const creatorId = ticket.created_by
       const ticketType = ticket.ticket_type as 'RFQ' | 'GEN'
-      const isOps = OPS_DEPARTMENTS.includes(ticket.department)
 
       // ========== Track CREATOR metrics ==========
       if (creatorId && ticket.creator) {
+        // Check if creator is OPS based on their role
+        const isCreatorOps = isOps(ticket.creator?.role as UserRole)
         if (!userMetrics[creatorId]) {
           userMetrics[creatorId] = initUserMetrics(
             creatorId,
             ticket.creator?.name || 'Unknown',
             ticket.creator?.role || 'Unknown',
-            false // Creator's OPS status doesn't matter for creator metrics
+            isCreatorOps
           )
         }
         userMetrics[creatorId].as_creator.tickets_created++
@@ -293,12 +291,14 @@ export async function GET(request: NextRequest) {
 
       // ========== Track ASSIGNEE metrics ==========
       if (assigneeId && ticket.assignee) {
+        // Check if assignee is OPS based on their role
+        const isAssigneeOps = isOps(ticket.assignee?.role as UserRole)
         if (!userMetrics[assigneeId]) {
           userMetrics[assigneeId] = initUserMetrics(
             assigneeId,
             ticket.assignee?.name || 'Unknown',
             ticket.assignee?.role || 'Unknown',
-            isOps
+            isAssigneeOps
           )
         }
 
@@ -420,12 +420,13 @@ export async function GET(request: NextRequest) {
 
         // Ensure user exists in metrics
         if (!userMetrics[userId] && comment.user) {
-          const isOps = OPS_DEPARTMENTS.includes(comment.ticket?.department || ticket?.department || '')
+          // Check if user is OPS based on their role
+          const isUserOps = isOps(comment.user?.role as UserRole)
           userMetrics[userId] = initUserMetrics(
             userId,
             comment.user.name || 'Unknown',
             comment.user.role || 'Unknown',
-            isOps
+            isUserOps
           )
         }
 

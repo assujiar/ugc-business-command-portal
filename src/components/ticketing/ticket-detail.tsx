@@ -2544,36 +2544,62 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {customerQuotations.map((quotation: any) => (
-                      <Link
-                        key={quotation.id}
-                        href={`/customer-quotations/${quotation.id}`}
-                        className="block p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-mono text-sm font-medium">{quotation.quotation_number}</span>
-                          <Badge variant={
-                            quotation.status === 'sent' ? 'default' :
-                            quotation.status === 'accepted' ? 'outline' :
-                            quotation.status === 'rejected' ? 'destructive' :
-                            quotation.status === 'draft' ? 'secondary' : 'outline'
-                          } className={
-                            quotation.status === 'accepted' ? 'border-green-500 text-green-600 bg-green-500/10' : ''
-                          }>
-                            {quotation.status}
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {quotation.currency} {Number(quotation.total_selling_rate).toLocaleString('id-ID')}
-                        </div>
-                        {quotation.sent_at && (
-                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            Sent: {formatDate(quotation.sent_at)}
+                    {customerQuotations.map((quotation: any) => {
+                      // For OPS users: show as non-clickable div without price
+                      // For other users: show as clickable link with price
+                      const QuotationItem = (
+                        <>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-mono text-sm font-medium">{quotation.quotation_number}</span>
+                            <Badge variant={
+                              quotation.status === 'sent' ? 'default' :
+                              quotation.status === 'accepted' ? 'outline' :
+                              quotation.status === 'rejected' ? 'destructive' :
+                              quotation.status === 'draft' ? 'secondary' : 'outline'
+                            } className={
+                              quotation.status === 'accepted' ? 'border-green-500 text-green-600 bg-green-500/10' : ''
+                            }>
+                              {quotation.status}
+                            </Badge>
                           </div>
-                        )}
-                      </Link>
-                    ))}
+                          {/* Hide price for OPS users */}
+                          {!isOpsUser && (
+                            <div className="text-sm text-muted-foreground">
+                              {quotation.currency} {Number(quotation.total_selling_rate).toLocaleString('id-ID')}
+                            </div>
+                          )}
+                          {quotation.sent_at && (
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              Sent: {formatDate(quotation.sent_at)}
+                            </div>
+                          )}
+                        </>
+                      )
+
+                      // OPS users: non-clickable div
+                      if (isOpsUser) {
+                        return (
+                          <div
+                            key={quotation.id}
+                            className="block p-3 rounded-lg border bg-muted/30"
+                          >
+                            {QuotationItem}
+                          </div>
+                        )
+                      }
+
+                      // Other users: clickable link
+                      return (
+                        <Link
+                          key={quotation.id}
+                          href={`/customer-quotations/${quotation.id}`}
+                          className="block p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                        >
+                          {QuotationItem}
+                        </Link>
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>

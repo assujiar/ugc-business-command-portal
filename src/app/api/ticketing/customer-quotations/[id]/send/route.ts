@@ -115,7 +115,7 @@ ${UGC_INFO.phone}`
   return text
 }
 
-// Generate Email HTML - email-client compatible design with QR code
+// Generate Email HTML - email-client compatible design with QR code and bulletproof buttons
 const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: string, pdfUrl: string): string => {
   const customerName = quotation.customer_name || 'Bapak/Ibu'
   const companyName = quotation.customer_company || ''
@@ -134,21 +134,21 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
   if (quotation.rate_structure === 'breakdown' && quotation.items?.length > 0) {
     const itemRows = quotation.items.map((item: any, index: number) => `
       <tr${index % 2 === 0 ? '' : ' bgcolor="#fafafa"'}>
-        <td style="padding: 12px 15px; border-bottom: 1px solid #f0f0f0; color: #374151; font-family: Arial, sans-serif; font-size: 14px;">${item.component_name || item.component_type}${item.quantity && item.unit ? ` <span style="color: #9ca3af; font-size: 12px;">(${item.quantity} ${item.unit})</span>` : ''}</td>
-        <td style="padding: 12px 15px; border-bottom: 1px solid #f0f0f0; text-align: right; font-weight: bold; color: #1f2937; font-family: Arial, sans-serif; font-size: 14px;">${formatCurrency(item.selling_rate, quotation.currency)}</td>
+        <td style="padding: 14px 18px; border-bottom: 1px solid #f0f0f0; color: #374151; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;">${item.component_name || item.component_type}${item.quantity && item.unit ? ` <span style="color: #9ca3af; font-size: 12px;">(${item.quantity} ${item.unit})</span>` : ''}</td>
+        <td style="padding: 14px 18px; border-bottom: 1px solid #f0f0f0; text-align: right; font-weight: 600; color: #1f2937; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;">${formatCurrency(item.selling_rate, quotation.currency)}</td>
       </tr>
     `).join('')
 
     itemsTable = `
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; border: 1px solid #e5e7eb;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
         <tr bgcolor="#ff4600">
-          <th style="padding: 14px 15px; text-align: left; color: white; font-weight: bold; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Deskripsi</th>
-          <th style="padding: 14px 15px; text-align: right; color: white; font-weight: bold; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Rate</th>
+          <th style="padding: 16px 18px; text-align: left; color: white; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; font-family: 'Segoe UI', Arial, sans-serif;">Deskripsi</th>
+          <th style="padding: 16px 18px; text-align: right; color: white; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; font-family: 'Segoe UI', Arial, sans-serif;">Rate</th>
         </tr>
         ${itemRows}
         <tr bgcolor="#fff5f0">
-          <td style="padding: 16px 15px; font-weight: bold; color: #ff4600; font-size: 15px; border-top: 2px solid #ff4600; font-family: Arial, sans-serif;">TOTAL</td>
-          <td style="padding: 16px 15px; text-align: right; font-weight: bold; color: #ff4600; font-size: 18px; border-top: 2px solid #ff4600; font-family: Arial, sans-serif;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</td>
+          <td style="padding: 18px; font-weight: 700; color: #ff4600; font-size: 15px; border-top: 2px solid #ff4600; font-family: 'Segoe UI', Arial, sans-serif;">TOTAL</td>
+          <td style="padding: 18px; text-align: right; font-weight: 700; color: #ff4600; font-size: 20px; border-top: 2px solid #ff4600; font-family: 'Segoe UI', Arial, sans-serif;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</td>
         </tr>
       </table>
     `
@@ -156,240 +156,360 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
 
   return `
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="x-apple-disable-message-reformatting" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>Quotation ${quotation.quotation_number}</title>
   <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:AllowPNG/>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
   <style type="text/css">
-    table {border-collapse: collapse;}
-    .button-link {padding: 14px 30px !important;}
+    table {border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;}
+    td, th {mso-line-height-rule: exactly;}
+    a {text-decoration: none;}
   </style>
   <![endif]-->
+  <style type="text/css">
+    @media only screen and (max-width: 620px) {
+      .mobile-full { width: 100% !important; }
+      .mobile-center { text-align: center !important; }
+      .mobile-padding { padding: 15px !important; }
+      .mobile-hide { display: none !important; }
+      .mobile-btn { width: 100% !important; display: block !important; }
+    }
+  </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f4f6">
+<body style="margin: 0; padding: 0; background-color: #f0f2f5; font-family: 'Segoe UI', Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;">
+  <!-- Preview text (hidden) -->
+  <div style="display: none; max-height: 0; overflow: hidden;">
+    Quotation ${quotation.quotation_number} - ${formatCurrency(quotation.total_selling_rate, quotation.currency)}${routeDisplay ? ` | ${routeDisplay}` : ''} | UGC Logistics
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f0f2f5">
     <tr>
-      <td align="center" style="padding: 20px 10px;">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%;">
+      <td align="center" style="padding: 30px 15px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="mobile-full" style="max-width: 600px; width: 100%;">
 
-          <!-- Header Banner -->
+          <!-- Preheader with Logo -->
           <tr>
-            <td bgcolor="#ff4600" style="padding: 0; border-radius: 12px 12px 0 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="padding: 25px 30px;" valign="middle">
-                    <img src="${PRODUCTION_URL}/logo/logougctaglinewhite.png" alt="UGC Logistics" width="160" height="auto" style="display: block; border: 0;" />
-                  </td>
-                  <td style="padding: 25px 30px; text-align: right;" valign="middle">
-                    <p style="margin: 0; color: #ffffff; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-family: Arial, sans-serif; opacity: 0.9;">Quotation</p>
-                    <p style="margin: 5px 0 0; color: #ffffff; font-size: 18px; font-weight: bold; font-family: Arial, sans-serif;">${quotation.quotation_number}</p>
-                  </td>
-                </tr>
-              </table>
+            <td align="center" style="padding: 0 0 20px;">
+              <img src="${PRODUCTION_URL}/logo/logougctaglinewhite.png" alt="UGC Logistics" width="140" height="auto" style="display: block; border: 0;" />
             </td>
           </tr>
 
-          <!-- Quotation Info Strip -->
+          <!-- Main Card -->
           <tr>
-            <td bgcolor="#1f2937" style="padding: 12px 30px;">
+            <td style="background: #ffffff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+
+              <!-- Header Banner with Gradient Effect -->
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="color: #9ca3af; font-size: 12px; font-family: Arial, sans-serif;">
-                    Tanggal: <span style="color: #ffffff; font-weight: bold;">${formatDate(quotation.created_at)}</span>
-                  </td>
-                  <td style="text-align: center; color: #9ca3af; font-size: 12px; font-family: Arial, sans-serif;">
-                    ${quotation.service_type ? `Layanan: <span style="color: #ffffff; font-weight: bold;">${quotation.service_type}</span>` : '&nbsp;'}
-                  </td>
-                  <td style="text-align: right; color: #9ca3af; font-size: 12px; font-family: Arial, sans-serif;">
-                    Berlaku: <span style="color: #10b981; font-weight: bold;">${formatDate(quotation.valid_until)}</span>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Main Content -->
-          <tr>
-            <td bgcolor="#ffffff" style="padding: 30px;">
-
-              <!-- Greeting -->
-              <p style="margin: 0 0 5px; color: #6b7280; font-size: 13px; font-family: Arial, sans-serif;">Kepada Yth.</p>
-              ${companyName ? `
-                <p style="margin: 0 0 3px; font-size: 18px; font-weight: bold; color: #1f2937; font-family: Arial, sans-serif;">${companyName}</p>
-                <p style="margin: 0 0 20px; color: #4b5563; font-family: Arial, sans-serif;">U.p ${customerName}</p>
-              ` : `
-                <p style="margin: 0 0 20px; font-size: 18px; font-weight: bold; color: #1f2937; font-family: Arial, sans-serif;">${customerName}</p>
-              `}
-
-              <p style="margin: 0 0 25px; color: #4b5563; line-height: 1.6; font-family: Arial, sans-serif; font-size: 14px;">
-                Terima kasih atas kepercayaan Anda kepada <strong style="color: #ff4600;">UGC Logistics</strong>.
-                Dengan senang hati kami sampaikan penawaran harga${routeDisplay ? ` untuk pengiriman rute <strong>${routeDisplay}</strong>` : ''} sebagai berikut:
-              </p>
-
-              <!-- Route & Service Info -->
-              ${(routeDisplay || quotation.fleet_type) ? `
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px;">
-                <tr>
-                  ${routeDisplay ? `
-                  <td width="${quotation.fleet_type ? '48%' : '100%'}" bgcolor="#fef3c7" style="padding: 15px 18px; border-radius: 8px; vertical-align: top;">
-                    <p style="margin: 0 0 5px; color: #92400e; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold; font-family: Arial, sans-serif;">Rute Pengiriman</p>
-                    <p style="margin: 0; color: #78350f; font-size: 15px; font-weight: bold; font-family: Arial, sans-serif;">${routeDisplay}</p>
-                  </td>
-                  ${quotation.fleet_type ? '<td width="4%">&nbsp;</td>' : ''}
-                  ` : ''}
-                  ${quotation.fleet_type ? `
-                  <td width="${routeDisplay ? '48%' : '100%'}" bgcolor="#e0e7ff" style="padding: 15px 18px; border-radius: 8px; vertical-align: top;">
-                    <p style="margin: 0 0 5px; color: #3730a3; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold; font-family: Arial, sans-serif;">Armada</p>
-                    <p style="margin: 0; color: #312e81; font-size: 15px; font-weight: bold; font-family: Arial, sans-serif;">${quotation.fleet_type}${quotation.fleet_quantity > 1 ? ` x ${quotation.fleet_quantity} unit` : ''}</p>
-                  </td>
-                  ` : ''}
-                </tr>
-              </table>
-              ` : ''}
-
-              <!-- Cargo Details -->
-              ${(quotation.commodity || quotation.cargo_weight || quotation.cargo_volume) ? `
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f9fafb" style="border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 20px;">
-                <tr>
-                  <td style="padding: 18px;">
-                    <p style="margin: 0 0 12px; color: #374151; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Detail Cargo</p>
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                      ${quotation.commodity ? `<tr><td style="padding: 5px 0; color: #6b7280; width: 35%; font-family: Arial, sans-serif; font-size: 13px;">Commodity</td><td style="padding: 5px 0; color: #1f2937; font-weight: bold; font-family: Arial, sans-serif; font-size: 13px;">${quotation.commodity}</td></tr>` : ''}
-                      ${quotation.cargo_description ? `<tr><td style="padding: 5px 0; color: #6b7280; width: 35%; font-family: Arial, sans-serif; font-size: 13px;">Deskripsi</td><td style="padding: 5px 0; color: #1f2937; font-family: Arial, sans-serif; font-size: 13px;">${quotation.cargo_description}</td></tr>` : ''}
-                      ${quotation.cargo_weight ? `<tr><td style="padding: 5px 0; color: #6b7280; width: 35%; font-family: Arial, sans-serif; font-size: 13px;">Berat</td><td style="padding: 5px 0; color: #1f2937; font-weight: bold; font-family: Arial, sans-serif; font-size: 13px;">${quotation.cargo_weight.toLocaleString()} ${quotation.cargo_weight_unit || 'kg'}</td></tr>` : ''}
-                      ${quotation.cargo_volume ? `<tr><td style="padding: 5px 0; color: #6b7280; width: 35%; font-family: Arial, sans-serif; font-size: 13px;">Volume</td><td style="padding: 5px 0; color: #1f2937; font-weight: bold; font-family: Arial, sans-serif; font-size: 13px;">${quotation.cargo_volume.toLocaleString()} ${quotation.cargo_volume_unit || 'cbm'}</td></tr>` : ''}
-                    </table>
-                  </td>
-                </tr>
-              </table>
-              ` : ''}
-
-              <!-- Rate Section -->
-              ${itemsTable ? `
-                <p style="margin: 0 0 12px; color: #374151; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Rincian Biaya</p>
-                ${itemsTable}
-              ` : `
-                <!-- Total Amount Card -->
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fff5f0" style="border: 2px solid #ff4600; border-radius: 10px; margin-bottom: 20px;">
-                  <tr>
-                    <td style="padding: 25px; text-align: center;">
-                      <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px; font-family: Arial, sans-serif;">Total Penawaran</p>
-                      <p style="margin: 0; color: #ff4600; font-size: 32px; font-weight: bold; font-family: Arial, sans-serif;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</p>
-                    </td>
-                  </tr>
-                </table>
-              `}
-
-              <!-- Scope of Work -->
-              ${quotation.scope_of_work ? `
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f0fdf4" style="border-left: 4px solid #22c55e; margin: 20px 0;">
-                <tr>
-                  <td style="padding: 15px 18px;">
-                    <p style="margin: 0 0 8px; color: #166534; font-size: 11px; font-weight: bold; text-transform: uppercase; font-family: Arial, sans-serif;">Scope of Work</p>
-                    <p style="margin: 0; color: #15803d; white-space: pre-line; line-height: 1.6; font-family: Arial, sans-serif; font-size: 13px;">${quotation.scope_of_work}</p>
-                  </td>
-                </tr>
-              </table>
-              ` : ''}
-
-              <!-- Validity Notice -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fef3c7" style="border-radius: 8px; margin: 20px 0;">
-                <tr>
-                  <td width="40" style="padding: 15px 5px 15px 15px; vertical-align: top;">
-                    <span style="font-size: 20px;">⏰</span>
-                  </td>
-                  <td style="padding: 15px 15px 15px 5px;">
-                    <p style="margin: 0; color: #92400e; font-weight: bold; font-family: Arial, sans-serif; font-size: 14px;">Validitas Penawaran</p>
-                    <p style="margin: 5px 0 0; color: #78350f; font-size: 13px; font-family: Arial, sans-serif;">Quotation ini berlaku selama <strong>${quotation.validity_days} hari</strong> hingga <strong>${formatDate(quotation.valid_until)}</strong></p>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- CTA Section with QR -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f8fafc" style="border-radius: 10px; margin: 25px 0;">
-                <tr>
-                  <td style="padding: 25px;">
+                  <td bgcolor="#ff4600" style="border-radius: 16px 16px 0 0; background: linear-gradient(135deg, #ff4600 0%, #ff6b35 100%);">
+                    <!--[if mso]>
+                    <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:100px;">
+                      <v:fill type="gradient" color="#ff4600" color2="#ff6b35" angle="135"/>
+                      <v:textbox inset="0,0,0,0">
+                    <![endif]-->
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                       <tr>
-                        <td style="vertical-align: top; padding-right: 20px;">
-                          <p style="margin: 0 0 12px; color: #1f2937; font-weight: bold; font-size: 15px; font-family: Arial, sans-serif;">Lihat Detail Quotation</p>
-                          <p style="margin: 0 0 18px; color: #6b7280; font-size: 13px; line-height: 1.5; font-family: Arial, sans-serif;">Scan QR code atau klik tombol untuk melihat detail lengkap dan download PDF.</p>
-
-                          <!-- Primary Button -->
-                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 10px;">
+                        <td style="padding: 30px;" valign="middle">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                             <tr>
-                              <td bgcolor="#ff4600" style="border-radius: 6px;">
-                                <a href="${validationUrl}" target="_blank" style="display: inline-block; padding: 12px 24px; color: #ffffff; text-decoration: none; font-weight: bold; font-size: 13px; font-family: Arial, sans-serif;">Lihat Quotation Online</a>
+                              <td>
+                                <p style="margin: 0; color: rgba(255,255,255,0.85); font-size: 11px; text-transform: uppercase; letter-spacing: 2px; font-family: 'Segoe UI', Arial, sans-serif;">Price Quotation</p>
+                                <p style="margin: 8px 0 0; color: #ffffff; font-size: 26px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; letter-spacing: -0.5px;">${quotation.quotation_number}</p>
+                              </td>
+                              <td align="right" valign="middle">
+                                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                  <tr>
+                                    <td bgcolor="rgba(255,255,255,0.2)" style="border-radius: 8px; padding: 12px 16px;">
+                                      <p style="margin: 0; color: rgba(255,255,255,0.9); font-size: 11px; font-family: 'Segoe UI', Arial, sans-serif;">Berlaku hingga</p>
+                                      <p style="margin: 4px 0 0; color: #ffffff; font-size: 14px; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif;">${formatDate(quotation.valid_until)}</p>
+                                    </td>
+                                  </tr>
+                                </table>
                               </td>
                             </tr>
                           </table>
-
-                          <!-- Secondary Button -->
-                          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                            <tr>
-                              <td style="border: 2px solid #ff4600; border-radius: 6px;">
-                                <a href="${pdfUrl}" target="_blank" style="display: inline-block; padding: 10px 20px; color: #ff4600; text-decoration: none; font-weight: bold; font-size: 12px; font-family: Arial, sans-serif;">Download PDF</a>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                        <td width="140" style="vertical-align: top; text-align: center;">
-                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="border-radius: 8px; border: 1px solid #e5e7eb;">
-                            <tr>
-                              <td style="padding: 10px;">
-                                <img src="${qrCodeUrl}" alt="QR Code" width="100" height="100" style="display: block; border: 0;" />
-                              </td>
-                            </tr>
-                          </table>
-                          <p style="margin: 8px 0 0; color: #9ca3af; font-size: 10px; font-family: Arial, sans-serif;">Scan untuk verifikasi</p>
                         </td>
                       </tr>
                     </table>
+                    <!--[if mso]>
+                      </v:textbox>
+                    </v:rect>
+                    <![endif]-->
                   </td>
                 </tr>
               </table>
 
-              <p style="margin: 0 0 20px; color: #4b5563; line-height: 1.6; font-family: Arial, sans-serif; font-size: 14px;">
-                Jika Bapak/Ibu memiliki pertanyaan atau membutuhkan informasi tambahan, silakan menghubungi kami. Kami siap membantu.
-              </p>
+              <!-- Info Strip -->
+              <tr>
+                <td bgcolor="#1e293b" style="padding: 14px 30px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td style="color: #94a3b8; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">
+                        <span style="color: #64748b;">Tanggal:</span> <span style="color: #ffffff; font-weight: 500;">${formatDate(quotation.created_at)}</span>
+                      </td>
+                      <td align="center" style="color: #94a3b8; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">
+                        ${quotation.service_type ? `<span style="color: #64748b;">Layanan:</span> <span style="color: #ffffff; font-weight: 500;">${quotation.service_type}</span>` : '&nbsp;'}
+                      </td>
+                      <td align="right" style="color: #94a3b8; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">
+                        ${quotation.ticket?.ticket_code ? `<span style="color: #64748b;">Ref:</span> <span style="color: #fbbf24; font-weight: 500;">${quotation.ticket.ticket_code}</span>` : '&nbsp;'}
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
 
-              <!-- Signature -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 25px;">
-                <tr>
-                  <td style="padding-top: 20px;">
-                    <p style="margin: 0 0 3px; color: #6b7280; font-size: 13px; font-family: Arial, sans-serif;">Hormat kami,</p>
-                    <p style="margin: 12px 0 3px; color: #ff4600; font-size: 16px; font-weight: bold; font-family: Arial, sans-serif;">${profile.name}</p>
-                    <p style="margin: 0 0 3px; color: #4b5563; font-size: 13px; font-family: Arial, sans-serif;">Sales & Commercial Executive</p>
-                    <p style="margin: 0 0 10px; color: #4b5563; font-size: 13px; font-family: Arial, sans-serif;">${UGC_INFO.shortName}</p>
-                    <p style="margin: 0; color: #6b7280; font-size: 12px; font-family: Arial, sans-serif;">
-                      ${profile.email} | ${UGC_INFO.phone}
-                    </p>
-                  </td>
-                </tr>
-              </table>
+              <!-- Main Content -->
+              <tr>
+                <td style="padding: 35px 30px;" class="mobile-padding">
+
+                  <!-- Greeting -->
+                  <p style="margin: 0 0 6px; color: #64748b; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif;">Kepada Yth.</p>
+                  ${companyName ? `
+                    <p style="margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #1e293b; font-family: 'Segoe UI', Arial, sans-serif;">${companyName}</p>
+                    <p style="margin: 0 0 24px; color: #475569; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;">U.p ${customerName}</p>
+                  ` : `
+                    <p style="margin: 0 0 24px; font-size: 20px; font-weight: 700; color: #1e293b; font-family: 'Segoe UI', Arial, sans-serif;">${customerName}</p>
+                  `}
+
+                  <p style="margin: 0 0 28px; color: #475569; line-height: 1.7; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;">
+                    Terima kasih atas kepercayaan Anda kepada <strong style="color: #ff4600;">UGC Logistics</strong>.
+                    Dengan senang hati kami sampaikan penawaran harga${routeDisplay ? ` untuk pengiriman rute <strong style="color: #1e293b;">${routeDisplay}</strong>` : ''} sebagai berikut:
+                  </p>
+
+                  <!-- Route & Fleet Cards -->
+                  ${(routeDisplay || quotation.fleet_type) ? `
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
+                    <tr>
+                      ${routeDisplay ? `
+                      <td width="${quotation.fleet_type ? '48%' : '100%'}" bgcolor="#fef9c3" style="padding: 18px 20px; border-radius: 12px; border-left: 4px solid #eab308; vertical-align: top;">
+                        <p style="margin: 0 0 6px; color: #a16207; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Rute Pengiriman</p>
+                        <p style="margin: 0; color: #713f12; font-size: 16px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">${routeDisplay}</p>
+                      </td>
+                      ${quotation.fleet_type ? '<td width="4%">&nbsp;</td>' : ''}
+                      ` : ''}
+                      ${quotation.fleet_type ? `
+                      <td width="${routeDisplay ? '48%' : '100%'}" bgcolor="#e0e7ff" style="padding: 18px 20px; border-radius: 12px; border-left: 4px solid #6366f1; vertical-align: top;">
+                        <p style="margin: 0 0 6px; color: #4338ca; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Armada</p>
+                        <p style="margin: 0; color: #312e81; font-size: 16px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">${quotation.fleet_type}${quotation.fleet_quantity > 1 ? ` x ${quotation.fleet_quantity} unit` : ''}</p>
+                      </td>
+                      ` : ''}
+                    </tr>
+                  </table>
+                  ` : ''}
+
+                  <!-- Cargo Details -->
+                  ${(quotation.commodity || quotation.cargo_weight || quotation.cargo_volume) ? `
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f8fafc" style="border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 24px;">
+                    <tr>
+                      <td style="padding: 20px;">
+                        <p style="margin: 0 0 14px; color: #334155; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; font-family: 'Segoe UI', Arial, sans-serif;">Detail Cargo</p>
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                          ${quotation.commodity ? `<tr><td style="padding: 6px 0; color: #64748b; width: 35%; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">Commodity</td><td style="padding: 6px 0; color: #1e293b; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">${quotation.commodity}</td></tr>` : ''}
+                          ${quotation.cargo_description ? `<tr><td style="padding: 6px 0; color: #64748b; width: 35%; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">Deskripsi</td><td style="padding: 6px 0; color: #1e293b; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">${quotation.cargo_description}</td></tr>` : ''}
+                          ${quotation.cargo_weight ? `<tr><td style="padding: 6px 0; color: #64748b; width: 35%; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">Berat</td><td style="padding: 6px 0; color: #1e293b; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">${quotation.cargo_weight.toLocaleString()} ${quotation.cargo_weight_unit || 'kg'}</td></tr>` : ''}
+                          ${quotation.cargo_volume ? `<tr><td style="padding: 6px 0; color: #64748b; width: 35%; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">Volume</td><td style="padding: 6px 0; color: #1e293b; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">${quotation.cargo_volume.toLocaleString()} ${quotation.cargo_volume_unit || 'cbm'}</td></tr>` : ''}
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                  ` : ''}
+
+                  <!-- Rate Section -->
+                  ${itemsTable ? `
+                    <p style="margin: 0 0 14px; color: #334155; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; font-family: 'Segoe UI', Arial, sans-serif;">Rincian Biaya</p>
+                    ${itemsTable}
+                  ` : `
+                    <!-- Total Amount Card - Premium Look -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
+                      <tr>
+                        <td bgcolor="#fff7ed" style="border: 2px solid #ff4600; border-radius: 16px; padding: 30px; text-align: center;">
+                          <p style="margin: 0 0 10px; color: #64748b; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif; text-transform: uppercase; letter-spacing: 1px;">Total Penawaran</p>
+                          <p style="margin: 0; color: #ff4600; font-size: 38px; font-weight: 800; font-family: 'Segoe UI', Arial, sans-serif; letter-spacing: -1px;">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</p>
+                          <p style="margin: 10px 0 0; color: #94a3b8; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">Harga sudah termasuk semua biaya yang tercantum</p>
+                        </td>
+                      </tr>
+                    </table>
+                  `}
+
+                  <!-- Scope of Work -->
+                  ${quotation.scope_of_work ? `
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f0fdf4" style="border-left: 4px solid #22c55e; border-radius: 0 12px 12px 0; margin: 24px 0;">
+                    <tr>
+                      <td style="padding: 18px 20px;">
+                        <p style="margin: 0 0 10px; color: #166534; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; font-family: 'Segoe UI', Arial, sans-serif;">Scope of Work</p>
+                        <p style="margin: 0; color: #15803d; white-space: pre-line; line-height: 1.7; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">${quotation.scope_of_work}</p>
+                      </td>
+                    </tr>
+                  </table>
+                  ` : ''}
+
+                  <!-- Validity Notice -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fefce8" style="border-radius: 12px; margin: 24px 0; border: 1px solid #fef08a;">
+                    <tr>
+                      <td width="50" style="padding: 18px 10px 18px 18px; vertical-align: middle;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                          <tr>
+                            <td bgcolor="#fbbf24" style="width: 36px; height: 36px; border-radius: 50%; text-align: center; vertical-align: middle;">
+                              <span style="font-size: 18px; line-height: 36px;">⏰</span>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                      <td style="padding: 18px 18px 18px 8px;">
+                        <p style="margin: 0; color: #854d0e; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;">Validitas Penawaran</p>
+                        <p style="margin: 5px 0 0; color: #a16207; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5;">Quotation ini berlaku selama <strong>${quotation.validity_days} hari</strong> hingga <strong>${formatDate(quotation.valid_until)}</strong></p>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- CTA Section with QR -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f1f5f9" style="border-radius: 16px; margin: 28px 0;">
+                    <tr>
+                      <td style="padding: 28px;">
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                          <tr>
+                            <td style="vertical-align: top; padding-right: 25px;">
+                              <p style="margin: 0 0 10px; color: #1e293b; font-weight: 700; font-size: 16px; font-family: 'Segoe UI', Arial, sans-serif;">Akses Quotation Anda</p>
+                              <p style="margin: 0 0 22px; color: #64748b; font-size: 13px; line-height: 1.6; font-family: 'Segoe UI', Arial, sans-serif;">Scan QR code atau klik tombol di bawah untuk melihat detail lengkap quotation dan download dalam format PDF.</p>
+
+                              <!-- Primary Button - Bulletproof -->
+                              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;" class="mobile-btn">
+                                <tr>
+                                  <td align="center" bgcolor="#ff4600" style="border-radius: 8px; background: linear-gradient(135deg, #ff4600 0%, #ff6b35 100%);">
+                                    <!--[if mso]>
+                                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${validationUrl}" style="height:48px;v-text-anchor:middle;width:220px;" arcsize="17%" strokecolor="#ff4600" fillcolor="#ff4600">
+                                      <w:anchorlock/>
+                                      <center style="color:#ffffff;font-family:'Segoe UI',Arial,sans-serif;font-size:14px;font-weight:bold;">Lihat Quotation Online</center>
+                                    </v:roundrect>
+                                    <![endif]-->
+                                    <!--[if !mso]><!-->
+                                    <a href="${validationUrl}" target="_blank" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; font-family: 'Segoe UI', Arial, sans-serif; border-radius: 8px; mso-hide: all;">Lihat Quotation Online</a>
+                                    <!--<![endif]-->
+                                  </td>
+                                </tr>
+                              </table>
+
+                              <!-- Secondary Button - Bulletproof -->
+                              <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="mobile-btn">
+                                <tr>
+                                  <td align="center" style="border: 2px solid #ff4600; border-radius: 8px; background: #ffffff;">
+                                    <!--[if mso]>
+                                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${pdfUrl}" style="height:44px;v-text-anchor:middle;width:180px;" arcsize="18%" strokecolor="#ff4600" fillcolor="#ffffff">
+                                      <w:anchorlock/>
+                                      <center style="color:#ff4600;font-family:'Segoe UI',Arial,sans-serif;font-size:13px;font-weight:bold;">Download PDF</center>
+                                    </v:roundrect>
+                                    <![endif]-->
+                                    <!--[if !mso]><!-->
+                                    <a href="${pdfUrl}" target="_blank" style="display: inline-block; padding: 12px 28px; color: #ff4600; text-decoration: none; font-weight: 700; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif; border-radius: 8px; mso-hide: all;">Download PDF</a>
+                                    <!--<![endif]-->
+                                  </td>
+                                </tr>
+                              </table>
+                            </td>
+                            <td width="130" style="vertical-align: top; text-align: center;" class="mobile-hide">
+                              <table role="presentation" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                                <tr>
+                                  <td style="padding: 12px;">
+                                    <img src="${qrCodeUrl}" alt="QR Code" width="106" height="106" style="display: block; border: 0; border-radius: 4px;" />
+                                  </td>
+                                </tr>
+                              </table>
+                              <p style="margin: 10px 0 0; color: #94a3b8; font-size: 10px; font-family: 'Segoe UI', Arial, sans-serif;">Scan untuk akses cepat</p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <p style="margin: 0 0 24px; color: #475569; line-height: 1.7; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;">
+                    Jika Bapak/Ibu memiliki pertanyaan atau membutuhkan informasi tambahan, silakan menghubungi kami. Kami siap membantu Anda.
+                  </p>
+
+                  <!-- Signature -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top: 1px solid #e2e8f0; margin-top: 28px;">
+                    <tr>
+                      <td style="padding-top: 24px;">
+                        <p style="margin: 0 0 4px; color: #64748b; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif;">Hormat kami,</p>
+                        <p style="margin: 14px 0 4px; color: #ff4600; font-size: 17px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">${profile.name}</p>
+                        <p style="margin: 0 0 4px; color: #475569; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif;">Sales & Commercial Executive</p>
+                        <p style="margin: 0 0 12px; color: #475569; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif;">${UGC_INFO.shortName}</p>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                          <tr>
+                            <td style="padding-right: 15px;">
+                              <p style="margin: 0; color: #64748b; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">
+                                <span style="color: #94a3b8;">Email:</span> ${profile.email}
+                              </p>
+                            </td>
+                            <td>
+                              <p style="margin: 0; color: #64748b; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">
+                                <span style="color: #94a3b8;">Tel:</span> ${UGC_INFO.phone}
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+
+                </td>
+              </tr>
 
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td bgcolor="#1f2937" style="padding: 25px 30px; border-radius: 0 0 12px 12px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <td style="padding-top: 20px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1e293b" style="border-radius: 16px;">
                 <tr>
-                  <td>
-                    <p style="margin: 0 0 5px; color: #ffffff; font-weight: bold; font-size: 14px; font-family: Arial, sans-serif;">${UGC_INFO.name}</p>
-                    <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.5; font-family: Arial, sans-serif;">${UGC_INFO.address}</p>
-                    <p style="margin: 10px 0 0; color: #9ca3af; font-size: 12px; font-family: Arial, sans-serif;">
-                      Tel: ${UGC_INFO.phone} | Email: ${UGC_INFO.email}
-                    </p>
+                  <td style="padding: 28px 30px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td>
+                          <p style="margin: 0 0 6px; color: #ffffff; font-weight: 700; font-size: 15px; font-family: 'Segoe UI', Arial, sans-serif;">${UGC_INFO.name}</p>
+                          <p style="margin: 0; color: #94a3b8; font-size: 12px; line-height: 1.6; font-family: 'Segoe UI', Arial, sans-serif;">${UGC_INFO.address}</p>
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top: 14px;">
+                            <tr>
+                              <td style="padding-right: 20px;">
+                                <p style="margin: 0; color: #94a3b8; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">
+                                  <span style="color: #64748b;">Tel:</span> ${UGC_INFO.phone}
+                                </p>
+                              </td>
+                              <td style="padding-right: 20px;">
+                                <p style="margin: 0; color: #94a3b8; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">
+                                  <span style="color: #64748b;">Email:</span> ${UGC_INFO.email}
+                                </p>
+                              </td>
+                              <td>
+                                <p style="margin: 0; color: #94a3b8; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">
+                                  <span style="color: #64748b;">Web:</span> ${UGC_INFO.web}
+                                </p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding-top: 18px; border-top: 1px solid #374151; margin-top: 18px;">
-                    <p style="margin: 0; padding-top: 15px; color: #6b7280; font-size: 10px; text-align: center; font-family: Arial, sans-serif;">
-                      Email ini dikirim otomatis dari UGC Business Command Portal. Jika Anda menerima email ini karena kesalahan, mohon abaikan.
+                  <td bgcolor="#0f172a" style="padding: 16px 30px; border-radius: 0 0 16px 16px;">
+                    <p style="margin: 0; color: #64748b; font-size: 10px; text-align: center; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5;">
+                      Email ini dikirim secara otomatis dari UGC Business Command Portal.<br/>
+                      Jika Anda menerima email ini karena kesalahan, mohon abaikan.
                     </p>
                   </td>
                 </tr>
