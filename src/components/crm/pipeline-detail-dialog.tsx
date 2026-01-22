@@ -300,18 +300,25 @@ export function PipelineDetailDialog({
   // Fetch shipment details from linked lead when data is loaded
   useEffect(() => {
     const fetchShipmentDetails = async () => {
+      console.log('[PipelineDetail] Checking lead_id:', data?.lead_id)
       if (!data?.lead_id) {
+        console.log('[PipelineDetail] No lead_id found, skipping shipment fetch')
         setShipmentDetails(null)
         return
       }
       try {
+        console.log('[PipelineDetail] Fetching shipment details for lead:', data.lead_id)
         const response = await fetch(`/api/crm/leads/${data.lead_id}`)
         if (response.ok) {
           const result = await response.json()
+          console.log('[PipelineDetail] Lead data received:', result.data)
+          console.log('[PipelineDetail] Shipment details:', result.data?.shipment_details)
           setShipmentDetails(result.data?.shipment_details || null)
+        } else {
+          console.error('[PipelineDetail] Failed to fetch lead:', response.status)
         }
       } catch (error) {
-        console.error('Error fetching shipment details:', error)
+        console.error('[PipelineDetail] Error fetching shipment details:', error)
       }
     }
     fetchShipmentDetails()
@@ -350,6 +357,10 @@ export function PipelineDetailDialog({
   // Create RFQ ticket from opportunity
   const handleCreateTicket = () => {
     if (!data) return
+
+    console.log('[PipelineDetail] handleCreateTicket called')
+    console.log('[PipelineDetail] data.lead_id:', data.lead_id)
+    console.log('[PipelineDetail] shipmentDetails:', shipmentDetails)
 
     // Store shipment data in sessionStorage for ticket form to read
     if (shipmentDetails) {
