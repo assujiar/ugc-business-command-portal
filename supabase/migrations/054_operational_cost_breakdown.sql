@@ -37,19 +37,17 @@ CREATE INDEX IF NOT EXISTS idx_ticket_rate_quote_items_component_type ON public.
 ALTER TABLE public.ticket_rate_quote_items ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for ticket_rate_quote_items
--- Ops/Admin can manage items
+-- Ops/Admin can manage items (using existing helper functions)
+DROP POLICY IF EXISTS "ticket_rate_quote_items_ops_all" ON public.ticket_rate_quote_items;
 CREATE POLICY "ticket_rate_quote_items_ops_all" ON public.ticket_rate_quote_items
 FOR ALL
 TO authenticated
 USING (
-    EXISTS (
-        SELECT 1 FROM public.profiles p
-        WHERE p.user_id = auth.uid()
-        AND (p.role IN ('admin', 'superadmin', 'ticketing_admin', 'ticketing_ops', 'operations', 'operations_admin', 'operations_manager'))
-    )
+    public.is_ticketing_admin(auth.uid()) OR public.is_ticketing_ops(auth.uid())
 );
 
 -- Users can view items for quotes on their tickets
+DROP POLICY IF EXISTS "ticket_rate_quote_items_view" ON public.ticket_rate_quote_items;
 CREATE POLICY "ticket_rate_quote_items_view" ON public.ticket_rate_quote_items
 FOR SELECT
 TO authenticated
@@ -91,7 +89,7 @@ BEGIN
     v_actor_user_id := auth.uid();
 
     -- Validate user is ops or admin
-    IF NOT is_ticketing_admin() AND NOT is_ticketing_ops() THEN
+    IF NOT public.is_ticketing_admin(v_actor_user_id) AND NOT public.is_ticketing_ops(v_actor_user_id) THEN
         RETURN jsonb_build_object('success', false, 'error', 'Only ops/admin can create quotes');
     END IF;
 
