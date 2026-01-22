@@ -116,12 +116,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (error) {
       console.error(`Error executing action ${action}:`, error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({
+        success: false,
+        error: error.message,
+        details: error
+      }, { status: 500 })
     }
 
     if (!result?.success) {
+      console.error(`Action ${action} failed:`, result)
       return NextResponse.json(
-        { error: result?.error || `Failed to execute action: ${action}` },
+        {
+          success: false,
+          error: result?.error || `Failed to execute action: ${action}`,
+          details: result
+        },
         { status: 400 }
       )
     }
