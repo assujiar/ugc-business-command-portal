@@ -72,6 +72,8 @@ import {
   isOps,
 } from '@/lib/permissions'
 import { CustomerQuotationDialog } from '@/components/ticketing/customer-quotation-dialog'
+import { RATE_COMPONENTS_BY_CATEGORY, getRateComponentLabel } from '@/lib/constants/rate-components'
+import { SelectGroup, SelectLabel } from '@/components/ui/select'
 import type { Database } from '@/types/database'
 import type {
   Ticket as TicketType,
@@ -163,6 +165,50 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const [costAmount, setCostAmount] = useState('')
   const [costCurrency, setCostCurrency] = useState('IDR')
   const [costTerms, setCostTerms] = useState('')
+  const [costRateStructure, setCostRateStructure] = useState<'bundling' | 'breakdown'>('bundling')
+  const [costItems, setCostItems] = useState<Array<{
+    id: string
+    component_type: string
+    component_name: string
+    description: string
+    cost_amount: number
+    quantity: number | null
+    unit: string | null
+  }>>([])
+
+  // Helper functions for cost items
+  const addCostItem = () => {
+    setCostItems([...costItems, {
+      id: `item-${Date.now()}`,
+      component_type: '',
+      component_name: '',
+      description: '',
+      cost_amount: 0,
+      quantity: null,
+      unit: null,
+    }])
+  }
+
+  const updateCostItem = (id: string, field: string, value: any) => {
+    setCostItems(costItems.map(item => {
+      if (item.id === id) {
+        const updated = { ...item, [field]: value }
+        // Auto-fill component name from type
+        if (field === 'component_type' && !item.component_name) {
+          updated.component_name = getRateComponentLabel(value)
+        }
+        return updated
+      }
+      return item
+    }))
+  }
+
+  const removeCostItem = (id: string) => {
+    setCostItems(costItems.filter(item => item.id !== id))
+  }
+
+  // Calculate total from breakdown items
+  const totalBreakdownCost = costItems.reduce((sum, item) => sum + (item.cost_amount || 0), 0)
 
   // Lost dialog state
   const [lostDialogOpen, setLostDialogOpen] = useState(false)
@@ -943,26 +989,76 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
 
   // Handle submit operational cost
   const handleSubmitCost = async () => {
-    const amount = parseFloat(costAmount)
-    if (isNaN(amount) || amount <= 0) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a valid amount',
-        variant: 'destructive',
-      })
-      return
+    // Validate based on rate structure
+    if (costRateStructure === 'bundling') {
+      const amount = parseFloat(costAmount)
+      if (isNaN(amount) || amount <= 0) {
+        toast({
+          title: 'Error',
+          description: 'Please enter a valid amount',
+          variant: 'destructive',
+        })
+        return
+      }
+    } else {
+      // Breakdown validation
+      if (costItems.length === 0) {
+        toast({
+          title: 'Error',
+          description: 'Please add at least one cost item',
+          variant: 'destructive',
+        })
+        return
+      }
+      if (totalBreakdownCost <= 0) {
+        toast({
+          title: 'Error',
+          description: 'Total cost must be greater than 0',
+          variant: 'destructive',
+        })
+        return
+      }
+      // Validate all items have component type
+      const invalidItem = costItems.find(item => !item.component_type)
+      if (invalidItem) {
+        toast({
+          title: 'Error',
+          description: 'All items must have a component type',
+          variant: 'destructive',
+        })
+        return
+      }
     }
 
-    const success = await executeAction('submit_quote', {
-      amount,
+    const payload: any = {
       currency: costCurrency,
       terms: costTerms || null,
-    })
+      rate_structure: costRateStructure,
+    }
+
+    if (costRateStructure === 'bundling') {
+      payload.amount = parseFloat(costAmount)
+    } else {
+      payload.amount = totalBreakdownCost
+      payload.items = costItems.map((item, index) => ({
+        component_type: item.component_type,
+        component_name: item.component_name,
+        description: item.description,
+        cost_amount: item.cost_amount,
+        quantity: item.quantity,
+        unit: item.unit,
+        sort_order: index,
+      }))
+    }
+
+    const success = await executeAction('submit_quote', payload)
 
     if (success) {
       setCostDialogOpen(false)
       setCostAmount('')
       setCostTerms('')
+      setCostRateStructure('bundling')
+      setCostItems([])
     }
   }
 
@@ -1761,7 +1857,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                               Submit Cost
                             </Button>
                           </DialogTrigger>
-                          <DialogContent>
+                          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
                             <DialogHeader>
                               <DialogTitle>Submit Operational Cost</DialogTitle>
                               <DialogDescription>
@@ -1769,17 +1865,30 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                               </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4">
-                              <div>
-                                <Label htmlFor="cost-amount">Amount *</Label>
-                                <Input
-                                  id="cost-amount"
-                                  name="cost-amount"
-                                  type="number"
-                                  placeholder="Enter amount"
-                                  value={costAmount}
-                                  onChange={(e) => setCostAmount(e.target.value)}
-                                />
+                              {/* Rate Structure Toggle */}
+                              <div className="flex items-center justify-between">
+                                <Label>Cost Structure</Label>
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    variant={costRateStructure === 'bundling' ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setCostRateStructure('bundling')}
+                                  >
+                                    Bundling
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant={costRateStructure === 'breakdown' ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setCostRateStructure('breakdown')}
+                                  >
+                                    Breakdown
+                                  </Button>
+                                </div>
                               </div>
+
+                              {/* Currency Selection */}
                               <div>
                                 <Label htmlFor="cost-currency">Currency</Label>
                                 <Select value={costCurrency} onValueChange={setCostCurrency}>
@@ -1793,6 +1902,145 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                   </SelectContent>
                                 </Select>
                               </div>
+
+                              {/* Bundling Mode - Single Amount */}
+                              {costRateStructure === 'bundling' && (
+                                <div className="p-4 bg-muted/50 rounded-lg">
+                                  <Label htmlFor="cost-amount">Total Cost *</Label>
+                                  <Input
+                                    id="cost-amount"
+                                    name="cost-amount"
+                                    type="number"
+                                    placeholder="Enter total cost amount"
+                                    value={costAmount}
+                                    onChange={(e) => setCostAmount(e.target.value)}
+                                    className="mt-2 text-right font-mono"
+                                  />
+                                </div>
+                              )}
+
+                              {/* Breakdown Mode - Itemized Costs */}
+                              {costRateStructure === 'breakdown' && (
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">Add cost components</span>
+                                    <Button type="button" size="sm" variant="outline" onClick={addCostItem}>
+                                      <Plus className="h-4 w-4 mr-1" />
+                                      Add Item
+                                    </Button>
+                                  </div>
+
+                                  {costItems.length === 0 ? (
+                                    <div className="text-center py-6 text-muted-foreground border border-dashed rounded-lg">
+                                      No items added. Click "Add Item" to start.
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                                      {costItems.map((item, index) => (
+                                        <div key={item.id} className="p-3 border rounded-lg space-y-3 bg-muted/30">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-sm font-medium">Item {index + 1}</span>
+                                            <Button
+                                              type="button"
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-8 w-8 text-destructive"
+                                              onClick={() => removeCostItem(item.id)}
+                                            >
+                                              <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                              <Label className="text-xs">Component Type *</Label>
+                                              <Select
+                                                value={item.component_type}
+                                                onValueChange={(v) => updateCostItem(item.id, 'component_type', v)}
+                                              >
+                                                <SelectTrigger>
+                                                  <SelectValue placeholder="Select component" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => (
+                                                    <SelectGroup key={category}>
+                                                      <SelectLabel>{category}</SelectLabel>
+                                                      {components.map((comp) => (
+                                                        <SelectItem key={comp.value} value={comp.value}>
+                                                          {comp.label}
+                                                        </SelectItem>
+                                                      ))}
+                                                    </SelectGroup>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                            </div>
+                                            <div>
+                                              <Label className="text-xs">Display Name</Label>
+                                              <Input
+                                                value={item.component_name}
+                                                onChange={(e) => updateCostItem(item.id, 'component_name', e.target.value)}
+                                                placeholder="Custom name"
+                                              />
+                                            </div>
+                                            <div>
+                                              <Label className="text-xs">Cost Amount *</Label>
+                                              <Input
+                                                type="number"
+                                                value={item.cost_amount || ''}
+                                                onChange={(e) => updateCostItem(item.id, 'cost_amount', parseFloat(e.target.value) || 0)}
+                                                className="text-right font-mono"
+                                                placeholder="0"
+                                              />
+                                            </div>
+                                            <div>
+                                              <Label className="text-xs">Qty / Unit (optional)</Label>
+                                              <div className="flex gap-1">
+                                                <Input
+                                                  type="number"
+                                                  value={item.quantity || ''}
+                                                  onChange={(e) => updateCostItem(item.id, 'quantity', e.target.value ? parseInt(e.target.value) : null)}
+                                                  placeholder="Qty"
+                                                  className="w-20 text-right"
+                                                />
+                                                <Input
+                                                  value={item.unit || ''}
+                                                  onChange={(e) => updateCostItem(item.id, 'unit', e.target.value)}
+                                                  placeholder="Unit"
+                                                  className="flex-1"
+                                                />
+                                              </div>
+                                            </div>
+                                            <div className="col-span-2">
+                                              <Label className="text-xs">Description (optional)</Label>
+                                              <Input
+                                                value={item.description}
+                                                onChange={(e) => updateCostItem(item.id, 'description', e.target.value)}
+                                                placeholder="Additional details"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Total */}
+                                  {costItems.length > 0 && (
+                                    <div className="flex items-center justify-between p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                                      <span className="font-medium">Total Cost</span>
+                                      <span className="text-xl font-bold font-mono text-green-700 dark:text-green-400">
+                                        {new Intl.NumberFormat('id-ID', {
+                                          style: 'currency',
+                                          currency: costCurrency,
+                                          minimumFractionDigits: 0,
+                                        }).format(totalBreakdownCost)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Terms & Conditions */}
                               <div>
                                 <Label htmlFor="cost-terms">Terms & Conditions (optional)</Label>
                                 <Textarea
@@ -1801,16 +2049,25 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                   placeholder="Enter any terms or conditions"
                                   value={costTerms}
                                   onChange={(e) => setCostTerms(e.target.value)}
+                                  rows={2}
                                 />
                               </div>
                             </div>
                             <DialogFooter>
-                              <Button variant="outline" onClick={() => setCostDialogOpen(false)}>
+                              <Button variant="outline" onClick={() => {
+                                setCostDialogOpen(false)
+                                setCostRateStructure('bundling')
+                                setCostItems([])
+                              }}>
                                 Cancel
                               </Button>
                               <Button
                                 onClick={handleSubmitCost}
-                                disabled={actionLoading === 'submit_cost' || !costAmount}
+                                disabled={
+                                  actionLoading === 'submit_cost' ||
+                                  (costRateStructure === 'bundling' && !costAmount) ||
+                                  (costRateStructure === 'breakdown' && (costItems.length === 0 || totalBreakdownCost <= 0))
+                                }
                                 className="bg-green-600 hover:bg-green-700"
                               >
                                 {actionLoading === 'submit_cost' ? (
