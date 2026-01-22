@@ -193,43 +193,69 @@ WHERE rfq_data IS NOT NULL
      OR rfq_data->>'service_type_code' LIKE 'DTD_%';
 
 -- ============================================
--- 5. UPDATE LEADS - shipment_data->service_type_code
+-- 5. UPDATE LEADS - service_code field
 -- ============================================
 UPDATE public.leads
-SET shipment_data = jsonb_set(
-    shipment_data,
-    '{service_type_code}',
-    to_jsonb(CASE shipment_data->>'service_type_code'
-        -- Domestics
-        WHEN 'LTL' THEN 'DOM_LTL'
-        WHEN 'FTL' THEN 'DOM_FTL'
-        WHEN 'AF' THEN 'DOM_AIRFREIGHT'
-        WHEN 'LCL' THEN 'DOM_SEAFREIGHT_LCL'
-        WHEN 'FCL' THEN 'DOM_SEAFREIGHT_FCL'
-        WHEN 'WAREHOUSING' THEN 'DOM_WAREHOUSING'
-        WHEN 'FULFILLMENT' THEN 'DOM_FULFILLMENT'
-        -- Export
-        WHEN 'LCL_EXPORT' THEN 'EXP_SEAFREIGHT_LCL'
-        WHEN 'FCL_EXPORT' THEN 'EXP_SEAFREIGHT_FCL'
-        WHEN 'AIRFREIGHT_EXPORT' THEN 'EXP_AIRFREIGHT'
-        -- Import
-        WHEN 'LCL_IMPORT' THEN 'IMP_SEAFREIGHT_LCL'
-        WHEN 'FCL_IMPORT' THEN 'IMP_SEAFREIGHT_FCL'
-        WHEN 'AIRFREIGHT_IMPORT' THEN 'IMP_AIRFREIGHT'
-        WHEN 'CUSTOMS_CLEARANCE' THEN 'IMP_CUSTOMS_CLEARANCE'
-        -- Import DTD
-        WHEN 'LCL_DTD' THEN 'DTD_SEAFREIGHT_LCL'
-        WHEN 'FCL_DTD' THEN 'DTD_SEAFREIGHT_FCL'
-        WHEN 'AIRFREIGHT_DTD' THEN 'DTD_AIRFREIGHT'
-        ELSE shipment_data->>'service_type_code'
-    END)
-)
-WHERE shipment_data IS NOT NULL
-  AND shipment_data->>'service_type_code' IS NOT NULL
-  AND shipment_data->>'service_type_code' NOT LIKE 'DOM_%'
-  AND shipment_data->>'service_type_code' NOT LIKE 'EXP_%'
-  AND shipment_data->>'service_type_code' NOT LIKE 'IMP_%'
-  AND shipment_data->>'service_type_code' NOT LIKE 'DTD_%';
+SET service_code = CASE service_code
+    -- Domestics
+    WHEN 'LTL' THEN 'DOM_LTL'
+    WHEN 'FTL' THEN 'DOM_FTL'
+    WHEN 'AF' THEN 'DOM_AIRFREIGHT'
+    WHEN 'LCL' THEN 'DOM_SEAFREIGHT_LCL'
+    WHEN 'FCL' THEN 'DOM_SEAFREIGHT_FCL'
+    WHEN 'WAREHOUSING' THEN 'DOM_WAREHOUSING'
+    WHEN 'FULFILLMENT' THEN 'DOM_FULFILLMENT'
+    -- Export
+    WHEN 'LCL_EXPORT' THEN 'EXP_SEAFREIGHT_LCL'
+    WHEN 'FCL_EXPORT' THEN 'EXP_SEAFREIGHT_FCL'
+    WHEN 'AIRFREIGHT_EXPORT' THEN 'EXP_AIRFREIGHT'
+    -- Import
+    WHEN 'LCL_IMPORT' THEN 'IMP_SEAFREIGHT_LCL'
+    WHEN 'FCL_IMPORT' THEN 'IMP_SEAFREIGHT_FCL'
+    WHEN 'AIRFREIGHT_IMPORT' THEN 'IMP_AIRFREIGHT'
+    WHEN 'CUSTOMS_CLEARANCE' THEN 'IMP_CUSTOMS_CLEARANCE'
+    -- Import DTD
+    WHEN 'LCL_DTD' THEN 'DTD_SEAFREIGHT_LCL'
+    WHEN 'FCL_DTD' THEN 'DTD_SEAFREIGHT_FCL'
+    WHEN 'AIRFREIGHT_DTD' THEN 'DTD_AIRFREIGHT'
+    ELSE service_code
+END
+WHERE service_code IS NOT NULL
+  AND service_code NOT LIKE 'DOM_%'
+  AND service_code NOT LIKE 'EXP_%'
+  AND service_code NOT LIKE 'IMP_%'
+  AND service_code NOT LIKE 'DTD_%';
+
+-- Also update service_description to new format
+UPDATE public.leads
+SET service_description = CASE service_code
+    -- Domestics
+    WHEN 'DOM_LTL' THEN 'Domestics | LTL (Less than Truck Load)'
+    WHEN 'DOM_FTL' THEN 'Domestics | FTL (Full Trucking Load)'
+    WHEN 'DOM_AIRFREIGHT' THEN 'Domestics | Airfreight'
+    WHEN 'DOM_SEAFREIGHT_LCL' THEN 'Domestics | Seafreight LCL'
+    WHEN 'DOM_SEAFREIGHT_FCL' THEN 'Domestics | Seafreight FCL'
+    WHEN 'DOM_WAREHOUSING' THEN 'Domestics | Warehousing'
+    WHEN 'DOM_FULFILLMENT' THEN 'Domestics | Fulfillment'
+    WHEN 'DOM_WAREHOUSING_FULFILLMENT' THEN 'Domestics | Warehousing-Fulfillment'
+    -- Export
+    WHEN 'EXP_AIRFREIGHT' THEN 'Export | Airfreight'
+    WHEN 'EXP_SEAFREIGHT_LCL' THEN 'Export | Seafreight LCL'
+    WHEN 'EXP_SEAFREIGHT_FCL' THEN 'Export | Seafreight FCL'
+    WHEN 'EXP_CUSTOMS_CLEARANCE' THEN 'Export | Customs Clearance'
+    -- Import
+    WHEN 'IMP_AIRFREIGHT' THEN 'Import | Airfreight'
+    WHEN 'IMP_SEAFREIGHT_LCL' THEN 'Import | Seafreight LCL'
+    WHEN 'IMP_SEAFREIGHT_FCL' THEN 'Import | Seafreight FCL'
+    WHEN 'IMP_CUSTOMS_CLEARANCE' THEN 'Import | Customs Clearance'
+    -- Import DTD
+    WHEN 'DTD_AIRFREIGHT' THEN 'Import DTD | Airfreight'
+    WHEN 'DTD_SEAFREIGHT_LCL' THEN 'Import DTD | Seafreight LCL'
+    WHEN 'DTD_SEAFREIGHT_FCL' THEN 'Import DTD | Seafreight FCL'
+    ELSE service_description
+END
+WHERE service_code IS NOT NULL
+  AND service_code LIKE 'DOM_%' OR service_code LIKE 'EXP_%' OR service_code LIKE 'IMP_%' OR service_code LIKE 'DTD_%';
 
 -- ============================================
 -- 6. ADD service_scope FIELD TO rfq_data (for new tickets)
@@ -277,7 +303,7 @@ WHERE rfq_data IS NOT NULL
 -- Check tickets rfq_data service types:
 -- SELECT DISTINCT rfq_data->>'service_type_code', rfq_data->>'service_type' FROM tickets WHERE rfq_data IS NOT NULL;
 
--- Check leads shipment_data service types:
--- SELECT DISTINCT shipment_data->>'service_type_code' FROM leads WHERE shipment_data IS NOT NULL;
+-- Check leads service_code:
+-- SELECT DISTINCT service_code, service_description FROM leads WHERE service_code IS NOT NULL;
 
 COMMENT ON TABLE public.customer_quotations IS 'Customer quotations with service types in format: [Scope] | [Service Name]';
