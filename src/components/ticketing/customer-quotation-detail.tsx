@@ -380,6 +380,38 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
     }
   }
 
+  // Recreate quotation (request adjustment)
+  const handleRecreateQuotation = async () => {
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}/recreate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Customer requested adjustment' }),
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: 'Quotation Recreated',
+          description: `New quotation ${result.data.new_quotation_number} created. Redirecting...`,
+        })
+        // Navigate to the new quotation edit page
+        router.push(`/customer-quotations/${result.data.new_quotation_id}/edit`)
+      } else {
+        throw new Error(result.error || 'Failed to recreate quotation')
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to recreate quotation',
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   // Delete quotation
   const deleteQuotation = async () => {
     setActionLoading(true)
@@ -567,6 +599,36 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 Mark Rejected
               </Button>
             </>
+          )}
+          {quotation.status === 'rejected' && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="default" disabled={actionLoading}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Recreate Quotation
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Recreate Quotation</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will create a new quotation based on the current one. The new quotation
+                    will be in draft status, allowing you to make adjustments before sending.
+                    {quotation.ticket_id && (
+                      <span className="block mt-2 text-yellow-600 dark:text-yellow-400">
+                        Note: This will trigger a rate adjustment request on the linked RFQ ticket.
+                      </span>
+                    )}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleRecreateQuotation}>
+                    Recreate
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       </div>
