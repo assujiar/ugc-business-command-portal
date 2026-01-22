@@ -136,6 +136,17 @@ interface CustomerQuotationDialogProps {
     id?: string  // operational_cost_id for linking
     amount: number
     currency: string
+    rate_structure?: 'bundling' | 'breakdown'
+    items?: Array<{
+      id: string
+      component_type: string
+      component_name?: string
+      description?: string
+      cost_amount: number
+      quantity?: number | null
+      unit?: string | null
+      sort_order?: number
+    }>
   }
   onSuccess?: () => void
   onCreated?: () => void
@@ -333,106 +344,126 @@ export function CustomerQuotationDialog({
     return ((totalSellingRate - totalBreakdownCost) / totalBreakdownCost) * 100
   }, [rateStructure, targetMarginPercent, totalBreakdownCost, totalSellingRate])
 
-  // Initialize from ticket, lead, or opportunity data
+  // Initialize from all available data sources
   useEffect(() => {
     if (!open) return
 
-    // Initialize from Lead (marketing flow)
+    // ============================================
+    // 1. CUSTOMER INFO (Priority: lead > opportunity > ticket.contact)
+    // ============================================
     if (lead) {
       setCustomerName(lead.contact_name || '')
       setCustomerCompany(lead.company_name || '')
       setCustomerEmail(lead.contact_email || '')
       setCustomerPhone(lead.contact_phone || '')
-
-      // Shipment details from lead
-      if (lead.shipment_details) {
-        const sd = lead.shipment_details
-        setServiceType(sd.service_type_code || '')
-        setFleetType(sd.fleet_type || '')
-        setFleetQuantity(sd.fleet_quantity || 1)
-        setIncoterm(sd.incoterm || '')
-        setCommodity(sd.cargo_category || '')
-        setCargoDescription(sd.cargo_description || '')
-        setCargoWeight(sd.weight_total_kg || null)
-        setCargoVolume(sd.volume_total_cbm || null)
-        setOriginAddress(sd.origin_address || '')
-        setOriginCity(sd.origin_city || '')
-        setOriginCountry(sd.origin_country || '')
-        setDestinationAddress(sd.destination_address || '')
-        setDestinationCity(sd.destination_city || '')
-        setDestinationCountry(sd.destination_country || '')
-      }
-
-      fetchTermTemplates()
-      return
-    }
-
-    // Initialize from Opportunity (sales pipeline flow)
-    if (opportunity) {
+    } else if (opportunity) {
       setCustomerName(opportunity.pic_name || '')
       setCustomerCompany(opportunity.company_name || '')
       setCustomerEmail(opportunity.pic_email || '')
       setCustomerPhone(opportunity.pic_phone || '')
       setCustomerAddress([opportunity.address, opportunity.city].filter(Boolean).join(', '))
-
-      fetchTermTemplates()
-      return
+    } else if (ticketData?.contact) {
+      const fullName = [ticketData.contact.first_name, ticketData.contact.last_name]
+        .filter(Boolean)
+        .join(' ')
+      setCustomerName(fullName)
+      setCustomerEmail(ticketData.contact.email || '')
+      setCustomerPhone(ticketData.contact.phone || '')
     }
 
-    // Initialize from Ticket data (existing flow)
-    if (ticketData) {
-      // Customer info from contact/account
-      if (ticketData.contact) {
-        const fullName = [ticketData.contact.first_name, ticketData.contact.last_name]
-          .filter(Boolean)
-          .join(' ')
-        setCustomerName(fullName)
-        setCustomerEmail(ticketData.contact.email || '')
-        setCustomerPhone(ticketData.contact.phone || '')
-      }
-      if (ticketData.account) {
+    // Account/Company info from ticket (fallback if not set by lead/opportunity)
+    if (ticketData?.account) {
+      if (!lead && !opportunity) {
         setCustomerCompany(ticketData.account.company_name || '')
+      }
+      // Address from account if not set by opportunity
+      if (!opportunity) {
         setCustomerAddress(
           [ticketData.account.address, ticketData.account.city, ticketData.account.country]
             .filter(Boolean)
             .join(', ')
         )
       }
-
-      // RFQ data
-      if (ticketData.rfq_data) {
-        const rfq = ticketData.rfq_data
-        setServiceType(rfq.service_type || '')
-        setIncoterm(rfq.incoterm || '')
-        setFleetType(rfq.fleet_type || '')
-        setFleetQuantity(rfq.fleet_quantity || 1)
-        setCommodity(rfq.commodity || '')
-        setOriginCity(rfq.origin_city || '')
-        setOriginCountry(rfq.origin_country || '')
-        setOriginPort(rfq.origin_port || '')
-        setDestinationCity(rfq.destination_city || '')
-        setDestinationCountry(rfq.destination_country || '')
-        setDestinationPort(rfq.destination_port || '')
-        setCargoDescription(rfq.cargo_description || '')
-        setCargoWeight(rfq.cargo_weight || null)
-        setCargoVolume(rfq.cargo_volume || null)
-        setCargoQuantity(rfq.cargo_quantity || null)
-        setEstimatedLeadtime(rfq.estimated_leadtime || '')
-        setEstimatedCargoValue(rfq.estimated_cargo_value || null)
-        setCargoValueCurrency(rfq.cargo_value_currency || 'IDR')
-      }
-
-      // Operational cost
-      if (operationalCost) {
-        setTotalCost(operationalCost.amount)
-        setCurrency(operationalCost.currency || 'IDR')
-      }
-
-      fetchTermTemplates()
-      return
     }
 
-    // Standalone mode - no source provided, just fetch templates
+    // ============================================
+    // 2. SHIPMENT DETAILS (Priority: lead.shipment_details > ticket.rfq_data)
+    // ============================================
+    if (lead?.shipment_details) {
+      const sd = lead.shipment_details
+      setServiceType(sd.service_type_code || '')
+      setFleetType(sd.fleet_type || '')
+      setFleetQuantity(sd.fleet_quantity || 1)
+      setIncoterm(sd.incoterm || '')
+      setCommodity(sd.cargo_category || '')
+      setCargoDescription(sd.cargo_description || '')
+      setCargoWeight(sd.weight_total_kg || null)
+      setCargoVolume(sd.volume_total_cbm || null)
+      setOriginAddress(sd.origin_address || '')
+      setOriginCity(sd.origin_city || '')
+      setOriginCountry(sd.origin_country || '')
+      setDestinationAddress(sd.destination_address || '')
+      setDestinationCity(sd.destination_city || '')
+      setDestinationCountry(sd.destination_country || '')
+    } else if (ticketData?.rfq_data) {
+      const rfq = ticketData.rfq_data
+      setServiceType(rfq.service_type || '')
+      setIncoterm(rfq.incoterm || '')
+      setFleetType(rfq.fleet_type || '')
+      setFleetQuantity(rfq.fleet_quantity || 1)
+      setCommodity(rfq.commodity || '')
+      setOriginCity(rfq.origin_city || '')
+      setOriginCountry(rfq.origin_country || '')
+      setOriginPort(rfq.origin_port || '')
+      setOriginAddress(rfq.origin_address || '')
+      setDestinationCity(rfq.destination_city || '')
+      setDestinationCountry(rfq.destination_country || '')
+      setDestinationPort(rfq.destination_port || '')
+      setDestinationAddress(rfq.destination_address || '')
+      setCargoDescription(rfq.cargo_description || '')
+      setCargoWeight(rfq.cargo_weight || null)
+      setCargoVolume(rfq.cargo_volume || null)
+      setCargoQuantity(rfq.cargo_quantity || null)
+      setEstimatedLeadtime(rfq.estimated_leadtime || '')
+      setEstimatedCargoValue(rfq.estimated_cargo_value || null)
+      setCargoValueCurrency(rfq.cargo_value_currency || 'IDR')
+    }
+
+    // ============================================
+    // 3. OPERATIONAL COST (ALWAYS apply if available)
+    // ============================================
+    if (operationalCost) {
+      setCurrency(operationalCost.currency || 'IDR')
+
+      // Set rate structure from operational cost
+      if (operationalCost.rate_structure) {
+        setRateStructure(operationalCost.rate_structure)
+      }
+
+      // If breakdown with items, populate items with margin calculation
+      if (operationalCost.rate_structure === 'breakdown' && operationalCost.items && operationalCost.items.length > 0) {
+        const defaultMargin = 15 // Default margin percentage
+        const mappedItems: QuotationItem[] = operationalCost.items.map((item, index) => ({
+          id: `item-${Date.now()}-${index}`,
+          component_type: item.component_type,
+          component_name: item.component_name || getRateComponentLabel(item.component_type),
+          description: item.description || '',
+          cost_amount: item.cost_amount,
+          target_margin_percent: defaultMargin,
+          selling_rate: item.cost_amount * (1 + defaultMargin / 100),
+          quantity: item.quantity || null,
+          unit: item.unit || null,
+        }))
+        setItems(mappedItems)
+        // Total cost is sum of all items
+        setTotalCost(operationalCost.items.reduce((sum, item) => sum + item.cost_amount, 0))
+      } else {
+        // Bundling mode
+        setTotalCost(operationalCost.amount)
+      }
+    }
+
+    // Fetch term templates
     fetchTermTemplates()
   }, [open, ticketData, operationalCost, lead, opportunity])
 
