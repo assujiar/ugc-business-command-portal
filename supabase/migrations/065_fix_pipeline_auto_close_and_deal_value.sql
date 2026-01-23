@@ -408,7 +408,7 @@ SELECT
   a.pic_name AS account_pic_name,
   a.pic_email AS account_pic_email,
   a.pic_phone AS account_pic_phone,
-  a.status AS account_status,
+  a.account_status,
   a.original_lead_id AS account_original_lead_id,
   a.original_creator_id AS account_original_creator_id,
   p.name AS owner_name,
