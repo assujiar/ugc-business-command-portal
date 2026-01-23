@@ -15,10 +15,11 @@
 -- ============================================
 -- 1. Create helper function to get user's owned account IDs
 -- This bypasses RLS on accounts table to avoid recursion
+-- Note: account_id is TEXT type in this schema
 -- ============================================
 
 CREATE OR REPLACE FUNCTION public.get_user_owned_account_ids(p_user_id UUID)
-RETURNS SETOF UUID AS $$
+RETURNS SETOF TEXT AS $$
 BEGIN
     RETURN QUERY
     SELECT account_id
@@ -27,14 +28,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
-COMMENT ON FUNCTION public.get_user_owned_account_ids(UUID) IS 'Returns account IDs owned by the user. Uses SECURITY DEFINER to bypass RLS and avoid recursion.';
+COMMENT ON FUNCTION public.get_user_owned_account_ids(UUID) IS 'Returns account IDs (TEXT) owned by the user. Uses SECURITY DEFINER to bypass RLS and avoid recursion.';
 
 -- ============================================
 -- 2. Create helper function to check if user can see a specific account via ticketing
 -- This bypasses RLS on tickets table to avoid recursion
+-- Note: account_id is TEXT type in this schema
 -- ============================================
 
-CREATE OR REPLACE FUNCTION public.can_see_account_via_ticketing(p_user_id UUID, p_account_id UUID)
+CREATE OR REPLACE FUNCTION public.can_see_account_via_ticketing(p_user_id UUID, p_account_id TEXT)
 RETURNS BOOLEAN AS $$
 BEGIN
     -- Check if user is ticketing ops and has ticket access for this account
@@ -54,7 +56,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
-COMMENT ON FUNCTION public.can_see_account_via_ticketing(UUID, UUID) IS 'Checks if user can see an account via ticketing access. Uses SECURITY DEFINER to bypass RLS and avoid recursion.';
+COMMENT ON FUNCTION public.can_see_account_via_ticketing(UUID, TEXT) IS 'Checks if user can see an account via ticketing access. Uses SECURITY DEFINER to bypass RLS and avoid recursion.';
 
 -- ============================================
 -- 3. Update tickets_select_policy to use the helper function
@@ -114,7 +116,7 @@ CREATE POLICY accounts_select ON accounts FOR SELECT
 -- ============================================
 
 GRANT EXECUTE ON FUNCTION public.get_user_owned_account_ids(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.can_see_account_via_ticketing(UUID, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.can_see_account_via_ticketing(UUID, TEXT) TO authenticated;
 
 -- ============================================
 -- COMMENTS
