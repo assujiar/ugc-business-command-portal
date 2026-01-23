@@ -2745,11 +2745,11 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
           pic_phone: ticket.sender_phone || undefined,
         } : undefined}
         operationalCost={costs.length > 0 ? {
-          id: costs[costs.length - 1]?.id,  // Link to operational cost
-          amount: costs[costs.length - 1]?.amount || 0,
-          currency: costs[costs.length - 1]?.currency || 'IDR',
-          rate_structure: costs[costs.length - 1]?.rate_structure || 'bundling',
-          items: costs[costs.length - 1]?.items || [],
+          id: costs[0]?.id,  // Link to latest operational cost (array sorted by created_at desc)
+          amount: costs[0]?.amount || 0,
+          currency: costs[0]?.currency || 'IDR',
+          rate_structure: costs[0]?.rate_structure || 'bundling',
+          items: costs[0]?.items || [],
         } : undefined}
         onSuccess={() => {
           setQuotationDialogOpen(false)
