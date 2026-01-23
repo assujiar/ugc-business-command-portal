@@ -912,6 +912,53 @@ export interface Database {
           updated_at?: string
         }
       }
+      crm_notification_logs: {
+        Row: {
+          id: number
+          entity_type: string
+          entity_id: string
+          event: string
+          threshold: number | null
+          recipient_emails: string[] | null
+          cc_emails: string[] | null
+          subject: string | null
+          status: string
+          error_message: string | null
+          metadata: Json | null
+          sent_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          entity_type: string
+          entity_id: string
+          event: string
+          threshold?: number | null
+          recipient_emails?: string[] | null
+          cc_emails?: string[] | null
+          subject?: string | null
+          status?: string
+          error_message?: string | null
+          metadata?: Json | null
+          sent_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          entity_type?: string
+          entity_id?: string
+          event?: string
+          threshold?: number | null
+          recipient_emails?: string[] | null
+          cc_emails?: string[] | null
+          subject?: string | null
+          status?: string
+          error_message?: string | null
+          metadata?: Json | null
+          sent_at?: string
+          created_at?: string
+        }
+      }
     }
     Views: {
       v_lead_inbox: {
