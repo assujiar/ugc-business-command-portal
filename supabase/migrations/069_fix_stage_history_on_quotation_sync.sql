@@ -10,6 +10,9 @@
 -- Solution:
 -- Add INSERT INTO opportunity_stage_history for 'sent' and 'rejected' cases,
 -- similar to how 'accepted' case already does it.
+--
+-- Note: Table has both from_stage/to_stage AND old_stage/new_stage columns.
+-- Required NOT NULL columns: to_stage, new_stage, changed_by
 -- ============================================
 
 -- ============================================
@@ -64,16 +67,20 @@ BEGIN
                 -- Create stage history entry for the auto-transition
                 INSERT INTO public.opportunity_stage_history (
                     opportunity_id,
-                    old_stage,
-                    new_stage,
+                    from_stage,
+                    to_stage,
                     changed_by,
-                    notes
+                    notes,
+                    old_stage,
+                    new_stage
                 ) VALUES (
                     v_quotation.opportunity_id,
                     v_quotation.stage,
                     'Quote Sent',
                     p_actor_user_id,
-                    'Auto-updated: Quotation sent to customer'
+                    'Auto-updated: Quotation sent to customer',
+                    v_quotation.stage,
+                    'Quote Sent'
                 );
             END IF;
 
@@ -88,16 +95,20 @@ BEGIN
                 -- Create stage history entry for the auto-transition
                 INSERT INTO public.opportunity_stage_history (
                     opportunity_id,
-                    old_stage,
-                    new_stage,
+                    from_stage,
+                    to_stage,
                     changed_by,
-                    notes
+                    notes,
+                    old_stage,
+                    new_stage
                 ) VALUES (
                     v_quotation.opportunity_id,
                     v_quotation.stage,
                     'Negotiation',
                     p_actor_user_id,
-                    'Auto-updated: Quotation rejected by customer'
+                    'Auto-updated: Quotation rejected by customer',
+                    v_quotation.stage,
+                    'Negotiation'
                 );
             END IF;
 
@@ -116,16 +127,20 @@ BEGIN
                 -- Create stage history entry
                 INSERT INTO public.opportunity_stage_history (
                     opportunity_id,
-                    old_stage,
-                    new_stage,
+                    from_stage,
+                    to_stage,
                     changed_by,
-                    notes
+                    notes,
+                    old_stage,
+                    new_stage
                 ) VALUES (
                     v_quotation.opportunity_id,
                     v_quotation.stage,
                     'Closed Won',
                     p_actor_user_id,
-                    'Auto-closed: Customer quotation accepted'
+                    'Auto-closed: Customer quotation accepted',
+                    v_quotation.stage,
+                    'Closed Won'
                 );
             END IF;
 
@@ -229,16 +244,20 @@ BEGIN
                 -- Create stage history entry
                 INSERT INTO public.opportunity_stage_history (
                     opportunity_id,
-                    old_stage,
-                    new_stage,
+                    from_stage,
+                    to_stage,
                     changed_by,
-                    notes
+                    notes,
+                    old_stage,
+                    new_stage
                 ) VALUES (
                     v_propagated_opportunity_id,
-                    v_old_stage,
+                    v_old_stage::opportunity_stage,
                     'Quote Sent',
                     p_actor_user_id,
-                    'Auto-updated: Quotation sent to customer (propagated from ticket)'
+                    'Auto-updated: Quotation sent to customer (propagated from ticket)',
+                    v_old_stage::opportunity_stage,
+                    'Quote Sent'
                 );
             END IF;
         ELSIF p_new_status = 'rejected' THEN
@@ -250,16 +269,20 @@ BEGIN
                 -- Create stage history entry
                 INSERT INTO public.opportunity_stage_history (
                     opportunity_id,
-                    old_stage,
-                    new_stage,
+                    from_stage,
+                    to_stage,
                     changed_by,
-                    notes
+                    notes,
+                    old_stage,
+                    new_stage
                 ) VALUES (
                     v_propagated_opportunity_id,
-                    v_old_stage,
+                    v_old_stage::opportunity_stage,
                     'Negotiation',
                     p_actor_user_id,
-                    'Auto-updated: Quotation rejected (propagated from ticket)'
+                    'Auto-updated: Quotation rejected (propagated from ticket)',
+                    v_old_stage::opportunity_stage,
+                    'Negotiation'
                 );
             END IF;
         ELSIF p_new_status = 'accepted' THEN
@@ -276,16 +299,20 @@ BEGIN
                 -- Create stage history entry for propagated close
                 INSERT INTO public.opportunity_stage_history (
                     opportunity_id,
-                    old_stage,
-                    new_stage,
+                    from_stage,
+                    to_stage,
                     changed_by,
-                    notes
+                    notes,
+                    old_stage,
+                    new_stage
                 ) VALUES (
                     v_propagated_opportunity_id,
-                    v_old_stage,
+                    v_old_stage::opportunity_stage,
                     'Closed Won',
                     p_actor_user_id,
-                    'Auto-closed: Customer quotation accepted (propagated from ticket)'
+                    'Auto-closed: Customer quotation accepted (propagated from ticket)',
+                    v_old_stage::opportunity_stage,
+                    'Closed Won'
                 );
             END IF;
         END IF;
