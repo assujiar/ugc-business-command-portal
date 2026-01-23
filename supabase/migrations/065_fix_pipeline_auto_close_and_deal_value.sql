@@ -311,7 +311,7 @@ SELECT
     a.industry,
     a.address,
     a.city,
-    a.status as account_status,
+    a.account_status,
     -- PIC info
     a.pic_name,
     a.pic_email,
