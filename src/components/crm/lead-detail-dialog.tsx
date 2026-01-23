@@ -33,6 +33,7 @@ import {
   INDUSTRIES,
   PRIORITY_LEVELS,
 } from '@/lib/constants'
+import { getQuotationSequenceLabel } from '@/lib/utils/quotation-utils'
 import { toast } from '@/hooks/use-toast'
 import type { LeadTriageStatus, LeadSource, UserRole } from '@/types/database'
 
@@ -1012,7 +1013,7 @@ export function LeadDetailDialog({
                           <p className="text-sm font-medium">
                             {quotation.quotation_number}
                             <span className="text-xs text-muted-foreground ml-2">
-                              (#{quotation.sequence_number || index + 1})
+                              ({getQuotationSequenceLabel(quotation.sequence_number || index + 1)} Quotation)
                             </span>
                           </p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">

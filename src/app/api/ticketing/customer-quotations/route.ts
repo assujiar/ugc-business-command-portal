@@ -210,9 +210,32 @@ export async function POST(request: NextRequest) {
 
     const items = body.items || []
 
-    // Validation
+    // Validation - use 422 for validation errors
     if (!customer_name) {
-      return NextResponse.json({ error: 'Customer name is required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Customer name is required', code: 'VALIDATION_ERROR', field: 'customer_name' },
+        { status: 422 }
+      )
+    }
+
+    // Validate source_type consistency
+    if (source_type === 'ticket' && !ticket_id) {
+      return NextResponse.json(
+        { error: 'ticket_id is required when source_type is ticket', code: 'VALIDATION_ERROR', field: 'ticket_id' },
+        { status: 422 }
+      )
+    }
+    if (source_type === 'lead' && !lead_id) {
+      return NextResponse.json(
+        { error: 'lead_id is required when source_type is lead', code: 'VALIDATION_ERROR', field: 'lead_id' },
+        { status: 422 }
+      )
+    }
+    if (source_type === 'opportunity' && !opportunity_id) {
+      return NextResponse.json(
+        { error: 'opportunity_id is required when source_type is opportunity', code: 'VALIDATION_ERROR', field: 'opportunity_id' },
+        { status: 422 }
+      )
     }
 
     // Generate quotation number using RPC
@@ -222,7 +245,10 @@ export async function POST(request: NextRequest) {
 
     if (seqError || !quotation_number) {
       console.error('[CustomerQuotations POST] Error generating quotation number:', seqError)
-      return NextResponse.json({ error: `Failed to generate quotation number: ${seqError?.message || 'Unknown error'}` }, { status: 500 })
+      return NextResponse.json(
+        { error: `Failed to generate quotation number: ${seqError?.message || 'Unknown error'}`, code: 'SEQUENCE_ERROR' },
+        { status: 500 }
+      )
     }
     console.log('[CustomerQuotations POST] Generated quotation number:', quotation_number)
 
@@ -306,7 +332,27 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       console.error('[CustomerQuotations POST] Error inserting customer quotation:', insertError)
       console.error('[CustomerQuotations POST] Insert error details:', JSON.stringify(insertError))
-      return NextResponse.json({ error: insertError.message, details: insertError.details, hint: insertError.hint }, { status: 500 })
+
+      // Handle specific error types
+      if (insertError.code === '23503') {
+        // Foreign key violation
+        return NextResponse.json(
+          { error: 'Invalid reference: the specified ticket, lead, or opportunity does not exist', code: 'FOREIGN_KEY_ERROR', details: insertError.message },
+          { status: 422 }
+        )
+      }
+      if (insertError.code === '23505') {
+        // Unique violation
+        return NextResponse.json(
+          { error: 'A quotation with this number already exists', code: 'UNIQUE_VIOLATION', details: insertError.message },
+          { status: 409 }
+        )
+      }
+
+      return NextResponse.json(
+        { error: insertError.message, code: 'INSERT_ERROR', details: insertError.details, hint: insertError.hint },
+        { status: 500 }
+      )
     }
 
     console.log('[CustomerQuotations POST] Quotation inserted successfully:', quotation)
@@ -376,16 +422,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Helper to get sequence label
+    const getSequenceLabel = (n: number): string => {
+      const labels = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth']
+      if (n <= 10) return labels[n - 1]
+      return `${n}th`
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         id: quotation_id,
         quotation_number,
         sequence_number,
+        sequence_label: getSequenceLabel(sequence_number),
       },
       quotation_id,
       quotation_number,
       sequence_number,
+      sequence_label: getSequenceLabel(sequence_number),
     }, { status: 201 })
   } catch (err) {
     console.error('Unexpected error:', err)
