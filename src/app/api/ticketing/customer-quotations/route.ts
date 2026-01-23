@@ -93,12 +93,15 @@ export async function GET(request: NextRequest) {
 // POST /api/ticketing/customer-quotations - Create customer quotation
 export async function POST(request: NextRequest) {
   try {
+    console.log('[CustomerQuotations POST] Starting quotation creation...')
     const supabase = await createClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
+      console.log('[CustomerQuotations POST] Auth error:', authError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    console.log('[CustomerQuotations POST] User authenticated:', user.id)
 
     const { data: profileData } = await (supabase as any)
       .from('profiles')
@@ -107,10 +110,19 @@ export async function POST(request: NextRequest) {
       .single() as { data: ProfileData | null }
 
     if (!profileData || !canAccessTicketing(profileData.role)) {
+      console.log('[CustomerQuotations POST] Access denied for role:', profileData?.role)
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
+    console.log('[CustomerQuotations POST] User has ticketing access')
 
     const body = await request.json()
+    console.log('[CustomerQuotations POST] Request body:', JSON.stringify({
+      ticket_id: body.ticket_id,
+      lead_id: body.lead_id,
+      opportunity_id: body.opportunity_id,
+      source_type: body.source_type,
+      customer_name: body.customer_name,
+    }))
 
     let ticket_id = body.ticket_id || null
     let lead_id = body.lead_id || null
@@ -204,13 +216,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate quotation number using RPC
+    console.log('[CustomerQuotations POST] Generating quotation number...')
     const { data: quotation_number, error: seqError } = await (supabase as any)
       .rpc('generate_customer_quotation_number')
 
     if (seqError || !quotation_number) {
-      console.error('Error generating quotation number:', seqError)
-      return NextResponse.json({ error: 'Failed to generate quotation number' }, { status: 500 })
+      console.error('[CustomerQuotations POST] Error generating quotation number:', seqError)
+      return NextResponse.json({ error: `Failed to generate quotation number: ${seqError?.message || 'Unknown error'}` }, { status: 500 })
     }
+    console.log('[CustomerQuotations POST] Generated quotation number:', quotation_number)
 
     // Calculate valid_until date
     const valid_until = new Date()
@@ -232,6 +246,9 @@ export async function POST(request: NextRequest) {
     // For standalone quotations, sequence_number remains 1
 
     // Insert quotation directly (bypass RPC to avoid JSONB serialization issues)
+    console.log('[CustomerQuotations POST] Inserting quotation with:', JSON.stringify({
+      ticket_id, lead_id, opportunity_id, source_type, sequence_number, customer_name, quotation_number
+    }))
     const { data: quotation, error: insertError } = await (supabase as any)
       .from('customer_quotations')
       .insert({
@@ -287,10 +304,12 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError) {
-      console.error('Error inserting customer quotation:', insertError)
-      return NextResponse.json({ error: insertError.message }, { status: 500 })
+      console.error('[CustomerQuotations POST] Error inserting customer quotation:', insertError)
+      console.error('[CustomerQuotations POST] Insert error details:', JSON.stringify(insertError))
+      return NextResponse.json({ error: insertError.message, details: insertError.details, hint: insertError.hint }, { status: 500 })
     }
 
+    console.log('[CustomerQuotations POST] Quotation inserted successfully:', quotation)
     const quotation_id = quotation.id
 
     // Insert breakdown items if any
@@ -333,20 +352,28 @@ export async function POST(request: NextRequest) {
 
     // Sync quotation status to lead if linked
     if (lead_id) {
-      await (supabase as any).rpc('sync_quotation_to_lead', {
+      console.log('[CustomerQuotations POST] Syncing to lead:', lead_id)
+      const { error: leadSyncError } = await (supabase as any).rpc('sync_quotation_to_lead', {
         p_quotation_id: quotation_id,
         p_new_status: 'draft',
         p_actor_user_id: user.id,
       })
+      if (leadSyncError) {
+        console.error('[CustomerQuotations POST] Lead sync error:', leadSyncError)
+      }
     }
 
     // Sync quotation status to opportunity if linked
     if (opportunity_id) {
-      await (supabase as any).rpc('sync_quotation_to_opportunity', {
+      console.log('[CustomerQuotations POST] Syncing to opportunity:', opportunity_id)
+      const { error: oppSyncError } = await (supabase as any).rpc('sync_quotation_to_opportunity', {
         p_quotation_id: quotation_id,
         p_new_status: 'draft',
         p_actor_user_id: user.id,
       })
+      if (oppSyncError) {
+        console.error('[CustomerQuotations POST] Opportunity sync error:', oppSyncError)
+      }
     }
 
     return NextResponse.json({
