@@ -4,6 +4,9 @@
 --
 -- This script creates missing opportunity_stage_history entries for
 -- opportunities that were auto-updated by quotation sync before migration 069.
+--
+-- Table schema has both from_stage/to_stage AND old_stage/new_stage columns.
+-- Required NOT NULL columns: to_stage, new_stage, changed_by
 -- ============================================
 
 -- ============================================
@@ -12,19 +15,23 @@
 
 INSERT INTO public.opportunity_stage_history (
     opportunity_id,
-    old_stage,
-    new_stage,
+    from_stage,
+    to_stage,
     changed_by,
     changed_at,
-    notes
+    notes,
+    old_stage,
+    new_stage
 )
 SELECT DISTINCT ON (cq.opportunity_id)
     cq.opportunity_id,
-    'Discovery' AS old_stage,  -- Assume was Discovery before Quote Sent
-    'Quote Sent' AS new_stage,
+    'Discovery'::opportunity_stage AS from_stage,
+    'Quote Sent'::opportunity_stage AS to_stage,
     cq.created_by AS changed_by,
     COALESCE(cq.sent_at, cq.updated_at) AS changed_at,
-    'Auto-updated: Quotation sent to customer (backfilled)' AS notes
+    'Auto-updated: Quotation sent to customer (backfilled)' AS notes,
+    'Discovery'::opportunity_stage AS old_stage,
+    'Quote Sent'::opportunity_stage AS new_stage
 FROM public.customer_quotations cq
 INNER JOIN public.opportunities o ON o.opportunity_id = cq.opportunity_id
 WHERE cq.status IN ('sent', 'accepted', 'rejected')  -- Quotation was sent at some point
@@ -43,19 +50,23 @@ ORDER BY cq.opportunity_id, cq.sent_at ASC NULLS LAST;
 
 INSERT INTO public.opportunity_stage_history (
     opportunity_id,
-    old_stage,
-    new_stage,
+    from_stage,
+    to_stage,
     changed_by,
     changed_at,
-    notes
+    notes,
+    old_stage,
+    new_stage
 )
 SELECT DISTINCT ON (cq.opportunity_id)
     cq.opportunity_id,
-    'Quote Sent' AS old_stage,
-    'Negotiation' AS new_stage,
+    'Quote Sent'::opportunity_stage AS from_stage,
+    'Negotiation'::opportunity_stage AS to_stage,
     cq.created_by AS changed_by,
     cq.updated_at AS changed_at,
-    'Auto-updated: Quotation rejected by customer (backfilled)' AS notes
+    'Auto-updated: Quotation rejected by customer (backfilled)' AS notes,
+    'Quote Sent'::opportunity_stage AS old_stage,
+    'Negotiation'::opportunity_stage AS new_stage
 FROM public.customer_quotations cq
 INNER JOIN public.opportunities o ON o.opportunity_id = cq.opportunity_id
 WHERE cq.status = 'rejected'
