@@ -22,6 +22,7 @@ interface Opportunity {
   name: string
   stage: OpportunityStage
   estimated_value: number | null
+  deal_value: number | null
   currency: string
   probability: number | null
   expected_close_date: string | null
