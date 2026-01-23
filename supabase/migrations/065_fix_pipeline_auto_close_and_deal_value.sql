@@ -35,7 +35,7 @@ DECLARE
     v_new_stage TEXT;
 BEGIN
     -- Get quotation with opportunity info
-    SELECT cq.*, cq.total_amount as quotation_amount, o.opportunity_id, o.stage
+    SELECT cq.*, cq.total_selling_rate as quotation_amount, o.opportunity_id, o.stage
     INTO v_quotation
     FROM public.customer_quotations cq
     LEFT JOIN public.opportunities o ON o.opportunity_id = cq.opportunity_id
@@ -206,7 +206,7 @@ BEGIN
             UPDATE public.opportunities
             SET
                 stage = 'Closed Won',
-                deal_value = v_quotation.total_amount,
+                deal_value = v_quotation.total_selling_rate,
                 closed_at = NOW(),
                 updated_at = NOW()
             WHERE opportunity_id = v_propagated_opportunity_id
@@ -319,7 +319,7 @@ SELECT
     -- Lead info
     o.source_lead_id as lead_id,
     l.potential_revenue,
-    l.lead_source,
+    l.source AS lead_source,
     creator.name as lead_creator_name,
     creator.department as lead_creator_department,
     -- Owner info
