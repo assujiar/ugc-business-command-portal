@@ -73,7 +73,7 @@ CREATE POLICY "customer_quotations_select" ON public.customer_quotations
             OR EXISTS (
                 SELECT 1 FROM public.leads l
                 WHERE l.lead_id = customer_quotations.lead_id
-                AND (l.created_by = auth.uid() OR l.assigned_sales_id = auth.uid())
+                AND (l.created_by = auth.uid() OR l.sales_owner_user_id = auth.uid() OR l.marketing_owner_user_id = auth.uid())
             )
         )
     );
