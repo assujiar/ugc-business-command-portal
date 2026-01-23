@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessTicketing, isAdmin } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
@@ -231,10 +232,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Sync quotation status to all linked entities (ticket, lead, opportunity)
+    // Sync quotation status to all linked entities (ticket, lead, opportunity, operational cost)
+    // Use admin client to ensure sync can update all related entities
     let syncResult = null
     if (needsSync) {
-      const { data: syncData, error: syncError } = await (supabase as any).rpc('sync_quotation_to_all', {
+      const adminClient = createAdminClient()
+      const { data: syncData, error: syncError } = await (adminClient as any).rpc('sync_quotation_to_all', {
         p_quotation_id: id,
         p_new_status: status,
         p_actor_user_id: user.id
@@ -242,6 +245,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       syncResult = syncData
       if (syncError) {
         console.error('Error syncing quotation:', syncError)
+      } else {
+        console.log('Quotation synced to all entities:', syncResult)
       }
     }
 

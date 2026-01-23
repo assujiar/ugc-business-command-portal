@@ -286,6 +286,16 @@ export function PipelineDetailDialog({
     setMounted(true)
   }, [])
 
+  // Refresh function to refetch all data
+  const refreshData = async () => {
+    if (opportunityId) {
+      await Promise.all([
+        fetchPipelineDetails(opportunityId),
+        fetchQuotations(opportunityId),
+      ])
+    }
+  }
+
   useEffect(() => {
     if (open && opportunityId) {
       fetchPipelineDetails(opportunityId)
@@ -294,6 +304,35 @@ export function PipelineDetailDialog({
       setData(null)
       setQuotations([])
       setShipmentDetails(null)
+    }
+  }, [open, opportunityId])
+
+  // Refresh data when dialog opens and quotations might have changed
+  // This ensures the latest stage is shown after quotation operations
+  useEffect(() => {
+    if (!open || !opportunityId) return
+
+    // Refetch pipeline details when visibility changes (user returns to tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && open) {
+        fetchPipelineDetails(opportunityId)
+        fetchQuotations(opportunityId)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Poll for updates every 30 seconds while dialog is open
+    // This helps catch external changes to quotation status
+    const pollInterval = setInterval(() => {
+      if (open && opportunityId) {
+        fetchPipelineDetails(opportunityId)
+      }
+    }, 30000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(pollInterval)
     }
   }, [open, opportunityId])
 
