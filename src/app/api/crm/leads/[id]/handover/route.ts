@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { sendNewLeadNotification } from '@/lib/crm-notification-service'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -39,6 +40,20 @@ export async function POST(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    // Send email notification to sales team (non-blocking)
+    sendNewLeadNotification({
+      leadId: id,
+      handoverByUserId: user.id,
+    }).then((result) => {
+      if (result.success) {
+        console.log(`[CRM] New lead notification sent for lead ${id}`)
+      } else {
+        console.error(`[CRM] Failed to send new lead notification: ${result.error}`)
+      }
+    }).catch((err) => {
+      console.error(`[CRM] Error sending new lead notification:`, err)
+    })
 
     return NextResponse.json({ data })
   } catch (error) {
