@@ -45,6 +45,7 @@ interface Opportunity {
   name: string
   stage: OpportunityStage
   estimated_value: number | null
+  deal_value: number | null
   next_step_due_date: string | null
   owner_user_id: string | null
 }
@@ -176,8 +177,15 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
   }
 
   const primaryContact = account.contacts?.find(c => c.is_primary) || account.contacts?.[0]
-  const totalPipelineValue = account.opportunities?.reduce((sum, opp) =>
+
+  // Calculate both estimated and deal values
+  const totalEstimatedValue = account.opportunities?.reduce((sum, opp) =>
     sum + (opp.estimated_value || 0), 0) || 0
+  const totalDealValue = account.opportunities?.reduce((sum, opp) =>
+    sum + (opp.deal_value || 0), 0) || 0
+  // For display: use deal_value for won deals, estimated_value for others
+  const totalPipelineValue = account.opportunities?.reduce((sum, opp) =>
+    sum + (opp.deal_value || opp.estimated_value || 0), 0) || 0
 
   return (
     <div className="space-y-6">
@@ -243,7 +251,19 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Pipeline</span>
             </div>
-            <p className="text-lg font-bold mt-1">{formatCurrency(totalPipelineValue)}</p>
+            {totalDealValue > 0 ? (
+              <div className="mt-1">
+                <p className="text-lg font-bold text-green-600">{formatCurrency(totalDealValue)}</p>
+                <p className="text-xs text-muted-foreground">Deal Value</p>
+                {totalEstimatedValue > 0 && totalEstimatedValue !== totalDealValue && (
+                  <p className="text-xs text-muted-foreground">
+                    Est: {formatCurrency(totalEstimatedValue)}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-lg font-bold mt-1">{formatCurrency(totalEstimatedValue)}</p>
+            )}
           </CardContent>
         </Card>
       </div>

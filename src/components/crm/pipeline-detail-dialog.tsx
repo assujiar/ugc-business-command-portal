@@ -77,6 +77,7 @@ interface PipelineDetailData {
   name: string
   stage: OpportunityStage
   estimated_value: number | null
+  deal_value: number | null
   currency: string
   probability: number | null
   expected_close_date: string | null
@@ -286,14 +287,65 @@ export function PipelineDetailDialog({
     setMounted(true)
   }, [])
 
+  // Refresh function to refetch all data with cache busting
+  const refreshData = async () => {
+    if (opportunityId) {
+      await Promise.all([
+        fetchPipelineDetails(opportunityId, true),
+        fetchQuotations(opportunityId, true),
+      ])
+    }
+  }
+
   useEffect(() => {
     if (open && opportunityId) {
-      fetchPipelineDetails(opportunityId)
-      fetchQuotations(opportunityId)
+      // Always force refresh when dialog opens to get latest data
+      // This ensures stage updates are immediately visible after quotation operations
+      fetchPipelineDetails(opportunityId, true)
+      fetchQuotations(opportunityId, true)
     } else {
       setData(null)
       setQuotations([])
       setShipmentDetails(null)
+    }
+  }, [open, opportunityId])
+
+  // Refresh data when dialog opens and quotations might have changed
+  // This ensures the latest stage is shown after quotation operations
+  useEffect(() => {
+    if (!open || !opportunityId) return
+
+    // Refetch pipeline details when visibility changes (user returns to tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && open) {
+        fetchPipelineDetails(opportunityId, true)
+        fetchQuotations(opportunityId, true)
+      }
+    }
+
+    // Also listen for focus events on the dialog to catch when user switches between dialogs
+    const handleFocus = () => {
+      if (open) {
+        fetchPipelineDetails(opportunityId, true)
+        fetchQuotations(opportunityId, true)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    // Poll for updates every 15 seconds while dialog is open (reduced from 30s for faster updates)
+    // This helps catch external changes to quotation status
+    const pollInterval = setInterval(() => {
+      if (open && opportunityId) {
+        fetchPipelineDetails(opportunityId, true)
+      }
+    }, 15000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+      clearInterval(pollInterval)
     }
   }, [open, opportunityId])
 
@@ -324,10 +376,19 @@ export function PipelineDetailDialog({
     fetchShipmentDetails()
   }, [data?.lead_id])
 
-  const fetchPipelineDetails = async (oppId: string) => {
+  const fetchPipelineDetails = async (oppId: string, forceRefresh = false) => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/crm/pipeline/${oppId}`)
+      // Add cache-busting parameter to ensure fresh data
+      const url = forceRefresh
+        ? `/api/crm/pipeline/${oppId}?_t=${Date.now()}`
+        : `/api/crm/pipeline/${oppId}`
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      })
       if (response.ok) {
         const { data: pipelineData } = await response.json()
         setData(pipelineData)
@@ -339,11 +400,20 @@ export function PipelineDetailDialog({
     }
   }
 
-  const fetchQuotations = async (oppId: string) => {
+  const fetchQuotations = async (oppId: string, forceRefresh = false) => {
     setLoadingQuotations(true)
     console.log('[PipelineDetail] Fetching quotations for opportunity_id:', oppId)
     try {
-      const response = await fetch(`/api/ticketing/customer-quotations?opportunity_id=${oppId}`)
+      // Add cache-busting parameter to ensure fresh data
+      const url = forceRefresh
+        ? `/api/ticketing/customer-quotations?opportunity_id=${oppId}&_t=${Date.now()}`
+        : `/api/ticketing/customer-quotations?opportunity_id=${oppId}`
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      })
       console.log('[PipelineDetail] Quotations API response status:', response.status)
       if (response.ok) {
         const result = await response.json()
@@ -630,10 +700,26 @@ export function PipelineDetailDialog({
                   </Badge>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-lg lg:text-xl font-bold text-brand">
-                    {formatCurrency(data.potential_revenue || data.estimated_value)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Potential Revenue</p>
+                  {data.deal_value ? (
+                    <>
+                      <p className="text-lg lg:text-xl font-bold text-green-600">
+                        {formatCurrency(data.deal_value)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Deal Value</p>
+                      {data.estimated_value && data.estimated_value !== data.deal_value && (
+                        <p className="text-xs text-muted-foreground">
+                          Est: {formatCurrency(data.estimated_value)}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-lg lg:text-xl font-bold text-brand">
+                        {formatCurrency(data.potential_revenue || data.estimated_value)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Potential Revenue</p>
+                    </>
+                  )}
                 </div>
               </div>
 
