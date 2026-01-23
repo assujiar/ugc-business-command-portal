@@ -77,6 +77,7 @@ interface PipelineDetailData {
   name: string
   stage: OpportunityStage
   estimated_value: number | null
+  deal_value: number | null
   currency: string
   probability: number | null
   expected_close_date: string | null
@@ -699,10 +700,26 @@ export function PipelineDetailDialog({
                   </Badge>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-lg lg:text-xl font-bold text-brand">
-                    {formatCurrency(data.potential_revenue || data.estimated_value)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Potential Revenue</p>
+                  {data.deal_value ? (
+                    <>
+                      <p className="text-lg lg:text-xl font-bold text-green-600">
+                        {formatCurrency(data.deal_value)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Deal Value</p>
+                      {data.estimated_value && data.estimated_value !== data.deal_value && (
+                        <p className="text-xs text-muted-foreground">
+                          Est: {formatCurrency(data.estimated_value)}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-lg lg:text-xl font-bold text-brand">
+                        {formatCurrency(data.potential_revenue || data.estimated_value)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Potential Revenue</p>
+                    </>
+                  )}
                 </div>
               </div>
 

@@ -221,6 +221,7 @@ export default async function PipelinePage({ searchParams }: PageProps) {
     name: opp.name,
     stage: opp.stage,
     estimated_value: opp.estimated_value,
+    deal_value: opp.deal_value,
     currency: opp.currency,
     probability: opp.probability,
     expected_close_date: opp.next_step_due_date, // Using next_step_due_date as expected_close_date

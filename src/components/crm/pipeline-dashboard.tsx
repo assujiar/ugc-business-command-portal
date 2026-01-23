@@ -65,6 +65,7 @@ interface Opportunity {
   name: string
   stage: OpportunityStage
   estimated_value: number | null
+  deal_value: number | null
   currency: string
   probability: number | null
   expected_close_date: string | null
@@ -651,9 +652,22 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                               <Badge variant="outline" className={`text-xs ${stageConfig?.color.replace('bg-', 'border-')}`}>
                                 {opp.stage}
                               </Badge>
-                              <span className="text-xs lg:text-sm font-medium text-brand">
-                                {formatCurrency(opp.estimated_value)}
-                              </span>
+                              {opp.deal_value ? (
+                                <div className="flex flex-col">
+                                  <span className="text-xs lg:text-sm font-medium text-green-600">
+                                    {formatCurrency(opp.deal_value)}
+                                  </span>
+                                  {opp.estimated_value && opp.estimated_value !== opp.deal_value && (
+                                    <span className="text-[10px] text-muted-foreground line-through">
+                                      Est: {formatCurrency(opp.estimated_value)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs lg:text-sm font-medium text-brand">
+                                  {formatCurrency(opp.estimated_value)}
+                                </span>
+                              )}
                               {opp.probability && (
                                 <span className="text-[10px] lg:text-xs text-muted-foreground">
                                   {opp.probability}% probability
