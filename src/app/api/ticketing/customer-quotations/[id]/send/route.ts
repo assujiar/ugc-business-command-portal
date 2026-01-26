@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessTicketing } from '@/lib/permissions'
 import { sendEmail, isEmailServiceConfigured } from '@/lib/email'
 import type { UserRole } from '@/types/database'
+import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -600,13 +601,20 @@ const getTimeBasedGreeting = (): string => {
 
 // POST /api/ticketing/customer-quotations/[id]/send - Send quotation via email or WhatsApp
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const correlationId = randomUUID()
+
   try {
     const { id } = await params
     const supabase = await createClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized',
+        error_code: 'UNAUTHORIZED',
+        correlation_id: correlationId
+      }, { status: 401 })
     }
 
     const { data: profileData } = await (supabase as any)
@@ -616,7 +624,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single() as { data: ProfileData | null }
 
     if (!profileData || !canAccessTicketing(profileData.role)) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+      return NextResponse.json({
+        success: false,
+        error: 'Access denied',
+        error_code: 'FORBIDDEN',
+        correlation_id: correlationId
+      }, { status: 403 })
     }
 
     // Parse request body
@@ -628,7 +641,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (!method || !['whatsapp', 'email'].includes(method)) {
-      return NextResponse.json({ error: 'Invalid send method' }, { status: 400 })
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid send method. Must be "whatsapp" or "email"',
+        error_code: 'VALIDATION_ERROR',
+        field_errors: { method: 'Must be "whatsapp" or "email"' },
+        correlation_id: correlationId
+      }, { status: 422 })
     }
 
     // Fetch quotation with all details including creator profile
@@ -644,7 +663,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single()
 
     if (error || !quotation) {
-      return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
+      return NextResponse.json({
+        success: false,
+        error: 'Quotation not found',
+        error_code: 'QUOTATION_NOT_FOUND',
+        correlation_id: correlationId
+      }, { status: 404 })
     }
 
     // Get creator email for reply-to (fallback to current user if not found)
@@ -694,38 +718,36 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Check if recipient email exists
       if (!quotation.customer_email) {
         return NextResponse.json({
-          error: 'Customer email address is not available'
-        }, { status: 400 })
+          success: false,
+          error: 'Customer email address is not available',
+          error_code: 'VALIDATION_ERROR',
+          field_errors: { customer_email: 'Email address is required' },
+          correlation_id: correlationId
+        }, { status: 422 })
       }
 
       // Check if email service is configured
       if (!isEmailServiceConfigured()) {
-        // Even without SMTP, update status to 'sent' when using fallback
-        if (!isResend) {
-          const adminClient = createAdminClient()
-          await (adminClient as any)
-            .from('customer_quotations')
-            .update({
-              status: 'sent',
-              sent_via: 'email',
-              sent_to: quotation.customer_email,
-              sent_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', id)
+        // Even without SMTP, use atomic RPC to update status to 'sent' when using fallback
+        const adminClient = createAdminClient()
+        const { data: fallbackResult, error: fallbackError } = await (adminClient as any).rpc('rpc_customer_quotation_mark_sent', {
+          p_quotation_id: id,
+          p_sent_via: 'email',
+          p_sent_to: quotation.customer_email,
+          p_actor_user_id: user.id,
+          p_correlation_id: correlationId
+        })
 
-          // Sync status to linked entities
-          await (adminClient as any).rpc('sync_quotation_to_all', {
-            p_quotation_id: id,
-            p_new_status: 'sent',
-            p_actor_user_id: user.id
-          })
+        if (fallbackError || !fallbackResult?.success) {
+          console.error('Error in fallback atomic send:', fallbackError || fallbackResult)
+          // Still return fallback but with warning
         }
 
         return NextResponse.json({
           success: true,
           message: 'Email service not configured. Opening email client as fallback.',
           fallback: true,
+          sync_result: fallbackResult,
           data: {
             email_subject: emailSubject,
             email_html: emailHtml,
@@ -791,60 +813,82 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Use admin client for status updates to bypass RLS
+    // Use admin client for atomic status update with full entity sync
     const adminClient = createAdminClient()
+    const sentTo = method === 'email' ? quotation.customer_email : quotation.customer_phone
 
-    // Update quotation status to 'sent' only if not a resend
-    if (!isResend) {
-      const sentTo = method === 'email' ? quotation.customer_email : quotation.customer_phone
-
-      // Update quotation status
-      const { error: updateError } = await (adminClient as any)
-        .from('customer_quotations')
-        .update({
-          status: 'sent',
-          sent_via: method,
-          sent_to: sentTo,
-          sent_at: new Date().toISOString(),
-          pdf_url: pdf_url || quotation.pdf_url,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-
-      if (updateError) {
-        console.error('Error updating quotation status:', updateError)
-        // Continue anyway - email was sent successfully
-      } else {
-        console.log('Quotation status updated to sent')
-      }
-    }
-
-    // Always sync quotation status to all linked entities (ticket, lead, opportunity)
-    // This ensures the pipeline stage is correct even on resends
-    const { data: syncResult, error: syncError } = await (adminClient as any).rpc('sync_quotation_to_all', {
+    // Use atomic RPC for quotation sent - updates quotation, opportunity, ticket, lead in ONE transaction
+    // This is idempotent: if already sent, will update sent_via/sent_to but not create duplicate events
+    const { data: atomicResult, error: atomicError } = await (adminClient as any).rpc('rpc_customer_quotation_mark_sent', {
       p_quotation_id: id,
-      p_new_status: 'sent',
-      p_actor_user_id: user.id
+      p_sent_via: method,
+      p_sent_to: sentTo,
+      p_actor_user_id: user.id,
+      p_correlation_id: correlationId
     })
 
-    if (syncError) {
-      console.error('Error syncing quotation status:', syncError)
-      // Continue anyway - main operation succeeded
-    } else {
-      console.log('Quotation synced to all entities:', syncResult)
+    if (atomicError) {
+      console.error('Error in atomic quotation send:', atomicError, 'correlation_id:', correlationId)
+      // Return error with details for debugging
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to update quotation and sync to pipeline',
+        error_code: 'ATOMIC_SYNC_ERROR',
+        detail: atomicError.message,
+        email_sent: method === 'email' ? true : false,
+        message: method === 'email'
+          ? 'Email was sent but system sync failed. Please contact support with this error.'
+          : 'WhatsApp text generated but system sync failed. Please contact support with this error.',
+        data: responseData,
+        correlation_id: correlationId
+      }, { status: 500 })
     }
+
+    if (!atomicResult?.success) {
+      console.error('Atomic quotation send returned error:', atomicResult, 'correlation_id:', correlationId)
+      // Map error codes to HTTP status codes (409 for conflict/invalid transition)
+      const statusCode = atomicResult?.error_code === 'INVALID_STATUS_TRANSITION' ? 409 :
+                         atomicResult?.error_code?.startsWith('CONFLICT_') ? 409 : 500
+      return NextResponse.json({
+        success: false,
+        error: atomicResult?.error || 'Failed to sync quotation status',
+        error_code: atomicResult?.error_code || 'SYNC_FAILED',
+        email_sent: method === 'email' ? true : false,
+        message: method === 'email'
+          ? 'Email was sent but system sync failed. Please retry.'
+          : 'WhatsApp text generated but system sync failed. Please retry.',
+        data: responseData,
+        correlation_id: correlationId
+      }, { status: statusCode })
+    }
+
+    console.log('Atomic quotation send succeeded:', atomicResult, 'correlation_id:', correlationId)
 
     return NextResponse.json({
       success: true,
-      data: responseData,
-      message: isResend
+      data: {
+        ...responseData,
+        is_resend: atomicResult.is_resend || isResend,
+      },
+      sync_result: {
+        quotation_status: atomicResult.quotation_status,
+        opportunity_stage: atomicResult.new_stage,
+        ticket_status: atomicResult.ticket_status,
+      },
+      message: atomicResult.is_resend || isResend
         ? `Quotation resent via ${method}`
         : method === 'email'
           ? 'Email sent successfully to customer.'
           : 'WhatsApp text generated. Click the link to send via WhatsApp.',
+      correlation_id: correlationId
     })
   } catch (err) {
-    console.error('Unexpected error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Unexpected error:', err, 'correlation_id:', correlationId)
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error',
+      error_code: 'INTERNAL_ERROR',
+      correlation_id: correlationId
+    }, { status: 500 })
   }
 }
