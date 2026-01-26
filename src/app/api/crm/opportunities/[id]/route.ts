@@ -120,12 +120,13 @@ export async function PATCH(
 
     // If closing, explicitly call sync functions for redundancy
     // (DB triggers should handle this, but explicit call ensures consistency)
+    // Note: Using 'as any' because these RPC functions are newly added and not in generated types yet
     let syncResults: { quotation?: unknown; account?: unknown } = {}
     if (isClosing && currentOpp?.account_id) {
       const outcome = body.stage === 'Closed Won' ? 'won' : 'lost'
 
       // Sync quotations and tickets
-      const { data: quotationSync, error: quotationSyncError } = await adminClient.rpc(
+      const { data: quotationSync, error: quotationSyncError } = await (adminClient as any).rpc(
         'sync_opportunity_to_quotation',
         { p_opportunity_id: id, p_outcome: outcome }
       )
@@ -134,7 +135,7 @@ export async function PATCH(
       }
 
       // Sync account status
-      const { data: accountSync, error: accountSyncError } = await adminClient.rpc(
+      const { data: accountSync, error: accountSyncError } = await (adminClient as any).rpc(
         'sync_opportunity_to_account',
         { p_opportunity_id: id, p_outcome: outcome }
       )
