@@ -948,8 +948,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     let creatorCount = 0
 
     // For average response time calculation (time between party switches)
-    let deptResponseTimes: number[] = []
-    let creatorResponseTimes: number[] = []
+    const deptResponseTimes: number[] = []
+    const creatorResponseTimes: number[] = []
     let lastTimestamp = new Date(ticket.created_at).getTime()
     let lastResponderIsCreator = true // Ticket starts with creator
 
