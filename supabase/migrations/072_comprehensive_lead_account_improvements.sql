@@ -256,7 +256,7 @@ SELECT
     -- Lead info
     cq.lead_id,
     l.company_name AS lead_company_name,
-    l.pic_name AS lead_pic_name,
+    l.contact_name AS lead_contact_name,
     l.triage_status AS lead_status,
     -- Opportunity info
     cq.opportunity_id,
