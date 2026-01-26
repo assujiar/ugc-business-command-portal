@@ -239,12 +239,12 @@ export function SLAComplianceSection({ profile }: SLAComplianceSectionProps) {
 
   // Get departments from metrics
   const departments = metrics?.department_metrics
-    ? [...new Set(metrics.department_metrics.map(m => m.department))]
+    ? Array.from(new Set(metrics.department_metrics.map(m => m.department)))
     : []
 
   // Get ticket types from metrics
   const ticketTypes = metrics?.company_metrics
-    ? [...new Set(metrics.company_metrics.map(m => m.ticket_type))]
+    ? Array.from(new Set(metrics.company_metrics.map(m => m.ticket_type)))
     : []
 
   if (loading) {
