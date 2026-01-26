@@ -31,6 +31,15 @@
 -- ============================================
 
 -- ============================================
+-- DROP OLD FUNCTION OVERLOADS (to avoid 42725 error)
+-- Previous migrations created rpc_ticket_request_adjustment with (UUID, TEXT) signature
+-- This migration replaces it with a new signature including rejection reason types
+-- ============================================
+
+-- Drop old function signatures from migrations 041 and 049
+DROP FUNCTION IF EXISTS public.rpc_ticket_request_adjustment(UUID, TEXT);
+
+-- ============================================
 -- 0. STATE MACHINE HELPER: Validate Quotation Transitions
 -- Centralizes all valid state transitions for quotations
 -- ============================================
