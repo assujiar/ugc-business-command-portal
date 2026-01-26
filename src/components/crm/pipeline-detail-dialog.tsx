@@ -20,6 +20,7 @@ import {
   APPROACH_METHODS,
   PIPELINE_STAGE_CONFIG,
 } from '@/lib/constants'
+import { getQuotationSequenceLabel } from '@/lib/utils/quotation-utils'
 import type { OpportunityStage, ApproachMethod, LostReason } from '@/types/database'
 import {
   CheckCircle2,
@@ -895,7 +896,7 @@ export function PipelineDetailDialog({
                                 <p className="text-sm font-medium">
                                   {quotation.quotation_number}
                                   <span className="text-xs text-muted-foreground ml-2">
-                                    (#{quotation.sequence_number || index + 1})
+                                    ({getQuotationSequenceLabel(quotation.sequence_number || index + 1)} Quotation)
                                   </span>
                                 </p>
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
