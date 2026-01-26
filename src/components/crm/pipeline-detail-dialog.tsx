@@ -20,6 +20,7 @@ import {
   APPROACH_METHODS,
   PIPELINE_STAGE_CONFIG,
 } from '@/lib/constants'
+import { getStaticMapUrl, getGoogleMapsUrl, isMapEnabled } from '@/lib/map'
 import { getQuotationSequenceLabel } from '@/lib/utils/quotation-utils'
 import type { OpportunityStage, ApproachMethod, LostReason } from '@/types/database'
 import {
@@ -1001,21 +1002,45 @@ export function PipelineDetailDialog({
                                     {item.locationLat && item.locationLng && (
                                       <div className="space-y-2">
                                         {/* Static Map Preview */}
-                                        <div className="relative rounded-lg overflow-hidden border">
-                                          <img
-                                            src={`https://staticmap.openstreetmap.de/staticmap.php?center=${item.locationLat},${item.locationLng}&zoom=16&size=400x200&maptype=mapnik&markers=${item.locationLat},${item.locationLng},red-pushpin`}
-                                            alt="Location Map"
-                                            className="w-full h-32 object-cover"
-                                            onError={(e) => {
-                                              // Fallback if static map fails
-                                              const target = e.target as HTMLImageElement
-                                              target.style.display = 'none'
-                                            }}
-                                          />
-                                        </div>
+                                        {(() => {
+                                          const mapUrl = getStaticMapUrl(item.locationLat, item.locationLng)
+                                          if (mapUrl) {
+                                            return (
+                                              <div className="relative rounded-lg overflow-hidden border">
+                                                <Image
+                                                  src={mapUrl}
+                                                  alt="Location Map"
+                                                  width={400}
+                                                  height={128}
+                                                  className="w-full h-32 object-cover"
+                                                  unoptimized
+                                                  onError={(e) => {
+                                                    // Hide the image container if map fails to load
+                                                    const target = e.target as HTMLImageElement
+                                                    const parent = target.parentElement
+                                                    if (parent) {
+                                                      parent.innerHTML = '<div class="h-32 flex items-center justify-center bg-muted"><p class="text-xs text-muted-foreground">Peta tidak tersedia</p></div>'
+                                                    }
+                                                  }}
+                                                />
+                                              </div>
+                                            )
+                                          }
+                                          // Fallback placeholder when no map provider is configured
+                                          return (
+                                            <div className="relative rounded-lg overflow-hidden border">
+                                              <div className="h-32 flex items-center justify-center bg-muted">
+                                                <div className="text-center">
+                                                  <MapPin className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
+                                                  <p className="text-xs text-muted-foreground">Peta tidak tersedia</p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )
+                                        })()}
                                         {/* View Location Button */}
                                         <a
-                                          href={`https://www.google.com/maps?q=${item.locationLat},${item.locationLng}`}
+                                          href={getGoogleMapsUrl(item.locationLat, item.locationLng)}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="inline-flex items-center gap-2 text-xs text-brand hover:underline"
