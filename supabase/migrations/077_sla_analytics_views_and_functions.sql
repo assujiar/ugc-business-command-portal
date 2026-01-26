@@ -49,7 +49,7 @@ WITH user_creator_metrics AS (
     -- Metrics for tickets created by each user
     SELECT
         t.created_by as user_id,
-        t.ticket_type,
+        t.ticket_type::TEXT as ticket_type,
         COUNT(DISTINCT t.id) as tickets_created,
         AVG(trm.creator_avg_business_response_seconds) as avg_stage_response_seconds,
         COUNT(DISTINCT t.id) FILTER (WHERE trm.creator_avg_business_response_seconds <= 3600) as sla_stage_response_met,
@@ -57,13 +57,13 @@ WITH user_creator_metrics AS (
     FROM public.tickets t
     LEFT JOIN public.ticket_response_metrics trm ON trm.ticket_id = t.id
     WHERE t.created_by IS NOT NULL
-    GROUP BY t.created_by, t.ticket_type
+    GROUP BY t.created_by, t.ticket_type::TEXT
 ),
 user_assignee_metrics AS (
     -- Metrics for tickets assigned to each user
     SELECT
         t.assigned_to as user_id,
-        t.ticket_type,
+        t.ticket_type::TEXT as ticket_type,
         COUNT(DISTINCT t.id) as tickets_assigned,
         AVG(trm.assignee_first_response_business_seconds) as avg_first_response_seconds,
         AVG(trm.assignee_avg_business_response_seconds) as avg_stage_response_seconds,
@@ -76,13 +76,13 @@ user_assignee_metrics AS (
     FROM public.tickets t
     LEFT JOIN public.ticket_response_metrics trm ON trm.ticket_id = t.id
     WHERE t.assigned_to IS NOT NULL
-    GROUP BY t.assigned_to, t.ticket_type
+    GROUP BY t.assigned_to, t.ticket_type::TEXT
 ),
 ops_quote_metrics AS (
     -- First quote metrics for Ops users
     SELECT
         trq.created_by as user_id,
-        t.ticket_type,
+        t.ticket_type::TEXT as ticket_type,
         COUNT(DISTINCT trq.id) as total_quotes,
         AVG(EXTRACT(EPOCH FROM (trq.created_at - t.created_at))) as avg_first_quote_seconds,
         COUNT(DISTINCT trq.id) FILTER (
@@ -94,7 +94,7 @@ ops_quote_metrics AS (
     FROM public.ticket_rate_quotes trq
     JOIN public.tickets t ON t.id = trq.ticket_id
     WHERE trq.created_by IS NOT NULL
-    GROUP BY trq.created_by, t.ticket_type
+    GROUP BY trq.created_by, t.ticket_type::TEXT
 ),
 ops_cost_acceptance AS (
     -- Operational cost acceptance rate
@@ -112,7 +112,7 @@ SELECT
     p.name as user_name,
     p.role as user_role,
     public.get_role_category(p.role::TEXT) as role_category,
-    COALESCE(ucm.ticket_type, uam.ticket_type, oqm.ticket_type, 'All') as ticket_type,
+    COALESCE(ucm.ticket_type, uam.ticket_type, oqm.ticket_type) as ticket_type,
 
     -- Creator metrics
     COALESCE(ucm.tickets_created, 0) as tickets_created,
@@ -390,8 +390,8 @@ BEGIN
             t.id,
             t.ticket_code,
             t.subject,
-            t.status,
-            t.ticket_type,
+            t.status::TEXT as status,
+            t.ticket_type::TEXT as ticket_type,
             t.created_at,
             t.resolved_at,
             trm.assignee_first_response_business_seconds,
@@ -505,8 +505,8 @@ COMMENT ON VIEW public.vw_user_sla_leaderboard IS 'User leaderboard ranked by SL
 
 CREATE OR REPLACE VIEW public.vw_ticket_status_distribution AS
 SELECT
-    t.status,
-    t.ticket_type,
+    t.status::TEXT as status,
+    t.ticket_type::TEXT as ticket_type,
     COUNT(*) as count,
     ROUND(COUNT(*)::NUMERIC / NULLIF(SUM(COUNT(*)) OVER (PARTITION BY t.ticket_type), 0) * 100, 2) as percentage
 FROM public.tickets t
