@@ -6,6 +6,14 @@ const nextConfig = {
         protocol: 'https',
         hostname: '*.supabase.co',
       },
+      {
+        protocol: 'https',
+        hostname: 'api.mapbox.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'tile.openstreetmap.org',
+      },
     ],
   },
 }
