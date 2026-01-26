@@ -85,8 +85,8 @@ UPDATE leads SET disqualified_reason = 'Company too small for minimum order quan
 
 -- First, create some qualified leads that were handed over
 INSERT INTO leads (lead_id, company_name, contact_name, contact_email, contact_phone, source, triage_status, notes, handover_eligible, marketing_owner_user_id, created_by) VALUES
-('LEAD20240108V4W5X6', 'PT Export Prima', 'Dian Kusuma', 'dian@exportprima.co.id', '+6281234500008', 'Website Form', 'Handed Over', 'Regular export shipments needed', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
-('LEAD20240109Y7Z8A9', 'PT Import Sejahtera', 'Ferry Gunawan', 'ferry@importsejahtera.co.id', '+6281234500009', 'Referral', 'Handed Over', 'High volume imports from China', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8')
+('LEAD20240108V4W5X6', 'PT Export Prima', 'Dian Kusuma', 'dian@exportprima.co.id', '+6281234500008', 'Website Form', 'Assign to Sales', 'Regular export shipments needed', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8'),
+('LEAD20240109Y7Z8A9', 'PT Import Sejahtera', 'Ferry Gunawan', 'ferry@importsejahtera.co.id', '+6281234500009', 'Referral', 'Assign to Sales', 'High volume imports from China', true, '6ce3f3e0-3e22-4a12-97c2-abd7152057f8', '6ce3f3e0-3e22-4a12-97c2-abd7152057f8')
 ON CONFLICT (lead_id) DO NOTHING;
 
 -- Add to handover pool
@@ -170,7 +170,7 @@ END $$;
 -- AUDIT LOGS (Sample entries)
 -- =====================================================
 INSERT INTO audit_logs (user_id, module, action, record_id, record_type, after_data) VALUES
-('6ce3f3e0-3e22-4a12-97c2-abd7152057f8', 'leads', 'handover', 'LEAD20240108V4W5X6', 'lead', '{"from_status": "Qualified", "to_status": "Handed Over"}'),
+('6ce3f3e0-3e22-4a12-97c2-abd7152057f8', 'leads', 'handover', 'LEAD20240108V4W5X6', 'lead', '{"from_status": "Qualified", "to_status": "Assign to Sales"}'),
 ('3a673e5b-c28f-45fd-98f5-adf04a1dacc0', 'opportunities', 'stage_change', 'OPP20240101A1B2C3', 'opportunity', '{"from_stage": "Quote Sent", "to_stage": "Negotiation"}'),
 ('3a673e5b-c28f-45fd-98f5-adf04a1dacc0', 'crm', 'create', 'ACC20240101A1B2C3', 'account', '{"company_name": "PT Maju Bersama"}')
 ON CONFLICT DO NOTHING;

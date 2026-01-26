@@ -27,6 +27,24 @@ export function isMACX(role: UserRole | null | undefined): boolean {
   return role === 'MACX'
 }
 
+// Check if user is Sales Manager (can see all sales team data)
+export function isSalesManager(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return role === 'sales manager'
+}
+
+// Check if user is Marketing Manager (can see all marketing team data)
+export function isMarketingManager(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return role === 'Marketing Manager'
+}
+
+// Check if user is Marketing Manager or MACX (both can see all marketing data)
+export function isMarketingManagerOrMACX(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return role === 'Marketing Manager' || role === 'MACX'
+}
+
 // Marketing roles for department check (excluding admin roles)
 const MARKETING_DEPARTMENT_ROLES: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
 

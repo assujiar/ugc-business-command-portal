@@ -48,7 +48,7 @@
 ## 3. Database Schema (SOURCE: PDF Section 6, Pages 21-28)
 
 ### Enums Required:
-- `lead_triage_status`: New, In Review, Qualified, Nurture, Disqualified, Handed Over (Page 21)
+- `lead_triage_status`: New, In Review, Qualified, Nurture, Disqualified, Assign to Sales (Page 21)
 - `opportunity_stage`: Prospecting, Discovery, Quote Sent, Negotiation, Closed Won, Closed Lost (Page 7)
 - `activity_type_v2`: Call, Email, Meeting, Task, Note (Page 24)
 - `activity_status`: Planned, Done, Cancelled (Page 24)
@@ -87,11 +87,11 @@
 ### Lead Triage State Machine (Page 4-5):
 ```
 New → In Review (marketing begins triage)
-In Review → Qualified (requires contact info validation) → AUTO Handover
+In Review → Qualified (requires contact info validation)
 In Review → Nurture (not ready, long-term follow-up)
 In Review → Disqualified (requires reason)
-Qualified → Handed Over (automatic, creates pool entry)
-Handed Over → Claimed (sales takes ownership)
+Qualified → Assign to Sales (manual, creates pool entry with potential revenue required)
+Assign to Sales → Claimed (sales takes ownership)
 Claimed → Converted (creates opportunity + account)
 ```
 
@@ -119,7 +119,7 @@ Claimed → Converted (creates opportunity + account)
 
 ### Lead Policies:
 - Marketing: See New/In Review/Nurture/Disqualified in their department
-- Marketing: Cannot edit after Handed Over
+- Marketing: Cannot edit after Assign to Sales
 - Sales: See handover pool + assigned leads
 - Sales Manager: Read team's data
 - Director/Super Admin: Full read access
