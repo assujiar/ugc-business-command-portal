@@ -456,13 +456,9 @@ export async function sendNewTicketNotification(
   const deptUsers = await getUsersByDepartmentRole(targetDept)
   const adminUsers = await getAdminUsers()
 
-  const toEmails = [...new Set([
-    ...deptUsers.map(u => u.email),
-  ])]
+  const toEmails = Array.from(new Set(deptUsers.map(u => u.email)))
 
-  const ccEmails = [...new Set([
-    ...adminUsers.map(u => u.email),
-  ])]
+  const ccEmails = Array.from(new Set(adminUsers.map(u => u.email)))
 
   if (toEmails.length === 0) {
     return { success: false, error: 'No recipients found' }

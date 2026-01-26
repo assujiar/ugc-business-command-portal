@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
 
     const { data: pipelineThisMonthData } = await pipelineThisMonthQuery
     const pipelineThisMonth = (pipelineThisMonthData || [])
-      .reduce((sum, opp) => sum + (opp.estimated_value || 0), 0)
+      .reduce((sum: number, opp: { estimated_value: number | null }) => sum + (opp.estimated_value || 0), 0)
 
     // Pipeline last month
     let pipelineLastMonthQuery = client
@@ -275,7 +275,7 @@ export async function GET(request: NextRequest) {
 
     const { data: pipelineLastMonthData } = await pipelineLastMonthQuery
     const pipelineLastMonth = (pipelineLastMonthData || [])
-      .reduce((sum, opp) => sum + (opp.estimated_value || 0), 0)
+      .reduce((sum: number, opp: { estimated_value: number | null }) => sum + (opp.estimated_value || 0), 0)
 
     // Calculate conversion rate
     const conversionRate = totalLeads && totalLeads > 0
