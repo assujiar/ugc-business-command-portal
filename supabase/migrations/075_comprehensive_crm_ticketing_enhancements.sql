@@ -295,8 +295,15 @@ SELECT
         THEN tr.responded_at END) AS first_response_at,
     MIN(CASE WHEN tr.responder_role IN ('assignee', 'ops', 'admin')
         THEN tr.response_time_seconds END) AS first_response_seconds,
-    MIN(CASE WHEN tr.responder_role IN ('assignee', 'ops', 'admin')
-        THEN tr.sla_met END) AS first_response_sla_met,
+    -- Get sla_met from the row with earliest response (correlated subquery)
+    (
+        SELECT tr2.sla_met
+        FROM public.ticket_responses tr2
+        WHERE tr2.ticket_id = t.id
+        AND tr2.responder_role IN ('assignee', 'ops', 'admin')
+        ORDER BY tr2.responded_at ASC
+        LIMIT 1
+    ) AS first_response_sla_met,
     -- Average response times by role
     AVG(CASE WHEN tr.responder_role = 'creator'
         THEN tr.response_time_seconds END)::INTEGER AS avg_creator_response_seconds,
@@ -311,6 +318,10 @@ LEFT JOIN public.ticket_responses tr ON t.id = tr.ticket_id
 GROUP BY t.id, t.ticket_code, t.ticket_type, t.department, t.origin_dept, t.target_dept, t.status, t.created_at;
 
 COMMENT ON VIEW public.v_sla_metrics IS 'SLA metrics view with response times by stage and responder role';
+
+-- Create composite index for correlated subquery performance
+CREATE INDEX IF NOT EXISTS idx_ticket_responses_ticket_responded_at
+    ON public.ticket_responses(ticket_id, responded_at);
 
 -- ============================================
 -- 8. HELPER FUNCTION FOR MARKETING VISIBILITY
