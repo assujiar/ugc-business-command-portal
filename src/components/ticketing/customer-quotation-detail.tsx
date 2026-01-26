@@ -65,6 +65,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import type { Database } from '@/types/database'
+import { QUOTATION_STATUS, QUOTATION_STATUS_LABELS } from '@/lib/constants'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -73,13 +74,13 @@ interface CustomerQuotationDetailProps {
   profile: Profile
 }
 
-// Status badge variants - only valid customer_quotation_status enum values
+// Status badge variants - using SSOT constants for customer_quotation_status enum values
 const statusVariants: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string; icon: React.ReactNode }> = {
-  draft: { variant: 'outline', label: 'Draft', icon: <FileText className="h-3 w-3" /> },
-  sent: { variant: 'default', label: 'Sent', icon: <Send className="h-3 w-3" /> },
-  accepted: { variant: 'secondary', label: 'Accepted', icon: <CheckCircle2 className="h-3 w-3" /> },
-  rejected: { variant: 'destructive', label: 'Rejected', icon: <XCircle className="h-3 w-3" /> },
-  expired: { variant: 'destructive', label: 'Expired', icon: <Clock className="h-3 w-3" /> },
+  [QUOTATION_STATUS.DRAFT]: { variant: 'outline', label: QUOTATION_STATUS_LABELS[QUOTATION_STATUS.DRAFT], icon: <FileText className="h-3 w-3" /> },
+  [QUOTATION_STATUS.SENT]: { variant: 'default', label: QUOTATION_STATUS_LABELS[QUOTATION_STATUS.SENT], icon: <Send className="h-3 w-3" /> },
+  [QUOTATION_STATUS.ACCEPTED]: { variant: 'secondary', label: QUOTATION_STATUS_LABELS[QUOTATION_STATUS.ACCEPTED], icon: <CheckCircle2 className="h-3 w-3" /> },
+  [QUOTATION_STATUS.REJECTED]: { variant: 'destructive', label: QUOTATION_STATUS_LABELS[QUOTATION_STATUS.REJECTED], icon: <XCircle className="h-3 w-3" /> },
+  [QUOTATION_STATUS.EXPIRED]: { variant: 'destructive', label: QUOTATION_STATUS_LABELS[QUOTATION_STATUS.EXPIRED], icon: <Clock className="h-3 w-3" /> },
 }
 
 // Rejection reason options
@@ -117,6 +118,8 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
   const [rejectCompetitorAmount, setRejectCompetitorAmount] = useState('')
   const [rejectCustomerBudget, setRejectCustomerBudget] = useState('')
   const [rejectNotes, setRejectNotes] = useState('')
+  const [rejectFieldErrors, setRejectFieldErrors] = useState<Record<string, string>>({})
+  const [rejectModalError, setRejectModalError] = useState<string | null>(null)
 
   // Fetch quotation
   const fetchQuotation = async () => {
@@ -259,7 +262,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
     }
   }
 
-  // Send via WhatsApp
+  // Send via WhatsApp (atomic - updates quotation + opportunity + ticket)
   const handleSendWhatsApp = async () => {
     setActionLoading(true)
     try {
@@ -274,7 +277,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
         await navigator.clipboard.writeText(result.data.whatsapp_text)
         toast({
           title: 'WhatsApp Text Copied',
-          description: 'Text copied to clipboard. Opening WhatsApp...',
+          description: 'Text copied to clipboard. Pipeline moved to Quote Sent.',
         })
 
         if (result.data.whatsapp_url) {
@@ -283,7 +286,28 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
 
         fetchQuotation()
       } else {
-        throw new Error(result.error || 'Failed to send')
+        // Handle specific error codes with correlation_id
+        const correlationMsg = result.correlation_id ? ` (ID: ${result.correlation_id})` : ''
+        if (response.status === 403) {
+          toast({
+            title: 'Access Denied',
+            description: `You do not have permission to send this quotation.${correlationMsg}`,
+            variant: 'destructive',
+          })
+        } else if (response.status === 409) {
+          toast({
+            title: 'Conflict',
+            description: `${result.error || 'State conflict'}. Please refresh and try again.${correlationMsg}`,
+            variant: 'destructive',
+          })
+          fetchQuotation()
+        } else {
+          toast({
+            title: 'Error',
+            description: `${result.error || 'Failed to send'}${correlationMsg}`,
+            variant: 'destructive',
+          })
+        }
       }
     } catch (error: any) {
       toast({
@@ -296,7 +320,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
     }
   }
 
-  // Send via Email (SMTP)
+  // Send via Email (SMTP) (atomic - updates quotation + opportunity + ticket)
   const handleSendEmail = async (isResend: boolean = false) => {
     setActionLoading(true)
     try {
@@ -311,7 +335,9 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
         // Email sent successfully via SMTP
         toast({
           title: isResend ? 'Email Resent Successfully' : 'Email Sent Successfully',
-          description: `Quotation has been sent to ${result.data.recipient_email}`,
+          description: isResend
+            ? `Quotation has been resent to ${result.data.recipient_email}`
+            : `Quotation sent to ${result.data.recipient_email}. Pipeline moved to Quote Sent.`,
         })
 
         // Always refresh quotation data to get updated status
@@ -335,7 +361,28 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
             variant: 'destructive',
           })
         } else {
-          throw new Error(result.error || 'Failed to send')
+          // Handle specific error codes with correlation_id
+          const correlationMsg = result.correlation_id ? ` (ID: ${result.correlation_id})` : ''
+          if (response.status === 403) {
+            toast({
+              title: 'Access Denied',
+              description: `You do not have permission to send this quotation.${correlationMsg}`,
+              variant: 'destructive',
+            })
+          } else if (response.status === 409) {
+            toast({
+              title: 'Conflict',
+              description: `${result.error || 'State conflict'}. Please refresh and try again.${correlationMsg}`,
+              variant: 'destructive',
+            })
+            fetchQuotation()
+          } else {
+            toast({
+              title: 'Error',
+              description: `${result.error || 'Failed to send'}${correlationMsg}`,
+              variant: 'destructive',
+            })
+          }
         }
       }
     } catch (error: any) {
@@ -384,30 +431,50 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
     }
   }
 
-  // Update status
-  const updateStatus = async (newStatus: string) => {
+  // Accept quotation via dedicated endpoint (atomic - updates quotation + opportunity + ticket)
+  const handleAcceptQuotation = async () => {
     setActionLoading(true)
     try {
-      const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}/accept`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
       })
       const result = await response.json()
 
       if (result.success) {
         toast({
-          title: 'Success',
-          description: `Quotation marked as ${newStatus}`,
+          title: 'Quotation Accepted',
+          description: 'Quotation marked as accepted. Pipeline moved to Closed Won.',
         })
         fetchQuotation()
       } else {
-        throw new Error(result.error || 'Failed to update status')
+        // Handle specific error codes
+        const correlationMsg = result.correlation_id ? ` (ID: ${result.correlation_id})` : ''
+        if (response.status === 403) {
+          toast({
+            title: 'Access Denied',
+            description: `You do not have permission to accept this quotation.${correlationMsg}`,
+            variant: 'destructive',
+          })
+        } else if (response.status === 409) {
+          toast({
+            title: 'Conflict',
+            description: `${result.error || 'State conflict detected'}. Please refresh and try again.${correlationMsg}`,
+            variant: 'destructive',
+          })
+          fetchQuotation() // Auto-refresh on conflict
+        } else {
+          toast({
+            title: 'Error',
+            description: `${result.error || 'Failed to accept quotation'}${correlationMsg}`,
+            variant: 'destructive',
+          })
+        }
       }
     } catch (error: any) {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to update status',
+        description: error.message || 'Failed to accept quotation',
         variant: 'destructive',
       })
     } finally {
@@ -415,14 +482,35 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
     }
   }
 
-  // Reject quotation with reason
+  // Reject quotation with reason (atomic - updates quotation + opportunity + ticket)
   const handleRejectWithReason = async () => {
+    // Clear previous errors
+    setRejectFieldErrors({})
+    setRejectModalError(null)
+
+    // Client-side validation
+    const fieldErrors: Record<string, string> = {}
+
     if (!rejectReason) {
-      toast({
-        title: 'Error',
-        description: 'Please select a rejection reason',
-        variant: 'destructive',
-      })
+      fieldErrors.reason_type = 'Please select a rejection reason'
+    }
+
+    // Additional client-side validation for specific reason types
+    if (rejectReason === 'kompetitor_lebih_murah' && !rejectCompetitorName && !rejectCompetitorAmount) {
+      fieldErrors.competitor_amount = 'Competitor name or amount is required for this reason'
+    }
+
+    if (rejectReason === 'budget_customer_tidak_cukup' && !rejectCustomerBudget) {
+      fieldErrors.customer_budget = 'Customer budget is required for this reason'
+    }
+
+    if (rejectReason === 'tarif_tidak_masuk' && !rejectCompetitorAmount && !rejectCustomerBudget) {
+      fieldErrors.competitor_amount = 'Either competitor amount or customer budget is required'
+    }
+
+    // If client-side validation fails, set field errors and return
+    if (Object.keys(fieldErrors).length > 0) {
+      setRejectFieldErrors(fieldErrors)
       return
     }
 
@@ -444,18 +532,51 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
       if (result.success) {
         toast({
           title: 'Quotation Rejected',
-          description: 'Quotation has been marked as rejected and the pipeline has been updated.',
+          description: 'Quotation rejected. Pipeline moved to Negotiation, ticket moved to need_adjustment.',
         })
         setShowRejectModal(false)
-        // Reset form
+        // Reset form and errors
         setRejectReason('')
         setRejectCompetitorName('')
         setRejectCompetitorAmount('')
         setRejectCustomerBudget('')
         setRejectNotes('')
+        setRejectFieldErrors({})
+        setRejectModalError(null)
         fetchQuotation()
       } else {
-        throw new Error(result.error || 'Failed to reject quotation')
+        // Handle specific error codes with correlation_id
+        const correlationMsg = result.correlation_id ? ` (ID: ${result.correlation_id})` : ''
+        if (response.status === 403) {
+          setRejectModalError(`Access denied: You do not have permission to reject this quotation.${correlationMsg}`)
+          toast({
+            title: 'Access Denied',
+            description: `You do not have permission to reject this quotation.${correlationMsg}`,
+            variant: 'destructive',
+          })
+        } else if (response.status === 409) {
+          setRejectModalError(`State conflict: ${result.error || 'Quotation state changed'}. Please close and try again.${correlationMsg}`)
+          toast({
+            title: 'Conflict',
+            description: `${result.error || 'State conflict detected'}. Please refresh and try again.${correlationMsg}`,
+            variant: 'destructive',
+          })
+          // Don't auto-close on conflict - let user see the error
+        } else if (response.status === 422 && result.field_errors) {
+          // Handle field-level validation errors - display in modal fields
+          setRejectFieldErrors(result.field_errors)
+          setRejectModalError(`Please fix the validation errors above.${correlationMsg}`)
+        } else if (response.status === 422) {
+          // General validation error without field-level details
+          setRejectModalError(`${result.error || 'Validation error'}${correlationMsg}`)
+        } else {
+          setRejectModalError(`${result.error || 'Failed to reject quotation'}${correlationMsg}`)
+          toast({
+            title: 'Error',
+            description: `${result.error || 'Failed to reject quotation'}${correlationMsg}`,
+            variant: 'destructive',
+          })
+        }
       }
     } catch (error: any) {
       toast({
@@ -577,7 +698,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 {statusVariants[quotation.status]?.icon}
                 {statusVariants[quotation.status]?.label || quotation.status}
               </Badge>
-              {isExpired(quotation.valid_until) && quotation.status !== 'accepted' && (
+              {isExpired(quotation.valid_until) && quotation.status !== QUOTATION_STATUS.ACCEPTED && (
                 <Badge variant="destructive">Expired</Badge>
               )}
             </div>
@@ -604,7 +725,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
             <Download className="mr-2 h-4 w-4" />
             Download PDF
           </Button>
-          {quotation.status === 'draft' && (
+          {quotation.status === QUOTATION_STATUS.DRAFT && (
             <>
               <Button
                 variant="outline"
@@ -619,7 +740,11 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 onClick={handleSendWhatsApp}
                 disabled={actionLoading}
               >
-                <MessageSquare className="mr-2 h-4 w-4" />
+                {actionLoading ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                )}
                 WhatsApp
               </Button>
               <Button
@@ -627,7 +752,11 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 onClick={() => handleSendEmail(false)}
                 disabled={actionLoading}
               >
-                <Mail className="mr-2 h-4 w-4" />
+                {actionLoading ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 h-4 w-4" />
+                )}
                 Email
               </Button>
               <AlertDialog>
@@ -652,14 +781,18 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
               </AlertDialog>
             </>
           )}
-          {quotation.status === 'sent' && (
+          {quotation.status === QUOTATION_STATUS.SENT && (
             <>
               <Button
                 variant="outline"
                 onClick={handleResendWhatsApp}
                 disabled={actionLoading}
               >
-                <MessageSquare className="mr-2 h-4 w-4" />
+                {actionLoading ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                )}
                 Resend WhatsApp
               </Button>
               <Button
@@ -667,16 +800,24 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 onClick={() => handleSendEmail(true)}
                 disabled={actionLoading}
               >
-                <Mail className="mr-2 h-4 w-4" />
+                {actionLoading ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 h-4 w-4" />
+                )}
                 Resend Email
               </Button>
               <Button
                 variant="outline"
-                onClick={() => updateStatus('accepted')}
+                onClick={handleAcceptQuotation}
                 disabled={actionLoading}
               >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Mark Accepted
+                {actionLoading ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                )}
+                {actionLoading ? 'Processing...' : 'Mark Accepted'}
               </Button>
               <Button
                 variant="outline"
@@ -688,7 +829,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
               </Button>
             </>
           )}
-          {quotation.status === 'rejected' && (
+          {quotation.status === QUOTATION_STATUS.REJECTED && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="default" disabled={actionLoading}>
@@ -1182,7 +1323,14 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
       </div>
 
       {/* Rejection Reason Modal */}
-      <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
+      <Dialog open={showRejectModal} onOpenChange={(open) => {
+        setShowRejectModal(open)
+        if (!open) {
+          // Clear errors when closing
+          setRejectFieldErrors({})
+          setRejectModalError(null)
+        }
+      }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Reject Quotation</DialogTitle>
@@ -1190,11 +1338,27 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
               Please provide a reason for rejecting this quotation. This information will be used for analytics and improvement.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Modal-level error banner */}
+          {rejectModalError && (
+            <div className="bg-destructive/10 border border-destructive/20 text-destructive rounded-md p-3 text-sm">
+              {rejectModalError}
+            </div>
+          )}
+
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="reject-reason">Rejection Reason *</Label>
-              <Select value={rejectReason} onValueChange={setRejectReason}>
-                <SelectTrigger id="reject-reason">
+              <Label htmlFor="reject-reason" className={rejectFieldErrors.reason_type ? 'text-destructive' : ''}>
+                Rejection Reason *
+              </Label>
+              <Select value={rejectReason} onValueChange={(value) => {
+                setRejectReason(value)
+                // Clear field error when user selects
+                if (rejectFieldErrors.reason_type) {
+                  setRejectFieldErrors(prev => ({ ...prev, reason_type: '' }))
+                }
+              }}>
+                <SelectTrigger id="reject-reason" className={rejectFieldErrors.reason_type ? 'border-destructive' : ''}>
                   <SelectValue placeholder="Select a reason" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1205,6 +1369,9 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                   ))}
                 </SelectContent>
               </Select>
+              {rejectFieldErrors.reason_type && (
+                <p className="text-xs text-destructive">{rejectFieldErrors.reason_type}</p>
+              )}
             </div>
 
             {rejectReason === 'kompetitor_lebih_murah' && (
@@ -1215,33 +1382,116 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                     id="competitor-name"
                     placeholder="Enter competitor name"
                     value={rejectCompetitorName}
-                    onChange={(e) => setRejectCompetitorName(e.target.value)}
+                    onChange={(e) => {
+                      setRejectCompetitorName(e.target.value)
+                      if (rejectFieldErrors.competitor_name) {
+                        setRejectFieldErrors(prev => ({ ...prev, competitor_name: '' }))
+                      }
+                    }}
+                    className={rejectFieldErrors.competitor_name ? 'border-destructive' : ''}
                   />
+                  {rejectFieldErrors.competitor_name && (
+                    <p className="text-xs text-destructive">{rejectFieldErrors.competitor_name}</p>
+                  )}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="competitor-amount">Competitor Price (IDR)</Label>
+                  <Label htmlFor="competitor-amount" className={rejectFieldErrors.competitor_amount ? 'text-destructive' : ''}>
+                    Competitor Price (IDR) *
+                  </Label>
                   <Input
                     id="competitor-amount"
                     type="number"
                     placeholder="Enter competitor price"
                     value={rejectCompetitorAmount}
-                    onChange={(e) => setRejectCompetitorAmount(e.target.value)}
+                    onChange={(e) => {
+                      setRejectCompetitorAmount(e.target.value)
+                      if (rejectFieldErrors.competitor_amount) {
+                        setRejectFieldErrors(prev => ({ ...prev, competitor_amount: '' }))
+                      }
+                    }}
+                    className={rejectFieldErrors.competitor_amount ? 'border-destructive' : ''}
                   />
+                  {rejectFieldErrors.competitor_amount ? (
+                    <p className="text-xs text-destructive">{rejectFieldErrors.competitor_amount}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">At least competitor name or price is required</p>
+                  )}
                 </div>
               </>
             )}
 
             {rejectReason === 'budget_customer_tidak_cukup' && (
               <div className="grid gap-2">
-                <Label htmlFor="customer-budget">Customer Budget (IDR)</Label>
+                <Label htmlFor="customer-budget" className={rejectFieldErrors.customer_budget ? 'text-destructive' : ''}>
+                  Customer Budget (IDR) *
+                </Label>
                 <Input
                   id="customer-budget"
                   type="number"
                   placeholder="Enter customer budget"
                   value={rejectCustomerBudget}
-                  onChange={(e) => setRejectCustomerBudget(e.target.value)}
+                  onChange={(e) => {
+                    setRejectCustomerBudget(e.target.value)
+                    if (rejectFieldErrors.customer_budget) {
+                      setRejectFieldErrors(prev => ({ ...prev, customer_budget: '' }))
+                    }
+                  }}
+                  className={rejectFieldErrors.customer_budget ? 'border-destructive' : ''}
                 />
+                {rejectFieldErrors.customer_budget ? (
+                  <p className="text-xs text-destructive">{rejectFieldErrors.customer_budget}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Required for this reason</p>
+                )}
               </div>
+            )}
+
+            {rejectReason === 'tarif_tidak_masuk' && (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="competitor-amount-tarif" className={rejectFieldErrors.competitor_amount ? 'text-destructive' : ''}>
+                    Competitor Price (IDR)
+                  </Label>
+                  <Input
+                    id="competitor-amount-tarif"
+                    type="number"
+                    placeholder="Enter competitor price"
+                    value={rejectCompetitorAmount}
+                    onChange={(e) => {
+                      setRejectCompetitorAmount(e.target.value)
+                      if (rejectFieldErrors.competitor_amount) {
+                        setRejectFieldErrors(prev => ({ ...prev, competitor_amount: '' }))
+                      }
+                    }}
+                    className={rejectFieldErrors.competitor_amount ? 'border-destructive' : ''}
+                  />
+                  {rejectFieldErrors.competitor_amount && (
+                    <p className="text-xs text-destructive">{rejectFieldErrors.competitor_amount}</p>
+                  )}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="customer-budget-tarif" className={rejectFieldErrors.customer_budget ? 'text-destructive' : ''}>
+                    Customer Budget (IDR)
+                  </Label>
+                  <Input
+                    id="customer-budget-tarif"
+                    type="number"
+                    placeholder="Enter customer budget"
+                    value={rejectCustomerBudget}
+                    onChange={(e) => {
+                      setRejectCustomerBudget(e.target.value)
+                      if (rejectFieldErrors.customer_budget) {
+                        setRejectFieldErrors(prev => ({ ...prev, customer_budget: '' }))
+                      }
+                    }}
+                    className={rejectFieldErrors.customer_budget ? 'border-destructive' : ''}
+                  />
+                  {rejectFieldErrors.customer_budget && (
+                    <p className="text-xs text-destructive">{rejectFieldErrors.customer_budget}</p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Either competitor price or customer budget is required</p>
+              </>
             )}
 
             <div className="grid gap-2">
@@ -1256,7 +1506,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRejectModal(false)}>
+            <Button variant="outline" onClick={() => setShowRejectModal(false)} disabled={actionLoading}>
               Cancel
             </Button>
             <Button
@@ -1264,7 +1514,14 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
               onClick={handleRejectWithReason}
               disabled={actionLoading || !rejectReason}
             >
-              {actionLoading ? 'Rejecting...' : 'Reject Quotation'}
+              {actionLoading ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Rejecting...
+                </>
+              ) : (
+                'Reject Quotation'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
