@@ -90,7 +90,7 @@ This document provides a comprehensive QA testing guide for the CRM module. All 
 | Step | Action | Expected Result |
 |------|--------|-----------------|
 | 1 | Select lead in "In Review" status | Lead selected |
-| 2 | Click Actions > Qualify & Handover | Status changes to "Handed Over" |
+| 2 | Click Actions > Qualify & Handover | Status changes to "Assign to Sales" |
 | 3 | Check Sales Inbox | Lead appears in handover pool |
 | 4 | Verify audit log | Action logged with timestamp |
 

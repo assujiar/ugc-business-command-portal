@@ -32,8 +32,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import { LEAD_STATUS_ACTIONS } from '@/lib/constants'
+import { LEAD_STATUS_ACTIONS, LEAD_SOURCES } from '@/lib/constants'
 import type { LeadTriageStatus, UserRole, LeadSource } from '@/types/database'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { LeadDetailDialog } from '@/components/crm/lead-detail-dialog'
 import { PipelineDetailDialog } from '@/components/crm/pipeline-detail-dialog'
 import {
@@ -131,6 +138,7 @@ interface LeadManagementDashboardProps {
 }
 
 type StatusFilter = 'all' | LeadTriageStatus
+type SourceFilter = 'all' | LeadSource
 
 const STATUS_CARDS: { key: keyof StatusCounts; status: StatusFilter; label: string; icon: typeof Inbox; color: string }[] = [
   { key: 'total', status: 'all', label: 'Total Leads', icon: Inbox, color: 'bg-blue-500' },
@@ -151,6 +159,7 @@ export function LeadManagementDashboard({
 }: LeadManagementDashboardProps) {
   const router = useRouter()
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter>('all')
+  const [selectedSource, setSelectedSource] = useState<SourceFilter>('all')
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const [actionDialog, setActionDialog] = useState<{
     open: boolean
@@ -205,10 +214,12 @@ export function LeadManagementDashboard({
     }
   }, [])
 
-  // Filter leads based on selected status
-  const filteredLeads = selectedStatus === 'all'
-    ? leads
-    : leads.filter(lead => lead.triage_status === selectedStatus)
+  // Filter leads based on selected status and source
+  const filteredLeads = leads.filter(lead => {
+    const statusMatch = selectedStatus === 'all' || lead.triage_status === selectedStatus
+    const sourceMatch = selectedSource === 'all' || lead.source === selectedSource
+    return statusMatch && sourceMatch
+  })
 
   const handleStatusChange = async () => {
     if (!actionDialog.lead || !actionDialog.targetStatus) return
@@ -328,12 +339,34 @@ export function LeadManagementDashboard({
       {/* Leads Table */}
       <Card>
         <CardHeader className="pb-3 lg:pb-6">
-          <CardTitle className="text-base lg:text-lg flex items-center justify-between">
-            <span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle className="text-base lg:text-lg">
               {selectedStatus === 'all' ? 'All Leads' : `${selectedStatus} Leads`}
+              {selectedSource !== 'all' && ` from ${selectedSource}`}
               {' '}({filteredLeads.length})
-            </span>
-          </CardTitle>
+            </CardTitle>
+
+            {/* Source Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Source:</span>
+              <Select
+                value={selectedSource}
+                onValueChange={(value) => setSelectedSource(value as SourceFilter)}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="All Sources" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  {LEAD_SOURCES.map((source) => (
+                    <SelectItem key={source} value={source}>
+                      {source}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="px-0 lg:px-6">
           {filteredLeads.length > 0 ? (
