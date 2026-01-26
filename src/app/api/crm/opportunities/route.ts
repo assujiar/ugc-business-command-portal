@@ -22,6 +22,9 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const stage = searchParams.get('stage')
     const owner = searchParams.get('owner')
+    const originalCreator = searchParams.get('original_creator_id')  // For marketing visibility filter
+    const sourceLeadId = searchParams.get('source_lead_id')  // For listing opportunities from a lead
+    const accountId = searchParams.get('account_id')  // For listing opportunities from an account
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
@@ -37,6 +40,21 @@ export async function GET(request: NextRequest) {
 
     if (owner) {
       query = query.eq('owner_user_id', owner)
+    }
+
+    // Marketing visibility: filter by original_creator_id
+    if (originalCreator) {
+      query = query.eq('original_creator_id', originalCreator)
+    }
+
+    // Filter by source lead
+    if (sourceLeadId) {
+      query = query.eq('source_lead_id', sourceLeadId)
+    }
+
+    // Filter by account
+    if (accountId) {
+      query = query.eq('account_id', accountId)
     }
 
     const { data, count, error } = await query

@@ -25,7 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, CheckCircle, XCircle, Leaf, Send } from 'lucide-react'
+import { MoreHorizontal, CheckCircle, XCircle, Leaf, Send, ArrowRightCircle } from 'lucide-react'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/hooks/use-toast'
@@ -65,6 +65,7 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
           'Qualified': 'berhasil dikualifikasi',
           'Nurture': 'dipindahkan ke Nurture',
           'Disqualified': 'didiskualifikasi',
+          'Assign to Sales': 'berhasil di-assign ke Sales',
         }
         toast.success(
           `Lead ${newStatus}`,
@@ -138,10 +139,18 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
             Mark In Review
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Qualified', lead.company_name)}>
-          <Send className="mr-2 h-4 w-4 text-green-500" />
-          Mark Qualified
-        </DropdownMenuItem>
+        {lead.triage_status !== 'Qualified' && (
+          <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Qualified', lead.company_name)}>
+            <Send className="mr-2 h-4 w-4 text-green-500" />
+            Mark Qualified
+          </DropdownMenuItem>
+        )}
+        {lead.triage_status === 'Qualified' && (
+          <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Assign to Sales', lead.company_name)}>
+            <ArrowRightCircle className="mr-2 h-4 w-4 text-blue-500" />
+            Assign to Sales
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Nurture', lead.company_name)}>
           <Leaf className="mr-2 h-4 w-4 text-purple-500" />
           Move to Nurture

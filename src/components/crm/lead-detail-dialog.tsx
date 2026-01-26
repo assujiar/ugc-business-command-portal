@@ -249,10 +249,10 @@ export function LeadDetailDialog({
     fetchQuotations()
   }, [lead, open])
 
-  // Check if lead can create quotation (must be Qualified or higher)
+  // Check if lead can create quotation (must be Qualified or Assign to Sales)
   const canCreateQuotation = React.useMemo(() => {
     if (!lead) return false
-    return ['Qualified', 'Handed Over', 'Assigned to Sales'].includes(lead.triage_status)
+    return ['Qualified', 'Assign to Sales'].includes(lead.triage_status)
   }, [lead])
 
   // Create RFQ ticket from lead

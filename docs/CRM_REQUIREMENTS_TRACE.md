@@ -90,13 +90,16 @@ New → In Review (marketing begins triage)
 In Review → Qualified (requires contact info validation)
 In Review → Nurture (not ready, long-term follow-up)
 In Review → Disqualified (requires reason)
-Qualified → Assign to Sales (manual, creates pool entry with potential revenue required)
-Assign to Sales → Claimed (sales takes ownership)
+Qualified → Assign to Sales (MANUAL action by marketing, creates pool entry with potential revenue required)
+Assign to Sales → Claimed (sales takes ownership from pool)
 Claimed → Converted (creates opportunity + account)
 ```
 
-### Auto-Handover Rule (Page 5):
-"When a lead's triage_status is set to Qualified, the system immediately triggers a handover."
+### Assign to Sales Rule (Page 5):
+"Lead assignment to sales is a MANUAL action. Marketing must explicitly click 'Assign to Sales' button
+to move qualified leads to the sales pool. This is NOT automatic - marketing retains control over
+when leads are ready for sales handover. The status 'Assign to Sales' is terminal from marketing
+perspective (cannot be changed once set)."
 
 ### Claim Lead Atomic Operations (Page 5):
 1. Lock pool row (FOR UPDATE SKIP LOCKED)
