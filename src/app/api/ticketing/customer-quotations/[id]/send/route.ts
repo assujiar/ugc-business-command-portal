@@ -791,12 +791,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Use admin client for status updates to bypass RLS
+    const adminClient = createAdminClient()
+
     // Update quotation status to 'sent' only if not a resend
     if (!isResend) {
       const sentTo = method === 'email' ? quotation.customer_email : quotation.customer_phone
-
-      // Use admin client for status updates to bypass RLS
-      const adminClient = createAdminClient()
 
       // Update quotation status
       const { error: updateError } = await (adminClient as any)
@@ -817,20 +817,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       } else {
         console.log('Quotation status updated to sent')
       }
+    }
 
-      // Sync quotation status to all linked entities (ticket, lead, opportunity)
-      const { data: syncResult, error: syncError } = await (adminClient as any).rpc('sync_quotation_to_all', {
-        p_quotation_id: id,
-        p_new_status: 'sent',
-        p_actor_user_id: user.id
-      })
+    // Always sync quotation status to all linked entities (ticket, lead, opportunity)
+    // This ensures the pipeline stage is correct even on resends
+    const { data: syncResult, error: syncError } = await (adminClient as any).rpc('sync_quotation_to_all', {
+      p_quotation_id: id,
+      p_new_status: 'sent',
+      p_actor_user_id: user.id
+    })
 
-      if (syncError) {
-        console.error('Error syncing quotation status:', syncError)
-        // Continue anyway - main operation succeeded
-      } else {
-        console.log('Quotation synced to all entities:', syncResult)
-      }
+    if (syncError) {
+      console.error('Error syncing quotation status:', syncError)
+      // Continue anyway - main operation succeeded
+    } else {
+      console.log('Quotation synced to all entities:', syncResult)
     }
 
     return NextResponse.json({

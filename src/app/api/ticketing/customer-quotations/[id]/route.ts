@@ -130,6 +130,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       sent_to
     } = body
 
+    // Valid quotation statuses (must match customer_quotation_status enum)
+    const validStatuses = ['draft', 'sent', 'accepted', 'rejected', 'expired']
+
+    // Validate status if provided
+    if (status !== undefined && !validStatuses.includes(status)) {
+      return NextResponse.json({
+        success: false,
+        error: `Invalid status: ${status}. Valid values are: ${validStatuses.join(', ')}`
+      }, { status: 400 })
+    }
+
     // Build update object
     const updates: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -189,23 +200,73 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       ['sent', 'accepted', 'rejected'].includes(status) &&
       quotation.status !== status
 
-    // Update quotation
-    const { data: updatedQuotation, error } = await (supabase as any)
-      .from('customer_quotations')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single()
+    // Use admin client for updates to bypass RLS and ensure proper enum casting
+    const adminClient = createAdminClient()
 
-    if (error) {
-      console.error('Error updating quotation:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    // If status is being updated, use RPC for proper enum casting
+    let updatedQuotation = null
+    let syncResult = null
+
+    if (status !== undefined && Object.keys(updates).length === 2 && updates.status !== undefined) {
+      // Only status is being updated, use RPC for proper enum casting
+      const { data: rpcResult, error: rpcError } = await (adminClient as any).rpc('rpc_update_quotation_status_validated', {
+        p_quotation_id: id,
+        p_new_status: status
+      })
+
+      if (rpcError) {
+        console.error('Error updating quotation status via RPC:', rpcError)
+        return NextResponse.json({ error: rpcError.message }, { status: 500 })
+      }
+
+      if (!rpcResult?.success) {
+        return NextResponse.json({ error: rpcResult?.error || 'Failed to update status' }, { status: 400 })
+      }
+
+      syncResult = rpcResult.sync_result
+
+      // Fetch updated quotation
+      const { data: fetchedQuotation } = await (supabase as any)
+        .from('customer_quotations')
+        .select('*')
+        .eq('id', id)
+        .single()
+      updatedQuotation = fetchedQuotation
+    } else {
+      // Update quotation with multiple fields
+      const { data: updated, error } = await (adminClient as any)
+        .from('customer_quotations')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error updating quotation:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+      updatedQuotation = updated
+
+      // Sync quotation status to all linked entities if needed
+      if (needsSync) {
+        const { data: syncData, error: syncError } = await (adminClient as any).rpc('sync_quotation_to_all', {
+          p_quotation_id: id,
+          p_new_status: status,
+          p_actor_user_id: user.id
+        })
+        syncResult = syncData
+        if (syncError) {
+          console.error('Error syncing quotation:', syncError)
+        } else {
+          console.log('Quotation synced to all entities:', syncResult)
+        }
+      }
     }
 
     // Update items if provided
     if (items && Array.isArray(items)) {
       // Delete existing items
-      await (supabase as any)
+      await (adminClient as any)
         .from('customer_quotation_items')
         .delete()
         .eq('quotation_id', id)
@@ -226,27 +287,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           sort_order: item.sort_order || index,
         }))
 
-        await (supabase as any)
+        await (adminClient as any)
           .from('customer_quotation_items')
           .insert(itemsToInsert)
-      }
-    }
-
-    // Sync quotation status to all linked entities (ticket, lead, opportunity, operational cost)
-    // Use admin client to ensure sync can update all related entities
-    let syncResult = null
-    if (needsSync) {
-      const adminClient = createAdminClient()
-      const { data: syncData, error: syncError } = await (adminClient as any).rpc('sync_quotation_to_all', {
-        p_quotation_id: id,
-        p_new_status: status,
-        p_actor_user_id: user.id
-      })
-      syncResult = syncData
-      if (syncError) {
-        console.error('Error syncing quotation:', syncError)
-      } else {
-        console.log('Quotation synced to all entities:', syncResult)
       }
     }
 

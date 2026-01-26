@@ -45,6 +45,24 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import type { Database } from '@/types/database'
 
@@ -55,16 +73,24 @@ interface CustomerQuotationDetailProps {
   profile: Profile
 }
 
-// Status badge variants
+// Status badge variants - only valid customer_quotation_status enum values
 const statusVariants: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string; icon: React.ReactNode }> = {
   draft: { variant: 'outline', label: 'Draft', icon: <FileText className="h-3 w-3" /> },
   sent: { variant: 'default', label: 'Sent', icon: <Send className="h-3 w-3" /> },
-  viewed: { variant: 'secondary', label: 'Viewed', icon: <Eye className="h-3 w-3" /> },
   accepted: { variant: 'secondary', label: 'Accepted', icon: <CheckCircle2 className="h-3 w-3" /> },
   rejected: { variant: 'destructive', label: 'Rejected', icon: <XCircle className="h-3 w-3" /> },
   expired: { variant: 'destructive', label: 'Expired', icon: <Clock className="h-3 w-3" /> },
-  revoked: { variant: 'destructive', label: 'Revoked', icon: <XCircle className="h-3 w-3" /> },
 }
+
+// Rejection reason options
+const rejectionReasonOptions = [
+  { value: 'tarif_tidak_masuk', label: 'Tarif tidak masuk' },
+  { value: 'kompetitor_lebih_murah', label: 'Kompetitor lebih murah' },
+  { value: 'budget_customer_tidak_cukup', label: 'Budget customer tidak cukup' },
+  { value: 'service_tidak_sesuai', label: 'Service tidak sesuai' },
+  { value: 'waktu_tidak_sesuai', label: 'Waktu tidak sesuai' },
+  { value: 'other', label: 'Lainnya' },
+]
 
 // Format currency
 const formatCurrency = (amount: number, currency: string = 'IDR') => {
@@ -83,6 +109,14 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Rejection modal state
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectCompetitorName, setRejectCompetitorName] = useState('')
+  const [rejectCompetitorAmount, setRejectCompetitorAmount] = useState('')
+  const [rejectCustomerBudget, setRejectCustomerBudget] = useState('')
+  const [rejectNotes, setRejectNotes] = useState('')
 
   // Fetch quotation
   const fetchQuotation = async () => {
@@ -381,6 +415,59 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
     }
   }
 
+  // Reject quotation with reason
+  const handleRejectWithReason = async () => {
+    if (!rejectReason) {
+      toast({
+        title: 'Error',
+        description: 'Please select a rejection reason',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason_type: rejectReason,
+          competitor_name: rejectCompetitorName || null,
+          competitor_amount: rejectCompetitorAmount ? parseFloat(rejectCompetitorAmount) : null,
+          customer_budget: rejectCustomerBudget ? parseFloat(rejectCustomerBudget) : null,
+          notes: rejectNotes || null,
+        }),
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: 'Quotation Rejected',
+          description: 'Quotation has been marked as rejected and the pipeline has been updated.',
+        })
+        setShowRejectModal(false)
+        // Reset form
+        setRejectReason('')
+        setRejectCompetitorName('')
+        setRejectCompetitorAmount('')
+        setRejectCustomerBudget('')
+        setRejectNotes('')
+        fetchQuotation()
+      } else {
+        throw new Error(result.error || 'Failed to reject quotation')
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reject quotation',
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   // Recreate quotation (request adjustment)
   const handleRecreateQuotation = async () => {
     setActionLoading(true)
@@ -593,7 +680,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
               </Button>
               <Button
                 variant="outline"
-                onClick={() => updateStatus('rejected')}
+                onClick={() => setShowRejectModal(true)}
                 disabled={actionLoading}
               >
                 <XCircle className="mr-2 h-4 w-4" />
@@ -1093,6 +1180,95 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
           )}
         </div>
       </div>
+
+      {/* Rejection Reason Modal */}
+      <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Reject Quotation</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this quotation. This information will be used for analytics and improvement.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="reject-reason">Rejection Reason *</Label>
+              <Select value={rejectReason} onValueChange={setRejectReason}>
+                <SelectTrigger id="reject-reason">
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {rejectionReasonOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {rejectReason === 'kompetitor_lebih_murah' && (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="competitor-name">Competitor Name</Label>
+                  <Input
+                    id="competitor-name"
+                    placeholder="Enter competitor name"
+                    value={rejectCompetitorName}
+                    onChange={(e) => setRejectCompetitorName(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="competitor-amount">Competitor Price (IDR)</Label>
+                  <Input
+                    id="competitor-amount"
+                    type="number"
+                    placeholder="Enter competitor price"
+                    value={rejectCompetitorAmount}
+                    onChange={(e) => setRejectCompetitorAmount(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            {rejectReason === 'budget_customer_tidak_cukup' && (
+              <div className="grid gap-2">
+                <Label htmlFor="customer-budget">Customer Budget (IDR)</Label>
+                <Input
+                  id="customer-budget"
+                  type="number"
+                  placeholder="Enter customer budget"
+                  value={rejectCustomerBudget}
+                  onChange={(e) => setRejectCustomerBudget(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="reject-notes">Additional Notes</Label>
+              <Textarea
+                id="reject-notes"
+                placeholder="Enter any additional notes or details"
+                value={rejectNotes}
+                onChange={(e) => setRejectNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRejectModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectWithReason}
+              disabled={actionLoading || !rejectReason}
+            >
+              {actionLoading ? 'Rejecting...' : 'Reject Quotation'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
