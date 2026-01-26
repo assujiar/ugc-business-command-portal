@@ -130,15 +130,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       sent_to
     } = body
 
-    // Valid quotation statuses (must match customer_quotation_status enum)
-    const validStatuses = ['draft', 'sent', 'accepted', 'rejected', 'expired']
-
-    // Validate status if provided
-    if (status !== undefined && !validStatuses.includes(status)) {
+    // SECURITY: Block status updates via generic PATCH - use dedicated endpoints instead
+    // This prevents enum mismatch errors and ensures atomic transitions
+    if (status !== undefined) {
+      const statusActionEndpoints: Record<string, string> = {
+        'sent': 'POST /api/ticketing/customer-quotations/:id/send',
+        'accepted': 'POST /api/ticketing/customer-quotations/:id/accept',
+        'rejected': 'POST /api/ticketing/customer-quotations/:id/reject',
+      }
+      const suggestedEndpoint = statusActionEndpoints[status] || 'dedicated status transition endpoint'
       return NextResponse.json({
         success: false,
-        error: `Invalid status: ${status}. Valid values are: ${validStatuses.join(', ')}`
-      }, { status: 400 })
+        error: `Status cannot be updated via PATCH. Use ${suggestedEndpoint} for status transitions to ensure atomic sync across quotation, pipeline, and ticket.`,
+        error_code: 'STATUS_UPDATE_NOT_ALLOWED',
+        suggestion: suggestedEndpoint,
+        allowed_via_patch: ['customer_data', 'service_data', 'rate_data', 'terms_data', 'items', 'pdf_url']
+      }, { status: 405 })
     }
 
     // Build update object
@@ -183,84 +190,27 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Status updates
-    if (status !== undefined) updates.status = status
+    // PDF URL updates (not status - status is handled by dedicated endpoints)
     if (pdf_url !== undefined) {
       updates.pdf_url = pdf_url
       updates.pdf_generated_at = new Date().toISOString()
     }
-    if (sent_via !== undefined) updates.sent_via = sent_via
-    if (sent_to !== undefined) updates.sent_to = sent_to
-    if (status === 'sent') {
-      updates.sent_at = new Date().toISOString()
-    }
+    // Note: sent_via and sent_to are now handled by /send endpoint only
 
-    // Track if this is a status change that needs sync (to ticket, lead, and/or opportunity)
-    const needsSync = status !== undefined &&
-      ['sent', 'accepted', 'rejected'].includes(status) &&
-      quotation.status !== status
-
-    // Use admin client for updates to bypass RLS and ensure proper enum casting
+    // Use admin client for updates to bypass RLS
     const adminClient = createAdminClient()
 
-    // If status is being updated, use RPC for proper enum casting
-    let updatedQuotation = null
-    let syncResult = null
+    // Update quotation fields (status is blocked above, so this is safe)
+    const { data: updatedQuotation, error } = await (adminClient as any)
+      .from('customer_quotations')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
 
-    if (status !== undefined && Object.keys(updates).length === 2 && updates.status !== undefined) {
-      // Only status is being updated, use RPC for proper enum casting
-      const { data: rpcResult, error: rpcError } = await (adminClient as any).rpc('rpc_update_quotation_status_validated', {
-        p_quotation_id: id,
-        p_new_status: status
-      })
-
-      if (rpcError) {
-        console.error('Error updating quotation status via RPC:', rpcError)
-        return NextResponse.json({ error: rpcError.message }, { status: 500 })
-      }
-
-      if (!rpcResult?.success) {
-        return NextResponse.json({ error: rpcResult?.error || 'Failed to update status' }, { status: 400 })
-      }
-
-      syncResult = rpcResult.sync_result
-
-      // Fetch updated quotation
-      const { data: fetchedQuotation } = await (supabase as any)
-        .from('customer_quotations')
-        .select('*')
-        .eq('id', id)
-        .single()
-      updatedQuotation = fetchedQuotation
-    } else {
-      // Update quotation with multiple fields
-      const { data: updated, error } = await (adminClient as any)
-        .from('customer_quotations')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single()
-
-      if (error) {
-        console.error('Error updating quotation:', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
-      updatedQuotation = updated
-
-      // Sync quotation status to all linked entities if needed
-      if (needsSync) {
-        const { data: syncData, error: syncError } = await (adminClient as any).rpc('sync_quotation_to_all', {
-          p_quotation_id: id,
-          p_new_status: status,
-          p_actor_user_id: user.id
-        })
-        syncResult = syncData
-        if (syncError) {
-          console.error('Error syncing quotation:', syncError)
-        } else {
-          console.log('Quotation synced to all entities:', syncResult)
-        }
-      }
+    if (error) {
+      console.error('Error updating quotation:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     // Update items if provided
@@ -296,7 +246,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       data: updatedQuotation,
-      sync_result: syncResult,
     })
   } catch (err) {
     console.error('Unexpected error:', err)

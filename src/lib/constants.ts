@@ -658,3 +658,246 @@ export function getStageIndex(stage: OpportunityStage): number {
   const order = ['Prospecting', 'Discovery', 'Quote Sent', 'Negotiation', 'Closed Won', 'Closed Lost', 'On Hold']
   return order.indexOf(stage)
 }
+
+// =====================================================
+// TICKETING STATUS CONSTANTS (SSOT)
+// These are the exact enum values used in the database
+// IMPORTANT: These must match database enum definitions exactly
+// =====================================================
+
+// Ticket Status (ticket_status enum) - must match database exactly
+export const TICKET_STATUS = {
+  OPEN: 'open',
+  NEED_RESPONSE: 'need_response',
+  IN_PROGRESS: 'in_progress',
+  WAITING_CUSTOMER: 'waiting_customer',
+  NEED_ADJUSTMENT: 'need_adjustment',
+  PENDING: 'pending',
+  RESOLVED: 'resolved',
+  CLOSED: 'closed',
+} as const
+
+export type TicketStatusCode = typeof TICKET_STATUS[keyof typeof TICKET_STATUS]
+
+export const TICKET_STATUS_LIST: TicketStatusCode[] = Object.values(TICKET_STATUS)
+
+// Ticket Status Labels for UI display
+export const TICKET_STATUS_LABELS: Record<TicketStatusCode, string> = {
+  [TICKET_STATUS.OPEN]: 'Open',
+  [TICKET_STATUS.NEED_RESPONSE]: 'Need Response',
+  [TICKET_STATUS.IN_PROGRESS]: 'In Progress',
+  [TICKET_STATUS.WAITING_CUSTOMER]: 'Waiting Customer',
+  [TICKET_STATUS.NEED_ADJUSTMENT]: 'Request Adjustment',
+  [TICKET_STATUS.PENDING]: 'Pending',
+  [TICKET_STATUS.RESOLVED]: 'Resolved',
+  [TICKET_STATUS.CLOSED]: 'Closed',
+}
+
+// Customer Quotation Status (customer_quotation_status enum) - must match database exactly
+export const QUOTATION_STATUS = {
+  DRAFT: 'draft',
+  SENT: 'sent',
+  ACCEPTED: 'accepted',
+  REJECTED: 'rejected',
+  EXPIRED: 'expired',
+  REVOKED: 'revoked',
+} as const
+
+export type QuotationStatusCode = typeof QUOTATION_STATUS[keyof typeof QUOTATION_STATUS]
+
+export const QUOTATION_STATUS_LIST: QuotationStatusCode[] = Object.values(QUOTATION_STATUS)
+
+// Quotation Status Labels for UI display
+export const QUOTATION_STATUS_LABELS: Record<QuotationStatusCode, string> = {
+  [QUOTATION_STATUS.DRAFT]: 'Draft',
+  [QUOTATION_STATUS.SENT]: 'Sent',
+  [QUOTATION_STATUS.ACCEPTED]: 'Accepted',
+  [QUOTATION_STATUS.REJECTED]: 'Rejected',
+  [QUOTATION_STATUS.EXPIRED]: 'Expired',
+  [QUOTATION_STATUS.REVOKED]: 'Revoked',
+}
+
+// Opportunity Stage (opportunity_stage enum) - must match database exactly
+// IMPORTANT: These use Title Case, NOT snake_case
+export const OPPORTUNITY_STAGE = {
+  PROSPECTING: 'Prospecting',
+  DISCOVERY: 'Discovery',
+  QUOTE_SENT: 'Quote Sent',
+  NEGOTIATION: 'Negotiation',
+  CLOSED_WON: 'Closed Won',
+  CLOSED_LOST: 'Closed Lost',
+  ON_HOLD: 'On Hold',
+} as const
+
+export type OpportunityStageCode = typeof OPPORTUNITY_STAGE[keyof typeof OPPORTUNITY_STAGE]
+
+export const OPPORTUNITY_STAGE_LIST: OpportunityStageCode[] = Object.values(OPPORTUNITY_STAGE)
+
+// Quote Status for Operational Costs (quote_status enum) - must match database exactly
+export const QUOTE_STATUS = {
+  DRAFT: 'draft',
+  SUBMITTED: 'submitted',
+  SENT: 'sent',
+  SENT_TO_CUSTOMER: 'sent_to_customer',
+  ACCEPTED: 'accepted',
+  REJECTED: 'rejected',
+  WON: 'won',
+  REVISE_REQUESTED: 'revise_requested',
+} as const
+
+export type QuoteStatusCode = typeof QUOTE_STATUS[keyof typeof QUOTE_STATUS]
+
+export const QUOTE_STATUS_LIST: QuoteStatusCode[] = Object.values(QUOTE_STATUS)
+
+// Quote Status Labels for UI display
+export const QUOTE_STATUS_LABELS: Record<QuoteStatusCode, string> = {
+  [QUOTE_STATUS.DRAFT]: 'Draft',
+  [QUOTE_STATUS.SUBMITTED]: 'Submitted',
+  [QUOTE_STATUS.SENT]: 'Sent',
+  [QUOTE_STATUS.SENT_TO_CUSTOMER]: 'Sent to Customer',
+  [QUOTE_STATUS.ACCEPTED]: 'Accepted',
+  [QUOTE_STATUS.REJECTED]: 'Rejected',
+  [QUOTE_STATUS.WON]: 'Won',
+  [QUOTE_STATUS.REVISE_REQUESTED]: 'Revision Requested',
+}
+
+// Quotation Rejection Reason Types (quotation_rejection_reason_type enum)
+export const QUOTATION_REJECTION_REASON = {
+  TARIF_TIDAK_MASUK: 'tarif_tidak_masuk',
+  KOMPETITOR_LEBIH_MURAH: 'kompetitor_lebih_murah',
+  BUDGET_CUSTOMER_TIDAK_CUKUP: 'budget_customer_tidak_cukup',
+  SERVICE_TIDAK_SESUAI: 'service_tidak_sesuai',
+  WAKTU_TIDAK_SESUAI: 'waktu_tidak_sesuai',
+  OTHER: 'other',
+} as const
+
+export type QuotationRejectionReasonCode = typeof QUOTATION_REJECTION_REASON[keyof typeof QUOTATION_REJECTION_REASON]
+
+export const QUOTATION_REJECTION_REASON_LIST: QuotationRejectionReasonCode[] = Object.values(QUOTATION_REJECTION_REASON)
+
+// Rejection Reason Labels for UI display
+export const QUOTATION_REJECTION_REASON_LABELS: Record<QuotationRejectionReasonCode, string> = {
+  [QUOTATION_REJECTION_REASON.TARIF_TIDAK_MASUK]: 'Tarif Tidak Masuk',
+  [QUOTATION_REJECTION_REASON.KOMPETITOR_LEBIH_MURAH]: 'Kompetitor Lebih Murah',
+  [QUOTATION_REJECTION_REASON.BUDGET_CUSTOMER_TIDAK_CUKUP]: 'Budget Customer Tidak Cukup',
+  [QUOTATION_REJECTION_REASON.SERVICE_TIDAK_SESUAI]: 'Service Tidak Sesuai',
+  [QUOTATION_REJECTION_REASON.WAKTU_TIDAK_SESUAI]: 'Waktu Tidak Sesuai',
+  [QUOTATION_REJECTION_REASON.OTHER]: 'Lainnya',
+}
+
+// Reasons that require numeric input (competitor_amount or customer_budget)
+export const FINANCIAL_REJECTION_REASONS: QuotationRejectionReasonCode[] = [
+  QUOTATION_REJECTION_REASON.TARIF_TIDAK_MASUK,
+  QUOTATION_REJECTION_REASON.KOMPETITOR_LEBIH_MURAH,
+  QUOTATION_REJECTION_REASON.BUDGET_CUSTOMER_TIDAK_CUKUP,
+]
+
+// Operational Cost Rejection Reason Types (operational_cost_rejection_reason_type enum)
+export const OPERATIONAL_COST_REJECTION_REASON = {
+  HARGA_TERLALU_TINGGI: 'harga_terlalu_tinggi',
+  MARGIN_TIDAK_MENCUKUPI: 'margin_tidak_mencukupi',
+  VENDOR_TIDAK_SESUAI: 'vendor_tidak_sesuai',
+  WAKTU_TIDAK_SESUAI: 'waktu_tidak_sesuai',
+  PERLU_REVISI: 'perlu_revisi',
+  TARIF_TIDAK_MASUK: 'tarif_tidak_masuk',
+  KOMPETITOR_LEBIH_MURAH: 'kompetitor_lebih_murah',
+  BUDGET_CUSTOMER_TIDAK_CUKUP: 'budget_customer_tidak_cukup',
+  OTHER: 'other',
+} as const
+
+export type OperationalCostRejectionReasonCode = typeof OPERATIONAL_COST_REJECTION_REASON[keyof typeof OPERATIONAL_COST_REJECTION_REASON]
+
+export const OPERATIONAL_COST_REJECTION_REASON_LIST: OperationalCostRejectionReasonCode[] = Object.values(OPERATIONAL_COST_REJECTION_REASON)
+
+// Operational Cost Rejection Reason Labels for UI display
+export const OPERATIONAL_COST_REJECTION_REASON_LABELS: Record<OperationalCostRejectionReasonCode, string> = {
+  [OPERATIONAL_COST_REJECTION_REASON.HARGA_TERLALU_TINGGI]: 'Harga Terlalu Tinggi',
+  [OPERATIONAL_COST_REJECTION_REASON.MARGIN_TIDAK_MENCUKUPI]: 'Margin Tidak Mencukupi',
+  [OPERATIONAL_COST_REJECTION_REASON.VENDOR_TIDAK_SESUAI]: 'Vendor Tidak Sesuai',
+  [OPERATIONAL_COST_REJECTION_REASON.WAKTU_TIDAK_SESUAI]: 'Waktu Tidak Sesuai',
+  [OPERATIONAL_COST_REJECTION_REASON.PERLU_REVISI]: 'Perlu Revisi',
+  [OPERATIONAL_COST_REJECTION_REASON.TARIF_TIDAK_MASUK]: 'Tarif Tidak Masuk',
+  [OPERATIONAL_COST_REJECTION_REASON.KOMPETITOR_LEBIH_MURAH]: 'Kompetitor Lebih Murah',
+  [OPERATIONAL_COST_REJECTION_REASON.BUDGET_CUSTOMER_TIDAK_CUKUP]: 'Budget Customer Tidak Cukup',
+  [OPERATIONAL_COST_REJECTION_REASON.OTHER]: 'Lainnya',
+}
+
+// Reasons that require numeric input for operational cost adjustment
+export const FINANCIAL_OPERATIONAL_COST_REASONS: OperationalCostRejectionReasonCode[] = [
+  OPERATIONAL_COST_REJECTION_REASON.HARGA_TERLALU_TINGGI,
+  OPERATIONAL_COST_REJECTION_REASON.MARGIN_TIDAK_MENCUKUPI,
+  OPERATIONAL_COST_REJECTION_REASON.TARIF_TIDAK_MASUK,
+  OPERATIONAL_COST_REJECTION_REASON.KOMPETITOR_LEBIH_MURAH,
+  OPERATIONAL_COST_REJECTION_REASON.BUDGET_CUSTOMER_TIDAK_CUKUP,
+]
+
+// Ticket Type (ticket_type enum)
+export const TICKET_TYPE = {
+  RFQ: 'RFQ',
+  GEN: 'GEN',
+} as const
+
+export type TicketTypeCode = typeof TICKET_TYPE[keyof typeof TICKET_TYPE]
+
+// Ticketing Department (ticketing_department enum)
+export const TICKETING_DEPARTMENT = {
+  MKT: 'MKT',
+  SAL: 'SAL',
+  DOM: 'DOM',
+  EXI: 'EXI',
+  DTD: 'DTD',
+  TRF: 'TRF',
+} as const
+
+export type TicketingDepartmentCode = typeof TICKETING_DEPARTMENT[keyof typeof TICKETING_DEPARTMENT]
+
+// Department Labels
+export const TICKETING_DEPARTMENT_LABELS: Record<TicketingDepartmentCode, string> = {
+  [TICKETING_DEPARTMENT.MKT]: 'Marketing',
+  [TICKETING_DEPARTMENT.SAL]: 'Sales',
+  [TICKETING_DEPARTMENT.DOM]: 'Domestics Ops',
+  [TICKETING_DEPARTMENT.EXI]: 'EXIM Ops',
+  [TICKETING_DEPARTMENT.DTD]: 'Import DTD Ops',
+  [TICKETING_DEPARTMENT.TRF]: 'Traffic & Warehouse',
+}
+
+// =====================================================
+// WORKFLOW TRANSITION MAPPINGS (SSOT)
+// These define the expected state changes for each action
+// =====================================================
+
+// When quotation is sent:
+// - Quotation: draft -> sent
+// - Opportunity: Discovery/Prospecting -> Quote Sent
+// - Ticket: -> waiting_customer
+// - Operational Cost: -> sent_to_customer
+export const WORKFLOW_QUOTATION_SENT = {
+  quotation_status: QUOTATION_STATUS.SENT,
+  opportunity_stage: OPPORTUNITY_STAGE.QUOTE_SENT,
+  ticket_status: TICKET_STATUS.WAITING_CUSTOMER,
+  quote_status: QUOTE_STATUS.SENT_TO_CUSTOMER,
+} as const
+
+// When quotation is rejected:
+// - Quotation: sent -> rejected
+// - Opportunity: Quote Sent/Discovery/Prospecting -> Negotiation
+// - Ticket: -> need_adjustment
+// - Operational Cost: -> revise_requested
+export const WORKFLOW_QUOTATION_REJECTED = {
+  quotation_status: QUOTATION_STATUS.REJECTED,
+  opportunity_stage: OPPORTUNITY_STAGE.NEGOTIATION,
+  ticket_status: TICKET_STATUS.NEED_ADJUSTMENT,
+  quote_status: QUOTE_STATUS.REVISE_REQUESTED,
+} as const
+
+// When quotation is accepted:
+// - Quotation: sent -> accepted
+// - Opportunity: -> Closed Won
+// - Ticket: -> closed (won)
+// - Operational Cost: -> accepted
+export const WORKFLOW_QUOTATION_ACCEPTED = {
+  quotation_status: QUOTATION_STATUS.ACCEPTED,
+  opportunity_stage: OPPORTUNITY_STAGE.CLOSED_WON,
+  ticket_status: TICKET_STATUS.CLOSED,
+  quote_status: QUOTE_STATUS.ACCEPTED,
+} as const

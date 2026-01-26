@@ -16,13 +16,16 @@ interface ProfileData {
   role: UserRole
 }
 
-// Valid rejection reason types (must match quotation_rejection_reason_type enum)
+// Valid operational cost rejection reason types (must match operational_cost_rejection_reason_type enum)
 const validReasonTypes = [
+  'harga_terlalu_tinggi',
+  'margin_tidak_mencukupi',
+  'vendor_tidak_sesuai',
+  'waktu_tidak_sesuai',
+  'perlu_revisi',
   'tarif_tidak_masuk',
   'kompetitor_lebih_murah',
   'budget_customer_tidak_cukup',
-  'service_tidak_sesuai',
-  'waktu_tidak_sesuai',
   'other',
 ]
 
@@ -31,11 +34,14 @@ const financialReasons = [
   'tarif_tidak_masuk',
   'kompetitor_lebih_murah',
   'budget_customer_tidak_cukup',
+  'harga_terlalu_tinggi',
+  'margin_tidak_mencukupi'
 ]
 
-// POST /api/ticketing/customer-quotations/[id]/reject - Reject quotation with reason
+// POST /api/ticketing/tickets/[id]/request-adjustment - Request rate adjustment
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const correlationId = randomUUID()
+
   try {
     const { id } = await params
     const supabase = await createClient()
@@ -80,7 +86,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!reason_type) {
       return NextResponse.json({
         success: false,
-        error: 'Rejection reason is required',
+        error: 'Adjustment reason is required',
         error_code: 'VALIDATION_ERROR',
         field_errors: { reason_type: 'Required' },
         correlation_id: correlationId
@@ -99,40 +105,52 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Validate numeric fields for financial reasons
-    if (reason_type === 'kompetitor_lebih_murah' && !competitor_name && !competitor_amount) {
-      return NextResponse.json({
-        success: false,
-        error: 'Competitor name or amount is required when reason is "kompetitor_lebih_murah"',
-        error_code: 'VALIDATION_ERROR',
-        field_errors: { competitor_amount: 'Required for this reason' },
-        correlation_id: correlationId
-      }, { status: 422 })
+    if (financialReasons.includes(reason_type)) {
+      if (reason_type === 'kompetitor_lebih_murah' && !competitor_name && !competitor_amount) {
+        return NextResponse.json({
+          success: false,
+          error: 'Competitor name or amount is required when reason is "kompetitor_lebih_murah"',
+          error_code: 'VALIDATION_ERROR',
+          field_errors: { competitor_amount: 'Required for this reason' },
+          correlation_id: correlationId
+        }, { status: 422 })
+      }
+
+      if (reason_type === 'budget_customer_tidak_cukup' && !customer_budget) {
+        return NextResponse.json({
+          success: false,
+          error: 'Customer budget is required when reason is "budget_customer_tidak_cukup"',
+          error_code: 'VALIDATION_ERROR',
+          field_errors: { customer_budget: 'Required for this reason' },
+          correlation_id: correlationId
+        }, { status: 422 })
+      }
+
+      if (reason_type === 'tarif_tidak_masuk' && !competitor_amount && !customer_budget) {
+        return NextResponse.json({
+          success: false,
+          error: 'Either competitor amount or customer budget is required when reason is "tarif_tidak_masuk"',
+          error_code: 'VALIDATION_ERROR',
+          field_errors: { competitor_amount: 'Either this or customer_budget required' },
+          correlation_id: correlationId
+        }, { status: 422 })
+      }
+
+      if ((reason_type === 'harga_terlalu_tinggi' || reason_type === 'margin_tidak_mencukupi') && !competitor_amount && !customer_budget) {
+        return NextResponse.json({
+          success: false,
+          error: 'Target amount (competitor_amount or customer_budget) is recommended for this reason',
+          error_code: 'VALIDATION_WARNING',
+          field_errors: { competitor_amount: 'Recommended for analytics' },
+          correlation_id: correlationId
+        }, { status: 422 })
+      }
     }
 
-    if (reason_type === 'budget_customer_tidak_cukup' && !customer_budget) {
-      return NextResponse.json({
-        success: false,
-        error: 'Customer budget is required when reason is "budget_customer_tidak_cukup"',
-        error_code: 'VALIDATION_ERROR',
-        field_errors: { customer_budget: 'Required for this reason' },
-        correlation_id: correlationId
-      }, { status: 422 })
-    }
-
-    if (reason_type === 'tarif_tidak_masuk' && !competitor_amount && !customer_budget) {
-      return NextResponse.json({
-        success: false,
-        error: 'Either competitor amount or customer budget is required when reason is "tarif_tidak_masuk"',
-        error_code: 'VALIDATION_ERROR',
-        field_errors: { competitor_amount: 'Either this or customer_budget required' },
-        correlation_id: correlationId
-      }, { status: 422 })
-    }
-
-    // Use admin client to call atomic RPC that updates quotation + opportunity + ticket in ONE transaction
+    // Use admin client to call atomic RPC
     const adminClient = createAdminClient()
-    const { data: result, error: rpcError } = await (adminClient as any).rpc('rpc_customer_quotation_mark_rejected', {
-      p_quotation_id: id,
+    const { data: result, error: rpcError } = await (adminClient as any).rpc('rpc_ticket_request_adjustment', {
+      p_ticket_id: id,
       p_reason_type: reason_type,
       p_competitor_name: competitor_name || null,
       p_competitor_amount: competitor_amount || null,
@@ -144,7 +162,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     })
 
     if (rpcError) {
-      console.error('Error rejecting quotation:', rpcError, 'correlation_id:', correlationId)
+      console.error('Error requesting adjustment:', rpcError, 'correlation_id:', correlationId)
       return NextResponse.json({
         success: false,
         error: rpcError.message,
@@ -155,28 +173,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (!result?.success) {
-      // Return structured error with field-level details if available
-      // Map error codes to appropriate HTTP status codes (409 for all conflict scenarios)
-      const statusCode = result?.error_code === 'VALIDATION_ERROR' ? 422 :
-                         result?.error_code === 'QUOTATION_NOT_FOUND' ? 404 :
+      // Return structured error with appropriate status code (409 for all conflict scenarios)
+      const statusCode = result?.error_code === 'TICKET_NOT_FOUND' ? 404 :
                          result?.error_code === 'INVALID_STATUS_TRANSITION' ? 409 :
                          result?.error_code?.startsWith('CONFLICT_') ? 409 : 400
-      console.error('Quotation rejection failed:', result, 'correlation_id:', correlationId)
+      console.error('Request adjustment failed:', result, 'correlation_id:', correlationId)
       return NextResponse.json({
         success: false,
-        error: result?.error || 'Failed to reject quotation',
+        error: result?.error || 'Failed to request adjustment',
         error_code: result?.error_code || 'UNKNOWN_ERROR',
-        field_errors: result?.field_errors || null,
         correlation_id: correlationId
       }, { status: statusCode })
     }
 
-    console.log('Quotation rejected successfully:', result, 'correlation_id:', correlationId)
+    console.log('Request adjustment succeeded:', result, 'correlation_id:', correlationId)
 
     return NextResponse.json({
       success: true,
       data: result,
-      message: 'Quotation rejected successfully. Pipeline moved to Negotiation, ticket moved to need_adjustment.',
+      message: 'Adjustment requested successfully. Ticket moved to need_adjustment.',
       correlation_id: correlationId
     })
   } catch (err) {
