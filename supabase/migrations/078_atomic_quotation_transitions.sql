@@ -208,6 +208,188 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 COMMENT ON FUNCTION public.fn_validate_ticket_transition IS 'State machine validator for ticket status transitions. Returns conflict (409-worthy) for closed tickets.';
 
 -- ============================================
+-- 0d. AUTHORIZATION HELPER: Check Quotation Access
+-- Validates that the actor can perform operations on the quotation
+-- ============================================
+
+CREATE OR REPLACE FUNCTION public.fn_check_quotation_authorization(
+    p_quotation_id UUID,
+    p_actor_user_id UUID,
+    p_action TEXT DEFAULT 'transition'
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_quotation RECORD;
+    v_profile RECORD;
+    v_is_creator BOOLEAN := FALSE;
+    v_is_ticket_owner BOOLEAN := FALSE;
+    v_is_ticket_assignee BOOLEAN := FALSE;
+    v_has_ticketing_role BOOLEAN := FALSE;
+    v_allowed_roles TEXT[] := ARRAY['superadmin', 'director', 'manager', 'sales', 'marketing', 'accountmanager'];
+BEGIN
+    -- If no actor provided, return unauthorized
+    IF p_actor_user_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'authorized', FALSE,
+            'error', 'Actor user ID is required for authorization',
+            'error_code', 'UNAUTHORIZED_NO_ACTOR'
+        );
+    END IF;
+
+    -- Get quotation with linked ticket
+    SELECT cq.*, t.created_by AS ticket_creator, t.assigned_to AS ticket_assignee
+    INTO v_quotation
+    FROM public.customer_quotations cq
+    LEFT JOIN public.tickets t ON t.id = cq.ticket_id
+    WHERE cq.id = p_quotation_id;
+
+    IF v_quotation IS NULL THEN
+        RETURN jsonb_build_object(
+            'authorized', FALSE,
+            'error', 'Quotation not found',
+            'error_code', 'QUOTATION_NOT_FOUND'
+        );
+    END IF;
+
+    -- Get actor's profile and role
+    SELECT * INTO v_profile
+    FROM public.profiles
+    WHERE user_id = p_actor_user_id;
+
+    IF v_profile IS NULL THEN
+        RETURN jsonb_build_object(
+            'authorized', FALSE,
+            'error', 'Actor profile not found',
+            'error_code', 'UNAUTHORIZED_NO_PROFILE'
+        );
+    END IF;
+
+    -- Check if actor is the quotation creator
+    v_is_creator := (v_quotation.created_by = p_actor_user_id);
+
+    -- Check if actor is the ticket creator or assignee
+    v_is_ticket_owner := (v_quotation.ticket_creator = p_actor_user_id);
+    v_is_ticket_assignee := (v_quotation.ticket_assignee = p_actor_user_id);
+
+    -- Check if actor has a ticketing-enabled role
+    v_has_ticketing_role := (v_profile.role::TEXT = ANY(v_allowed_roles));
+
+    -- Authorization logic: must be creator, ticket owner/assignee, OR have ticketing role
+    IF v_is_creator OR v_is_ticket_owner OR v_is_ticket_assignee OR v_has_ticketing_role THEN
+        RETURN jsonb_build_object(
+            'authorized', TRUE,
+            'is_creator', v_is_creator,
+            'is_ticket_owner', v_is_ticket_owner,
+            'is_ticket_assignee', v_is_ticket_assignee,
+            'has_ticketing_role', v_has_ticketing_role,
+            'actor_role', v_profile.role
+        );
+    END IF;
+
+    -- Not authorized
+    RETURN jsonb_build_object(
+        'authorized', FALSE,
+        'error', 'You do not have permission to ' || p_action || ' this quotation. Must be creator, ticket owner/assignee, or have a ticketing role.',
+        'error_code', 'FORBIDDEN'
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION public.fn_check_quotation_authorization IS 'Authorization helper that checks if an actor can perform operations on a quotation. Returns authorized=true if actor is creator, ticket owner/assignee, or has ticketing role.';
+
+-- ============================================
+-- 0e. AUTHORIZATION HELPER: Check Ticket Access
+-- Validates that the actor can perform operations on the ticket
+-- ============================================
+
+CREATE OR REPLACE FUNCTION public.fn_check_ticket_authorization(
+    p_ticket_id UUID,
+    p_actor_user_id UUID,
+    p_action TEXT DEFAULT 'transition'
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_ticket RECORD;
+    v_profile RECORD;
+    v_is_creator BOOLEAN := FALSE;
+    v_is_assignee BOOLEAN := FALSE;
+    v_is_department_manager BOOLEAN := FALSE;
+    v_has_elevated_role BOOLEAN := FALSE;
+    v_elevated_roles TEXT[] := ARRAY['superadmin', 'director', 'manager'];
+BEGIN
+    -- If no actor provided, return unauthorized
+    IF p_actor_user_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'authorized', FALSE,
+            'error', 'Actor user ID is required for authorization',
+            'error_code', 'UNAUTHORIZED_NO_ACTOR'
+        );
+    END IF;
+
+    -- Get ticket
+    SELECT * INTO v_ticket
+    FROM public.tickets
+    WHERE id = p_ticket_id;
+
+    IF v_ticket IS NULL THEN
+        RETURN jsonb_build_object(
+            'authorized', FALSE,
+            'error', 'Ticket not found',
+            'error_code', 'TICKET_NOT_FOUND'
+        );
+    END IF;
+
+    -- Get actor's profile
+    SELECT * INTO v_profile
+    FROM public.profiles
+    WHERE user_id = p_actor_user_id;
+
+    IF v_profile IS NULL THEN
+        RETURN jsonb_build_object(
+            'authorized', FALSE,
+            'error', 'Actor profile not found',
+            'error_code', 'UNAUTHORIZED_NO_PROFILE'
+        );
+    END IF;
+
+    -- Check if actor is the ticket creator
+    v_is_creator := (v_ticket.created_by = p_actor_user_id);
+
+    -- Check if actor is the assignee
+    v_is_assignee := (v_ticket.assigned_to = p_actor_user_id);
+
+    -- Check if actor has elevated role
+    v_has_elevated_role := (v_profile.role::TEXT = ANY(v_elevated_roles));
+
+    -- Check if actor is department manager (same department as ticket)
+    IF v_profile.role::TEXT = 'manager' AND v_profile.department = v_ticket.department THEN
+        v_is_department_manager := TRUE;
+    END IF;
+
+    -- Authorization logic
+    IF v_is_creator OR v_is_assignee OR v_is_department_manager OR v_has_elevated_role THEN
+        RETURN jsonb_build_object(
+            'authorized', TRUE,
+            'is_creator', v_is_creator,
+            'is_assignee', v_is_assignee,
+            'is_department_manager', v_is_department_manager,
+            'has_elevated_role', v_has_elevated_role,
+            'actor_role', v_profile.role
+        );
+    END IF;
+
+    -- Not authorized
+    RETURN jsonb_build_object(
+        'authorized', FALSE,
+        'error', 'You do not have permission to ' || p_action || ' this ticket. Must be creator, assignee, department manager, or have elevated role.',
+        'error_code', 'FORBIDDEN'
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION public.fn_check_ticket_authorization IS 'Authorization helper that checks if an actor can perform operations on a ticket. Returns authorized=true if actor is creator, assignee, department manager, or has elevated role.';
+
+-- ============================================
 -- 1. ATOMIC RPC: Mark Quotation as SENT
 -- Updates quotation -> opportunity -> ticket in ONE transaction
 -- ============================================
@@ -229,6 +411,7 @@ DECLARE
     v_new_opp_stage opportunity_stage := NULL;
     v_is_resend BOOLEAN := FALSE;
     v_transition_check JSONB;
+    v_auth_check JSONB;
     v_correlation_id TEXT;
 BEGIN
     -- Generate correlation_id if not provided
@@ -245,6 +428,17 @@ BEGIN
             'success', FALSE,
             'error', 'Quotation not found',
             'error_code', 'QUOTATION_NOT_FOUND',
+            'correlation_id', v_correlation_id
+        );
+    END IF;
+
+    -- AUTHORIZATION: Check if actor can send this quotation
+    v_auth_check := fn_check_quotation_authorization(p_quotation_id, p_actor_user_id, 'send');
+    IF NOT (v_auth_check->>'authorized')::BOOLEAN THEN
+        RETURN jsonb_build_object(
+            'success', FALSE,
+            'error', v_auth_check->>'error',
+            'error_code', v_auth_check->>'error_code',
             'correlation_id', v_correlation_id
         );
     END IF;
@@ -463,6 +657,7 @@ DECLARE
     v_new_opp_stage opportunity_stage := NULL;
     v_actor_id UUID;
     v_transition_check JSONB;
+    v_auth_check JSONB;
     v_correlation_id TEXT;
     v_is_already_rejected BOOLEAN := FALSE;
 BEGIN
@@ -514,6 +709,17 @@ BEGIN
             'success', FALSE,
             'error', 'Quotation not found',
             'error_code', 'QUOTATION_NOT_FOUND',
+            'correlation_id', v_correlation_id
+        );
+    END IF;
+
+    -- AUTHORIZATION: Check if actor can reject this quotation
+    v_auth_check := fn_check_quotation_authorization(p_quotation_id, v_actor_id, 'reject');
+    IF NOT (v_auth_check->>'authorized')::BOOLEAN THEN
+        RETURN jsonb_build_object(
+            'success', FALSE,
+            'error', v_auth_check->>'error',
+            'error_code', v_auth_check->>'error_code',
             'correlation_id', v_correlation_id
         );
     END IF;
@@ -762,6 +968,7 @@ DECLARE
     v_old_ticket_status ticket_status;
     v_actor_id UUID;
     v_transition_check JSONB;
+    v_auth_check JSONB;
     v_correlation_id TEXT;
 BEGIN
     -- Generate correlation_id if not provided
@@ -781,6 +988,17 @@ BEGIN
             'success', FALSE,
             'error', 'Quotation not found',
             'error_code', 'QUOTATION_NOT_FOUND',
+            'correlation_id', v_correlation_id
+        );
+    END IF;
+
+    -- AUTHORIZATION: Check if actor can accept this quotation
+    v_auth_check := fn_check_quotation_authorization(p_quotation_id, v_actor_id, 'accept');
+    IF NOT (v_auth_check->>'authorized')::BOOLEAN THEN
+        RETURN jsonb_build_object(
+            'success', FALSE,
+            'error', v_auth_check->>'error',
+            'error_code', v_auth_check->>'error_code',
             'correlation_id', v_correlation_id
         );
     END IF;
@@ -1032,6 +1250,7 @@ DECLARE
     v_rate_quote RECORD;
     v_actor_id UUID;
     v_transition_check JSONB;
+    v_auth_check JSONB;
     v_correlation_id TEXT;
     v_is_already_need_adjustment BOOLEAN := FALSE;
 BEGIN
@@ -1052,6 +1271,17 @@ BEGIN
             'success', FALSE,
             'error', 'Ticket not found',
             'error_code', 'TICKET_NOT_FOUND',
+            'correlation_id', v_correlation_id
+        );
+    END IF;
+
+    -- AUTHORIZATION: Check if actor can request adjustment on this ticket
+    v_auth_check := fn_check_ticket_authorization(p_ticket_id, v_actor_id, 'request adjustment on');
+    IF NOT (v_auth_check->>'authorized')::BOOLEAN THEN
+        RETURN jsonb_build_object(
+            'success', FALSE,
+            'error', v_auth_check->>'error',
+            'error_code', v_auth_check->>'error_code',
             'correlation_id', v_correlation_id
         );
     END IF;
@@ -1267,6 +1497,10 @@ END $$;
 GRANT EXECUTE ON FUNCTION public.fn_validate_quotation_transition(TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_validate_opportunity_transition(TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_validate_ticket_transition(TEXT, TEXT) TO authenticated;
+
+-- Grant execute on authorization helper functions
+GRANT EXECUTE ON FUNCTION public.fn_check_quotation_authorization(UUID, UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_check_ticket_authorization(UUID, UUID, TEXT) TO authenticated;
 
 -- Grant execute on atomic RPC functions (with correlation_id parameter)
 GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_sent(UUID, TEXT, TEXT, UUID, TEXT) TO authenticated;
