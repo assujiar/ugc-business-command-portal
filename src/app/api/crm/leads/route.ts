@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
+    const source = searchParams.get('source')  // Lead source filter
+    const createdBy = searchParams.get('created_by')  // Filter by creator for marketing visibility
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
@@ -35,6 +37,16 @@ export async function GET(request: NextRequest) {
 
     if (status) {
       query = query.eq('triage_status', status)
+    }
+
+    // Lead source filter (e.g., ?source=Marketing)
+    if (source) {
+      query = query.eq('source', source)
+    }
+
+    // Filter by creator for marketing visibility
+    if (createdBy) {
+      query = query.eq('created_by', createdBy)
     }
 
     const { data, count, error } = await query

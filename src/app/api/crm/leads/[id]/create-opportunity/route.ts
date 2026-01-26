@@ -42,10 +42,9 @@ export async function POST(
       return NextResponse.json({ error: 'Lead must be claimed first' }, { status: 400 })
     }
 
-    // Check if lead already has opportunity
-    if (lead.opportunity_id) {
-      return NextResponse.json({ error: 'Lead already has an opportunity' }, { status: 400 })
-    }
+    // NOTE: Multiple opportunities per lead are now allowed.
+    // The lead.opportunity_id field stores the FIRST opportunity created (or the primary one).
+    // Additional opportunities can be created and linked via source_lead_id.
 
     // Check if lead has account
     if (!lead.account_id) {
@@ -84,17 +83,20 @@ export async function POST(
       }, { status: 500 })
     }
 
-    // Update lead with opportunity_id
-    const { error: updateError } = await (adminClient as any)
-      .from('leads')
-      .update({
-        opportunity_id: newOpportunity.opportunity_id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('lead_id', leadId)
+    // Only update lead.opportunity_id if this is the first opportunity
+    // (keeps the primary/first opportunity reference, additional opportunities are linked via source_lead_id)
+    if (!lead.opportunity_id) {
+      const { error: updateError } = await (adminClient as any)
+        .from('leads')
+        .update({
+          opportunity_id: newOpportunity.opportunity_id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('lead_id', leadId)
 
-    if (updateError) {
-      console.error('Error updating lead:', updateError)
+      if (updateError) {
+        console.error('Error updating lead:', updateError)
+      }
     }
 
     return NextResponse.json({

@@ -84,15 +84,28 @@ This document provides a comprehensive QA testing guide for the CRM module. All 
 | 2 | Click Actions > Mark In Review | Status changes to "In Review" |
 | 3 | Refresh page | Status persists |
 
-#### TC-LEAD-003: Triage Lead - Qualify & Auto-Handover
+#### TC-LEAD-003: Triage Lead - Qualify
 **SOURCE: PDF Page 28-29**
 
 | Step | Action | Expected Result |
 |------|--------|-----------------|
 | 1 | Select lead in "In Review" status | Lead selected |
-| 2 | Click Actions > Qualify & Handover | Status changes to "Assign to Sales" |
-| 3 | Check Sales Inbox | Lead appears in handover pool |
+| 2 | Click Actions > Qualify | Status changes to "Qualified" |
+| 3 | Verify potential_revenue is set | Lead has estimated value |
 | 4 | Verify audit log | Action logged with timestamp |
+
+#### TC-LEAD-003a: Assign to Sales (Manual Handover)
+**SOURCE: PDF Page 28-29**
+**NOTE: This is a MANUAL action, NOT automatic**
+
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Select qualified lead (status "Qualified") | Lead selected |
+| 2 | Click Actions > Assign to Sales | Status changes to "Assign to Sales" |
+| 3 | Check Sales Inbox | Lead appears in handover pool |
+| 4 | Verify potential_revenue > 0 | Required for assignment |
+| 5 | Verify status is TERMINAL | Cannot change status after "Assign to Sales" |
+| 6 | Verify audit log | Action logged with timestamp |
 
 #### TC-LEAD-004: Move to Nurture
 **SOURCE: PDF Page 17**
@@ -298,11 +311,15 @@ This document provides a comprehensive QA testing guide for the CRM module. All 
 |------|--------|-----------------|
 | 1 | Create new lead (Marketing) | Lead in "New" status |
 | 2 | Mark as In Review | Status changes |
-| 3 | Qualify & Handover | Appears in Sales Inbox |
-| 4 | Claim Lead (Sales) | Account created, lead claimed |
-| 5 | Convert to Opportunity | Opportunity in Pipeline |
-| 6 | Progress through stages | Stage history recorded |
-| 7 | Close Won | Opportunity completed |
+| 3 | Qualify lead (validate contact info) | Status changes to "Qualified" |
+| 4 | **Assign to Sales (MANUAL action)** | Appears in Sales Inbox |
+| 5 | Claim Lead (Sales) | Account created, lead claimed |
+| 6 | Convert to Opportunity | Opportunity in Pipeline |
+| 7 | Progress through stages | Stage history recorded |
+| 8 | Close Won | Opportunity completed |
+
+**IMPORTANT**: Step 4 (Assign to Sales) is a MANUAL action by marketing, NOT automatic.
+Marketing must explicitly click "Assign to Sales" to move the lead to the sales pool.
 
 ---
 
