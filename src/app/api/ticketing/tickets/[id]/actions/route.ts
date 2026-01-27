@@ -1,6 +1,19 @@
 // =====================================================
-// Ticketing API - Ticket Actions
+// Ticketing API - Ticket Actions (DEPRECATED)
 // POST: Execute ticket actions (submit-quote, request-adjustment, etc.)
+// =====================================================
+//
+// DEPRECATION NOTICE (Issue 10):
+// This generic action dispatcher is maintained for backward compatibility
+// but new code should use dedicated endpoints for better validation:
+//
+// - request_adjustment → /api/ticketing/tickets/[id]/request-adjustment
+//   (Full support for reason_type, competitor info, customer budget)
+//
+// - Other actions (submit_quote, mark_won, mark_lost, quote_sent_to_customer)
+//   still work through this route but may get dedicated endpoints in future.
+//
+// See migration 085_safe_schema_cleanup.sql for cleanup status.
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
