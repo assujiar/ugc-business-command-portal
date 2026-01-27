@@ -2692,5 +2692,1136 @@ GRANT SELECT ON v_customer_quotations_enriched TO authenticated;
 GRANT SELECT ON v_latest_operational_costs TO authenticated;
 
 -- =====================================================
+-- SECTION 16: RPC FUNCTIONS
+-- =====================================================
+
+-- -----------------------------------------------------
+-- IDEMPOTENCY HELPER FUNCTIONS
+-- -----------------------------------------------------
+
+CREATE OR REPLACE FUNCTION check_idempotency(p_key TEXT)
+RETURNS JSONB AS $$
+DECLARE
+  v_result JSONB;
+BEGIN
+  SELECT result INTO v_result
+  FROM idempotency_keys
+  WHERE idempotency_key = p_key
+    AND expires_at > NOW();
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+CREATE OR REPLACE FUNCTION store_idempotency(p_key TEXT, p_operation TEXT, p_result JSONB)
+RETURNS VOID AS $$
+BEGIN
+  INSERT INTO idempotency_keys (idempotency_key, operation, result, expires_at)
+  VALUES (p_key, p_operation, p_result, NOW() + INTERVAL '24 hours')
+  ON CONFLICT (idempotency_key) DO UPDATE SET
+    result = EXCLUDED.result,
+    expires_at = EXCLUDED.expires_at;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- -----------------------------------------------------
+-- CRM RPC FUNCTIONS
+-- -----------------------------------------------------
+
+-- RPC_LEAD_TRIAGE - Handle triage status changes
+CREATE OR REPLACE FUNCTION rpc_lead_triage(
+  p_lead_id TEXT,
+  p_new_status lead_triage_status,
+  p_notes TEXT DEFAULT NULL,
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_lead RECORD;
+  v_existing JSONB;
+  v_pool_id BIGINT;
+  v_result JSONB;
+BEGIN
+  IF p_idempotency_key IS NOT NULL THEN
+    v_existing := check_idempotency(p_idempotency_key);
+    IF v_existing IS NOT NULL THEN
+      RETURN v_existing;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_lead FROM leads WHERE lead_id = p_lead_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Lead not found: %', p_lead_id;
+  END IF;
+
+  IF v_lead.triage_status = 'Handed Over' THEN
+    RAISE EXCEPTION 'Cannot change status of handed over lead';
+  END IF;
+
+  UPDATE leads SET
+    triage_status = p_new_status,
+    updated_at = NOW(),
+    disqualified_at = CASE WHEN p_new_status = 'Disqualified' THEN NOW() ELSE NULL END,
+    disqualification_reason = CASE WHEN p_new_status = 'Disqualified' THEN p_notes ELSE disqualification_reason END
+  WHERE lead_id = p_lead_id;
+
+  IF p_new_status = 'Qualified' THEN
+    INSERT INTO lead_handover_pool (
+      lead_id, handed_over_by, handover_notes, priority, expires_at
+    ) VALUES (
+      p_lead_id, auth.uid(), p_notes, 1, NOW() + INTERVAL '7 days'
+    ) RETURNING pool_id INTO v_pool_id;
+
+    UPDATE leads SET
+      triage_status = 'Handed Over',
+      handover_eligible = true,
+      updated_at = NOW()
+    WHERE lead_id = p_lead_id;
+  END IF;
+
+  v_result := jsonb_build_object(
+    'success', true,
+    'lead_id', p_lead_id,
+    'new_status', p_new_status::TEXT,
+    'pool_id', v_pool_id
+  );
+
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM store_idempotency(p_idempotency_key, 'triage-' || p_lead_id, v_result);
+  END IF;
+
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('leads', 'triage', 'lead', p_lead_id, auth.uid(), v_result);
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_LEAD_HANDOVER_TO_SALES_POOL - Manual handover
+CREATE OR REPLACE FUNCTION rpc_lead_handover_to_sales_pool(
+  p_lead_id TEXT,
+  p_notes TEXT DEFAULT NULL,
+  p_priority INTEGER DEFAULT 1,
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_lead RECORD;
+  v_existing JSONB;
+  v_pool_id BIGINT;
+  v_result JSONB;
+BEGIN
+  IF p_idempotency_key IS NOT NULL THEN
+    v_existing := check_idempotency(p_idempotency_key);
+    IF v_existing IS NOT NULL THEN
+      RETURN v_existing;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_lead FROM leads WHERE lead_id = p_lead_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Lead not found: %', p_lead_id;
+  END IF;
+
+  IF v_lead.triage_status = 'Handed Over' THEN
+    RAISE EXCEPTION 'Lead already handed over';
+  END IF;
+
+  INSERT INTO lead_handover_pool (
+    lead_id, handed_over_by, handover_notes, priority, expires_at
+  ) VALUES (
+    p_lead_id, auth.uid(), p_notes, p_priority, NOW() + INTERVAL '7 days'
+  ) RETURNING pool_id INTO v_pool_id;
+
+  UPDATE leads SET
+    triage_status = 'Handed Over',
+    handover_eligible = true,
+    updated_at = NOW()
+  WHERE lead_id = p_lead_id;
+
+  v_result := jsonb_build_object(
+    'success', true,
+    'lead_id', p_lead_id,
+    'pool_id', v_pool_id
+  );
+
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM store_idempotency(p_idempotency_key, 'handover-' || p_lead_id, v_result);
+  END IF;
+
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('leads', 'handover', 'lead', p_lead_id, auth.uid(), v_result);
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_SALES_CLAIM_LEAD - Atomic claim with race safety
+CREATE OR REPLACE FUNCTION rpc_sales_claim_lead(
+  p_pool_id BIGINT,
+  p_create_account BOOLEAN DEFAULT true,
+  p_create_opportunity BOOLEAN DEFAULT false,
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_pool RECORD;
+  v_lead RECORD;
+  v_existing JSONB;
+  v_account_id TEXT;
+  v_opportunity_id TEXT;
+  v_result JSONB;
+BEGIN
+  IF p_idempotency_key IS NOT NULL THEN
+    v_existing := check_idempotency(p_idempotency_key);
+    IF v_existing IS NOT NULL THEN
+      RETURN v_existing;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_pool
+  FROM lead_handover_pool
+  WHERE pool_id = p_pool_id
+    AND claimed_by IS NULL
+  FOR UPDATE SKIP LOCKED;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'Lead already claimed or not available'
+    );
+  END IF;
+
+  SELECT * INTO v_lead FROM leads WHERE lead_id = v_pool.lead_id FOR UPDATE;
+
+  UPDATE lead_handover_pool SET
+    claimed_by = auth.uid(),
+    claimed_at = NOW()
+  WHERE pool_id = p_pool_id;
+
+  UPDATE leads SET
+    sales_owner_user_id = auth.uid(),
+    claimed_at = NOW(),
+    handover_eligible = false,
+    updated_at = NOW()
+  WHERE lead_id = v_pool.lead_id;
+
+  IF p_create_account AND v_lead.customer_id IS NULL THEN
+    v_account_id := 'ACC' || TO_CHAR(NOW(), 'YYYYMMDD') || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 6));
+
+    INSERT INTO accounts (
+      account_id, company_name, pic_name, pic_email, pic_phone, industry, owner_user_id, created_by
+    ) VALUES (
+      v_account_id, v_lead.company_name, v_lead.pic_name, v_lead.pic_email, v_lead.pic_phone, v_lead.industry, auth.uid(), auth.uid()
+    );
+
+    UPDATE leads SET customer_id = v_account_id WHERE lead_id = v_pool.lead_id;
+  ELSE
+    v_account_id := v_lead.customer_id;
+  END IF;
+
+  IF p_create_opportunity AND v_account_id IS NOT NULL THEN
+    v_opportunity_id := 'OPP' || TO_CHAR(NOW(), 'YYYYMMDD') || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 6));
+
+    INSERT INTO opportunities (
+      opportunity_id, name, account_id, lead_id, stage, owner_user_id, created_by
+    ) VALUES (
+      v_opportunity_id, 'Opportunity from ' || v_lead.company_name, v_account_id, v_pool.lead_id, 'Prospecting', auth.uid(), auth.uid()
+    );
+
+    UPDATE leads SET opportunity_id = v_opportunity_id WHERE lead_id = v_pool.lead_id;
+  END IF;
+
+  v_result := jsonb_build_object(
+    'success', true,
+    'pool_id', p_pool_id,
+    'lead_id', v_pool.lead_id,
+    'account_id', v_account_id,
+    'opportunity_id', v_opportunity_id
+  );
+
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM store_idempotency(p_idempotency_key, 'claim-' || v_pool.lead_id, v_result);
+  END IF;
+
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('leads', 'claim', 'lead', v_pool.lead_id, auth.uid(), v_result);
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_LEAD_CONVERT - Convert lead to opportunity
+CREATE OR REPLACE FUNCTION rpc_lead_convert(
+  p_lead_id TEXT,
+  p_opportunity_name TEXT,
+  p_estimated_value NUMERIC DEFAULT NULL,
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_lead RECORD;
+  v_existing JSONB;
+  v_opportunity_id TEXT;
+  v_account_id TEXT;
+  v_result JSONB;
+BEGIN
+  IF p_idempotency_key IS NOT NULL THEN
+    v_existing := check_idempotency(p_idempotency_key);
+    IF v_existing IS NOT NULL THEN
+      RETURN v_existing;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_lead FROM leads WHERE lead_id = p_lead_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Lead not found: %', p_lead_id;
+  END IF;
+
+  IF v_lead.opportunity_id IS NOT NULL THEN
+    RAISE EXCEPTION 'Lead already converted to opportunity: %', v_lead.opportunity_id;
+  END IF;
+
+  IF v_lead.customer_id IS NULL THEN
+    v_account_id := 'ACC' || TO_CHAR(NOW(), 'YYYYMMDD') || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 6));
+
+    INSERT INTO accounts (
+      account_id, company_name, pic_name, pic_email, pic_phone, industry, owner_user_id, created_by
+    ) VALUES (
+      v_account_id, v_lead.company_name, v_lead.pic_name, v_lead.pic_email, v_lead.pic_phone, v_lead.industry, auth.uid(), auth.uid()
+    );
+
+    UPDATE leads SET customer_id = v_account_id WHERE lead_id = p_lead_id;
+  ELSE
+    v_account_id := v_lead.customer_id;
+  END IF;
+
+  v_opportunity_id := 'OPP' || TO_CHAR(NOW(), 'YYYYMMDD') || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 6));
+
+  INSERT INTO opportunities (
+    opportunity_id, name, account_id, lead_id, stage, estimated_value, owner_user_id, created_by
+  ) VALUES (
+    v_opportunity_id, p_opportunity_name, v_account_id, p_lead_id, 'Prospecting', p_estimated_value, auth.uid(), auth.uid()
+  );
+
+  UPDATE leads SET
+    opportunity_id = v_opportunity_id,
+    updated_at = NOW()
+  WHERE lead_id = p_lead_id;
+
+  v_result := jsonb_build_object(
+    'success', true,
+    'lead_id', p_lead_id,
+    'account_id', v_account_id,
+    'opportunity_id', v_opportunity_id
+  );
+
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM store_idempotency(p_idempotency_key, 'convert-' || p_lead_id, v_result);
+  END IF;
+
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('leads', 'convert', 'lead', p_lead_id, auth.uid(), v_result);
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_OPPORTUNITY_CHANGE_STAGE - Stage transition
+CREATE OR REPLACE FUNCTION rpc_opportunity_change_stage(
+  p_opportunity_id TEXT,
+  p_new_stage opportunity_stage,
+  p_notes TEXT DEFAULT NULL,
+  p_close_reason TEXT DEFAULT NULL,
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_opp RECORD;
+  v_existing JSONB;
+  v_result JSONB;
+BEGIN
+  IF p_idempotency_key IS NOT NULL THEN
+    v_existing := check_idempotency(p_idempotency_key);
+    IF v_existing IS NOT NULL THEN
+      RETURN v_existing;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_opp FROM opportunities WHERE opportunity_id = p_opportunity_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Opportunity not found: %', p_opportunity_id;
+  END IF;
+
+  IF v_opp.stage IN ('Closed Won', 'Closed Lost') THEN
+    RAISE EXCEPTION 'Cannot change stage of closed opportunity';
+  END IF;
+
+  UPDATE opportunities SET
+    stage = p_new_stage,
+    close_reason = CASE WHEN p_new_stage IN ('Closed Won', 'Closed Lost') THEN p_close_reason ELSE close_reason END,
+    closed_at = CASE WHEN p_new_stage IN ('Closed Won', 'Closed Lost') THEN NOW() ELSE NULL END,
+    updated_at = NOW()
+  WHERE opportunity_id = p_opportunity_id;
+
+  v_result := jsonb_build_object(
+    'success', true,
+    'opportunity_id', p_opportunity_id,
+    'old_stage', v_opp.stage::TEXT,
+    'new_stage', p_new_stage::TEXT
+  );
+
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM store_idempotency(p_idempotency_key, 'stage_change-' || p_opportunity_id, v_result);
+  END IF;
+
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('opportunities', 'stage_change', 'opportunity', p_opportunity_id, auth.uid(), v_result);
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_TARGET_CONVERT - Convert target to account/opportunity
+CREATE OR REPLACE FUNCTION rpc_target_convert(
+  p_target_id TEXT,
+  p_create_opportunity BOOLEAN DEFAULT true,
+  p_opportunity_name TEXT DEFAULT NULL,
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_target RECORD;
+  v_existing JSONB;
+  v_account_id TEXT;
+  v_opportunity_id TEXT;
+  v_result JSONB;
+BEGIN
+  IF p_idempotency_key IS NOT NULL THEN
+    v_existing := check_idempotency(p_idempotency_key);
+    IF v_existing IS NOT NULL THEN
+      RETURN v_existing;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_target FROM prospecting_targets WHERE target_id = p_target_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target not found: %', p_target_id;
+  END IF;
+
+  IF v_target.status = 'converted' THEN
+    RAISE EXCEPTION 'Target already converted';
+  END IF;
+
+  IF v_target.converted_account_id IS NOT NULL THEN
+    RAISE EXCEPTION 'Target already has account: %', v_target.converted_account_id;
+  END IF;
+
+  v_account_id := 'ACC' || TO_CHAR(NOW(), 'YYYYMMDD') || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 6));
+
+  INSERT INTO accounts (
+    account_id, company_name, pic_name, pic_email, pic_phone, industry, owner_user_id, created_by
+  ) VALUES (
+    v_account_id, v_target.company_name, v_target.pic_name, v_target.pic_email, v_target.pic_phone, v_target.industry, auth.uid(), auth.uid()
+  );
+
+  IF p_create_opportunity THEN
+    v_opportunity_id := 'OPP' || TO_CHAR(NOW(), 'YYYYMMDD') || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 6));
+
+    INSERT INTO opportunities (
+      opportunity_id, name, account_id, stage, owner_user_id, created_by
+    ) VALUES (
+      v_opportunity_id, COALESCE(p_opportunity_name, 'Opportunity from ' || v_target.company_name), v_account_id, 'Prospecting', auth.uid(), auth.uid()
+    );
+  END IF;
+
+  UPDATE prospecting_targets SET
+    status = 'converted',
+    converted_account_id = v_account_id,
+    converted_at = NOW(),
+    updated_at = NOW()
+  WHERE target_id = p_target_id;
+
+  v_result := jsonb_build_object(
+    'success', true,
+    'target_id', p_target_id,
+    'account_id', v_account_id,
+    'opportunity_id', v_opportunity_id
+  );
+
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM store_idempotency(p_idempotency_key, 'convert-' || p_target_id, v_result);
+  END IF;
+
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('targets', 'convert', 'target', p_target_id, auth.uid(), v_result);
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_ACTIVITY_COMPLETE_AND_NEXT - Complete + next
+CREATE OR REPLACE FUNCTION rpc_activity_complete_and_next(
+  p_activity_id TEXT,
+  p_outcome TEXT DEFAULT NULL,
+  p_create_follow_up BOOLEAN DEFAULT false,
+  p_follow_up_days INTEGER DEFAULT 7,
+  p_follow_up_type activity_type_v2 DEFAULT 'Task',
+  p_follow_up_subject TEXT DEFAULT NULL,
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_activity RECORD;
+  v_existing JSONB;
+  v_follow_up_id TEXT;
+  v_result JSONB;
+BEGIN
+  IF p_idempotency_key IS NOT NULL THEN
+    v_existing := check_idempotency(p_idempotency_key);
+    IF v_existing IS NOT NULL THEN
+      RETURN v_existing;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_activity FROM activities WHERE activity_id = p_activity_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Activity not found: %', p_activity_id;
+  END IF;
+
+  IF v_activity.status = 'Done' THEN
+    RAISE EXCEPTION 'Activity already completed';
+  END IF;
+
+  UPDATE activities SET
+    status = 'Done',
+    outcome = p_outcome,
+    completed_at = NOW(),
+    updated_at = NOW()
+  WHERE activity_id = p_activity_id;
+
+  IF p_create_follow_up THEN
+    v_follow_up_id := 'ACT' || TO_CHAR(NOW(), 'YYYYMMDD') || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 6));
+
+    INSERT INTO activities (
+      activity_id, activity_type, subject, description, status, due_date,
+      related_account_id, related_contact_id, related_opportunity_id, related_lead_id,
+      owner_user_id, created_by
+    ) VALUES (
+      v_follow_up_id, p_follow_up_type, COALESCE(p_follow_up_subject, 'Follow-up: ' || v_activity.subject),
+      'Follow-up from activity ' || p_activity_id, 'Planned', CURRENT_DATE + p_follow_up_days,
+      v_activity.related_account_id, v_activity.related_contact_id, v_activity.related_opportunity_id, v_activity.related_lead_id,
+      auth.uid(), auth.uid()
+    );
+  END IF;
+
+  v_result := jsonb_build_object(
+    'success', true,
+    'activity_id', p_activity_id,
+    'follow_up_id', v_follow_up_id
+  );
+
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM store_idempotency(p_idempotency_key, 'complete-' || p_activity_id, v_result);
+  END IF;
+
+  INSERT INTO audit_logs (module, action, record_type, record_id, user_id, after_data)
+  VALUES ('activities', 'complete', 'activity', p_activity_id, auth.uid(), v_result);
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_CADENCE_ADVANCE - Advance cadence to next step
+CREATE OR REPLACE FUNCTION rpc_cadence_advance(
+  p_enrollment_id BIGINT,
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_enrollment RECORD;
+  v_next_step RECORD;
+  v_existing JSONB;
+  v_activity_id TEXT;
+  v_result JSONB;
+BEGIN
+  IF p_idempotency_key IS NOT NULL THEN
+    v_existing := check_idempotency(p_idempotency_key);
+    IF v_existing IS NOT NULL THEN
+      RETURN v_existing;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_enrollment FROM cadence_enrollments WHERE enrollment_id = p_enrollment_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Enrollment not found: %', p_enrollment_id;
+  END IF;
+
+  IF v_enrollment.status != 'Active' THEN
+    RAISE EXCEPTION 'Enrollment not active';
+  END IF;
+
+  SELECT * INTO v_next_step
+  FROM cadence_steps
+  WHERE cadence_id = v_enrollment.cadence_id
+    AND step_number = v_enrollment.current_step + 1;
+
+  IF NOT FOUND THEN
+    UPDATE cadence_enrollments SET
+      status = 'Completed',
+      completed_at = NOW(),
+      updated_at = NOW()
+    WHERE enrollment_id = p_enrollment_id;
+
+    v_result := jsonb_build_object(
+      'success', true,
+      'enrollment_id', p_enrollment_id,
+      'status', 'Completed'
+    );
+  ELSE
+    UPDATE cadence_enrollments SET
+      current_step = v_next_step.step_number,
+      updated_at = NOW()
+    WHERE enrollment_id = p_enrollment_id;
+
+    v_activity_id := 'ACT' || TO_CHAR(NOW(), 'YYYYMMDD') || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 6));
+
+    INSERT INTO activities (
+      activity_id, activity_type, subject, description, status, due_date,
+      related_account_id, related_opportunity_id, cadence_enrollment_id, cadence_step_number,
+      owner_user_id, created_by
+    ) VALUES (
+      v_activity_id, v_next_step.activity_type, v_next_step.subject_template, v_next_step.description_template,
+      'Planned', CURRENT_DATE + v_next_step.delay_days,
+      v_enrollment.account_id, v_enrollment.opportunity_id, p_enrollment_id, v_next_step.step_number,
+      v_enrollment.enrolled_by, v_enrollment.enrolled_by
+    );
+
+    v_result := jsonb_build_object(
+      'success', true,
+      'enrollment_id', p_enrollment_id,
+      'new_step', v_next_step.step_number,
+      'activity_id', v_activity_id
+    );
+  END IF;
+
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM store_idempotency(p_idempotency_key, 'cadence-advance-' || p_enrollment_id, v_result);
+  END IF;
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- -----------------------------------------------------
+-- TICKETING RPC FUNCTIONS
+-- -----------------------------------------------------
+
+-- GENERATE TICKET CODE
+CREATE OR REPLACE FUNCTION generate_ticket_code(
+  p_ticket_type ticket_type,
+  p_department ticketing_department
+)
+RETURNS VARCHAR(20) AS $$
+DECLARE
+  v_date_key VARCHAR(6);
+  v_sequence INTEGER;
+  v_ticket_code VARCHAR(20);
+BEGIN
+  v_date_key := TO_CHAR(CURRENT_DATE, 'DDMMYY');
+
+  INSERT INTO ticket_sequences (ticket_type, department, date_key, last_sequence)
+  VALUES (p_ticket_type, p_department, v_date_key, 1)
+  ON CONFLICT (ticket_type, department, date_key)
+  DO UPDATE SET
+    last_sequence = ticket_sequences.last_sequence + 1,
+    updated_at = NOW()
+  RETURNING last_sequence INTO v_sequence;
+
+  v_ticket_code := p_ticket_type::TEXT || p_department::TEXT || v_date_key || LPAD(v_sequence::TEXT, 3, '0');
+
+  RETURN v_ticket_code;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- GENERATE TICKET QUOTE NUMBER
+CREATE OR REPLACE FUNCTION generate_ticket_quote_number(p_ticket_id UUID)
+RETURNS VARCHAR(30) AS $$
+DECLARE
+  v_ticket_code VARCHAR(20);
+  v_quote_count INTEGER;
+  v_quote_number VARCHAR(30);
+BEGIN
+  SELECT ticket_code INTO v_ticket_code
+  FROM tickets
+  WHERE id = p_ticket_id;
+
+  IF v_ticket_code IS NULL THEN
+    RAISE EXCEPTION 'Ticket not found: %', p_ticket_id;
+  END IF;
+
+  SELECT COUNT(*) + 1 INTO v_quote_count
+  FROM ticket_rate_quotes
+  WHERE ticket_id = p_ticket_id;
+
+  v_quote_number := 'QT-' || v_ticket_code || '-' || LPAD(v_quote_count::TEXT, 3, '0');
+
+  RETURN v_quote_number;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_TICKET_CREATE - Creates ticket with auto-generated code and SLA tracking
+CREATE OR REPLACE FUNCTION rpc_ticket_create(
+  p_ticket_type ticket_type,
+  p_subject VARCHAR(255),
+  p_description TEXT,
+  p_department ticketing_department,
+  p_priority ticket_priority DEFAULT 'medium',
+  p_account_id TEXT DEFAULT NULL,
+  p_contact_id TEXT DEFAULT NULL,
+  p_rfq_data JSONB DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_user_id UUID;
+  v_ticket_code VARCHAR(20);
+  v_ticket tickets;
+  v_sla_config ticketing_sla_config;
+BEGIN
+  v_user_id := auth.uid();
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF NOT can_access_ticketing(v_user_id) THEN
+    RAISE EXCEPTION 'Access denied: User cannot access ticketing';
+  END IF;
+
+  v_ticket_code := generate_ticket_code(p_ticket_type, p_department);
+
+  INSERT INTO tickets (
+    ticket_code, ticket_type, subject, description, department, created_by, priority, account_id, contact_id, rfq_data, status
+  ) VALUES (
+    v_ticket_code, p_ticket_type, p_subject, p_description, p_department, v_user_id, p_priority, p_account_id, p_contact_id, p_rfq_data, 'open'
+  ) RETURNING * INTO v_ticket;
+
+  SELECT * INTO v_sla_config
+  FROM ticketing_sla_config
+  WHERE department = p_department
+  AND ticket_type = p_ticket_type;
+
+  IF v_sla_config IS NOT NULL THEN
+    INSERT INTO ticket_sla_tracking (ticket_id, first_response_sla_hours, resolution_sla_hours)
+    VALUES (v_ticket.id, v_sla_config.first_response_hours, v_sla_config.resolution_hours);
+  ELSE
+    INSERT INTO ticket_sla_tracking (ticket_id, first_response_sla_hours, resolution_sla_hours)
+    VALUES (v_ticket.id, 4, 48);
+  END IF;
+
+  INSERT INTO ticket_events (ticket_id, event_type, actor_user_id, new_value, notes)
+  VALUES (
+    v_ticket.id, 'created', v_user_id,
+    jsonb_build_object('ticket_code', v_ticket.ticket_code, 'ticket_type', v_ticket.ticket_type, 'subject', v_ticket.subject, 'department', v_ticket.department, 'priority', v_ticket.priority),
+    'Ticket created'
+  );
+
+  RETURN jsonb_build_object('success', TRUE, 'ticket_id', v_ticket.id, 'ticket_code', v_ticket.ticket_code);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_TICKET_ASSIGN - Assigns ticket to user with history tracking
+CREATE OR REPLACE FUNCTION rpc_ticket_assign(
+  p_ticket_id UUID,
+  p_assigned_to UUID,
+  p_notes TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_user_id UUID;
+  v_ticket tickets;
+  v_old_assignee UUID;
+BEGIN
+  v_user_id := auth.uid();
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF NOT (is_ticketing_admin(v_user_id) OR is_ticketing_ops(v_user_id)) THEN
+    RAISE EXCEPTION 'Access denied: Only Ops or Admin can assign tickets';
+  END IF;
+
+  SELECT * INTO v_ticket FROM tickets WHERE id = p_ticket_id FOR UPDATE;
+
+  IF v_ticket IS NULL THEN
+    RAISE EXCEPTION 'Ticket not found: %', p_ticket_id;
+  END IF;
+
+  v_old_assignee := v_ticket.assigned_to;
+
+  UPDATE tickets
+  SET
+    assigned_to = p_assigned_to,
+    status = CASE WHEN status = 'open' THEN 'in_progress'::ticket_status ELSE status END,
+    updated_at = NOW()
+  WHERE id = p_ticket_id
+  RETURNING * INTO v_ticket;
+
+  INSERT INTO ticket_assignments (ticket_id, assigned_to, assigned_by, notes)
+  VALUES (p_ticket_id, p_assigned_to, v_user_id, p_notes);
+
+  INSERT INTO ticket_events (ticket_id, event_type, actor_user_id, old_value, new_value, notes)
+  VALUES (
+    p_ticket_id,
+    CASE WHEN v_old_assignee IS NULL THEN 'assigned'::ticket_event_type ELSE 'reassigned'::ticket_event_type END,
+    v_user_id,
+    CASE WHEN v_old_assignee IS NOT NULL THEN jsonb_build_object('assigned_to', v_old_assignee) ELSE NULL END,
+    jsonb_build_object('assigned_to', p_assigned_to),
+    p_notes
+  );
+
+  IF v_old_assignee IS NULL THEN
+    UPDATE ticket_sla_tracking
+    SET first_response_at = NOW(), first_response_met = EXTRACT(EPOCH FROM (NOW() - v_ticket.created_at)) / 3600 <= first_response_sla_hours, updated_at = NOW()
+    WHERE ticket_id = p_ticket_id AND first_response_at IS NULL;
+
+    UPDATE tickets SET first_response_at = NOW() WHERE id = p_ticket_id AND first_response_at IS NULL;
+  END IF;
+
+  RETURN jsonb_build_object('success', TRUE, 'ticket_id', v_ticket.id, 'assigned_to', p_assigned_to);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_TICKET_TRANSITION - Changes ticket status with validation and audit
+CREATE OR REPLACE FUNCTION rpc_ticket_transition(
+  p_ticket_id UUID,
+  p_new_status ticket_status,
+  p_notes TEXT DEFAULT NULL,
+  p_close_outcome ticket_close_outcome DEFAULT NULL,
+  p_close_reason TEXT DEFAULT NULL,
+  p_competitor_name VARCHAR(255) DEFAULT NULL,
+  p_competitor_cost DECIMAL(15,2) DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_user_id UUID;
+  v_ticket tickets;
+  v_old_status ticket_status;
+  v_allowed_transitions TEXT[];
+BEGIN
+  v_user_id := auth.uid();
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  SELECT * INTO v_ticket FROM tickets WHERE id = p_ticket_id FOR UPDATE;
+
+  IF v_ticket IS NULL THEN
+    RAISE EXCEPTION 'Ticket not found: %', p_ticket_id;
+  END IF;
+
+  v_old_status := v_ticket.status;
+
+  CASE v_old_status
+    WHEN 'open' THEN v_allowed_transitions := ARRAY['in_progress', 'pending', 'closed'];
+    WHEN 'need_response' THEN v_allowed_transitions := ARRAY['in_progress', 'waiting_customer', 'resolved', 'closed'];
+    WHEN 'in_progress' THEN v_allowed_transitions := ARRAY['need_response', 'waiting_customer', 'need_adjustment', 'pending', 'resolved', 'closed'];
+    WHEN 'waiting_customer' THEN v_allowed_transitions := ARRAY['in_progress', 'need_adjustment', 'resolved', 'closed'];
+    WHEN 'need_adjustment' THEN v_allowed_transitions := ARRAY['in_progress', 'resolved', 'closed'];
+    WHEN 'pending' THEN v_allowed_transitions := ARRAY['open', 'in_progress', 'resolved', 'closed'];
+    WHEN 'resolved' THEN v_allowed_transitions := ARRAY['closed', 'in_progress'];
+    WHEN 'closed' THEN v_allowed_transitions := ARRAY['open'];
+    ELSE v_allowed_transitions := ARRAY[]::TEXT[];
+  END CASE;
+
+  IF NOT (p_new_status::TEXT = ANY(v_allowed_transitions)) THEN
+    RAISE EXCEPTION 'Invalid status transition from % to %', v_old_status, p_new_status;
+  END IF;
+
+  UPDATE tickets
+  SET
+    status = p_new_status,
+    updated_at = NOW(),
+    resolved_at = CASE WHEN p_new_status = 'resolved' AND resolved_at IS NULL THEN NOW() ELSE resolved_at END,
+    closed_at = CASE WHEN p_new_status = 'closed' THEN NOW() ELSE closed_at END,
+    close_outcome = COALESCE(p_close_outcome, close_outcome),
+    close_reason = COALESCE(p_close_reason, close_reason),
+    competitor_name = COALESCE(p_competitor_name, competitor_name),
+    competitor_cost = COALESCE(p_competitor_cost, competitor_cost)
+  WHERE id = p_ticket_id
+  RETURNING * INTO v_ticket;
+
+  INSERT INTO ticket_events (ticket_id, event_type, actor_user_id, old_value, new_value, notes)
+  VALUES (
+    p_ticket_id,
+    CASE
+      WHEN p_new_status = 'resolved' THEN 'resolved'::ticket_event_type
+      WHEN p_new_status = 'closed' THEN 'closed'::ticket_event_type
+      WHEN v_old_status = 'closed' AND p_new_status = 'open' THEN 'reopened'::ticket_event_type
+      ELSE 'status_changed'::ticket_event_type
+    END,
+    v_user_id,
+    jsonb_build_object('status', v_old_status),
+    jsonb_build_object('status', p_new_status, 'close_outcome', p_close_outcome, 'close_reason', p_close_reason),
+    p_notes
+  );
+
+  IF p_new_status IN ('resolved', 'closed') THEN
+    UPDATE ticket_sla_tracking
+    SET resolution_at = NOW(), resolution_met = EXTRACT(EPOCH FROM (NOW() - v_ticket.created_at)) / 3600 <= resolution_sla_hours, updated_at = NOW()
+    WHERE ticket_id = p_ticket_id AND resolution_at IS NULL;
+  END IF;
+
+  RETURN jsonb_build_object('success', TRUE, 'ticket_id', v_ticket.id, 'old_status', v_old_status, 'new_status', p_new_status);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_TICKET_ADD_COMMENT - Adds comment to ticket with event tracking
+CREATE OR REPLACE FUNCTION rpc_ticket_add_comment(
+  p_ticket_id UUID,
+  p_content TEXT,
+  p_is_internal BOOLEAN DEFAULT FALSE
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_user_id UUID;
+  v_ticket tickets;
+  v_comment ticket_comments;
+  v_response_time INTEGER;
+  v_last_comment_at TIMESTAMPTZ;
+BEGIN
+  v_user_id := auth.uid();
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF p_is_internal AND NOT (is_ticketing_admin(v_user_id) OR is_ticketing_ops(v_user_id)) THEN
+    RAISE EXCEPTION 'Only Ops or Admin can create internal comments';
+  END IF;
+
+  SELECT * INTO v_ticket FROM tickets WHERE id = p_ticket_id;
+
+  IF v_ticket IS NULL THEN
+    RAISE EXCEPTION 'Ticket not found: %', p_ticket_id;
+  END IF;
+
+  IF NOT p_is_internal THEN
+    SELECT created_at INTO v_last_comment_at
+    FROM ticket_comments
+    WHERE ticket_id = p_ticket_id AND is_internal = FALSE
+    ORDER BY created_at DESC
+    LIMIT 1;
+
+    IF v_last_comment_at IS NOT NULL THEN
+      v_response_time := EXTRACT(EPOCH FROM (NOW() - v_last_comment_at))::INTEGER;
+    ELSE
+      v_response_time := EXTRACT(EPOCH FROM (NOW() - v_ticket.created_at))::INTEGER;
+    END IF;
+  END IF;
+
+  INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal, response_time_seconds, response_direction)
+  VALUES (
+    p_ticket_id, v_user_id, p_content, p_is_internal, v_response_time,
+    CASE WHEN v_user_id = v_ticket.created_by THEN 'inbound' ELSE 'outbound' END
+  ) RETURNING * INTO v_comment;
+
+  INSERT INTO ticket_events (ticket_id, event_type, actor_user_id, new_value, notes)
+  VALUES (
+    p_ticket_id, 'comment_added', v_user_id,
+    jsonb_build_object('comment_id', v_comment.id, 'is_internal', p_is_internal),
+    CASE WHEN p_is_internal THEN 'Internal note added' ELSE 'Comment added' END
+  );
+
+  IF NOT p_is_internal AND v_user_id != v_ticket.created_by THEN
+    UPDATE ticket_sla_tracking
+    SET first_response_at = NOW(), first_response_met = EXTRACT(EPOCH FROM (NOW() - v_ticket.created_at)) / 3600 <= first_response_sla_hours, updated_at = NOW()
+    WHERE ticket_id = p_ticket_id AND first_response_at IS NULL;
+
+    UPDATE tickets SET first_response_at = NOW() WHERE id = p_ticket_id AND first_response_at IS NULL;
+  END IF;
+
+  RETURN jsonb_build_object('success', TRUE, 'comment_id', v_comment.id, 'ticket_id', p_ticket_id);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_TICKET_CREATE_QUOTE - Creates rate quote for RFQ ticket
+CREATE OR REPLACE FUNCTION rpc_ticket_create_quote(
+  p_ticket_id UUID,
+  p_amount DECIMAL(15,2),
+  p_currency VARCHAR(3),
+  p_valid_until DATE,
+  p_terms TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_user_id UUID;
+  v_ticket tickets;
+  v_quote_number VARCHAR(30);
+  v_quote ticket_rate_quotes;
+BEGIN
+  v_user_id := auth.uid();
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF NOT (is_ticketing_admin(v_user_id) OR is_ticketing_ops(v_user_id)) THEN
+    RAISE EXCEPTION 'Access denied: Only Ops or Admin can create quotes';
+  END IF;
+
+  SELECT * INTO v_ticket FROM tickets WHERE id = p_ticket_id;
+
+  IF v_ticket IS NULL THEN
+    RAISE EXCEPTION 'Ticket not found: %', p_ticket_id;
+  END IF;
+
+  IF v_ticket.ticket_type != 'RFQ' THEN
+    RAISE EXCEPTION 'Quotes can only be created for RFQ tickets';
+  END IF;
+
+  v_quote_number := generate_ticket_quote_number(p_ticket_id);
+
+  INSERT INTO ticket_rate_quotes (ticket_id, quote_number, amount, currency, valid_until, terms, status, created_by)
+  VALUES (p_ticket_id, v_quote_number, p_amount, p_currency, p_valid_until, p_terms, 'draft', v_user_id)
+  RETURNING * INTO v_quote;
+
+  INSERT INTO ticket_events (ticket_id, event_type, actor_user_id, new_value, notes)
+  VALUES (
+    p_ticket_id, 'quote_created', v_user_id,
+    jsonb_build_object('quote_id', v_quote.id, 'quote_number', v_quote.quote_number, 'amount', v_quote.amount, 'currency', v_quote.currency),
+    'Rate quote created'
+  );
+
+  RETURN jsonb_build_object('success', TRUE, 'quote_id', v_quote.id, 'quote_number', v_quote.quote_number);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC_TICKETING_DASHBOARD_SUMMARY - Returns dashboard summary metrics
+CREATE OR REPLACE FUNCTION rpc_ticketing_dashboard_summary(
+  p_department ticketing_department DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_user_id UUID;
+  v_result JSONB;
+  v_total INTEGER;
+  v_open INTEGER;
+  v_in_progress INTEGER;
+  v_pending INTEGER;
+  v_resolved INTEGER;
+  v_closed INTEGER;
+  v_by_department JSONB;
+  v_by_status JSONB;
+  v_by_priority JSONB;
+BEGIN
+  v_user_id := auth.uid();
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF NOT can_access_ticketing(v_user_id) THEN
+    RAISE EXCEPTION 'Access denied';
+  END IF;
+
+  IF is_ticketing_admin(v_user_id) THEN
+    SELECT COUNT(*) INTO v_total FROM tickets WHERE (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_open FROM tickets WHERE status = 'open' AND (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_in_progress FROM tickets WHERE status = 'in_progress' AND (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_pending FROM tickets WHERE status = 'pending' AND (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_resolved FROM tickets WHERE status = 'resolved' AND (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_closed FROM tickets WHERE status = 'closed' AND (p_department IS NULL OR department = p_department);
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('department', department::TEXT, 'count', cnt)), '[]'::jsonb)
+    INTO v_by_department
+    FROM (SELECT department, COUNT(*) as cnt FROM tickets WHERE p_department IS NULL OR department = p_department GROUP BY department ORDER BY cnt DESC) t;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('priority', priority::TEXT, 'count', cnt)), '[]'::jsonb)
+    INTO v_by_priority
+    FROM (SELECT priority, COUNT(*) as cnt FROM tickets WHERE p_department IS NULL OR department = p_department GROUP BY priority ORDER BY CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 END) t;
+  ELSE
+    SELECT COUNT(*) INTO v_total FROM tickets WHERE (created_by = v_user_id OR assigned_to = v_user_id) AND (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_open FROM tickets WHERE status = 'open' AND (created_by = v_user_id OR assigned_to = v_user_id) AND (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_in_progress FROM tickets WHERE status = 'in_progress' AND (created_by = v_user_id OR assigned_to = v_user_id) AND (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_pending FROM tickets WHERE status = 'pending' AND (created_by = v_user_id OR assigned_to = v_user_id) AND (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_resolved FROM tickets WHERE status = 'resolved' AND (created_by = v_user_id OR assigned_to = v_user_id) AND (p_department IS NULL OR department = p_department);
+    SELECT COUNT(*) INTO v_closed FROM tickets WHERE status = 'closed' AND (created_by = v_user_id OR assigned_to = v_user_id) AND (p_department IS NULL OR department = p_department);
+
+    v_by_department := '[]'::jsonb;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('priority', priority::TEXT, 'count', cnt)), '[]'::jsonb)
+    INTO v_by_priority
+    FROM (SELECT priority, COUNT(*) as cnt FROM tickets WHERE (created_by = v_user_id OR assigned_to = v_user_id) AND (p_department IS NULL OR department = p_department) GROUP BY priority) t;
+  END IF;
+
+  v_by_status := jsonb_build_array(
+    jsonb_build_object('status', 'open', 'count', v_open),
+    jsonb_build_object('status', 'in_progress', 'count', v_in_progress),
+    jsonb_build_object('status', 'pending', 'count', v_pending),
+    jsonb_build_object('status', 'resolved', 'count', v_resolved),
+    jsonb_build_object('status', 'closed', 'count', v_closed)
+  );
+
+  v_result := jsonb_build_object(
+    'total_tickets', v_total,
+    'open_tickets', v_open,
+    'in_progress_tickets', v_in_progress,
+    'pending_tickets', v_pending,
+    'resolved_tickets', v_resolved,
+    'closed_tickets', v_closed,
+    'tickets_by_department', v_by_department,
+    'tickets_by_status', v_by_status,
+    'tickets_by_priority', v_by_priority
+  );
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Grant execute permissions for RPC functions
+GRANT EXECUTE ON FUNCTION check_idempotency(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION store_idempotency(TEXT, TEXT, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_lead_triage(TEXT, lead_triage_status, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_lead_handover_to_sales_pool(TEXT, TEXT, INTEGER, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_sales_claim_lead(BIGINT, BOOLEAN, BOOLEAN, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_lead_convert(TEXT, TEXT, NUMERIC, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_opportunity_change_stage(TEXT, opportunity_stage, TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_target_convert(TEXT, BOOLEAN, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_activity_complete_and_next(TEXT, TEXT, BOOLEAN, INTEGER, activity_type_v2, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_cadence_advance(BIGINT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION generate_ticket_code(ticket_type, ticketing_department) TO authenticated;
+GRANT EXECUTE ON FUNCTION generate_ticket_quote_number(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_ticket_create(ticket_type, VARCHAR, TEXT, ticketing_department, ticket_priority, TEXT, TEXT, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_ticket_assign(UUID, UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_ticket_transition(UUID, ticket_status, TEXT, ticket_close_outcome, TEXT, VARCHAR, DECIMAL) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_ticket_add_comment(UUID, TEXT, BOOLEAN) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_ticket_create_quote(UUID, DECIMAL, VARCHAR, DATE, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION rpc_ticketing_dashboard_summary(ticketing_department) TO authenticated;
+
+-- =====================================================
 -- END OF SCHEMA
 -- =====================================================
