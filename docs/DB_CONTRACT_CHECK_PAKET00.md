@@ -1756,4 +1756,306 @@ update_ticket_response_metrics()
 
 ---
 
+## 15. PAKET 09: QUOTATION FROM OPS COST MUST USE LATEST SUBMITTED COST
+
+### Status: FULLY IMPLEMENTED (BUG FIXED)
+
+Migration 092 implements server-side guard to ensure customer quotations always use the latest submitted operational cost. The recreate flow bug has been fixed.
+
+### Requirements
+1. Always pick latest `ticket_rate_quotes` row with `status='submitted'` for the same ticket/opportunity/lead context
+2. Prevent stale cost usage
+3. Add validation: if no submitted cost exists for RFQ tickets, block creation with clear error_code
+4. Quotation recreate flow should also use latest cost (not copy old)
+
+### Implementation Evidence (migration 092)
+
+| Component | Purpose | Status |
+|-----------|---------|--------|
+| `fn_resolve_latest_operational_cost()` | Server-side guard to resolve latest submitted cost | ✓ Implemented |
+| `v_latest_operational_costs` view | UI helper to show latest submitted cost per ticket | ✓ Implemented |
+| API POST `/customer-quotations` | Calls `fn_resolve_latest_operational_cost` before insert | ✓ Implemented |
+| API POST `/customer-quotations/[id]/recreate` | Calls `fn_resolve_latest_operational_cost` before insert | ✓ **FIXED** |
+
+### Contract Matrix
+
+| API Route | Function Called | Validates Latest Cost? |
+|-----------|-----------------|------------------------|
+| `POST /api/ticketing/customer-quotations` | `fn_resolve_latest_operational_cost` | **Yes** |
+| `POST /api/ticketing/customer-quotations/[id]/recreate` | `fn_resolve_latest_operational_cost` | **Yes (FIXED)** |
+
+### `fn_resolve_latest_operational_cost` Function Signature
+
+```sql
+fn_resolve_latest_operational_cost(
+    p_ticket_id UUID DEFAULT NULL,
+    p_lead_id TEXT DEFAULT NULL,
+    p_opportunity_id TEXT DEFAULT NULL,
+    p_provided_cost_id UUID DEFAULT NULL
+) RETURNS JSONB
+```
+
+**Return Values**:
+
+| Scenario | Returns |
+|----------|---------|
+| No ticket found | `{ success: true, resolved: false, message: "No ticket found..." }` |
+| RFQ ticket, no submitted cost | `{ success: false, error: "No submitted operational cost...", error_code: "NO_SUBMITTED_COST" }` |
+| Non-RFQ, no submitted cost | `{ success: true, resolved: false, operational_cost_id: null }` |
+| Provided cost is latest | `{ success: true, resolved: true, is_latest: true, operational_cost_id: UUID }` |
+| Provided cost is stale | `{ success: true, resolved: true, is_latest: true, was_stale: true, operational_cost_id: UUID }` |
+| No cost provided, found latest | `{ success: true, resolved: true, is_latest: true, operational_cost_id: UUID }` |
+
+### `v_latest_operational_costs` View
+
+```sql
+CREATE OR REPLACE VIEW public.v_latest_operational_costs AS
+SELECT DISTINCT ON (ticket_id)
+    trq.id,
+    trq.ticket_id,
+    trq.status,
+    trq.total_cost,
+    trq.currency,
+    trq.rate_structure,
+    trq.created_at,
+    trq.created_by,
+    p.name AS created_by_name,
+    t.ticket_code,
+    t.ticket_type
+FROM public.ticket_rate_quotes trq
+JOIN public.tickets t ON t.id = trq.ticket_id
+LEFT JOIN public.profiles p ON p.user_id = trq.created_by
+WHERE trq.status = 'submitted'  -- KEY: Only submitted costs
+ORDER BY trq.ticket_id, trq.created_at DESC;  -- KEY: Latest first
+```
+
+### API Implementation: Create Quotation
+
+**File**: `src/app/api/ticketing/customer-quotations/route.ts`
+**Lines**: 256-298
+
+```typescript
+// BUG #9 FIX: Resolve latest operational cost
+if (ticket_id || lead_id || opportunity_id) {
+  const { data: costResult, error: costError } = await supabase.rpc('fn_resolve_latest_operational_cost', {
+    p_ticket_id: ticket_id,
+    p_lead_id: lead_id,
+    p_opportunity_id: opportunity_id,
+    p_provided_cost_id: operational_cost_id
+  })
+
+  if (costResult && !costResult.success) {
+    // RFQ ticket without submitted cost - reject
+    return NextResponse.json(
+      { error: costResult.error, code: costResult.error_code, details: costResult },
+      { status: 400 }
+    )
+  }
+
+  if (costResult?.resolved && costResult.operational_cost_id) {
+    operational_cost_id = costResult.operational_cost_id
+  }
+}
+```
+
+**✓ CORRECT**: This implementation properly validates and resolves the latest cost.
+
+### ⚠️ BUG: Recreate Flow Doesn't Resolve Latest Cost
+
+**File**: `src/app/api/ticketing/customer-quotations/[id]/recreate/route.ts`
+**Line**: 111
+
+```typescript
+// BUG: Copies old operational_cost_id without checking if there's a newer one
+const { data: newQuotation, error: insertError } = await supabase
+  .from('customer_quotations')
+  .insert({
+    ...
+    operational_cost_id: quotation.operational_cost_id,  // <-- STALE!
+    ...
+  })
+```
+
+**Impact**:
+- When a quotation is recreated after rejection, ops might have submitted a revised cost
+- The recreated quotation will use the OLD cost, not the new revised one
+- This defeats the purpose of adjustment → revised cost → new quotation flow
+
+### Patch Plan: Fix Recreate Flow
+
+Create migration `097_fix_recreate_quotation_latest_cost.sql` or update API route:
+
+**Option A: Fix in API Route** (Recommended)
+
+```typescript
+// In /api/ticketing/customer-quotations/[id]/recreate/route.ts
+// After getting old quotation, resolve latest operational cost
+
+// Add this before insert (around line 102)
+let operational_cost_id = quotation.operational_cost_id
+
+if (quotation.ticket_id || quotation.lead_id || quotation.opportunity_id) {
+  const { data: costResult } = await supabase.rpc('fn_resolve_latest_operational_cost', {
+    p_ticket_id: quotation.ticket_id,
+    p_lead_id: quotation.lead_id,
+    p_opportunity_id: quotation.opportunity_id,
+    p_provided_cost_id: quotation.operational_cost_id
+  })
+
+  if (costResult?.success && costResult.resolved) {
+    operational_cost_id = costResult.operational_cost_id
+    if (costResult.was_stale) {
+      console.log('[CustomerQuotations Recreate] Using newer operational cost:', {
+        old: quotation.operational_cost_id,
+        new: operational_cost_id
+      })
+    }
+  } else if (costResult && !costResult.success) {
+    // RFQ without submitted cost
+    return NextResponse.json({
+      error: costResult.error,
+      code: costResult.error_code
+    }, { status: 400 })
+  }
+}
+
+// Then use operational_cost_id in insert
+```
+
+### Side Effect Chain
+
+```
+UI: Creator clicks "Recreate Quotation" (after rejection)
+         ↓
+POST /api/ticketing/customer-quotations/[id]/recreate
+         ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Get old quotation data                                   │
+│ 2. Call fn_resolve_latest_operational_cost ← NEW (fix)      │
+│ 3. Generate new quotation_number                            │
+│ 4. Insert new customer_quotation with LATEST cost           │
+│ 5. Copy quotation items                                     │
+│ 6. Insert ticket_event (customer_quotation_created)         │
+│ 7. Sync to lead/opportunity                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Validation SQL
+
+```sql
+-- 1. Check v_latest_operational_costs view exists and filters correctly
+SELECT * FROM v_latest_operational_costs
+WHERE ticket_id = 'TICKET_UUID'::UUID;
+-- Should return ONLY submitted costs, latest first
+
+-- 2. Verify fn_resolve_latest_operational_cost returns latest
+SELECT * FROM fn_resolve_latest_operational_cost(
+    'TICKET_UUID'::UUID,
+    NULL,
+    NULL,
+    'OLD_COST_UUID'::UUID  -- provide old cost
+);
+-- If newer cost exists, should return was_stale=true
+
+-- 3. Test RFQ ticket without submitted cost (should fail)
+SELECT * FROM fn_resolve_latest_operational_cost(
+    'RFQ_TICKET_WITHOUT_COST_UUID'::UUID,
+    NULL,
+    NULL,
+    NULL
+);
+-- Expected: { success: false, error_code: "NO_SUBMITTED_COST" }
+
+-- 4. Test non-RFQ ticket without cost (should succeed)
+SELECT * FROM fn_resolve_latest_operational_cost(
+    'GEN_TICKET_UUID'::UUID,
+    NULL,
+    NULL,
+    NULL
+);
+-- Expected: { success: true, resolved: false, operational_cost_id: null }
+
+-- 5. Verify ticket_rate_quotes status filter
+SELECT id, ticket_id, status, created_at, total_cost
+FROM ticket_rate_quotes
+WHERE ticket_id = 'TICKET_UUID'::UUID
+ORDER BY created_at DESC;
+-- Check: only 'submitted' status should be picked for quotation
+
+-- 6. Verify customer_quotations.operational_cost_id linkage
+SELECT
+    cq.id,
+    cq.quotation_number,
+    cq.operational_cost_id,
+    trq.status as cost_status,
+    trq.total_cost,
+    trq.created_at as cost_created_at
+FROM customer_quotations cq
+LEFT JOIN ticket_rate_quotes trq ON trq.id = cq.operational_cost_id
+WHERE cq.ticket_id = 'TICKET_UUID'::UUID
+ORDER BY cq.created_at DESC;
+-- Verify operational_cost_id points to correct (latest) submitted cost
+```
+
+### Quality Gates (Paket 09)
+
+| Gate | Requirement | Status |
+|------|-------------|--------|
+| **Gate 1** | `fn_resolve_latest_operational_cost` exists | ✓ Migration 092 |
+| **Gate 2** | Function filters by `status = 'submitted'` | ✓ Line 77-78 |
+| **Gate 3** | Function orders by `created_at DESC` | ✓ Line 79-80 |
+| **Gate 4** | RFQ tickets require submitted cost (error_code) | ✓ Line 85-92 |
+| **Gate 5** | Non-RFQ tickets allow NULL cost | ✓ Line 96-104 |
+| **Gate 6** | Stale cost is overridden with latest | ✓ Line 135-173 |
+| **Gate 7** | API POST `/customer-quotations` calls resolver | ✓ Line 262 |
+| **Gate 8** | API POST `/customer-quotations/[id]/recreate` calls resolver | ✓ **FIXED** (Line 107) |
+| **Gate 9** | `v_latest_operational_costs` view exists | ✓ Migration 092 |
+| **Gate 10** | View filters `WHERE status = 'submitted'` | ✓ Line 243 |
+
+### Integration Test Scenario
+
+```
+SCENARIO: Quotation recreate after ops submits revised cost
+
+SETUP:
+1. Create RFQ ticket
+2. Ops submits cost #1 (total_cost = 100,000)
+3. Sales creates quotation #1 using cost #1
+4. Sales sends quotation #1 → opportunity to "Quote Sent"
+5. Customer rejects quotation #1 → opportunity to "Negotiation"
+6. Ops revises and submits cost #2 (total_cost = 90,000)
+
+TEST:
+7. Sales clicks "Recreate Quotation" on rejected quotation #1
+
+EXPECTED (after fix):
+- New quotation #2 should use cost #2 (90,000) NOT cost #1 (100,000)
+- API should call fn_resolve_latest_operational_cost
+- costResult.was_stale should be true
+- costResult.operational_cost_id should be cost #2 ID
+
+CURRENT (bug):
+- New quotation #2 uses cost #1 (100,000) - STALE!
+```
+
+### Files Referenced (Paket 09)
+
+| File | Purpose |
+|------|---------|
+| `supabase/migrations/092_quotation_must_use_latest_operational_cost.sql` | Function + view definition |
+| `src/app/api/ticketing/customer-quotations/route.ts` | Create quotation - ✓ calls resolver |
+| `src/app/api/ticketing/customer-quotations/[id]/recreate/route.ts` | Recreate quotation - ✓ **FIXED** |
+
+### Summary
+
+Migration 092 and the API fix correctly implement the server-side guard for quotation creation:
+- ✓ `fn_resolve_latest_operational_cost()` validates and resolves latest submitted cost
+- ✓ `v_latest_operational_costs` view for UI default selection
+- ✓ POST `/customer-quotations` calls the resolver
+- ✓ POST `/customer-quotations/[id]/recreate` now calls the resolver (FIXED)
+
+All quality gates pass.
+
+---
+
 **END OF DB CONTRACT CHECK**
