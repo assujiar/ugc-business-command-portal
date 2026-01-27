@@ -25,6 +25,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { MoreHorizontal, CheckCircle, XCircle, Leaf, Send, ArrowRightCircle } from 'lucide-react'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -50,13 +60,25 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState<string | null>(null)
 
-  const handleTriage = async (leadId: string, newStatus: string, companyName: string) => {
+  // State for Assign to Sales dialog
+  const [assignDialog, setAssignDialog] = useState<{
+    open: boolean
+    lead: Lead | null
+  }>({ open: false, lead: null })
+  const [potentialRevenue, setPotentialRevenue] = useState('')
+
+  const handleTriage = async (leadId: string, newStatus: string, companyName: string, potential_revenue?: number) => {
     setIsLoading(leadId)
     try {
+      const body: Record<string, unknown> = { new_status: newStatus }
+      if (potential_revenue !== undefined) {
+        body.potential_revenue = potential_revenue
+      }
+
       const response = await fetch(`/api/crm/leads/${leadId}/triage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_status: newStatus }),
+        body: JSON.stringify(body),
       })
 
       if (response.ok) {
@@ -81,6 +103,28 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
     } finally {
       setIsLoading(null)
     }
+  }
+
+  // Handle Assign to Sales submission with potential revenue
+  const handleAssignToSales = async () => {
+    if (!assignDialog.lead) return
+
+    const revenue = parseFloat(potentialRevenue)
+    if (!potentialRevenue || isNaN(revenue) || revenue <= 0) {
+      toast.error('Input tidak valid', 'Potential Revenue wajib diisi dengan nilai yang valid')
+      return
+    }
+
+    await handleTriage(
+      assignDialog.lead.lead_id,
+      'Assign to Sales',
+      assignDialog.lead.company_name,
+      revenue
+    )
+
+    // Close dialog and reset state
+    setAssignDialog({ open: false, lead: null })
+    setPotentialRevenue('')
   }
 
   const getStatusBadge = (status: string) => {
@@ -146,7 +190,7 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
           </DropdownMenuItem>
         )}
         {lead.triage_status === 'Qualified' && (
-          <DropdownMenuItem onClick={() => handleTriage(lead.lead_id, 'Assign to Sales', lead.company_name)}>
+          <DropdownMenuItem onClick={() => setAssignDialog({ open: true, lead })}>
             <ArrowRightCircle className="mr-2 h-4 w-4 text-blue-500" />
             Assign to Sales
           </DropdownMenuItem>
@@ -235,6 +279,62 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
           ))}
         </div>
       </CardContent>
+
+      {/* Assign to Sales Dialog - for entering potential revenue */}
+      <Dialog
+        open={assignDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAssignDialog({ open: false, lead: null })
+            setPotentialRevenue('')
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign to Sales</DialogTitle>
+            <DialogDescription>
+              Lead: {assignDialog.lead?.company_name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="potential_revenue">
+                Potential Revenue <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="potential_revenue"
+                type="number"
+                placeholder="Enter potential revenue"
+                value={potentialRevenue}
+                onChange={(e) => setPotentialRevenue(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Wajib diisi untuk Assign to Sales
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAssignDialog({ open: false, lead: null })
+                setPotentialRevenue('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAssignToSales}
+              disabled={isLoading === assignDialog.lead?.lead_id || !potentialRevenue}
+            >
+              {isLoading === assignDialog.lead?.lead_id ? 'Updating...' : 'Assign to Sales'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }
