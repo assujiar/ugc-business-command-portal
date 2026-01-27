@@ -695,4 +695,147 @@ WHERE opportunity_id = 'OPPORTUNITY_UUID' AND new_stage = 'Negotiation';
 
 ---
 
+## 11. PAKET 05: QUOTATION ACCEPTED → CLOSED WON
+
+### Status: ALREADY IMPLEMENTED IN MIGRATION 095
+
+The `rpc_customer_quotation_mark_accepted` function in `095_fix_quotation_sent_pipeline_sync.sql` correctly handles all Paket 05 requirements.
+
+### Implementation Evidence (migration 095)
+
+| Line | Action |
+|------|--------|
+| 829 | Check: `IF v_opportunity.stage NOT IN ('Closed Won', 'Closed Lost')` |
+| 832 | Update: `stage = 'Closed Won'::opportunity_stage` |
+| 834 | Update: `deal_value = v_quotation.total_selling_rate` |
+| 835 | Update: `closed_at = COALESCE(closed_at, NOW())` |
+| 847-873 | Insert: `opportunity_stage_history` (→ Closed Won) |
+| 875-899 | Insert: `pipeline_updates` (→ Closed Won) |
+| 901-930 | Insert: `activities` (Note: Quotation Accepted) |
+| 932-944 | Update: `accounts.account_status` = 'active_account' |
+| 964-975 | Update: `tickets.status` = 'closed', `close_outcome` = 'won' |
+| 977-1023 | Insert: `ticket_events` (accepted + closed) |
+| 1025-1031 | Update: `ticket_sla_tracking.resolution_at` |
+
+### Side Effect Chain (Accepted)
+
+```
+POST /api/ticketing/customer-quotations/[id]/accept
+         ↓
+rpc_customer_quotation_mark_accepted
+         ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1. UPDATE customer_quotations.status = 'accepted'          │
+│ 2. UPDATE opportunities.stage = 'Closed Won'               │
+│    + deal_value = total_selling_rate                       │
+│    + closed_at = NOW()                                     │
+│ 3. INSERT opportunity_stage_history (→ Closed Won)         │
+│ 4. INSERT pipeline_updates (→ Closed Won)                  │
+│ 5. INSERT activities (Note: Quotation Accepted)            │
+│ 6. UPDATE accounts.account_status = 'active_account'       │
+│    + first_deal_date, first_transaction_date               │
+│ 7. UPDATE tickets.status = 'closed', close_outcome = 'won' │
+│    + closed_at, resolved_at                                │
+│ 8. INSERT ticket_events (customer_quotation_accepted)      │
+│ 9. INSERT ticket_events (closed)                           │
+│10. UPDATE ticket_sla_tracking.resolution_at                │
+│11. UPDATE leads.quotation_status = 'accepted'              │
+│12. UPDATE ticket_rate_quotes.status = 'accepted'           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Validation SQL
+
+```sql
+-- After accepting a quotation, verify all side effects
+-- Replace QUOTATION_UUID with actual quotation ID
+
+-- 1. Check quotation status
+SELECT id, quotation_number, status, opportunity_id, ticket_id
+FROM customer_quotations WHERE id = 'QUOTATION_UUID';
+
+-- 2. Check opportunity stage = Closed Won with deal_value
+SELECT opportunity_id, stage, quotation_status, deal_value, closed_at
+FROM opportunities WHERE opportunity_id = 'OPPORTUNITY_UUID';
+
+-- 3. Check stage history
+SELECT * FROM opportunity_stage_history
+WHERE opportunity_id = 'OPPORTUNITY_UUID'
+AND new_stage = 'Closed Won'
+ORDER BY created_at DESC LIMIT 1;
+
+-- 4. Check pipeline_updates
+SELECT * FROM pipeline_updates
+WHERE opportunity_id = 'OPPORTUNITY_UUID'
+AND new_stage = 'Closed Won'
+ORDER BY created_at DESC LIMIT 1;
+
+-- 5. Check activities
+SELECT * FROM activities
+WHERE related_opportunity_id = 'OPPORTUNITY_UUID'
+AND subject LIKE '%Accepted%'
+ORDER BY created_at DESC LIMIT 1;
+
+-- 6. Check account upgraded to active_account
+SELECT account_id, account_status, is_active, first_deal_date
+FROM accounts WHERE account_id = 'ACCOUNT_UUID';
+
+-- 7. Check ticket closed with 'won' outcome
+SELECT id, status, close_outcome, close_reason, closed_at, resolved_at
+FROM tickets WHERE id = 'TICKET_UUID';
+
+-- 8. Check ticket_events
+SELECT * FROM ticket_events
+WHERE ticket_id = 'TICKET_UUID'
+AND event_type IN ('customer_quotation_accepted', 'closed')
+ORDER BY created_at DESC LIMIT 2;
+
+-- 9. Check SLA tracking resolution
+SELECT * FROM ticket_sla_tracking
+WHERE ticket_id = 'TICKET_UUID';
+
+-- 10. Check operational cost status
+SELECT id, status FROM ticket_rate_quotes WHERE id = 'OPERATIONAL_COST_UUID';
+```
+
+### Quality Gates (Paket 05)
+
+| Gate | Requirement | Verification |
+|------|-------------|--------------|
+| **Gate 1** | `opportunities.stage` = 'Closed Won' | Query 2 |
+| **Gate 2** | `opportunities.deal_value` populated | Query 2 |
+| **Gate 3** | `opportunities.closed_at` populated | Query 2 |
+| **Gate 4** | New row in `opportunity_stage_history` (→ Closed Won) | Query 3 |
+| **Gate 5** | New row in `pipeline_updates` (→ Closed Won) | Query 4 |
+| **Gate 6** | New row in `activities` | Query 5 |
+| **Gate 7** | `accounts.account_status` = 'active_account' (if linked) | Query 6 |
+| **Gate 8** | `tickets.status` = 'closed', `close_outcome` = 'won' | Query 7 |
+| **Gate 9** | `ticket_sla_tracking.resolution_at` populated | Query 9 |
+| **Gate 10** | Idempotent (no duplicates on retry) | Call accept twice |
+
+### End-to-End Test Plan
+
+```
+Test: Accept quotation and verify all side effects
+
+Preconditions:
+- Quotation exists with status = 'sent'
+- Opportunity linked with stage = 'Quote Sent' or 'Negotiation'
+- Ticket linked with status != 'closed'
+- Account linked with account_status = 'calon_account'
+
+Steps:
+1. Call POST /api/ticketing/customer-quotations/[id]/accept
+2. Verify response: { success: true, new_stage: 'Closed Won' }
+3. Run validation SQL queries 1-10
+4. Verify all gates pass
+
+Idempotency Test:
+5. Call accept again on same quotation
+6. Verify response: { success: true, is_idempotent: true }
+7. Verify no duplicate rows in stage_history, pipeline_updates, activities
+```
+
+---
+
 **END OF DB CONTRACT CHECK**
