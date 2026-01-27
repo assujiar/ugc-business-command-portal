@@ -1,11 +1,12 @@
 // =====================================================
-// Ticketing Overview Page
-// Enhanced Dashboard with SLA metrics and performance
+// Ticketing Overview Page - V2
+// Paket 11: Comprehensive Dashboard with SLA, Response Metrics,
+// Quotation Analytics, Ops Analytics, and Role-based Leaderboards
 // =====================================================
 
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { OverviewDashboard } from '@/components/ticketing/overview-dashboard'
+import { OverviewDashboardV2 } from '@/components/ticketing/overview-dashboard-v2'
 
 export const metadata = {
   title: 'Ticketing Overview | UGC Business Command Portal',
@@ -19,5 +20,5 @@ export default async function OverviewPage() {
     redirect('/login')
   }
 
-  return <OverviewDashboard profile={profile} />
+  return <OverviewDashboardV2 profile={profile} />
 }
