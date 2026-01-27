@@ -1438,4 +1438,322 @@ Located in: `078_atomic_quotation_transitions.sql:314-401`
 
 ---
 
+## 14. PAKET 08: TICKET_EVENTS MIRRORING FOR SLA & RESPONSE METRICS
+
+### Status: IMPLEMENTED IN MIGRATION 084 + 096
+
+Every ticket_events insert is mirrored to:
+- `ticket_comments` (with `source_event_id`)
+- `ticket_responses` (per-user response rows)
+- `ticket_response_exchanges` (creator↔assignee exchange tracking)
+
+### Requirements
+1. Every ticket_events insert must be mirrored to all three tables
+2. Define clear rules: which event_types count as responses
+3. Must work for BOTH creator and assignee actions
+4. Must avoid duplicates (idempotent)
+
+### Event Type Mapping Specification
+
+#### Complete `ticket_event_type` Enum Values
+
+**Base (migration 034)**:
+- `created` - Ticket created
+- `assigned` - Ticket assigned to user
+- `reassigned` - Ticket reassigned to different user
+- `status_changed` - Ticket status changed
+- `priority_changed` - Ticket priority changed
+- `comment_added` - Comment added to ticket
+- `attachment_added` - Attachment added
+- `quote_created` - Rate quote created (ops cost)
+- `quote_sent` - Rate quote sent
+- `resolved` - Ticket resolved
+- `closed` - Ticket closed
+- `reopened` - Ticket reopened
+
+**Added (migrations 050, 052, 060, 071)**:
+- `customer_quotation_created` - Customer quotation created
+- `customer_quotation_sent` - Customer quotation sent
+- `customer_quotation_accepted` - Customer quotation accepted
+- `customer_quotation_rejected` - Customer quotation rejected
+- `quote_sent_to_customer` - Quote sent to customer
+- `request_adjustment` - Adjustment requested
+- `cost_sent` - Cost sent
+
+### Mirror Behavior Matrix
+
+| Event Type | Creates `ticket_comments`? | Creates `ticket_responses`? | Calls `record_response_exchange`? | Notes |
+|------------|---------------------------|----------------------------|----------------------------------|-------|
+| `comment_added` | **SKIP** | **SKIP** | **SKIP** | Already handled by `rpc_ticket_add_comment` |
+| `request_adjustment` | ✓ (auto, internal) | ✓ | **SKIP** | RPC already calls it (Paket 07 fix) |
+| `escalation_timer_started` | **SKIP** | ✓ | ✓ | No visible comment needed |
+| `escalation_timer_stopped` | **SKIP** | ✓ | ✓ | No visible comment needed |
+| `sla_checked` | **SKIP** | ✓ | ✓ | No visible comment needed |
+| All other events | ✓ (auto, internal) | ✓ | ✓ | Full mirroring |
+
+### Trigger Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     INSERT INTO ticket_events                           │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ AFTER INSERT
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ TRIGGER: trg_mirror_ticket_event_to_responses                           │
+│ FUNCTION: mirror_ticket_event_to_response_tables()                      │
+│                                                                         │
+│ ┌─────────────────────────────────────────────────────────────────────┐ │
+│ │ 1. Check event_type                                                 │ │
+│ │    - IF comment_added → RETURN (skip all)                           │ │
+│ │                                                                     │ │
+│ │ 2. Get ticket info (created_by, assigned_to)                        │ │
+│ │                                                                     │ │
+│ │ 3. Determine responder_role:                                        │ │
+│ │    - actor == created_by → 'creator'                                │ │
+│ │    - actor == assigned_to → 'assignee'                              │ │
+│ │    - actor is Admin role → 'admin'                                  │ │
+│ │    - else → 'ops'                                                   │ │
+│ │                                                                     │ │
+│ │ 4. Calculate response_time_seconds from last response               │ │
+│ │                                                                     │ │
+│ │ 5. Generate comment content from event_type                         │ │
+│ │                                                                     │ │
+│ │ 6. INSERT ticket_comments (if event_type allows)                    │ │
+│ │    - content = '[Auto] ' + generated content                        │ │
+│ │    - is_internal = TRUE                                             │ │
+│ │    - source_event_id = NEW.id                                       │ │
+│ │                                                                     │ │
+│ │ 7. INSERT ticket_responses (always, except comment_added)           │ │
+│ │    - responder_role, ticket_stage, response_time_seconds            │ │
+│ │    - comment_id linked to auto-comment                              │ │
+│ │                                                                     │ │
+│ │ 8. CALL record_response_exchange (if event_type allows)             │ │
+│ │    - Skip for: request_adjustment (Paket 07 fix)                    │ │
+│ │    - Updates ticket_response_exchanges                              │ │
+│ │    - Updates ticket_response_metrics                                │ │
+│ └─────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Response Role Determination
+
+```sql
+-- Logic in mirror_ticket_event_to_response_tables()
+IF NEW.actor_user_id = v_ticket.created_by THEN
+    v_responder_role := 'creator';
+ELSIF NEW.actor_user_id = v_ticket.assigned_to THEN
+    v_responder_role := 'assignee';
+ELSIF EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE user_id = NEW.actor_user_id
+    AND role = 'Admin'
+) THEN
+    v_responder_role := 'admin';
+ELSE
+    v_responder_role := 'ops';
+END IF;
+```
+
+### Tables Written
+
+| Table | Columns | Source |
+|-------|---------|--------|
+| `ticket_comments` | `ticket_id`, `user_id`, `content`, `is_internal`, `response_time_seconds`, `response_direction`, `source_event_id` | Trigger |
+| `ticket_responses` | `ticket_id`, `user_id`, `responder_role`, `ticket_stage`, `responded_at`, `response_time_seconds`, `comment_id` | Trigger |
+| `ticket_response_exchanges` | `ticket_id`, `responder_user_id`, `responder_type`, `comment_id`, `previous_response_at`, `responded_at`, `raw_response_seconds`, `business_response_seconds`, `exchange_number` | `record_response_exchange()` |
+| `ticket_response_metrics` | Various aggregated metrics per ticket | `update_ticket_response_metrics()` |
+
+### Idempotency Strategy
+
+1. **`source_event_id` Tracking**: Each auto-generated `ticket_comments` row has `source_event_id` linking to `ticket_events.id`
+2. **Index**: `idx_ticket_comments_source_event` on `source_event_id`
+3. **Trigger Transactionality**: AFTER INSERT trigger runs in same transaction; if insert fails, trigger doesn't run
+4. **Exception Handling**: Trigger catches all errors and warns without failing the main transaction
+
+```sql
+-- From migration 084
+ALTER TABLE public.ticket_comments
+ADD COLUMN IF NOT EXISTS source_event_id BIGINT REFERENCES public.ticket_events(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ticket_comments_source_event ON public.ticket_comments(source_event_id);
+```
+
+### Paket 07 Fix Integration
+
+Migration 096 fixes duplicate response exchanges by skipping `record_response_exchange` for `request_adjustment` events in the trigger (since RPCs already call it):
+
+```sql
+-- FIX Paket 07: Skip record_response_exchange for events that already call it in RPC
+IF NEW.event_type::TEXT NOT IN ('request_adjustment') THEN
+    PERFORM public.record_response_exchange(...);
+END IF;
+```
+
+### Validation SQL
+
+```sql
+-- 1. Verify trigger exists
+SELECT tgname, tgrelid::regclass, tgenabled
+FROM pg_trigger
+WHERE tgname = 'trg_mirror_ticket_event_to_responses';
+
+-- 2. Test: Create a ticket event and verify mirroring
+-- Replace IDs with actual values
+INSERT INTO ticket_events (ticket_id, event_type, actor_user_id, notes)
+VALUES ('TICKET_UUID'::UUID, 'status_changed', 'USER_UUID'::UUID, 'Test event');
+
+-- 3. Verify ticket_comments was created
+SELECT id, ticket_id, content, is_internal, source_event_id, created_at
+FROM ticket_comments
+WHERE ticket_id = 'TICKET_UUID'::UUID
+AND source_event_id IS NOT NULL
+ORDER BY created_at DESC LIMIT 1;
+
+-- 4. Verify ticket_responses was created
+SELECT id, ticket_id, user_id, responder_role, ticket_stage, response_time_seconds, responded_at
+FROM ticket_responses
+WHERE ticket_id = 'TICKET_UUID'::UUID
+ORDER BY responded_at DESC LIMIT 1;
+
+-- 5. Verify ticket_response_exchanges was created
+SELECT id, ticket_id, responder_type, raw_response_seconds, exchange_number, responded_at
+FROM ticket_response_exchanges
+WHERE ticket_id = 'TICKET_UUID'::UUID
+ORDER BY responded_at DESC LIMIT 1;
+
+-- 6. Verify NO duplicates in response_exchanges for same event
+SELECT ticket_id, responder_type, responded_at, COUNT(*) as cnt
+FROM ticket_response_exchanges
+WHERE ticket_id = 'TICKET_UUID'::UUID
+GROUP BY ticket_id, responder_type, DATE_TRUNC('second', responded_at)
+HAVING COUNT(*) > 1;
+-- Expected: 0 rows (no duplicates)
+
+-- 7. Verify response metrics are updated
+SELECT * FROM ticket_response_metrics
+WHERE ticket_id = 'TICKET_UUID'::UUID;
+```
+
+### Test Plan: Sample Ticket Flow
+
+```sql
+-- STEP 1: Create ticket (simulates API call)
+-- Expected: ticket_events(created), but NO mirror (created event doesn't need mirroring)
+
+-- STEP 2: Assign ticket
+INSERT INTO ticket_events (ticket_id, event_type, actor_user_id, notes)
+VALUES ('TICKET_UUID', 'assigned', 'OPS_USER_UUID', 'Assigned to ops');
+-- Expected:
+--   - ticket_comments: 1 row with '[Auto] Ticket assigned'
+--   - ticket_responses: 1 row with responder_role='ops' or 'admin'
+--   - ticket_response_exchanges: 1 row with responder_type='assignee'
+
+-- STEP 3: Creator adds comment (via rpc_ticket_add_comment)
+-- Trigger SKIPS for comment_added - handled by RPC
+
+-- STEP 4: Ops changes status
+INSERT INTO ticket_events (ticket_id, event_type, actor_user_id, old_value, new_value)
+VALUES ('TICKET_UUID', 'status_changed', 'OPS_USER_UUID',
+        '{"status": "open"}'::jsonb, '{"status": "in_progress"}'::jsonb);
+-- Expected:
+--   - ticket_comments: 1 row with '[Auto] Status changed from open to in_progress'
+--   - ticket_responses: 1 row with responder_role='assignee' or 'ops'
+--   - ticket_response_exchanges: 1 row
+
+-- STEP 5: Creator requests adjustment (via API)
+-- RPC calls record_response_exchange directly
+-- Trigger SKIPS record_response_exchange (Paket 07 fix)
+-- Expected:
+--   - ticket_comments: 1 row with '[Auto] Adjustment requested: ...'
+--   - ticket_responses: 1 row with responder_role='creator'
+--   - ticket_response_exchanges: 1 row (from RPC, NOT from trigger)
+
+-- FINAL: Verify metrics
+SELECT
+    creator_total_responses,
+    assignee_total_responses,
+    creator_avg_response_seconds,
+    assignee_avg_response_seconds
+FROM ticket_response_metrics
+WHERE ticket_id = 'TICKET_UUID';
+-- Expected: Counts match actual responses, no duplicates
+```
+
+### Quality Gates (Paket 08)
+
+| Gate | Requirement | Status |
+|------|-------------|--------|
+| **Gate 1** | Trigger `trg_mirror_ticket_event_to_responses` exists | ✓ Migration 084 |
+| **Gate 2** | Trigger fires AFTER INSERT on ticket_events | ✓ `AFTER INSERT FOR EACH ROW` |
+| **Gate 3** | `comment_added` events are skipped (handled by RPC) | ✓ Line 26-28 |
+| **Gate 4** | `request_adjustment` events skip `record_response_exchange` (Paket 07) | ✓ Migration 096 line 154 |
+| **Gate 5** | Auto-comments include `source_event_id` | ✓ Line 118 + 127 |
+| **Gate 6** | `ticket_responses` created for all events (except comment_added) | ✓ Line 132-149 |
+| **Gate 7** | `responder_role` correctly determined | ✓ Line 39-52 |
+| **Gate 8** | `response_time_seconds` calculated from last response | ✓ Line 54-63 |
+| **Gate 9** | Works for both creator and assignee actions | ✓ Role determination logic |
+| **Gate 10** | Exception handling doesn't fail main transaction | ✓ EXCEPTION block line 163-168 |
+
+### Files Referenced (Paket 08)
+
+| File | Purpose |
+|------|---------|
+| `supabase/migrations/034_ticketing_enums.sql` | Base `ticket_event_type` enum |
+| `supabase/migrations/075_comprehensive_crm_ticketing_enhancements.sql` | `ticket_responses` table |
+| `supabase/migrations/084_ticket_events_mirror_and_quotation_cost_link.sql` | Mirror trigger function + `source_event_id` column |
+| `supabase/migrations/040_sla_response_tracking.sql` | `ticket_response_exchanges`, `record_response_exchange()` |
+| `supabase/migrations/096_fix_duplicate_response_exchanges.sql` | Paket 07 fix for duplicate response exchanges |
+
+### Response Time Calculation
+
+```sql
+-- Response time is calculated as seconds from last response
+SELECT MAX(responded_at) INTO v_last_response_at
+FROM public.ticket_responses
+WHERE ticket_id = NEW.ticket_id;
+
+IF v_last_response_at IS NOT NULL THEN
+    -- Time since last response
+    v_response_time_seconds := EXTRACT(EPOCH FROM (NEW.created_at - v_last_response_at))::INTEGER;
+ELSE
+    -- Time since ticket creation (first response)
+    v_response_time_seconds := EXTRACT(EPOCH FROM (NEW.created_at - v_ticket.created_at))::INTEGER;
+END IF;
+```
+
+### SLA Metrics Flow
+
+```
+ticket_events INSERT
+         ↓
+mirror_ticket_event_to_response_tables()
+         ↓
+record_response_exchange()
+         ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Determine responder_type (creator/assignee)             │
+│ 2. Find previous_response_at from opposite party           │
+│ 3. Calculate raw_response_seconds                          │
+│ 4. Calculate business_response_seconds (exclude nights/weekends) │
+│ 5. INSERT into ticket_response_exchanges                    │
+│ 6. Update pending_response_from on ticket                   │
+│ 7. CALL update_ticket_response_metrics()                    │
+└─────────────────────────────────────────────────────────────┘
+         ↓
+update_ticket_response_metrics()
+         ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Recalculate aggregated metrics:                             │
+│ - creator_total_responses, avg_response_seconds             │
+│ - assignee_total_responses, avg_response_seconds            │
+│ - assignee_first_response_seconds                           │
+│ - time_to_first_quote_seconds (for RFQ)                     │
+│ - time_to_resolution_seconds                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
 **END OF DB CONTRACT CHECK**
