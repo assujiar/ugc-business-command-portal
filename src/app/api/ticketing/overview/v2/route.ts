@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import type { Database } from '@/types/database'
+import { createClient } from '@/lib/supabase/server'
+
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/ticketing/overview/v2
@@ -24,8 +24,7 @@ import type { Database } from '@/types/database'
  */
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies()
-    const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore })
+    const supabase = await createClient()
 
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -38,18 +37,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile
-    const { data: profile, error: profileError } = await supabase
+    const { data: profileData, error: profileError } = await (supabase as any)
       .from('profiles')
       .select('user_id, role, department')
       .eq('user_id', user.id)
       .single()
 
-    if (profileError || !profile) {
+    if (profileError || !profileData) {
       return NextResponse.json(
         { success: false, error: 'Profile not found' },
         { status: 404 }
       )
     }
+
+    const profile = profileData as { user_id: string; role: string; department: string | null }
 
     // Get query params
     const { searchParams } = new URL(request.url)
