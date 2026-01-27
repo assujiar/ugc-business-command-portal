@@ -567,4 +567,132 @@ SELECT * FROM rpc_customer_quotation_mark_rejected(
 
 ---
 
+## 10. PAKET 04: QUOTATION REJECTED → NEGOTIATION MAPPING
+
+### Status: ALREADY IMPLEMENTED IN MIGRATION 095
+
+The `rpc_customer_quotation_mark_rejected` function in `095_fix_quotation_sent_pipeline_sync.sql` correctly handles all Paket 04 requirements.
+
+### Status → Stage Mapping Table
+
+| Quotation Status | Source Stages | Target Stage | Side Effects |
+|-----------------|---------------|--------------|--------------|
+| `sent` | Prospecting, Discovery | **Quote Sent** | stage_history, pipeline_updates, activities |
+| `rejected` | Quote Sent, Discovery, Prospecting | **Negotiation** | stage_history, pipeline_updates, activities, quotation_rejection_reasons |
+| `accepted` | Quote Sent, Negotiation, Discovery | **Closed Won** | stage_history, pipeline_updates, activities, account→active |
+
+### Implementation Evidence (migration 095)
+
+| Line | Action |
+|------|--------|
+| 498-499 | Check: `IF v_opportunity.stage IN ('Quote Sent', 'Discovery', 'Prospecting')` |
+| 502 | Update: `stage = 'Negotiation'::opportunity_stage` |
+| 518-544 | Insert: `opportunity_stage_history` (from_stage → Negotiation) |
+| 546-570 | Insert: `pipeline_updates` (old_stage → Negotiation) |
+| 572-601 | Insert: `activities` (Note: Quotation Rejected) |
+| 538-544, 564-570, 596-601 | Idempotency: `NOT EXISTS` guard with 1-minute window |
+
+### Side Effect Chain (Rejected)
+
+```
+POST /api/ticketing/customer-quotations/[id]/reject
+         ↓
+rpc_customer_quotation_mark_rejected
+         ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1. UPDATE customer_quotations.status = 'rejected'          │
+│ 2. INSERT quotation_rejection_reasons                       │
+│ 3. UPDATE opportunities.stage = 'Negotiation'              │
+│    + competitor, competitor_price, customer_budget         │
+│ 4. INSERT opportunity_stage_history (→ Negotiation)        │
+│ 5. INSERT pipeline_updates (→ Negotiation)                 │
+│ 6. INSERT activities (Note: Quotation Rejected)            │
+│ 7. UPDATE tickets.status = 'need_adjustment'               │
+│ 8. INSERT ticket_events (customer_quotation_rejected)      │
+│ 9. INSERT ticket_events (request_adjustment)               │
+│10. UPDATE leads.quotation_status = 'rejected'              │
+│11. UPDATE ticket_rate_quotes.status = 'revise_requested'   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Validation SQL
+
+```sql
+-- After rejecting a quotation, verify all side effects
+-- Replace QUOTATION_UUID with actual quotation ID
+
+-- 1. Check quotation status
+SELECT id, quotation_number, status, rejection_reason, opportunity_id, ticket_id
+FROM customer_quotations WHERE id = 'QUOTATION_UUID';
+
+-- 2. Check rejection reason record
+SELECT * FROM quotation_rejection_reasons
+WHERE quotation_id = 'QUOTATION_UUID' ORDER BY created_at DESC LIMIT 1;
+
+-- 3. Check opportunity stage = Negotiation
+SELECT opportunity_id, stage, quotation_status, competitor, competitor_price, customer_budget
+FROM opportunities WHERE opportunity_id = 'OPPORTUNITY_UUID';
+
+-- 4. Check stage history
+SELECT * FROM opportunity_stage_history
+WHERE opportunity_id = 'OPPORTUNITY_UUID'
+AND new_stage = 'Negotiation'
+ORDER BY created_at DESC LIMIT 1;
+
+-- 5. Check pipeline_updates
+SELECT * FROM pipeline_updates
+WHERE opportunity_id = 'OPPORTUNITY_UUID'
+AND new_stage = 'Negotiation'
+ORDER BY created_at DESC LIMIT 1;
+
+-- 6. Check activities
+SELECT * FROM activities
+WHERE related_opportunity_id = 'OPPORTUNITY_UUID'
+AND subject LIKE '%Rejected%'
+ORDER BY created_at DESC LIMIT 1;
+
+-- 7. Check ticket status = need_adjustment
+SELECT id, status, pending_response_from FROM tickets WHERE id = 'TICKET_UUID';
+
+-- 8. Check ticket_events
+SELECT * FROM ticket_events
+WHERE ticket_id = 'TICKET_UUID'
+AND event_type IN ('customer_quotation_rejected', 'request_adjustment')
+ORDER BY created_at DESC LIMIT 2;
+```
+
+### Quality Gates (Paket 04)
+
+| Gate | Requirement | Verification |
+|------|-------------|--------------|
+| **Gate 1** | `opportunities.stage` = 'Negotiation' | Query 3 |
+| **Gate 2** | New row in `opportunity_stage_history` (→ Negotiation) | Query 4 |
+| **Gate 3** | New row in `pipeline_updates` (→ Negotiation) | Query 5 |
+| **Gate 4** | New row in `activities` | Query 6 |
+| **Gate 5** | New row in `quotation_rejection_reasons` | Query 2 |
+| **Gate 6** | `tickets.status` = 'need_adjustment' | Query 7 |
+| **Gate 7** | Idempotent (no duplicates on retry) | Call reject twice, count rows |
+
+### Idempotency Test
+
+```sql
+-- Call reject twice on same quotation
+-- First call: Should create all records
+-- Second call: Should return is_idempotent=true, no new records
+
+-- Count before
+SELECT COUNT(*) as before_count FROM opportunity_stage_history
+WHERE opportunity_id = 'OPPORTUNITY_UUID' AND new_stage = 'Negotiation';
+
+-- Call reject (will return is_idempotent=true on second call)
+
+-- Count after
+SELECT COUNT(*) as after_count FROM opportunity_stage_history
+WHERE opportunity_id = 'OPPORTUNITY_UUID' AND new_stage = 'Negotiation';
+
+-- Should be same count (idempotent)
+```
+
+---
+
 **END OF DB CONTRACT CHECK**
