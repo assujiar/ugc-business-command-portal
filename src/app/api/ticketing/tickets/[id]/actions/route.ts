@@ -78,9 +78,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       case 'request_adjustment':
         // Creator requests price adjustment
+        // FIX Issue 7: Use new RPC signature with proper parameters
+        // Map old 'reason' field to 'notes', use 'perlu_revisi' as default reason_type
         ({ data: result, error } = await (supabase as any).rpc('rpc_ticket_request_adjustment', {
           p_ticket_id: id,
-          p_reason: actionData.reason || null,
+          p_reason_type: actionData.reason_type || 'perlu_revisi',  // Default to general revision needed
+          p_competitor_name: actionData.competitor_name || null,
+          p_competitor_amount: actionData.competitor_amount || null,
+          p_customer_budget: actionData.customer_budget || null,
+          p_currency: actionData.currency || 'IDR',
+          p_notes: actionData.reason || actionData.notes || null,  // Support old 'reason' field as notes
+          p_actor_user_id: user.id,
+          p_correlation_id: null  // Will be auto-generated
         }))
         break
 
