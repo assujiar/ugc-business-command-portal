@@ -99,7 +99,49 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Insert new quotation (copy of the old one)
+    // FIX Paket 09: Resolve latest operational cost instead of copying old one
+    // This ensures recreated quotations use the latest submitted cost (e.g., after ops revision)
+    let operational_cost_id = quotation.operational_cost_id
+    if (quotation.ticket_id || quotation.lead_id || quotation.opportunity_id) {
+      console.log('[CustomerQuotations Recreate] Resolving latest operational cost...')
+      const { data: costResult, error: costError } = await (supabase as any).rpc('fn_resolve_latest_operational_cost', {
+        p_ticket_id: quotation.ticket_id,
+        p_lead_id: quotation.lead_id,
+        p_opportunity_id: quotation.opportunity_id,
+        p_provided_cost_id: quotation.operational_cost_id
+      })
+
+      if (costError) {
+        console.error('[CustomerQuotations Recreate] Error resolving operational cost:', costError)
+        // Continue with old cost_id on RPC error
+      } else if (costResult) {
+        console.log('[CustomerQuotations Recreate] Operational cost resolution:', costResult)
+
+        if (!costResult.success) {
+          // RFQ ticket without submitted cost - reject
+          return NextResponse.json(
+            {
+              error: costResult.error || 'Failed to resolve operational cost',
+              code: costResult.error_code || 'COST_RESOLUTION_ERROR',
+              details: costResult
+            },
+            { status: 400 }
+          )
+        }
+
+        if (costResult.resolved && costResult.operational_cost_id) {
+          if (costResult.was_stale) {
+            console.log('[CustomerQuotations Recreate] Using newer operational cost:', {
+              old: quotation.operational_cost_id,
+              new: costResult.operational_cost_id
+            })
+          }
+          operational_cost_id = costResult.operational_cost_id
+        }
+      }
+    }
+
+    // Insert new quotation (copy of the old one with latest operational cost)
     const { data: newQuotation, error: insertError } = await (supabase as any)
       .from('customer_quotations')
       .insert({
@@ -108,7 +150,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         opportunity_id: quotation.opportunity_id,
         source_type: quotation.source_type,
         sequence_number,
-        operational_cost_id: quotation.operational_cost_id,
+        operational_cost_id,
         quotation_number: quotationNumber,
         customer_name: quotation.customer_name,
         customer_company: quotation.customer_company,

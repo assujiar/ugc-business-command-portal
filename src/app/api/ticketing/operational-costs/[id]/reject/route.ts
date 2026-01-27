@@ -126,12 +126,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }, { status: 404 })
     }
 
-    // Use QUOTE_STATUS constant instead of hardcoded string
-    if (cost.status !== QUOTE_STATUS.SENT) {
+    // State Machine: Valid states for rejection (pre-customer review states)
+    // submitted: Ops submitted, sales can reject for adjustment
+    // accepted: Sales accepted cost, can still reject before sending to customer
+    // sent: Legacy status (backward compatibility)
+    // sent_to_customer: After quotation sent, if customer rejects
+    const REJECTABLE_STATUSES = [
+      QUOTE_STATUS.SUBMITTED,
+      QUOTE_STATUS.ACCEPTED,
+      QUOTE_STATUS.SENT,
+      QUOTE_STATUS.SENT_TO_CUSTOMER,
+    ]
+
+    if (!REJECTABLE_STATUSES.includes(cost.status)) {
       return NextResponse.json({
         success: false,
-        error: `Operational cost cannot be rejected in current status: ${cost.status}. Must be in '${QUOTE_STATUS.SENT}' status.`,
+        error: `Operational cost cannot be rejected in current status: ${cost.status}. Must be one of: ${REJECTABLE_STATUSES.join(', ')}.`,
         error_code: 'INVALID_STATUS_TRANSITION',
+        allowed_statuses: REJECTABLE_STATUSES,
+        current_status: cost.status,
         correlation_id: correlationId
       }, { status: 409 })
     }

@@ -67,7 +67,7 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
   }>({ open: false, lead: null })
   const [potentialRevenue, setPotentialRevenue] = useState('')
 
-  const handleTriage = async (leadId: string, newStatus: string, companyName: string, potential_revenue?: number) => {
+  const handleTriage = async (leadId: string, newStatus: string, companyName: string, potential_revenue?: number, leadForDialog?: Lead) => {
     setIsLoading(leadId)
     try {
       const body: Record<string, unknown> = { new_status: newStatus }
@@ -95,11 +95,26 @@ export function LeadInboxTable({ leads }: LeadInboxTableProps) {
         )
         router.refresh()
       } else {
-        throw new Error('Failed to update lead status')
+        // Handle specific error codes
+        const errorData = await response.json()
+
+        // UNIVERSAL FALLBACK: If MISSING_POTENTIAL_REVENUE, open the revenue dialog
+        if (errorData.error_code === 'MISSING_POTENTIAL_REVENUE' && leadForDialog) {
+          toast.warning(
+            'Potential Revenue Diperlukan',
+            'Mohon isi Potential Revenue untuk assign lead ke Sales'
+          )
+          // Open the assign dialog so user can enter potential revenue
+          setAssignDialog({ open: true, lead: leadForDialog })
+          setPotentialRevenue('')
+          return
+        }
+
+        throw new Error(errorData.error || 'Failed to update lead status')
       }
     } catch (error) {
       console.error('Error triaging lead:', error)
-      toast.error('Gagal update status', 'Terjadi kesalahan saat mengubah status lead')
+      toast.error('Gagal update status', error instanceof Error ? error.message : 'Terjadi kesalahan saat mengubah status lead')
     } finally {
       setIsLoading(null)
     }

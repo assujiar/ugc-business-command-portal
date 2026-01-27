@@ -33,6 +33,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { LEAD_STATUS_ACTIONS, LEAD_SOURCES } from '@/lib/constants'
+import { toast } from '@/hooks/use-toast'
 import type { LeadTriageStatus, UserRole, LeadSource } from '@/types/database'
 import {
   Select,
@@ -235,7 +236,11 @@ export function LeadManagementDashboard({
       // If changing to Assign to Sales, require potential revenue
       if (actionDialog.targetStatus === 'Assign to Sales') {
         if (!potentialRevenue || parseFloat(potentialRevenue) <= 0) {
-          alert('Potential Revenue wajib diisi untuk status Assign to Sales')
+          // Don't close dialog, just show toast warning
+          toast.warning(
+            'Input tidak valid',
+            'Potential Revenue wajib diisi dengan nilai lebih dari 0 untuk Assign to Sales'
+          )
           setIsLoading(null)
           return
         }
@@ -249,17 +254,40 @@ export function LeadManagementDashboard({
       })
 
       if (response.ok) {
+        toast.success(
+          `Status Updated`,
+          `${actionDialog.lead.company_name} berhasil diubah ke ${actionDialog.targetStatus}`
+        )
         router.refresh()
         setActionDialog({ open: false, lead: null, targetStatus: null })
         setPotentialRevenue('')
         setNotes('')
       } else {
-        const error = await response.json()
-        alert(error.error || 'Gagal mengubah status')
+        const errorData = await response.json()
+
+        // UNIVERSAL FALLBACK: If MISSING_POTENTIAL_REVENUE, keep dialog open and show field
+        if (errorData.error_code === 'MISSING_POTENTIAL_REVENUE') {
+          toast.warning(
+            'Potential Revenue Diperlukan',
+            'Mohon isi Potential Revenue untuk assign lead ke Sales'
+          )
+          // If not already targeting Assign to Sales, update the target
+          if (actionDialog.targetStatus !== 'Assign to Sales') {
+            setActionDialog({
+              ...actionDialog,
+              targetStatus: 'Assign to Sales',
+            })
+          }
+          // Keep dialog open, don't reset potentialRevenue so user can fill it
+          setIsLoading(null)
+          return
+        }
+
+        toast.error('Gagal mengubah status', errorData.error || 'Terjadi kesalahan')
       }
     } catch (error) {
       console.error('Error changing status:', error)
-      alert('Terjadi kesalahan')
+      toast.error('Terjadi kesalahan', 'Gagal mengubah status lead')
     } finally {
       setIsLoading(null)
     }
