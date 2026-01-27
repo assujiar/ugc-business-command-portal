@@ -7,14 +7,53 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Timeout wrapper to prevent middleware from hanging
+const AUTH_TIMEOUT_MS = 5000 // 5 seconds max for auth operations
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  fallback: T
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) =>
+      setTimeout(() => resolve(fallback), timeoutMs)
+    ),
+  ])
+}
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
 
+  // Check if Supabase environment variables are configured
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('[Middleware] Supabase environment variables not configured')
+    // Allow public routes, redirect others to login
+    const isPublicRoute =
+      request.nextUrl.pathname.startsWith('/login') ||
+      request.nextUrl.pathname.startsWith('/auth') ||
+      request.nextUrl.pathname.startsWith('/quotation-verify') ||
+      request.nextUrl.pathname.startsWith('/api/public') ||
+      request.nextUrl.pathname.startsWith('/api/ticketing/customer-quotations/validate') ||
+      request.nextUrl.pathname.startsWith('/api/crm/notifications/cron')
+
+    if (!isPublicRoute) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+    return supabaseResponse
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -41,19 +80,33 @@ export async function middleware(request: NextRequest) {
 
   // Try getUser first (validates token with Supabase server)
   // Fall back to getSession if getUser fails (reads from cookie only)
+  // Wrapped with timeout to prevent middleware hanging when Supabase is slow/unreachable
   let user = null
 
-  const { data: userData, error: userError } = await supabase.auth.getUser()
+  try {
+    const { data: userData, error: userError } = await withTimeout(
+      supabase.auth.getUser(),
+      AUTH_TIMEOUT_MS,
+      { data: { user: null }, error: { message: 'Auth timeout' } as any }
+    )
 
-  if (userData?.user) {
-    user = userData.user
-  } else if (userError) {
-    // If getUser fails, try getSession as fallback
-    // This can happen if there's a network issue or token refresh is needed
-    const { data: sessionData } = await supabase.auth.getSession()
-    if (sessionData?.session?.user) {
-      user = sessionData.session.user
+    if (userData?.user) {
+      user = userData.user
+    } else if (userError) {
+      // If getUser fails, try getSession as fallback
+      // This can happen if there's a network issue or token refresh is needed
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        AUTH_TIMEOUT_MS,
+        { data: { session: null }, error: null }
+      )
+      if (sessionData?.session?.user) {
+        user = sessionData.session.user
+      }
     }
+  } catch (error) {
+    // Log but don't crash - treat as unauthenticated
+    console.error('[Middleware] Auth error:', error instanceof Error ? error.message : 'Unknown error')
   }
 
   // Public routes that don't require authentication
@@ -102,8 +155,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder
+     * - Static assets (images, fonts, stylesheets, etc.)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|eot|otf)$).*)',
   ],
 }
