@@ -156,6 +156,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // FIX Issue 2: If lead_id exists but opportunity_id doesn't, derive opportunity_id from lead
+    // This ensures pipeline sync works correctly when quotation is sent
+    if (lead_id && !opportunity_id) {
+      const { data: lead } = await (supabase as any)
+        .from('leads')
+        .select('opportunity_id')
+        .eq('lead_id', lead_id)
+        .single()
+
+      if (lead && lead.opportunity_id) {
+        opportunity_id = lead.opportunity_id
+        console.log('[CustomerQuotations POST] Derived opportunity_id from lead:', opportunity_id)
+      }
+    }
+
     // Determine source type: standalone if no source is provided
     const source_type = body.source_type || (ticket_id ? 'ticket' : lead_id ? 'lead' : opportunity_id ? 'opportunity' : 'standalone')
 
