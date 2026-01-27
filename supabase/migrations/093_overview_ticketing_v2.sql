@@ -4,19 +4,10 @@
 -- PURPOSE: BUG #11 - Comprehensive Overview Ticketing V2
 -- Creates a single RPC that returns all dashboard data
 --
--- Returns:
--- - counts_by_type (RFQ/GEN/TOTAL)
--- - status_cards (by status, priority)
--- - response_time_metrics (first response, stage response)
--- - sla_compliance_metrics (first response, resolution, first quote)
--- - quotation_analytics (sent, accepted, rejected, conversion)
--- - ops_cost_analytics (submitted, approved, rejected, avg turnaround)
--- - leaderboards (top performers by role)
---
--- Role scoping:
--- - Director/Super Admin: all data
--- - Manager: department data
--- - User: personal data only
+-- Actual schema used:
+-- - ticket_sla_tracking: first_response_met, resolution_met (BOOLEAN)
+-- - ticket_response_metrics: assignee_first_response_seconds, time_to_resolution_seconds, etc.
+-- - ticket_response_exchanges: exchange_number (INTEGER), raw_response_seconds
 -- ============================================
 
 -- ============================================
@@ -163,38 +154,24 @@ BEGIN
                     GROUP BY status
                 ) s
             )
-        ),
-        'by_priority_and_type', jsonb_build_object(
-            'RFQ', (
-                SELECT COALESCE(jsonb_object_agg(priority, count), '{}')
-                FROM (
-                    SELECT priority, SUM(count)::INTEGER as count
-                    FROM status_data WHERE ticket_type = 'RFQ'
-                    GROUP BY priority
-                ) s
-            ),
-            'GEN', (
-                SELECT COALESCE(jsonb_object_agg(priority, count), '{}')
-                FROM (
-                    SELECT priority, SUM(count)::INTEGER as count
-                    FROM status_data WHERE ticket_type = 'GEN'
-                    GROUP BY priority
-                ) s
-            )
         )
     ) INTO v_status_cards;
 
     -- ============================================
     -- SECTION 3: Response Time Metrics
+    -- Uses ticket_response_metrics table (one row per ticket)
     -- ============================================
     WITH response_data AS (
         SELECT
             t.ticket_type,
-            tre.exchange_type,
-            tre.response_time_seconds
-        FROM public.ticket_response_exchanges tre
-        JOIN public.tickets t ON t.id = tre.ticket_id
-        WHERE tre.created_at >= v_start_date
+            trm.assignee_first_response_seconds,
+            trm.assignee_avg_response_seconds,
+            trm.creator_avg_response_seconds,
+            trm.time_to_resolution_seconds,
+            trm.time_to_first_quote_seconds
+        FROM public.ticket_response_metrics trm
+        JOIN public.tickets t ON t.id = trm.ticket_id
+        WHERE t.created_at >= v_start_date
         AND (
             v_scope = 'all'
             OR (v_scope = 'department' AND EXISTS (
@@ -208,65 +185,79 @@ BEGIN
     SELECT jsonb_build_object(
         'RFQ', jsonb_build_object(
             'first_response', jsonb_build_object(
-                'count', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND exchange_type = 'first_response'),
-                'avg_seconds', (SELECT ROUND(AVG(response_time_seconds)) FROM response_data WHERE ticket_type = 'RFQ' AND exchange_type = 'first_response'),
-                'min_seconds', (SELECT MIN(response_time_seconds) FROM response_data WHERE ticket_type = 'RFQ' AND exchange_type = 'first_response'),
-                'max_seconds', (SELECT MAX(response_time_seconds) FROM response_data WHERE ticket_type = 'RFQ' AND exchange_type = 'first_response')
+                'count', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND assignee_first_response_seconds IS NOT NULL),
+                'avg_seconds', (SELECT ROUND(AVG(assignee_first_response_seconds)) FROM response_data WHERE ticket_type = 'RFQ' AND assignee_first_response_seconds IS NOT NULL),
+                'min_seconds', (SELECT MIN(assignee_first_response_seconds) FROM response_data WHERE ticket_type = 'RFQ'),
+                'max_seconds', (SELECT MAX(assignee_first_response_seconds) FROM response_data WHERE ticket_type = 'RFQ')
             ),
-            'stage_response', jsonb_build_object(
-                'count', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND exchange_type = 'stage_response'),
-                'avg_seconds', (SELECT ROUND(AVG(response_time_seconds)) FROM response_data WHERE ticket_type = 'RFQ' AND exchange_type = 'stage_response')
+            'avg_response', jsonb_build_object(
+                'assignee_avg', (SELECT ROUND(AVG(assignee_avg_response_seconds)) FROM response_data WHERE ticket_type = 'RFQ' AND assignee_avg_response_seconds IS NOT NULL),
+                'creator_avg', (SELECT ROUND(AVG(creator_avg_response_seconds)) FROM response_data WHERE ticket_type = 'RFQ' AND creator_avg_response_seconds IS NOT NULL)
+            ),
+            'resolution', jsonb_build_object(
+                'count', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND time_to_resolution_seconds IS NOT NULL),
+                'avg_seconds', (SELECT ROUND(AVG(time_to_resolution_seconds)) FROM response_data WHERE ticket_type = 'RFQ' AND time_to_resolution_seconds IS NOT NULL)
+            ),
+            'first_quote', jsonb_build_object(
+                'count', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND time_to_first_quote_seconds IS NOT NULL),
+                'avg_seconds', (SELECT ROUND(AVG(time_to_first_quote_seconds)) FROM response_data WHERE ticket_type = 'RFQ' AND time_to_first_quote_seconds IS NOT NULL)
             ),
             'distribution', jsonb_build_object(
-                'under_1_hour', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND response_time_seconds < 3600),
-                'from_1_to_4_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND response_time_seconds >= 3600 AND response_time_seconds < 14400),
-                'from_4_to_24_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND response_time_seconds >= 14400 AND response_time_seconds < 86400),
-                'over_24_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND response_time_seconds >= 86400)
+                'under_1_hour', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND assignee_first_response_seconds < 3600),
+                'from_1_to_4_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND assignee_first_response_seconds >= 3600 AND assignee_first_response_seconds < 14400),
+                'from_4_to_24_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND assignee_first_response_seconds >= 14400 AND assignee_first_response_seconds < 86400),
+                'over_24_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'RFQ' AND assignee_first_response_seconds >= 86400)
             )
         ),
         'GEN', jsonb_build_object(
             'first_response', jsonb_build_object(
-                'count', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND exchange_type = 'first_response'),
-                'avg_seconds', (SELECT ROUND(AVG(response_time_seconds)) FROM response_data WHERE ticket_type = 'GEN' AND exchange_type = 'first_response'),
-                'min_seconds', (SELECT MIN(response_time_seconds) FROM response_data WHERE ticket_type = 'GEN' AND exchange_type = 'first_response'),
-                'max_seconds', (SELECT MAX(response_time_seconds) FROM response_data WHERE ticket_type = 'GEN' AND exchange_type = 'first_response')
+                'count', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND assignee_first_response_seconds IS NOT NULL),
+                'avg_seconds', (SELECT ROUND(AVG(assignee_first_response_seconds)) FROM response_data WHERE ticket_type = 'GEN' AND assignee_first_response_seconds IS NOT NULL),
+                'min_seconds', (SELECT MIN(assignee_first_response_seconds) FROM response_data WHERE ticket_type = 'GEN'),
+                'max_seconds', (SELECT MAX(assignee_first_response_seconds) FROM response_data WHERE ticket_type = 'GEN')
             ),
-            'stage_response', jsonb_build_object(
-                'count', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND exchange_type = 'stage_response'),
-                'avg_seconds', (SELECT ROUND(AVG(response_time_seconds)) FROM response_data WHERE ticket_type = 'GEN' AND exchange_type = 'stage_response')
+            'avg_response', jsonb_build_object(
+                'assignee_avg', (SELECT ROUND(AVG(assignee_avg_response_seconds)) FROM response_data WHERE ticket_type = 'GEN' AND assignee_avg_response_seconds IS NOT NULL),
+                'creator_avg', (SELECT ROUND(AVG(creator_avg_response_seconds)) FROM response_data WHERE ticket_type = 'GEN' AND creator_avg_response_seconds IS NOT NULL)
+            ),
+            'resolution', jsonb_build_object(
+                'count', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND time_to_resolution_seconds IS NOT NULL),
+                'avg_seconds', (SELECT ROUND(AVG(time_to_resolution_seconds)) FROM response_data WHERE ticket_type = 'GEN' AND time_to_resolution_seconds IS NOT NULL)
             ),
             'distribution', jsonb_build_object(
-                'under_1_hour', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND response_time_seconds < 3600),
-                'from_1_to_4_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND response_time_seconds >= 3600 AND response_time_seconds < 14400),
-                'from_4_to_24_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND response_time_seconds >= 14400 AND response_time_seconds < 86400),
-                'over_24_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND response_time_seconds >= 86400)
+                'under_1_hour', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND assignee_first_response_seconds < 3600),
+                'from_1_to_4_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND assignee_first_response_seconds >= 3600 AND assignee_first_response_seconds < 14400),
+                'from_4_to_24_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND assignee_first_response_seconds >= 14400 AND assignee_first_response_seconds < 86400),
+                'over_24_hours', (SELECT COUNT(*) FROM response_data WHERE ticket_type = 'GEN' AND assignee_first_response_seconds >= 86400)
             )
         ),
         'TOTAL', jsonb_build_object(
             'first_response', jsonb_build_object(
-                'count', (SELECT COUNT(*) FROM response_data WHERE exchange_type = 'first_response'),
-                'avg_seconds', (SELECT ROUND(AVG(response_time_seconds)) FROM response_data WHERE exchange_type = 'first_response')
+                'count', (SELECT COUNT(*) FROM response_data WHERE assignee_first_response_seconds IS NOT NULL),
+                'avg_seconds', (SELECT ROUND(AVG(assignee_first_response_seconds)) FROM response_data WHERE assignee_first_response_seconds IS NOT NULL)
             ),
-            'stage_response', jsonb_build_object(
-                'count', (SELECT COUNT(*) FROM response_data WHERE exchange_type = 'stage_response'),
-                'avg_seconds', (SELECT ROUND(AVG(response_time_seconds)) FROM response_data WHERE exchange_type = 'stage_response')
+            'resolution', jsonb_build_object(
+                'count', (SELECT COUNT(*) FROM response_data WHERE time_to_resolution_seconds IS NOT NULL),
+                'avg_seconds', (SELECT ROUND(AVG(time_to_resolution_seconds)) FROM response_data WHERE time_to_resolution_seconds IS NOT NULL)
             )
         )
     ) INTO v_response_time_metrics;
 
     -- ============================================
     -- SECTION 4: SLA Compliance Metrics
+    -- Uses ticket_sla_tracking table
     -- ============================================
     WITH sla_data AS (
         SELECT
             t.ticket_type,
-            trm.metric_type,
-            trm.sla_met,
-            trm.actual_seconds,
-            trm.sla_seconds
-        FROM public.ticket_response_metrics trm
-        JOIN public.tickets t ON t.id = trm.ticket_id
-        WHERE trm.created_at >= v_start_date
+            tst.first_response_met,
+            tst.resolution_met,
+            tst.first_response_at,
+            tst.resolution_at,
+            t.status
+        FROM public.ticket_sla_tracking tst
+        JOIN public.tickets t ON t.id = tst.ticket_id
+        WHERE t.created_at >= v_start_date
         AND (
             v_scope = 'all'
             OR (v_scope = 'department' AND EXISTS (
@@ -280,18 +271,10 @@ BEGIN
     pending_sla AS (
         SELECT
             t.ticket_type,
-            COUNT(*) FILTER (WHERE t.first_response_at IS NULL) as pending_first_response,
-            COUNT(*) FILTER (WHERE t.status NOT IN ('resolved', 'closed')) as pending_resolution,
-            -- Check for first quote (RFQ only)
-            COUNT(*) FILTER (
-                WHERE t.ticket_type = 'RFQ'
-                AND NOT EXISTS (
-                    SELECT 1 FROM public.ticket_rate_quotes trq
-                    WHERE trq.ticket_id = t.id
-                    AND trq.status IN ('submitted', 'sent_to_customer', 'accepted')
-                )
-            ) as pending_first_quote
+            COUNT(*) FILTER (WHERE tst.first_response_at IS NULL) as pending_first_response,
+            COUNT(*) FILTER (WHERE t.status NOT IN ('resolved', 'closed')) as pending_resolution
         FROM public.tickets t
+        LEFT JOIN public.ticket_sla_tracking tst ON tst.ticket_id = t.id
         WHERE t.created_at >= v_start_date
         AND t.status NOT IN ('resolved', 'closed')
         AND (
@@ -304,103 +287,112 @@ BEGIN
             OR (v_scope = 'user' AND (t.assigned_to = v_user_id OR t.created_by = v_user_id))
         )
         GROUP BY t.ticket_type
+    ),
+    first_quote_pending AS (
+        SELECT
+            COUNT(*) as pending_count
+        FROM public.tickets t
+        WHERE t.created_at >= v_start_date
+        AND t.ticket_type = 'RFQ'
+        AND t.status NOT IN ('resolved', 'closed')
+        AND NOT EXISTS (
+            SELECT 1 FROM public.ticket_rate_quotes trq
+            WHERE trq.ticket_id = t.id
+            AND trq.status IN ('submitted', 'sent_to_customer', 'accepted')
+        )
+        AND (
+            v_scope = 'all'
+            OR (v_scope = 'department' AND EXISTS (
+                SELECT 1 FROM public.profiles p
+                WHERE (p.user_id = t.assigned_to OR p.user_id = t.created_by)
+                AND p.department = v_user_department
+            ))
+            OR (v_scope = 'user' AND (t.assigned_to = v_user_id OR t.created_by = v_user_id))
+        )
     )
     SELECT jsonb_build_object(
         'RFQ', jsonb_build_object(
             'first_response', jsonb_build_object(
-                'met', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'first_response' AND sla_met = TRUE),
-                'breached', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'first_response' AND sla_met = FALSE),
+                'met', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND first_response_met = TRUE),
+                'breached', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND first_response_met = FALSE),
                 'pending', COALESCE((SELECT pending_first_response FROM pending_sla WHERE ticket_type = 'RFQ'), 0),
                 'compliance_rate', (
                     SELECT CASE
-                        WHEN COUNT(*) > 0 THEN ROUND((COUNT(*) FILTER (WHERE sla_met = TRUE)::NUMERIC / COUNT(*)) * 100, 1)
+                        WHEN COUNT(*) FILTER (WHERE first_response_met IS NOT NULL) > 0
+                        THEN ROUND((COUNT(*) FILTER (WHERE first_response_met = TRUE)::NUMERIC / COUNT(*) FILTER (WHERE first_response_met IS NOT NULL)) * 100, 1)
                         ELSE 0
                     END
-                    FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'first_response'
-                ),
-                'avg_seconds', (SELECT ROUND(AVG(actual_seconds)) FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'first_response')
-            ),
-            'first_quote', jsonb_build_object(
-                'met', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'first_quote' AND sla_met = TRUE),
-                'breached', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'first_quote' AND sla_met = FALSE),
-                'pending', COALESCE((SELECT pending_first_quote FROM pending_sla WHERE ticket_type = 'RFQ'), 0),
-                'compliance_rate', (
-                    SELECT CASE
-                        WHEN COUNT(*) > 0 THEN ROUND((COUNT(*) FILTER (WHERE sla_met = TRUE)::NUMERIC / COUNT(*)) * 100, 1)
-                        ELSE 0
-                    END
-                    FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'first_quote'
-                ),
-                'avg_seconds', (SELECT ROUND(AVG(actual_seconds)) FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'first_quote'),
-                'sla_hours', 24
-            ),
-            'resolution', jsonb_build_object(
-                'met', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'resolution' AND sla_met = TRUE),
-                'breached', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'resolution' AND sla_met = FALSE),
-                'pending', COALESCE((SELECT pending_resolution FROM pending_sla WHERE ticket_type = 'RFQ'), 0),
-                'compliance_rate', (
-                    SELECT CASE
-                        WHEN COUNT(*) > 0 THEN ROUND((COUNT(*) FILTER (WHERE sla_met = TRUE)::NUMERIC / COUNT(*)) * 100, 1)
-                        ELSE 0
-                    END
-                    FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'resolution'
-                ),
-                'avg_seconds', (SELECT ROUND(AVG(actual_seconds)) FROM sla_data WHERE ticket_type = 'RFQ' AND metric_type = 'resolution')
-            ),
-            'total', (SELECT COUNT(DISTINCT t.id) FROM public.tickets t WHERE t.created_at >= v_start_date AND t.ticket_type = 'RFQ'
-                AND (v_scope = 'all' OR (v_scope = 'department' AND EXISTS (SELECT 1 FROM public.profiles p WHERE (p.user_id = t.assigned_to OR p.user_id = t.created_by) AND p.department = v_user_department)) OR (v_scope = 'user' AND (t.assigned_to = v_user_id OR t.created_by = v_user_id))))
-        ),
-        'GEN', jsonb_build_object(
-            'first_response', jsonb_build_object(
-                'met', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'GEN' AND metric_type = 'first_response' AND sla_met = TRUE),
-                'breached', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'GEN' AND metric_type = 'first_response' AND sla_met = FALSE),
-                'pending', COALESCE((SELECT pending_first_response FROM pending_sla WHERE ticket_type = 'GEN'), 0),
-                'compliance_rate', (
-                    SELECT CASE
-                        WHEN COUNT(*) > 0 THEN ROUND((COUNT(*) FILTER (WHERE sla_met = TRUE)::NUMERIC / COUNT(*)) * 100, 1)
-                        ELSE 0
-                    END
-                    FROM sla_data WHERE ticket_type = 'GEN' AND metric_type = 'first_response'
-                ),
-                'avg_seconds', (SELECT ROUND(AVG(actual_seconds)) FROM sla_data WHERE ticket_type = 'GEN' AND metric_type = 'first_response')
-            ),
-            'resolution', jsonb_build_object(
-                'met', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'GEN' AND metric_type = 'resolution' AND sla_met = TRUE),
-                'breached', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'GEN' AND metric_type = 'resolution' AND sla_met = FALSE),
-                'pending', COALESCE((SELECT pending_resolution FROM pending_sla WHERE ticket_type = 'GEN'), 0),
-                'compliance_rate', (
-                    SELECT CASE
-                        WHEN COUNT(*) > 0 THEN ROUND((COUNT(*) FILTER (WHERE sla_met = TRUE)::NUMERIC / COUNT(*)) * 100, 1)
-                        ELSE 0
-                    END
-                    FROM sla_data WHERE ticket_type = 'GEN' AND metric_type = 'resolution'
-                ),
-                'avg_seconds', (SELECT ROUND(AVG(actual_seconds)) FROM sla_data WHERE ticket_type = 'GEN' AND metric_type = 'resolution')
-            ),
-            'total', (SELECT COUNT(DISTINCT t.id) FROM public.tickets t WHERE t.created_at >= v_start_date AND t.ticket_type = 'GEN'
-                AND (v_scope = 'all' OR (v_scope = 'department' AND EXISTS (SELECT 1 FROM public.profiles p WHERE (p.user_id = t.assigned_to OR p.user_id = t.created_by) AND p.department = v_user_department)) OR (v_scope = 'user' AND (t.assigned_to = v_user_id OR t.created_by = v_user_id))))
-        ),
-        'TOTAL', jsonb_build_object(
-            'first_response', jsonb_build_object(
-                'met', (SELECT COUNT(*) FROM sla_data WHERE metric_type = 'first_response' AND sla_met = TRUE),
-                'breached', (SELECT COUNT(*) FROM sla_data WHERE metric_type = 'first_response' AND sla_met = FALSE),
-                'compliance_rate', (
-                    SELECT CASE
-                        WHEN COUNT(*) > 0 THEN ROUND((COUNT(*) FILTER (WHERE sla_met = TRUE)::NUMERIC / COUNT(*)) * 100, 1)
-                        ELSE 0
-                    END
-                    FROM sla_data WHERE metric_type = 'first_response'
+                    FROM sla_data WHERE ticket_type = 'RFQ'
                 )
             ),
             'resolution', jsonb_build_object(
-                'met', (SELECT COUNT(*) FROM sla_data WHERE metric_type = 'resolution' AND sla_met = TRUE),
-                'breached', (SELECT COUNT(*) FROM sla_data WHERE metric_type = 'resolution' AND sla_met = FALSE),
+                'met', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND resolution_met = TRUE),
+                'breached', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ' AND resolution_met = FALSE),
+                'pending', COALESCE((SELECT pending_resolution FROM pending_sla WHERE ticket_type = 'RFQ'), 0),
                 'compliance_rate', (
                     SELECT CASE
-                        WHEN COUNT(*) > 0 THEN ROUND((COUNT(*) FILTER (WHERE sla_met = TRUE)::NUMERIC / COUNT(*)) * 100, 1)
+                        WHEN COUNT(*) FILTER (WHERE resolution_met IS NOT NULL) > 0
+                        THEN ROUND((COUNT(*) FILTER (WHERE resolution_met = TRUE)::NUMERIC / COUNT(*) FILTER (WHERE resolution_met IS NOT NULL)) * 100, 1)
                         ELSE 0
                     END
-                    FROM sla_data WHERE metric_type = 'resolution'
+                    FROM sla_data WHERE ticket_type = 'RFQ'
+                )
+            ),
+            'first_quote_pending', (SELECT pending_count FROM first_quote_pending),
+            'total', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'RFQ')
+        ),
+        'GEN', jsonb_build_object(
+            'first_response', jsonb_build_object(
+                'met', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'GEN' AND first_response_met = TRUE),
+                'breached', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'GEN' AND first_response_met = FALSE),
+                'pending', COALESCE((SELECT pending_first_response FROM pending_sla WHERE ticket_type = 'GEN'), 0),
+                'compliance_rate', (
+                    SELECT CASE
+                        WHEN COUNT(*) FILTER (WHERE first_response_met IS NOT NULL) > 0
+                        THEN ROUND((COUNT(*) FILTER (WHERE first_response_met = TRUE)::NUMERIC / COUNT(*) FILTER (WHERE first_response_met IS NOT NULL)) * 100, 1)
+                        ELSE 0
+                    END
+                    FROM sla_data WHERE ticket_type = 'GEN'
+                )
+            ),
+            'resolution', jsonb_build_object(
+                'met', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'GEN' AND resolution_met = TRUE),
+                'breached', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'GEN' AND resolution_met = FALSE),
+                'pending', COALESCE((SELECT pending_resolution FROM pending_sla WHERE ticket_type = 'GEN'), 0),
+                'compliance_rate', (
+                    SELECT CASE
+                        WHEN COUNT(*) FILTER (WHERE resolution_met IS NOT NULL) > 0
+                        THEN ROUND((COUNT(*) FILTER (WHERE resolution_met = TRUE)::NUMERIC / COUNT(*) FILTER (WHERE resolution_met IS NOT NULL)) * 100, 1)
+                        ELSE 0
+                    END
+                    FROM sla_data WHERE ticket_type = 'GEN'
+                )
+            ),
+            'total', (SELECT COUNT(*) FROM sla_data WHERE ticket_type = 'GEN')
+        ),
+        'TOTAL', jsonb_build_object(
+            'first_response', jsonb_build_object(
+                'met', (SELECT COUNT(*) FROM sla_data WHERE first_response_met = TRUE),
+                'breached', (SELECT COUNT(*) FROM sla_data WHERE first_response_met = FALSE),
+                'compliance_rate', (
+                    SELECT CASE
+                        WHEN COUNT(*) FILTER (WHERE first_response_met IS NOT NULL) > 0
+                        THEN ROUND((COUNT(*) FILTER (WHERE first_response_met = TRUE)::NUMERIC / COUNT(*) FILTER (WHERE first_response_met IS NOT NULL)) * 100, 1)
+                        ELSE 0
+                    END
+                    FROM sla_data
+                )
+            ),
+            'resolution', jsonb_build_object(
+                'met', (SELECT COUNT(*) FROM sla_data WHERE resolution_met = TRUE),
+                'breached', (SELECT COUNT(*) FROM sla_data WHERE resolution_met = FALSE),
+                'compliance_rate', (
+                    SELECT CASE
+                        WHEN COUNT(*) FILTER (WHERE resolution_met IS NOT NULL) > 0
+                        THEN ROUND((COUNT(*) FILTER (WHERE resolution_met = TRUE)::NUMERIC / COUNT(*) FILTER (WHERE resolution_met IS NOT NULL)) * 100, 1)
+                        ELSE 0
+                    END
+                    FROM sla_data
                 )
             )
         )
@@ -510,7 +502,6 @@ BEGIN
             trq.created_at,
             trq.updated_at,
             t.ticket_type,
-            -- Calculate turnaround time (from creation to submission)
             CASE WHEN trq.status IN ('submitted', 'sent_to_customer', 'accepted')
                 THEN EXTRACT(EPOCH FROM (trq.updated_at - trq.created_at))
                 ELSE NULL
@@ -603,20 +594,15 @@ BEGIN
             p.full_name as name,
             p.role,
             p.department,
-            -- Tickets completed
             COUNT(DISTINCT CASE WHEN t.assigned_to = p.user_id AND t.status IN ('resolved', 'closed') THEN t.id END) as tickets_completed,
-            -- Tickets assigned
             COUNT(DISTINCT CASE WHEN t.assigned_to = p.user_id THEN t.id END) as tickets_assigned,
-            -- First response avg
-            AVG(CASE WHEN tre.responder_user_id = p.user_id AND tre.exchange_type = 'first_response' THEN tre.response_time_seconds END) as avg_first_response,
-            -- Quotes submitted
+            AVG(CASE WHEN trm.ticket_id = t.id AND t.assigned_to = p.user_id THEN trm.assignee_first_response_seconds END) as avg_first_response,
             COUNT(DISTINCT CASE WHEN trq.created_by = p.user_id AND trq.status IN ('submitted', 'sent_to_customer', 'accepted') THEN trq.id END) as quotes_submitted,
-            -- Won tickets
             COUNT(DISTINCT CASE WHEN t.assigned_to = p.user_id AND t.close_outcome = 'won' THEN t.id END) as tickets_won,
             COUNT(DISTINCT CASE WHEN t.assigned_to = p.user_id AND t.close_outcome = 'lost' THEN t.id END) as tickets_lost
         FROM public.profiles p
         LEFT JOIN public.tickets t ON (t.assigned_to = p.user_id OR t.created_by = p.user_id) AND t.created_at >= v_start_date
-        LEFT JOIN public.ticket_response_exchanges tre ON tre.ticket_id = t.id AND tre.responder_user_id = p.user_id
+        LEFT JOIN public.ticket_response_metrics trm ON trm.ticket_id = t.id
         LEFT JOIN public.ticket_rate_quotes trq ON trq.ticket_id = t.id
         WHERE (
             v_scope = 'all'
@@ -719,31 +705,14 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 COMMENT ON FUNCTION public.rpc_ticketing_overview_v2 IS
 'Comprehensive Overview Ticketing V2 RPC - BUG #11
 Returns all dashboard data in a single call with role-based scoping.
-Sections: counts_by_type, status_cards, response_time_metrics, sla_compliance, quotation_analytics, ops_cost_analytics, leaderboards';
+Uses actual schema: ticket_sla_tracking (first_response_met, resolution_met), ticket_response_metrics (assignee_first_response_seconds, etc.)';
 
 GRANT EXECUTE ON FUNCTION public.rpc_ticketing_overview_v2(INTEGER, UUID, TEXT, TEXT) TO authenticated;
 
 -- ============================================
 -- 2. PERFORMANCE INDEXES
 -- ============================================
-
--- Add indexes to improve query performance
 CREATE INDEX IF NOT EXISTS idx_tickets_created_at_type ON public.tickets(created_at, ticket_type);
 CREATE INDEX IF NOT EXISTS idx_tickets_status_type ON public.tickets(status, ticket_type);
-CREATE INDEX IF NOT EXISTS idx_ticket_response_exchanges_created_type ON public.ticket_response_exchanges(created_at, exchange_type);
-CREATE INDEX IF NOT EXISTS idx_ticket_response_metrics_created_type ON public.ticket_response_metrics(created_at, metric_type);
 CREATE INDEX IF NOT EXISTS idx_customer_quotations_created_status ON public.customer_quotations(created_at, status);
 CREATE INDEX IF NOT EXISTS idx_ticket_rate_quotes_created_status ON public.ticket_rate_quotes(created_at, status);
-
--- ============================================
--- SUMMARY
--- ============================================
--- BUG #11: Created comprehensive rpc_ticketing_overview_v2 that returns:
--- - counts_by_type (RFQ/GEN/TOTAL with active/completed/today stats)
--- - status_cards (by status, priority, and type combinations)
--- - response_time_metrics (first response, stage response, distribution)
--- - sla_compliance (first response, first quote, resolution with pending counts)
--- - quotation_analytics (sent/accepted/rejected, values, conversion, rejection reasons)
--- - ops_cost_analytics (submitted/approved/rejected, turnaround, rejection reasons)
--- - leaderboards (by completion, response speed, quotes, win rate)
--- ============================================
