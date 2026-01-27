@@ -1808,5 +1808,889 @@ COMMENT ON TABLE crm_notification_logs IS 'Email notification logs for CRM event
 COMMENT ON TABLE insights_growth IS 'AI-generated growth insights cache';
 
 -- =====================================================
+-- SECTION 12: HELPER FUNCTIONS FOR RLS
+-- =====================================================
+
+-- Get current user's role
+CREATE OR REPLACE FUNCTION get_user_role()
+RETURNS user_role AS $$
+BEGIN
+  RETURN (SELECT role FROM profiles WHERE user_id = auth.uid());
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Check if user is admin
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN get_user_role() IN ('Director', 'super admin');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Check if user is marketing
+CREATE OR REPLACE FUNCTION is_marketing()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN get_user_role() IN ('Director', 'super admin', 'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Check if user is sales
+CREATE OR REPLACE FUNCTION is_sales()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN get_user_role() IN ('Director', 'super admin', 'sales manager', 'salesperson', 'sales support');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Check if user can access ticketing module
+CREATE OR REPLACE FUNCTION can_access_ticketing(user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_role TEXT;
+BEGIN
+  SELECT role INTO v_role
+  FROM profiles
+  WHERE profiles.user_id = can_access_ticketing.user_id AND is_active = TRUE;
+
+  IF v_role = 'finance' THEN
+    RETURN FALSE;
+  END IF;
+
+  RETURN v_role IS NOT NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Check if user is ticketing admin
+CREATE OR REPLACE FUNCTION is_ticketing_admin(user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_role TEXT;
+BEGIN
+  SELECT role INTO v_role
+  FROM profiles
+  WHERE profiles.user_id = is_ticketing_admin.user_id AND is_active = TRUE;
+
+  RETURN v_role IN ('Director', 'super admin');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Check if user is ticketing ops
+CREATE OR REPLACE FUNCTION is_ticketing_ops(user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_role TEXT;
+BEGIN
+  SELECT role INTO v_role
+  FROM profiles
+  WHERE profiles.user_id = is_ticketing_ops.user_id AND is_active = TRUE;
+
+  RETURN v_role IN (
+    'Director', 'super admin',
+    'EXIM Ops', 'domestics Ops', 'Import DTD Ops', 'traffic & warehous'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Get user's ticketing department
+CREATE OR REPLACE FUNCTION get_user_ticketing_department(user_id UUID)
+RETURNS ticketing_department AS $$
+DECLARE
+  v_role TEXT;
+BEGIN
+  SELECT role INTO v_role
+  FROM profiles
+  WHERE profiles.user_id = get_user_ticketing_department.user_id AND is_active = TRUE;
+
+  CASE v_role
+    WHEN 'Marketing Manager' THEN RETURN 'MKT';
+    WHEN 'Marcomm' THEN RETURN 'MKT';
+    WHEN 'DGO' THEN RETURN 'MKT';
+    WHEN 'MACX' THEN RETURN 'MKT';
+    WHEN 'VSDO' THEN RETURN 'MKT';
+    WHEN 'sales manager' THEN RETURN 'SAL';
+    WHEN 'salesperson' THEN RETURN 'SAL';
+    WHEN 'sales support' THEN RETURN 'SAL';
+    WHEN 'domestics Ops' THEN RETURN 'DOM';
+    WHEN 'EXIM Ops' THEN RETURN 'EXI';
+    WHEN 'Import DTD Ops' THEN RETURN 'DTD';
+    WHEN 'traffic & warehous' THEN RETURN 'TRF';
+    ELSE RETURN NULL;
+  END CASE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Get role category for analytics
+CREATE OR REPLACE FUNCTION get_role_category(p_role TEXT)
+RETURNS TEXT AS $$
+BEGIN
+  CASE p_role
+    WHEN 'EXIM Ops' THEN RETURN 'Ops';
+    WHEN 'domestics Ops' THEN RETURN 'Ops';
+    WHEN 'Import DTD Ops' THEN RETURN 'Ops';
+    WHEN 'traffic & warehous' THEN RETURN 'Operations Support';
+    WHEN 'sales manager' THEN RETURN 'Sales';
+    WHEN 'salesperson' THEN RETURN 'Sales';
+    WHEN 'sales support' THEN RETURN 'Sales';
+    WHEN 'Marketing Manager' THEN RETURN 'Marketing';
+    WHEN 'Marcomm' THEN RETURN 'Marketing';
+    WHEN 'DGO' THEN RETURN 'Marketing';
+    WHEN 'MACX' THEN RETURN 'Marketing';
+    WHEN 'VSDO' THEN RETURN 'Marketing';
+    WHEN 'finance' THEN RETURN 'Finance';
+    WHEN 'Director' THEN RETURN 'Management';
+    WHEN 'super admin' THEN RETURN 'Management';
+    ELSE RETURN 'Other';
+  END CASE;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Format duration helper
+CREATE OR REPLACE FUNCTION format_duration(p_seconds INTEGER)
+RETURNS TEXT AS $$
+DECLARE
+  v_days INTEGER;
+  v_hours INTEGER;
+  v_minutes INTEGER;
+  v_result TEXT := '';
+BEGIN
+  IF p_seconds IS NULL THEN
+    RETURN 'N/A';
+  END IF;
+
+  v_days := p_seconds / 86400;
+  v_hours := (p_seconds % 86400) / 3600;
+  v_minutes := (p_seconds % 3600) / 60;
+
+  IF v_days > 0 THEN
+    v_result := v_days || 'd ';
+  END IF;
+
+  IF v_hours > 0 OR v_days > 0 THEN
+    v_result := v_result || v_hours || 'h ';
+  END IF;
+
+  v_result := v_result || v_minutes || 'm';
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Calculate business hours between timestamps
+CREATE OR REPLACE FUNCTION calculate_business_hours_seconds(
+  p_start_time TIMESTAMPTZ,
+  p_end_time TIMESTAMPTZ
+)
+RETURNS INTEGER AS $$
+DECLARE
+  v_current_time TIMESTAMPTZ;
+  v_total_seconds INTEGER := 0;
+  v_day_of_week INTEGER;
+  v_business_hours RECORD;
+  v_day_start TIMESTAMPTZ;
+  v_day_end TIMESTAMPTZ;
+  v_work_start TIMESTAMPTZ;
+  v_work_end TIMESTAMPTZ;
+  v_is_holiday BOOLEAN;
+BEGIN
+  IF p_start_time IS NULL OR p_end_time IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  IF p_start_time >= p_end_time THEN
+    RETURN 0;
+  END IF;
+
+  v_current_time := p_start_time;
+
+  WHILE v_current_time < p_end_time LOOP
+    v_day_of_week := EXTRACT(DOW FROM v_current_time)::INTEGER;
+
+    SELECT * INTO v_business_hours
+    FROM sla_business_hours
+    WHERE day_of_week = v_day_of_week;
+
+    SELECT EXISTS(
+      SELECT 1 FROM sla_holidays
+      WHERE holiday_date = v_current_time::DATE
+    ) INTO v_is_holiday;
+
+    IF v_business_hours.is_working_day AND NOT v_is_holiday THEN
+      v_day_start := DATE_TRUNC('day', v_current_time) + v_business_hours.start_time::INTERVAL;
+      v_day_end := DATE_TRUNC('day', v_current_time) + v_business_hours.end_time::INTERVAL;
+
+      v_work_start := GREATEST(v_current_time, v_day_start);
+      v_work_end := LEAST(p_end_time, v_day_end);
+
+      IF v_work_start < v_work_end THEN
+        v_total_seconds := v_total_seconds + EXTRACT(EPOCH FROM (v_work_end - v_work_start))::INTEGER;
+      END IF;
+    END IF;
+
+    v_current_time := DATE_TRUNC('day', v_current_time) + INTERVAL '1 day';
+  END LOOP;
+
+  RETURN v_total_seconds;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- =====================================================
+-- SECTION 13: ROW LEVEL SECURITY POLICIES
+-- =====================================================
+
+-- Enable RLS on all tables
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lead_handover_pool ENABLE ROW LEVEL SECURITY;
+ALTER TABLE opportunities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE opportunity_stage_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cadences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cadence_steps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cadence_enrollments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE import_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pipeline_updates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_rate_quotes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticketing_sla_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_sla_tracking ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_sequences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sla_business_hours ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sla_holidays ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_response_exchanges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_response_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_quotations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_quotation_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quotation_rejection_reasons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE operational_cost_rejection_reasons ENABLE ROW LEVEL SECURITY;
+
+-- PROFILES POLICIES
+CREATE POLICY profiles_select ON profiles FOR SELECT USING (true);
+CREATE POLICY profiles_update ON profiles FOR UPDATE USING (user_id = auth.uid() OR is_admin());
+
+-- ACCOUNTS POLICIES
+CREATE POLICY accounts_select ON accounts FOR SELECT USING (is_admin() OR is_sales() OR is_marketing());
+CREATE POLICY accounts_insert ON accounts FOR INSERT WITH CHECK (is_admin() OR is_sales());
+CREATE POLICY accounts_update ON accounts FOR UPDATE USING (is_admin() OR owner_user_id = auth.uid());
+
+-- CONTACTS POLICIES
+CREATE POLICY contacts_select ON contacts FOR SELECT USING (is_admin() OR is_sales() OR is_marketing());
+CREATE POLICY contacts_insert ON contacts FOR INSERT WITH CHECK (is_admin() OR is_sales());
+CREATE POLICY contacts_update ON contacts FOR UPDATE USING (is_admin() OR is_sales());
+
+-- LEADS POLICIES
+CREATE POLICY leads_select ON leads FOR SELECT
+  USING (
+    is_admin()
+    OR (is_marketing() AND triage_status IN ('New', 'In Review', 'Nurture', 'Disqualified'))
+    OR (is_sales() AND (sales_owner_user_id = auth.uid() OR handover_eligible = true))
+  );
+CREATE POLICY leads_insert ON leads FOR INSERT WITH CHECK (is_admin() OR is_marketing());
+CREATE POLICY leads_update ON leads FOR UPDATE
+  USING (
+    is_admin()
+    OR (is_marketing() AND triage_status IN ('New', 'In Review', 'Nurture', 'Disqualified') AND sales_owner_user_id IS NULL)
+    OR (is_sales() AND sales_owner_user_id = auth.uid())
+  );
+
+-- LEAD HANDOVER POOL POLICIES
+CREATE POLICY pool_select ON lead_handover_pool FOR SELECT USING (is_admin() OR is_sales() OR handed_over_by = auth.uid());
+CREATE POLICY pool_insert ON lead_handover_pool FOR INSERT WITH CHECK (is_admin() OR is_marketing());
+CREATE POLICY pool_update ON lead_handover_pool FOR UPDATE USING (is_admin() OR is_sales());
+
+-- OPPORTUNITIES POLICIES
+CREATE POLICY opp_select ON opportunities FOR SELECT USING (is_admin() OR is_sales() OR is_marketing());
+CREATE POLICY opp_insert ON opportunities FOR INSERT WITH CHECK (is_admin() OR is_sales());
+CREATE POLICY opp_update ON opportunities FOR UPDATE USING (is_admin() OR owner_user_id = auth.uid());
+
+-- OPPORTUNITY STAGE HISTORY POLICIES
+CREATE POLICY stage_history_select ON opportunity_stage_history FOR SELECT USING (is_admin() OR is_sales() OR is_marketing());
+CREATE POLICY stage_history_insert ON opportunity_stage_history FOR INSERT WITH CHECK (is_admin() OR is_sales());
+
+-- ACTIVITIES POLICIES
+CREATE POLICY activities_select ON activities FOR SELECT USING (is_admin() OR owner_user_id = auth.uid() OR is_marketing());
+CREATE POLICY activities_insert ON activities FOR INSERT WITH CHECK (is_admin() OR is_sales() OR is_marketing());
+CREATE POLICY activities_update ON activities FOR UPDATE USING (is_admin() OR owner_user_id = auth.uid());
+
+-- CADENCES POLICIES
+CREATE POLICY cadences_select ON cadences FOR SELECT USING (is_admin() OR is_sales() OR is_marketing());
+CREATE POLICY cadences_insert ON cadences FOR INSERT WITH CHECK (is_admin());
+CREATE POLICY cadences_update ON cadences FOR UPDATE USING (is_admin());
+
+-- CADENCE STEPS POLICIES
+CREATE POLICY steps_select ON cadence_steps FOR SELECT USING (is_admin() OR is_sales() OR is_marketing());
+CREATE POLICY steps_insert ON cadence_steps FOR INSERT WITH CHECK (is_admin());
+
+-- CADENCE ENROLLMENTS POLICIES
+CREATE POLICY enrollments_select ON cadence_enrollments FOR SELECT USING (is_admin() OR enrolled_by = auth.uid());
+CREATE POLICY enrollments_insert ON cadence_enrollments FOR INSERT WITH CHECK (is_admin() OR is_sales());
+CREATE POLICY enrollments_update ON cadence_enrollments FOR UPDATE USING (is_admin() OR enrolled_by = auth.uid());
+
+-- IMPORT BATCHES POLICIES
+CREATE POLICY imports_select ON import_batches FOR SELECT USING (is_admin() OR imported_by = auth.uid());
+CREATE POLICY imports_insert ON import_batches FOR INSERT
+  WITH CHECK (is_admin() OR get_user_role() IN ('Marketing Manager', 'sales manager'));
+
+-- AUDIT LOGS POLICIES
+CREATE POLICY audit_select ON audit_logs FOR SELECT USING (is_admin());
+CREATE POLICY audit_insert ON audit_logs FOR INSERT WITH CHECK (true);
+
+-- PIPELINE UPDATES POLICIES
+CREATE POLICY pipeline_updates_select ON pipeline_updates FOR SELECT USING (is_admin() OR is_sales() OR is_marketing());
+CREATE POLICY pipeline_updates_insert ON pipeline_updates FOR INSERT WITH CHECK (is_admin() OR is_sales());
+CREATE POLICY pipeline_updates_update ON pipeline_updates FOR UPDATE USING (is_admin() OR updated_by = auth.uid());
+
+-- SALES PLANS POLICIES
+CREATE POLICY sales_plans_select ON sales_plans FOR SELECT
+  USING (
+    owner_user_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM profiles WHERE user_id = auth.uid()
+      AND role IN ('super admin', 'Director', 'sales manager', 'sales support', 'Marketing Manager', 'MACX')
+    )
+  );
+CREATE POLICY sales_plans_insert ON sales_plans FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles WHERE user_id = auth.uid()
+      AND role IN ('super admin', 'salesperson')
+    )
+  );
+CREATE POLICY sales_plans_update ON sales_plans FOR UPDATE
+  USING (
+    owner_user_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM profiles WHERE user_id = auth.uid()
+      AND role IN ('super admin')
+    )
+  );
+CREATE POLICY sales_plans_delete ON sales_plans FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles WHERE user_id = auth.uid()
+      AND role IN ('super admin', 'sales manager', 'sales support')
+    )
+  );
+
+-- TICKETS POLICIES
+CREATE POLICY tickets_select ON tickets FOR SELECT TO authenticated
+  USING (
+    can_access_ticketing(auth.uid())
+    AND (
+      is_ticketing_admin(auth.uid())
+      OR is_ticketing_ops(auth.uid())
+      OR created_by = auth.uid()
+      OR assigned_to = auth.uid()
+    )
+  );
+CREATE POLICY tickets_insert ON tickets FOR INSERT TO authenticated
+  WITH CHECK (can_access_ticketing(auth.uid()) AND created_by = auth.uid());
+CREATE POLICY tickets_update ON tickets FOR UPDATE TO authenticated
+  USING (
+    can_access_ticketing(auth.uid())
+    AND (
+      is_ticketing_admin(auth.uid())
+      OR is_ticketing_ops(auth.uid())
+      OR created_by = auth.uid()
+      OR assigned_to = auth.uid()
+    )
+  );
+CREATE POLICY tickets_delete ON tickets FOR DELETE TO authenticated
+  USING (is_ticketing_admin(auth.uid()));
+
+-- TICKET EVENTS POLICIES
+CREATE POLICY ticket_events_select ON ticket_events FOR SELECT TO authenticated
+  USING (
+    can_access_ticketing(auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM tickets t
+      WHERE t.id = ticket_id
+      AND (
+        is_ticketing_admin(auth.uid())
+        OR is_ticketing_ops(auth.uid())
+        OR t.created_by = auth.uid()
+        OR t.assigned_to = auth.uid()
+      )
+    )
+  );
+CREATE POLICY ticket_events_insert ON ticket_events FOR INSERT TO authenticated
+  WITH CHECK (can_access_ticketing(auth.uid()) AND actor_user_id = auth.uid());
+
+-- TICKET COMMENTS POLICIES
+CREATE POLICY ticket_comments_select ON ticket_comments FOR SELECT TO authenticated
+  USING (
+    can_access_ticketing(auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM tickets t
+      WHERE t.id = ticket_id
+      AND (
+        is_ticketing_admin(auth.uid())
+        OR is_ticketing_ops(auth.uid())
+        OR t.created_by = auth.uid()
+        OR t.assigned_to = auth.uid()
+      )
+    )
+    AND (
+      is_internal = FALSE
+      OR is_ticketing_ops(auth.uid())
+      OR is_ticketing_admin(auth.uid())
+    )
+  );
+CREATE POLICY ticket_comments_insert ON ticket_comments FOR INSERT TO authenticated
+  WITH CHECK (
+    can_access_ticketing(auth.uid())
+    AND user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM tickets t
+      WHERE t.id = ticket_id
+      AND (
+        is_ticketing_admin(auth.uid())
+        OR is_ticketing_ops(auth.uid())
+        OR t.created_by = auth.uid()
+        OR t.assigned_to = auth.uid()
+      )
+    )
+  );
+CREATE POLICY ticket_comments_update ON ticket_comments FOR UPDATE TO authenticated
+  USING (can_access_ticketing(auth.uid()) AND (user_id = auth.uid() OR is_ticketing_admin(auth.uid())));
+CREATE POLICY ticket_comments_delete ON ticket_comments FOR DELETE TO authenticated
+  USING (can_access_ticketing(auth.uid()) AND (user_id = auth.uid() OR is_ticketing_admin(auth.uid())));
+
+-- TICKET RATE QUOTES POLICIES
+CREATE POLICY ticket_rate_quotes_select ON ticket_rate_quotes FOR SELECT TO authenticated
+  USING (
+    can_access_ticketing(auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM tickets t
+      WHERE t.id = ticket_id
+      AND (
+        is_ticketing_admin(auth.uid())
+        OR is_ticketing_ops(auth.uid())
+        OR t.created_by = auth.uid()
+        OR t.assigned_to = auth.uid()
+      )
+    )
+  );
+CREATE POLICY ticket_rate_quotes_insert ON ticket_rate_quotes FOR INSERT TO authenticated
+  WITH CHECK (
+    can_access_ticketing(auth.uid())
+    AND (is_ticketing_admin(auth.uid()) OR is_ticketing_ops(auth.uid()))
+    AND created_by = auth.uid()
+  );
+CREATE POLICY ticket_rate_quotes_update ON ticket_rate_quotes FOR UPDATE TO authenticated
+  USING (can_access_ticketing(auth.uid()) AND (created_by = auth.uid() OR is_ticketing_admin(auth.uid())));
+CREATE POLICY ticket_rate_quotes_delete ON ticket_rate_quotes FOR DELETE TO authenticated
+  USING (can_access_ticketing(auth.uid()) AND (created_by = auth.uid() OR is_ticketing_admin(auth.uid())));
+
+-- TICKETING SLA CONFIG POLICIES
+CREATE POLICY ticketing_sla_config_select ON ticketing_sla_config FOR SELECT TO authenticated
+  USING (can_access_ticketing(auth.uid()));
+CREATE POLICY ticketing_sla_config_insert ON ticketing_sla_config FOR INSERT TO authenticated
+  WITH CHECK (is_ticketing_admin(auth.uid()));
+CREATE POLICY ticketing_sla_config_update ON ticketing_sla_config FOR UPDATE TO authenticated
+  USING (is_ticketing_admin(auth.uid()));
+
+-- SLA BUSINESS HOURS POLICIES
+CREATE POLICY sla_business_hours_select ON sla_business_hours FOR SELECT TO authenticated USING (true);
+CREATE POLICY sla_business_hours_manage ON sla_business_hours FOR ALL TO authenticated
+  USING (is_ticketing_admin(auth.uid()))
+  WITH CHECK (is_ticketing_admin(auth.uid()));
+
+-- SLA HOLIDAYS POLICIES
+CREATE POLICY sla_holidays_select ON sla_holidays FOR SELECT TO authenticated USING (true);
+CREATE POLICY sla_holidays_manage ON sla_holidays FOR ALL TO authenticated
+  USING (is_ticketing_admin(auth.uid()))
+  WITH CHECK (is_ticketing_admin(auth.uid()));
+
+-- CUSTOMER QUOTATIONS POLICIES
+CREATE POLICY customer_quotations_select ON customer_quotations FOR SELECT TO authenticated
+  USING (can_access_ticketing(auth.uid()));
+CREATE POLICY customer_quotations_insert ON customer_quotations FOR INSERT TO authenticated
+  WITH CHECK (can_access_ticketing(auth.uid()) AND created_by = auth.uid());
+CREATE POLICY customer_quotations_update ON customer_quotations FOR UPDATE TO authenticated
+  USING (can_access_ticketing(auth.uid()) AND (created_by = auth.uid() OR is_ticketing_admin(auth.uid())));
+
+-- =====================================================
+-- SECTION 14: VIEWS
+-- =====================================================
+
+-- Lead inbox view for marketing
+CREATE OR REPLACE VIEW v_lead_inbox AS
+SELECT
+  l.lead_id,
+  l.company_name,
+  l.contact_name,
+  l.contact_email,
+  l.contact_phone,
+  l.job_title,
+  l.source,
+  l.source_detail,
+  l.service_code,
+  l.service_description,
+  l.route,
+  l.origin,
+  l.destination,
+  l.volume_estimate,
+  l.timeline,
+  l.notes,
+  l.triage_status,
+  l.status,
+  l.handover_eligible,
+  l.marketing_owner_user_id,
+  l.sales_owner_user_id,
+  l.opportunity_id,
+  l.customer_id,
+  l.priority,
+  l.industry,
+  l.potential_revenue,
+  l.claim_status,
+  l.created_by,
+  l.created_at,
+  l.updated_at,
+  p.name AS marketing_owner_name,
+  p.email AS marketing_owner_email,
+  cb.name AS created_by_name
+FROM leads l
+LEFT JOIN profiles p ON l.marketing_owner_user_id = p.user_id
+LEFT JOIN profiles cb ON l.created_by = cb.user_id
+WHERE l.triage_status IN ('New', 'In Review')
+ORDER BY l.created_at DESC;
+
+-- Sales inbox view (unclaimed leads in handover pool)
+CREATE OR REPLACE VIEW v_sales_inbox AS
+SELECT
+  l.lead_id,
+  l.company_name,
+  l.contact_name,
+  l.contact_email,
+  l.contact_phone,
+  hp.pool_id,
+  hp.handed_over_at,
+  hp.handover_notes,
+  hp.priority,
+  hp.expires_at,
+  hb.name AS handed_over_by_name,
+  l.marketing_owner_user_id,
+  l.sales_owner_user_id,
+  l.handover_eligible,
+  l.created_at,
+  l.updated_at
+FROM leads l
+INNER JOIN lead_handover_pool hp ON l.lead_id = hp.lead_id
+LEFT JOIN profiles hb ON hp.handed_over_by = hb.user_id
+WHERE hp.claimed_by IS NULL
+  AND l.handover_eligible = true
+ORDER BY hp.priority DESC, hp.handed_over_at ASC;
+
+-- Pipeline active view
+CREATE OR REPLACE VIEW v_pipeline_active AS
+SELECT
+  o.opportunity_id,
+  o.account_id,
+  o.name AS opportunity_name,
+  o.description,
+  o.service_codes,
+  o.route,
+  o.origin,
+  o.destination,
+  o.estimated_value,
+  o.currency,
+  o.probability,
+  o.stage,
+  o.next_step,
+  o.next_step_due_date,
+  o.owner_user_id,
+  o.closed_at,
+  o.outcome,
+  o.lost_reason,
+  o.competitor,
+  o.deal_value,
+  o.created_at,
+  o.updated_at,
+  a.company_name AS account_name,
+  a.pic_name AS account_pic,
+  p.name AS owner_name,
+  p.email AS owner_email,
+  CASE WHEN o.next_step_due_date < CURRENT_DATE THEN true ELSE false END AS is_overdue
+FROM opportunities o
+INNER JOIN accounts a ON o.account_id = a.account_id
+LEFT JOIN profiles p ON o.owner_user_id = p.user_id
+WHERE o.stage NOT IN ('Closed Won', 'Closed Lost')
+ORDER BY o.next_step_due_date ASC;
+
+-- Pipeline with updates view
+CREATE OR REPLACE VIEW v_pipeline_with_updates AS
+SELECT
+  o.opportunity_id,
+  o.account_id,
+  o.name AS opportunity_name,
+  o.stage,
+  o.estimated_value,
+  o.deal_value,
+  o.owner_user_id,
+  o.next_step,
+  o.next_step_due_date,
+  o.created_at,
+  o.updated_at,
+  a.company_name AS account_name,
+  p.name AS owner_name,
+  pu.update_id AS latest_update_id,
+  pu.approach_method AS latest_approach,
+  pu.notes AS latest_notes,
+  pu.updated_at AS latest_update_at,
+  pu.evidence_url AS latest_evidence_url
+FROM opportunities o
+INNER JOIN accounts a ON o.account_id = a.account_id
+LEFT JOIN profiles p ON o.owner_user_id = p.user_id
+LEFT JOIN LATERAL (
+  SELECT *
+  FROM pipeline_updates
+  WHERE opportunity_id = o.opportunity_id
+  ORDER BY updated_at DESC
+  LIMIT 1
+) pu ON true
+ORDER BY o.updated_at DESC;
+
+-- Accounts enriched view
+CREATE OR REPLACE VIEW v_accounts_enriched AS
+SELECT
+  a.account_id,
+  a.company_name,
+  a.domain,
+  a.npwp,
+  a.industry,
+  a.address,
+  a.city,
+  a.province,
+  a.country,
+  a.postal_code,
+  a.phone,
+  a.pic_name,
+  a.pic_email,
+  a.pic_phone,
+  a.owner_user_id,
+  a.tenure_status,
+  a.activity_status,
+  a.account_status,
+  a.first_deal_date,
+  a.first_transaction_date,
+  a.last_transaction_date,
+  a.is_active,
+  a.tags,
+  a.notes,
+  a.created_by,
+  a.created_at,
+  a.updated_at,
+  p.name AS owner_name,
+  p.email AS owner_email,
+  COALESCE(opp_stats.open_opps, 0) AS open_opportunities,
+  COALESCE(opp_stats.total_value, 0) AS pipeline_value,
+  COALESCE(contact_count.cnt, 0) AS contact_count,
+  COALESCE(activity_stats.planned_activities, 0) AS planned_activities,
+  COALESCE(activity_stats.overdue_activities, 0) AS overdue_activities
+FROM accounts a
+LEFT JOIN profiles p ON a.owner_user_id = p.user_id
+LEFT JOIN (
+  SELECT
+    account_id,
+    COUNT(*) AS open_opps,
+    SUM(estimated_value) AS total_value
+  FROM opportunities
+  WHERE stage NOT IN ('Closed Won', 'Closed Lost')
+  GROUP BY account_id
+) opp_stats ON a.account_id = opp_stats.account_id
+LEFT JOIN (
+  SELECT account_id, COUNT(*) AS cnt
+  FROM contacts
+  GROUP BY account_id
+) contact_count ON a.account_id = contact_count.account_id
+LEFT JOIN (
+  SELECT
+    related_account_id,
+    COUNT(*) FILTER (WHERE status = 'Planned') AS planned_activities,
+    COUNT(*) FILTER (WHERE status = 'Planned' AND due_date < CURRENT_DATE) AS overdue_activities
+  FROM activities
+  WHERE related_account_id IS NOT NULL
+  GROUP BY related_account_id
+) activity_stats ON a.account_id = activity_stats.related_account_id
+ORDER BY a.company_name;
+
+-- Activities planner view
+CREATE OR REPLACE VIEW v_activities_planner AS
+SELECT
+  act.activity_id,
+  act.activity_type,
+  act.subject,
+  act.description,
+  act.outcome,
+  act.status,
+  act.due_date,
+  act.due_time,
+  act.completed_at,
+  act.related_account_id,
+  act.related_contact_id,
+  act.related_opportunity_id,
+  act.related_lead_id,
+  act.cadence_enrollment_id,
+  act.cadence_step_number,
+  act.owner_user_id,
+  act.assigned_to,
+  act.created_by,
+  act.created_at,
+  act.updated_at,
+  a.company_name AS account_name,
+  o.name AS opportunity_name,
+  l.company_name AS lead_company,
+  p.name AS owner_name
+FROM activities act
+LEFT JOIN accounts a ON act.related_account_id = a.account_id
+LEFT JOIN opportunities o ON act.related_opportunity_id = o.opportunity_id
+LEFT JOIN leads l ON act.related_lead_id = l.lead_id
+LEFT JOIN profiles p ON act.owner_user_id = p.user_id
+WHERE act.status IN ('Planned', 'Done')
+ORDER BY
+  CASE act.status WHEN 'Planned' THEN 0 ELSE 1 END,
+  act.due_date ASC;
+
+-- Unified activities view (combines sales_plans and pipeline_updates)
+CREATE OR REPLACE VIEW v_activities_unified AS
+SELECT
+  sp.plan_id AS activity_id,
+  'sales_plan' AS source_type,
+  sp.plan_type::text AS plan_type,
+  COALESCE(sp.actual_activity_method, sp.planned_activity_method)::text AS activity_type,
+  sp.company_name AS activity_detail,
+  COALESCE(sp.realization_notes, sp.plan_notes) AS notes,
+  sp.status,
+  sp.planned_date::TIMESTAMPTZ AS scheduled_on,
+  sp.realized_at AS completed_on,
+  sp.evidence_url,
+  sp.evidence_file_name,
+  sp.location_lat,
+  sp.location_lng,
+  sp.location_address,
+  sp.owner_user_id,
+  COALESCE(sp.created_account_id, sp.source_account_id) AS account_id,
+  sp.created_opportunity_id AS opportunity_id,
+  sp.created_lead_id AS lead_id,
+  sp.created_at,
+  sp.potential_status::text AS potential_status,
+  sp.pic_name,
+  sp.pic_phone,
+  sp.pic_email,
+  p.name AS sales_name,
+  COALESCE(a.company_name, sp.company_name) AS account_name
+FROM sales_plans sp
+LEFT JOIN profiles p ON sp.owner_user_id = p.user_id
+LEFT JOIN accounts a ON COALESCE(sp.created_account_id, sp.source_account_id) = a.account_id
+
+UNION ALL
+
+SELECT
+  pu.update_id AS activity_id,
+  'pipeline_update' AS source_type,
+  'pipeline' AS plan_type,
+  pu.approach_method::text AS activity_type,
+  CONCAT('Pipeline: ', pu.old_stage, ' -> ', pu.new_stage) AS activity_detail,
+  pu.notes,
+  'completed' AS status,
+  pu.updated_at AS scheduled_on,
+  pu.updated_at AS completed_on,
+  pu.evidence_url,
+  pu.evidence_file_name,
+  pu.location_lat,
+  pu.location_lng,
+  pu.location_address,
+  pu.updated_by AS owner_user_id,
+  o.account_id,
+  pu.opportunity_id,
+  o.source_lead_id AS lead_id,
+  pu.created_at,
+  NULL AS potential_status,
+  a.pic_name,
+  a.pic_phone,
+  a.pic_email,
+  p.name AS sales_name,
+  a.company_name AS account_name
+FROM pipeline_updates pu
+LEFT JOIN opportunities o ON pu.opportunity_id = o.opportunity_id
+LEFT JOIN profiles p ON pu.updated_by = p.user_id
+LEFT JOIN accounts a ON o.account_id = a.account_id;
+
+-- Customer quotations enriched view
+CREATE OR REPLACE VIEW v_customer_quotations_enriched AS
+SELECT
+  cq.*,
+  t.ticket_code,
+  t.subject AS ticket_subject,
+  t.department AS ticket_department,
+  t.status AS ticket_status,
+  l.company_name AS lead_company,
+  l.contact_name AS lead_contact,
+  o.name AS opportunity_name,
+  o.stage AS opportunity_stage,
+  o.account_id AS opportunity_account_id,
+  a.company_name AS account_name,
+  p.name AS created_by_name
+FROM customer_quotations cq
+LEFT JOIN tickets t ON cq.ticket_id = t.id
+LEFT JOIN leads l ON cq.lead_id = l.lead_id
+LEFT JOIN opportunities o ON cq.opportunity_id = o.opportunity_id
+LEFT JOIN accounts a ON o.account_id = a.account_id
+LEFT JOIN profiles p ON cq.created_by = p.user_id;
+
+-- Latest operational costs view
+CREATE OR REPLACE VIEW v_latest_operational_costs AS
+SELECT DISTINCT ON (ticket_id)
+  id,
+  ticket_id,
+  quote_number,
+  amount,
+  currency,
+  valid_until,
+  status,
+  rate_structure,
+  created_by,
+  created_at,
+  updated_at
+FROM ticket_rate_quotes
+WHERE status = 'sent'
+ORDER BY ticket_id, created_at DESC;
+
+-- =====================================================
+-- SECTION 15: GRANT PERMISSIONS
+-- =====================================================
+
+GRANT EXECUTE ON FUNCTION get_user_role() TO authenticated;
+GRANT EXECUTE ON FUNCTION is_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION is_marketing() TO authenticated;
+GRANT EXECUTE ON FUNCTION is_sales() TO authenticated;
+GRANT EXECUTE ON FUNCTION can_access_ticketing(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION is_ticketing_admin(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION is_ticketing_ops(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_user_ticketing_department(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_role_category(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION format_duration(INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION calculate_business_hours_seconds(TIMESTAMPTZ, TIMESTAMPTZ) TO authenticated;
+
+GRANT SELECT ON v_lead_inbox TO authenticated;
+GRANT SELECT ON v_sales_inbox TO authenticated;
+GRANT SELECT ON v_pipeline_active TO authenticated;
+GRANT SELECT ON v_pipeline_with_updates TO authenticated;
+GRANT SELECT ON v_accounts_enriched TO authenticated;
+GRANT SELECT ON v_activities_planner TO authenticated;
+GRANT SELECT ON v_activities_unified TO authenticated;
+GRANT SELECT ON v_customer_quotations_enriched TO authenticated;
+GRANT SELECT ON v_latest_operational_costs TO authenticated;
+
+-- =====================================================
 -- END OF SCHEMA
 -- =====================================================
