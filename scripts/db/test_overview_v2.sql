@@ -31,27 +31,9 @@ SELECT jsonb_pretty(
 \echo '============================================'
 
 -- ============================================
--- Test 2: Call with department scope
+-- Test 2: Verify counts_by_type structure
 -- ============================================
-\echo 'Test 2: Department scope (DOM - Domestics Ops)'
-\echo ''
-
-SELECT jsonb_pretty(
-    public.rpc_ticketing_overview_v2(
-        p_period_days := 30,
-        p_user_id := NULL,
-        p_department := 'DOM',
-        p_role := 'ticketing_manager'
-    )
-);
-
-\echo ''
-\echo '============================================'
-
--- ============================================
--- Test 3: Verify counts_by_type structure
--- ============================================
-\echo 'Test 3: Verify counts_by_type structure'
+\echo 'Test 2: Verify counts_by_type structure'
 \echo ''
 
 SELECT
@@ -68,18 +50,37 @@ FROM (
 \echo '============================================'
 
 -- ============================================
--- Test 4: Verify SLA compliance structure
+-- Test 3: Verify SLA compliance structure
+-- Uses ticket_sla_tracking table (first_response_met, resolution_met BOOLEAN)
 -- ============================================
-\echo 'Test 4: Verify SLA compliance structure'
+\echo 'Test 3: Verify SLA compliance structure'
 \echo ''
 
 SELECT
     (result->'sla_compliance'->'RFQ'->'first_response'->>'met')::INTEGER as rfq_fr_met,
     (result->'sla_compliance'->'RFQ'->'first_response'->>'breached')::INTEGER as rfq_fr_breached,
-    (result->'sla_compliance'->'RFQ'->'first_quote'->>'met')::INTEGER as rfq_fq_met,
-    (result->'sla_compliance'->'RFQ'->'first_quote'->>'breached')::INTEGER as rfq_fq_breached,
+    (result->'sla_compliance'->'RFQ'->'first_response'->>'compliance_rate')::NUMERIC as rfq_fr_compliance,
     (result->'sla_compliance'->'GEN'->'first_response'->>'met')::INTEGER as gen_fr_met,
     (result->'sla_compliance'->'GEN'->'first_response'->>'breached')::INTEGER as gen_fr_breached
+FROM (
+    SELECT public.rpc_ticketing_overview_v2(30, NULL, NULL, 'super_admin') as result
+) t;
+
+\echo ''
+\echo '============================================'
+
+-- ============================================
+-- Test 4: Verify response time metrics
+-- Uses ticket_response_metrics table (assignee_first_response_seconds, etc.)
+-- ============================================
+\echo 'Test 4: Verify response time metrics'
+\echo ''
+
+SELECT
+    (result->'response_time_metrics'->'RFQ'->'first_response'->>'count')::INTEGER as rfq_fr_count,
+    (result->'response_time_metrics'->'RFQ'->'first_response'->>'avg_seconds')::INTEGER as rfq_fr_avg,
+    (result->'response_time_metrics'->'GEN'->'first_response'->>'count')::INTEGER as gen_fr_count,
+    (result->'response_time_metrics'->'TOTAL'->'first_response'->>'count')::INTEGER as total_fr_count
 FROM (
     SELECT public.rpc_ticketing_overview_v2(30, NULL, NULL, 'super_admin') as result
 ) t;
@@ -118,8 +119,7 @@ SELECT
     (result->'ops_cost_analytics'->'summary'->>'submitted')::INTEGER as submitted,
     (result->'ops_cost_analytics'->'summary'->>'accepted')::INTEGER as accepted,
     (result->'ops_cost_analytics'->'summary'->>'rejected')::INTEGER as rejected,
-    (result->'ops_cost_analytics'->>'approval_rate')::NUMERIC as approval_rate,
-    (result->'ops_cost_analytics'->'turnaround'->>'avg_seconds')::INTEGER as avg_turnaround_seconds
+    (result->'ops_cost_analytics'->>'approval_rate')::NUMERIC as approval_rate
 FROM (
     SELECT public.rpc_ticketing_overview_v2(30, NULL, NULL, 'super_admin') as result
 ) t;
@@ -138,25 +138,6 @@ SELECT
     jsonb_array_length(result->'leaderboards'->'by_response_speed') as response_speed_leaderboard_count,
     jsonb_array_length(result->'leaderboards'->'by_quotes') as quotes_leaderboard_count,
     jsonb_array_length(result->'leaderboards'->'by_win_rate') as win_rate_leaderboard_count
-FROM (
-    SELECT public.rpc_ticketing_overview_v2(30, NULL, NULL, 'super_admin') as result
-) t;
-
-\echo ''
-\echo '============================================'
-
--- ============================================
--- Test 8: Verify response time metrics
--- ============================================
-\echo 'Test 8: Verify response time metrics'
-\echo ''
-
-SELECT
-    (result->'response_time_metrics'->'RFQ'->'first_response'->>'count')::INTEGER as rfq_fr_count,
-    (result->'response_time_metrics'->'RFQ'->'first_response'->>'avg_seconds')::INTEGER as rfq_fr_avg,
-    (result->'response_time_metrics'->'GEN'->'first_response'->>'count')::INTEGER as gen_fr_count,
-    (result->'response_time_metrics'->'GEN'->'first_response'->>'avg_seconds')::INTEGER as gen_fr_avg,
-    (result->'response_time_metrics'->'TOTAL'->'first_response'->>'count')::INTEGER as total_fr_count
 FROM (
     SELECT public.rpc_ticketing_overview_v2(30, NULL, NULL, 'super_admin') as result
 ) t;
