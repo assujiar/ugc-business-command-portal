@@ -967,4 +967,475 @@ The activities records created by quotation transitions count towards user activ
 
 ---
 
+## 13. PAKET 07: MANUAL NEED ADJUSTMENT / REQUEST ADJUSTMENT FLOWS
+
+### Status: IMPLEMENTED IN MIGRATION 090
+
+Manual adjustment flows work for both creator→ops and ops→creator scenarios.
+
+### Requirements
+1. Creator can request adjustment manual (with reason)
+2. Assignee (ops) can mark need adjustment manual
+3. All actions logged to ticket_events
+4. All actions counted in response metrics (ticket_response_exchanges)
+
+### Contract Matrix: UI Action → API → RPC → DB Writes
+
+| UI Action | API Route | RPC Called | Tables Written |
+|-----------|-----------|------------|----------------|
+| Creator requests price adjustment | `POST /api/ticketing/tickets/[id]/request-adjustment` | `rpc_ticket_request_adjustment` | `tickets`, `ticket_events`, `ticket_rate_quotes`, `operational_cost_rejection_reasons`, `ticket_response_exchanges`, `ticket_response_metrics`, `opportunities`, `opportunity_stage_history` |
+| Ops/Assignee marks need adjustment | `POST /api/ticketing/tickets/[id]/need-adjustment` | `rpc_ticket_set_need_adjustment` | `tickets`, `ticket_events`, `ticket_response_exchanges`, `ticket_response_metrics`, `opportunities`, `opportunity_stage_history` |
+| Ops submits revised cost | (trigger on ticket_rate_quotes) | `trigger_sync_cost_submission_to_ticket` | `tickets`, `ticket_events`, `ticket_response_exchanges`, `ticket_response_metrics` |
+
+### RPC Signatures
+
+#### `rpc_ticket_request_adjustment` (for creator with reason)
+```sql
+rpc_ticket_request_adjustment(
+    p_ticket_id UUID,
+    p_reason_type operational_cost_rejection_reason_type,  -- REQUIRED
+    p_competitor_name TEXT DEFAULT NULL,
+    p_competitor_amount NUMERIC DEFAULT NULL,
+    p_customer_budget NUMERIC DEFAULT NULL,
+    p_currency TEXT DEFAULT 'IDR',
+    p_notes TEXT DEFAULT NULL,
+    p_actor_user_id UUID DEFAULT NULL,
+    p_correlation_id TEXT DEFAULT NULL
+) RETURNS JSONB
+```
+
+**Valid reason_type values**:
+- `harga_terlalu_tinggi`
+- `margin_tidak_mencukupi`
+- `vendor_tidak_sesuai`
+- `waktu_tidak_sesuai`
+- `perlu_revisi`
+- `tarif_tidak_masuk`
+- `kompetitor_lebih_murah`
+- `budget_customer_tidak_cukup`
+- `other`
+
+#### `rpc_ticket_set_need_adjustment` (for ops or simpler flow)
+```sql
+rpc_ticket_set_need_adjustment(
+    p_ticket_id UUID,
+    p_notes TEXT DEFAULT NULL,
+    p_actor_role_mode TEXT DEFAULT 'creator',  -- 'creator' or 'ops'
+    p_actor_user_id UUID DEFAULT NULL,
+    p_correlation_id TEXT DEFAULT NULL
+) RETURNS JSONB
+```
+
+**actor_role_mode behavior**:
+- `'creator'`: Sets `pending_response_from = 'assignee'` (customer requesting adjustment)
+- `'ops'`: Sets `pending_response_from = 'creator'` (ops requesting more info)
+
+### Side Effect Chains
+
+#### Request Adjustment (creator with reason)
+```
+POST /api/ticketing/tickets/[id]/request-adjustment
+         ↓
+rpc_ticket_request_adjustment
+         ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1. UPDATE tickets.status = 'need_adjustment'                │
+│    + pending_response_from = 'assignee'                     │
+│ 2. UPDATE ticket_rate_quotes.status = 'revise_requested'    │
+│ 3. INSERT operational_cost_rejection_reasons                │
+│ 4. INSERT ticket_events (request_adjustment)                │
+│ 5. CALL record_response_exchange() ← Direct call in RPC     │
+│ 6. UPDATE opportunities.stage = 'Negotiation' (if Quote Sent)│
+│ 7. INSERT opportunity_stage_history (if stage changed)      │
+└─────────────────────────────────────────────────────────────┘
+         ↓
+trigger: trg_mirror_ticket_event_to_responses
+         ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1. INSERT ticket_comments (auto-generated, internal)        │
+│ 2. INSERT ticket_responses                                  │
+│ 3. CALL record_response_exchange() ← DUPLICATE!             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Set Need Adjustment (manual/ops)
+```
+POST /api/ticketing/tickets/[id]/need-adjustment
+         ↓
+rpc_ticket_set_need_adjustment
+         ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1. UPDATE tickets.status = 'need_adjustment'                │
+│    + pending_response_from based on actor_role_mode         │
+│ 2. INSERT ticket_events (request_adjustment)                │
+│ 3. CALL record_response_exchange() ← Direct call in RPC     │
+│ 4. UPDATE opportunities.stage = 'Negotiation' (if Quote Sent)│
+│ 5. INSERT opportunity_stage_history (if stage changed)      │
+└─────────────────────────────────────────────────────────────┘
+         ↓
+trigger: trg_mirror_ticket_event_to_responses
+         ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1. INSERT ticket_comments (auto-generated, internal)        │
+│ 2. INSERT ticket_responses                                  │
+│ 3. CALL record_response_exchange() ← DUPLICATE!             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### ⚠️ BUG DETECTED: Duplicate Response Exchanges
+
+**Issue**: Both RPCs directly call `record_response_exchange()`, and then the `trg_mirror_ticket_event_to_responses` trigger ALSO calls `record_response_exchange()` when the ticket_events row is inserted.
+
+**Impact**:
+- Each adjustment action creates TWO response_exchange entries
+- Response metrics (avg response time, exchange count) are inflated
+- SLA calculations may be incorrect
+
+**Evidence**:
+- Migration 090 line 163-175: RPC calls `record_response_exchange()`
+- Migration 084 line 154-160: Trigger calls `record_response_exchange()`
+
+**Fix Required**: See Patch Plan below
+
+### Patch Plan: Fix Duplicate Response Exchanges
+
+Create migration `096_fix_duplicate_response_exchanges.sql`:
+
+```sql
+-- ============================================
+-- Migration: 096_fix_duplicate_response_exchanges.sql
+--
+-- PURPOSE: Fix Paket 07 - Duplicate response exchanges
+--
+-- ISSUE: RPCs directly call record_response_exchange(), then trigger
+-- mirror_ticket_event_to_response_tables ALSO calls record_response_exchange()
+--
+-- FIX: Update mirror trigger to skip events that already have response exchange
+-- recorded by the RPC (request_adjustment event type)
+-- ============================================
+
+CREATE OR REPLACE FUNCTION public.mirror_ticket_event_to_response_tables()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_ticket RECORD;
+    v_comment_id UUID;
+    v_comment_content TEXT;
+    v_responder_role VARCHAR(20);
+    v_response_time_seconds INTEGER;
+    v_last_response_at TIMESTAMPTZ;
+BEGIN
+    -- Skip if this is a comment_added event (already handled by rpc_ticket_add_comment)
+    IF NEW.event_type = 'comment_added' THEN
+        RETURN NEW;
+    END IF;
+
+    -- FIX Paket 07: Skip request_adjustment events as they already call record_response_exchange
+    -- in the RPC functions (rpc_ticket_request_adjustment, rpc_ticket_set_need_adjustment)
+    IF NEW.event_type = 'request_adjustment' THEN
+        -- Still create the auto-comment but skip record_response_exchange
+        -- (See below - we split the logic)
+    END IF;
+
+    -- Get ticket info
+    SELECT * INTO v_ticket
+    FROM public.tickets
+    WHERE id = NEW.ticket_id;
+
+    IF v_ticket IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    -- Determine responder role based on actor vs ticket creator/assignee
+    IF NEW.actor_user_id = v_ticket.created_by THEN
+        v_responder_role := 'creator';
+    ELSIF NEW.actor_user_id = v_ticket.assigned_to THEN
+        v_responder_role := 'assignee';
+    ELSIF EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE user_id = NEW.actor_user_id
+        AND role = 'Admin'
+    ) THEN
+        v_responder_role := 'admin';
+    ELSE
+        v_responder_role := 'ops';
+    END IF;
+
+    -- Calculate response time from last response
+    SELECT MAX(responded_at) INTO v_last_response_at
+    FROM public.ticket_responses
+    WHERE ticket_id = NEW.ticket_id;
+
+    IF v_last_response_at IS NOT NULL THEN
+        v_response_time_seconds := EXTRACT(EPOCH FROM (NEW.created_at - v_last_response_at))::INTEGER;
+    ELSE
+        v_response_time_seconds := EXTRACT(EPOCH FROM (NEW.created_at - v_ticket.created_at))::INTEGER;
+    END IF;
+
+    -- Generate comment content from event
+    v_comment_content := CASE NEW.event_type::TEXT
+        WHEN 'status_changed' THEN
+            'Status changed from ' || COALESCE((NEW.old_value->>'status')::TEXT, 'unknown') ||
+            ' to ' || COALESCE((NEW.new_value->>'status')::TEXT, 'unknown')
+        WHEN 'assigned' THEN
+            'Ticket assigned'
+        WHEN 'reassigned' THEN
+            'Ticket reassigned'
+        WHEN 'priority_changed' THEN
+            'Priority changed from ' || COALESCE((NEW.old_value->>'priority')::TEXT, 'unknown') ||
+            ' to ' || COALESCE((NEW.new_value->>'priority')::TEXT, 'unknown')
+        WHEN 'request_adjustment' THEN
+            'Adjustment requested' || COALESCE(': ' || NEW.notes, '')
+        WHEN 'cost_submitted' THEN
+            'Operational cost submitted'
+        WHEN 'cost_sent_to_customer' THEN
+            'Cost sent to customer'
+        WHEN 'customer_quotation_created' THEN
+            'Customer quotation created: ' || COALESCE((NEW.new_value->>'quotation_number')::TEXT, '')
+        WHEN 'customer_quotation_sent' THEN
+            'Customer quotation sent: ' || COALESCE((NEW.new_value->>'quotation_number')::TEXT, '')
+        WHEN 'won' THEN
+            'Ticket marked as won'
+        WHEN 'lost' THEN
+            'Ticket marked as lost' || COALESCE(': ' || NEW.notes, '')
+        WHEN 'closed' THEN
+            'Ticket closed'
+        WHEN 'reopened' THEN
+            'Ticket reopened'
+        ELSE
+            'Event: ' || NEW.event_type::TEXT || COALESCE(' - ' || NEW.notes, '')
+    END;
+
+    -- Append notes if available and not already included
+    IF NEW.notes IS NOT NULL AND v_comment_content NOT LIKE '%' || NEW.notes || '%' THEN
+        v_comment_content := v_comment_content || ' | Notes: ' || NEW.notes;
+    END IF;
+
+    -- Create auto-generated comment (only for significant events)
+    IF NEW.event_type::TEXT NOT IN ('escalation_timer_started', 'escalation_timer_stopped', 'sla_checked') THEN
+        INSERT INTO public.ticket_comments (
+            ticket_id,
+            user_id,
+            content,
+            is_internal,
+            response_time_seconds,
+            response_direction,
+            source_event_id
+        ) VALUES (
+            NEW.ticket_id,
+            COALESCE(NEW.actor_user_id, v_ticket.created_by),
+            '[Auto] ' || v_comment_content,
+            TRUE,
+            v_response_time_seconds,
+            CASE WHEN COALESCE(NEW.actor_user_id, v_ticket.created_by) = v_ticket.created_by
+                 THEN 'inbound' ELSE 'outbound' END,
+            NEW.id
+        )
+        RETURNING id INTO v_comment_id;
+    END IF;
+
+    -- Create ticket_responses entry for SLA tracking
+    INSERT INTO public.ticket_responses (
+        ticket_id,
+        user_id,
+        responder_role,
+        ticket_stage,
+        responded_at,
+        response_time_seconds,
+        comment_id
+    ) VALUES (
+        NEW.ticket_id,
+        COALESCE(NEW.actor_user_id, v_ticket.created_by),
+        v_responder_role,
+        v_ticket.status::TEXT,
+        NEW.created_at,
+        v_response_time_seconds,
+        v_comment_id
+    );
+
+    -- FIX Paket 07: Skip record_response_exchange for events that already call it in RPC
+    IF NEW.event_type::TEXT NOT IN ('request_adjustment') THEN
+        PERFORM public.record_response_exchange(
+            NEW.ticket_id,
+            COALESCE(NEW.actor_user_id, v_ticket.created_by),
+            v_comment_id
+        );
+    END IF;
+
+    RETURN NEW;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Log error but don't fail the original insert
+        RAISE WARNING 'Error mirroring ticket event to response tables: %', SQLERRM;
+        RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION public.mirror_ticket_event_to_response_tables IS
+'Trigger function that mirrors ticket_events to ticket_comments, ticket_responses, and ticket_response_exchanges.
+FIX Paket 07: Skips record_response_exchange for request_adjustment events (already called by RPC).
+Still creates ticket_comments and ticket_responses for all significant events.';
+
+-- ============================================
+-- CLEANUP: Remove duplicate response exchanges
+-- ============================================
+
+-- Delete duplicate response exchanges (keep the first one for each ticket within 5 seconds)
+WITH duplicates AS (
+    SELECT id, ticket_id, responded_at,
+           ROW_NUMBER() OVER (
+               PARTITION BY ticket_id, responder_type, DATE_TRUNC('second', responded_at) / 5
+               ORDER BY responded_at ASC
+           ) as rn
+    FROM public.ticket_response_exchanges
+)
+DELETE FROM public.ticket_response_exchanges
+WHERE id IN (SELECT id FROM duplicates WHERE rn > 1);
+
+-- Recalculate metrics for affected tickets
+UPDATE public.ticket_response_metrics trm
+SET updated_at = NOW() - INTERVAL '1 hour'
+WHERE EXISTS (
+    SELECT 1 FROM public.ticket_response_exchanges tre
+    WHERE tre.ticket_id = trm.ticket_id
+);
+```
+
+### Validation SQL
+
+```sql
+-- 1. Test request adjustment (creator with reason)
+-- Replace TICKET_UUID with actual ticket ID
+SELECT * FROM rpc_ticket_request_adjustment(
+    'TICKET_UUID'::UUID,
+    'tarif_tidak_masuk'::operational_cost_rejection_reason_type,
+    NULL,  -- competitor_name
+    100000,  -- competitor_amount
+    NULL,  -- customer_budget
+    'IDR',
+    'Price too high for customer budget',
+    'USER_UUID'::UUID,
+    'test-request-adjustment'
+);
+
+-- 2. Verify ticket status changed
+SELECT id, ticket_code, status, pending_response_from
+FROM tickets WHERE id = 'TICKET_UUID';
+
+-- 3. Verify ticket_events created
+SELECT id, event_type, actor_user_id, notes, created_at
+FROM ticket_events
+WHERE ticket_id = 'TICKET_UUID'
+AND event_type = 'request_adjustment'
+ORDER BY created_at DESC LIMIT 1;
+
+-- 4. Verify ticket_responses created
+SELECT * FROM ticket_responses
+WHERE ticket_id = 'TICKET_UUID'
+ORDER BY responded_at DESC LIMIT 1;
+
+-- 5. Verify response exchange (should be ONE, not TWO)
+SELECT COUNT(*) as exchange_count
+FROM ticket_response_exchanges
+WHERE ticket_id = 'TICKET_UUID'
+AND responded_at > NOW() - INTERVAL '1 minute';
+-- Expected: 1 (after fix)
+-- Current (before fix): 2
+
+-- 6. Test set need adjustment (ops mode)
+SELECT * FROM rpc_ticket_set_need_adjustment(
+    'TICKET_UUID'::UUID,
+    'Need more information about cargo weight',
+    'ops',  -- actor_role_mode
+    'USER_UUID'::UUID,
+    'test-need-adjustment-ops'
+);
+
+-- 7. Verify pending_response_from = 'creator' for ops mode
+SELECT id, status, pending_response_from
+FROM tickets WHERE id = 'TICKET_UUID';
+```
+
+### Quality Gates (Paket 07)
+
+| Gate | Requirement | Status |
+|------|-------------|--------|
+| **Gate 1** | Creator can request adjustment with reason_type | ✓ Implemented (migration 090 line 349-580) |
+| **Gate 2** | Ops can mark need adjustment via actor_role_mode | ✓ Implemented (migration 090 line 23-231) |
+| **Gate 3** | Both actions create ticket_events | ✓ Implemented (line 134-161, 483-508) |
+| **Gate 4** | Both actions update pending_response_from | ✓ Implemented (line 127-128, 430-435) |
+| **Gate 5** | Both actions call record_response_exchange | ✓ Implemented (line 163-175, 513-524) |
+| **Gate 6** | ticket_events trigger creates ticket_responses | ✓ Implemented (migration 084 line 136-152) |
+| **Gate 7** | No duplicate response_exchanges | ⚠️ **BUG** - Needs fix (see Patch Plan) |
+| **Gate 8** | Opportunity moves to Negotiation (if Quote Sent) | ✓ Implemented (line 177-208, 526-556) |
+| **Gate 9** | Idempotent (no duplicates on retry) | ✓ Implemented (line 97-109, 406-417) |
+
+### Trigger Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│         UI: Creator clicks "Request Price Adjustment"                    │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ API: POST /api/ticketing/tickets/[id]/request-adjustment                │
+│ Body: { reason_type: 'tarif_tidak_masuk', competitor_amount: 100000 }   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ RPC: rpc_ticket_request_adjustment                                       │
+│ ┌─────────────────────────────────────────────────────────────────────┐ │
+│ │ 1. Lock ticket (FOR UPDATE)                                         │ │
+│ │ 2. Check authorization (fn_check_ticket_authorization)              │ │
+│ │ 3. Check idempotency (already need_adjustment → return success)     │ │
+│ │ 4. Validate state machine transition                                │ │
+│ │ 5. UPDATE tickets.status = 'need_adjustment'                        │ │
+│ │ 6. UPDATE ticket_rate_quotes.status = 'revise_requested'            │ │
+│ │ 7. INSERT operational_cost_rejection_reasons                        │ │
+│ │ 8. INSERT ticket_events (type: request_adjustment)                  │ │
+│ │ 9. CALL record_response_exchange (BUG: duplicate!)                  │ │
+│ │10. UPDATE opportunities.stage = 'Negotiation'                       │ │
+│ │11. INSERT opportunity_stage_history                                 │ │
+│ └─────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ (INSERT INTO ticket_events triggers...)
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ TRIGGER: trg_mirror_ticket_event_to_responses                           │
+│ ┌─────────────────────────────────────────────────────────────────────┐ │
+│ │ 1. Generate auto-comment content                                    │ │
+│ │ 2. INSERT ticket_comments (internal, auto-generated)                │ │
+│ │ 3. INSERT ticket_responses                                          │ │
+│ │ 4. CALL record_response_exchange (BUG: duplicate!)                  │ │
+│ └─────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Authorization Rules (fn_check_ticket_authorization)
+
+```sql
+-- Actor can request adjustment on ticket if:
+-- 1. Actor is ticket creator (v_is_creator)
+-- 2. Actor is ticket assignee (v_is_assignee)
+-- 3. Actor is department manager for ticket's department (v_is_department_manager)
+-- 4. Actor has elevated role: superadmin, director, manager (v_has_elevated_role)
+```
+
+Located in: `078_atomic_quotation_transitions.sql:314-401`
+
+### Files Referenced (Paket 07)
+
+| File | Purpose |
+|------|---------|
+| `src/app/api/ticketing/tickets/[id]/request-adjustment/route.ts` | API that calls `rpc_ticket_request_adjustment` |
+| `src/app/api/ticketing/tickets/[id]/need-adjustment/route.ts` | API that calls `rpc_ticket_set_need_adjustment` |
+| `supabase/migrations/090_fix_need_adjustment_manual_flow.sql` | Both RPC functions + trigger |
+| `supabase/migrations/084_ticket_events_mirror_and_quotation_cost_link.sql` | Mirror trigger function |
+| `supabase/migrations/040_sla_response_tracking.sql` | SLA response exchange tracking |
+| `supabase/migrations/096_fix_duplicate_response_exchanges.sql` | **NEW** - Fix for duplicate response exchanges |
+
+---
+
 **END OF DB CONTRACT CHECK**
