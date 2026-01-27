@@ -504,4 +504,67 @@ SELECT * FROM ticket_events WHERE ticket_id = 'TICKET_UUID' AND event_type = 'cu
 
 ---
 
+## 9. PAKET 03: ENUM/TEXT MISMATCH FIX VERIFICATION
+
+### Issue
+Error: `"column status is of type customer_quotation_status but expression is of type text"`
+
+### Root Cause
+Production database has an older version of `rpc_customer_quotation_mark_rejected` that assigns text literals to enum columns without proper casting.
+
+### Fix Location
+The fix is already in the repo in these migrations (all use correct enum casting):
+- `078_atomic_quotation_transitions.sql:763` - `status = 'rejected'::customer_quotation_status`
+- `088_fix_quotation_reject_pipeline_updates.sql:172` - `status = 'rejected'::customer_quotation_status`
+- `095_fix_quotation_sent_pipeline_sync.sql:459` - `status = 'rejected'::customer_quotation_status`
+
+### Audit SQL: Verify Fix is Applied
+
+```sql
+-- Check function definition for correct enum casting
+SELECT
+    p.proname AS function_name,
+    pg_get_functiondef(p.oid) AS definition
+FROM pg_proc p
+JOIN pg_namespace n ON p.pronamespace = n.oid
+WHERE n.nspname = 'public'
+AND p.proname = 'rpc_customer_quotation_mark_rejected';
+
+-- Check if definition contains correct cast
+-- Should see: status = 'rejected'::customer_quotation_status
+-- Should NOT see: status = 'rejected' (without cast)
+```
+
+### Quick Test
+
+```sql
+-- Test: This should succeed if fix is applied
+SELECT * FROM rpc_customer_quotation_mark_rejected(
+    '00000000-0000-0000-0000-000000000000'::UUID,  -- fake ID (will return QUOTATION_NOT_FOUND)
+    'tarif_tidak_masuk'::quotation_rejection_reason_type,
+    NULL,  -- competitor_name
+    100000,  -- competitor_amount (required for tarif_tidak_masuk)
+    NULL,  -- customer_budget
+    'IDR',
+    NULL,
+    NULL,
+    'test-enum-fix'
+);
+
+-- Expected: { "success": false, "error": "Quotation not found", "error_code": "QUOTATION_NOT_FOUND" }
+-- If you get: "column status is of type customer_quotation_status but expression is of type text"
+-- Then the migration hasn't been applied yet.
+```
+
+### Quality Gates (Paket 03)
+
+| Gate | Requirement | Status |
+|------|-------------|--------|
+| Reject succeeds without 400 | RPC returns success=true | Verify with test |
+| `customer_quotations.status` = 'rejected' | Check after reject | Verify with test |
+| `quotation_rejection_reasons` has new row | Check after reject | Verify with test |
+| Side effects (Paket 04) run | pipeline_updates, activities created | Verify with test |
+
+---
+
 **END OF DB CONTRACT CHECK**
