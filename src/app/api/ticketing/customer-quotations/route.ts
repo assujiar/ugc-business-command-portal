@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     let ticket_id = body.ticket_id || null
     let lead_id = body.lead_id || null
     let opportunity_id = body.opportunity_id || null
-    const operational_cost_id = body.operational_cost_id || null
+    let operational_cost_id = body.operational_cost_id || null
 
     // If ticket_id is provided, inherit lead_id and opportunity_id from ticket if not already set
     if (ticket_id && (!lead_id || !opportunity_id)) {
@@ -153,6 +153,21 @@ export async function POST(request: NextRequest) {
 
       if (opportunity && opportunity.source_lead_id) {
         lead_id = opportunity.source_lead_id
+      }
+    }
+
+    // FIX Issue 2: If lead_id exists but opportunity_id doesn't, derive opportunity_id from lead
+    // This ensures pipeline sync works correctly when quotation is sent
+    if (lead_id && !opportunity_id) {
+      const { data: lead } = await (supabase as any)
+        .from('leads')
+        .select('opportunity_id')
+        .eq('lead_id', lead_id)
+        .single()
+
+      if (lead && lead.opportunity_id) {
+        opportunity_id = lead.opportunity_id
+        console.log('[CustomerQuotations POST] Derived opportunity_id from lead:', opportunity_id)
       }
     }
 
@@ -236,6 +251,50 @@ export async function POST(request: NextRequest) {
         { error: 'opportunity_id is required when source_type is opportunity', code: 'VALIDATION_ERROR', field: 'opportunity_id' },
         { status: 422 }
       )
+    }
+
+    // ============================================
+    // BUG #9 FIX: Resolve latest operational cost
+    // Server-side guard to ensure quotation always uses latest submitted cost
+    // ============================================
+    if (ticket_id || lead_id || opportunity_id) {
+      console.log('[CustomerQuotations POST] Resolving latest operational cost...')
+      const { data: costResult, error: costError } = await (supabase as any).rpc('fn_resolve_latest_operational_cost', {
+        p_ticket_id: ticket_id,
+        p_lead_id: lead_id,
+        p_opportunity_id: opportunity_id,
+        p_provided_cost_id: operational_cost_id
+      })
+
+      if (costError) {
+        console.error('[CustomerQuotations POST] Error resolving operational cost:', costError)
+        // Don't fail on RPC error - continue with provided cost_id
+      } else if (costResult) {
+        console.log('[CustomerQuotations POST] Operational cost resolution:', costResult)
+
+        if (!costResult.success) {
+          // RFQ ticket without submitted cost - reject
+          return NextResponse.json(
+            {
+              error: costResult.error || 'Failed to resolve operational cost',
+              code: costResult.error_code || 'COST_RESOLUTION_ERROR',
+              details: costResult
+            },
+            { status: 400 }
+          )
+        }
+
+        if (costResult.resolved && costResult.operational_cost_id) {
+          // Use resolved cost_id (may be different from provided)
+          if (costResult.was_stale) {
+            console.log('[CustomerQuotations POST] Overriding stale operational_cost_id:', {
+              provided: operational_cost_id,
+              latest: costResult.operational_cost_id
+            })
+          }
+          operational_cost_id = costResult.operational_cost_id
+        }
+      }
     }
 
     // Generate quotation number using RPC

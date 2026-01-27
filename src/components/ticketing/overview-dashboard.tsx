@@ -16,6 +16,8 @@ import {
   Timer,
   Trophy,
   ArrowRight,
+  XCircle,
+  Ban,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -85,6 +87,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
   const [responseTime, setResponseTime] = useState<any>(null)
   const [deptPerformance, setDeptPerformance] = useState<any>(null)
   const [userPerformance, setUserPerformance] = useState<any>(null)
+  const [rejectionAnalytics, setRejectionAnalytics] = useState<any>(null)
 
   const canViewAll = canViewAllTickets(profile.role)
 
@@ -95,20 +98,22 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
       const params = `?period=${period}`
 
       // Fetch all data in parallel - all roles can see performance data (filtered by RBAC on API)
-      const [summaryRes, slaRes, responseRes, deptRes, userRes] = await Promise.all([
+      const [summaryRes, slaRes, responseRes, deptRes, userRes, rejectionRes] = await Promise.all([
         fetch(`/api/ticketing/dashboard/summary${params}`),
         fetch(`/api/ticketing/dashboard/sla-metrics${params}`),
         fetch(`/api/ticketing/dashboard/response-time${params}`),
         fetch(`/api/ticketing/performance/departments${params}`),
         fetch(`/api/ticketing/performance/users${params}`),
+        fetch(`/api/ticketing/dashboard/rejection-analytics${params}`),
       ])
 
-      const [summaryData, slaData, responseData, deptData, userData] = await Promise.all([
+      const [summaryData, slaData, responseData, deptData, userData, rejectionData] = await Promise.all([
         summaryRes.json(),
         slaRes.json(),
         responseRes.json(),
         deptRes.json(),
         userRes.json(),
+        rejectionRes.json(),
       ])
 
       if (summaryData.success) setSummary(summaryData.data)
@@ -116,6 +121,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
       if (responseData.success) setResponseTime(responseData.data)
       if (deptData.success) setDeptPerformance(deptData.data)
       if (userData.success) setUserPerformance(userData.data)
+      if (rejectionData.success) setRejectionAnalytics(rejectionData.data)
     } catch (err) {
       console.error('Error fetching dashboard data:', err)
     } finally {
@@ -668,6 +674,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
         <TabsList>
           <TabsTrigger value="sla">SLA Compliance</TabsTrigger>
           <TabsTrigger value="response">Response Times</TabsTrigger>
+          <TabsTrigger value="rejections">Rejection Analytics</TabsTrigger>
           <TabsTrigger value="departments">Departments</TabsTrigger>
           <TabsTrigger value="users">Team Performance</TabsTrigger>
         </TabsList>
@@ -1110,6 +1117,243 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
                 </Card>
               )}
             </>
+          )}
+        </TabsContent>
+
+        {/* Rejection Analytics Tab */}
+        <TabsContent value="rejections" className="space-y-6">
+          {rejectionAnalytics && (
+            <>
+              {/* Summary Cards */}
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Ops Cost Rejections Summary */}
+                <Card className="border-orange-200 dark:border-orange-900">
+                  <CardHeader className="bg-orange-50/50 dark:bg-orange-950/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Ban className="h-5 w-5 text-orange-600" />
+                        <CardTitle className="text-lg">Ops Cost Rejections</CardTitle>
+                      </div>
+                      <Badge variant="outline" className="border-orange-500 text-orange-600">
+                        {rejectionAnalytics.ops_cost_rejections?.summary?.total_rejections || 0} total
+                      </Badge>
+                    </div>
+                    <CardDescription>
+                      Operational cost rejections in the last {period} days
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="p-3 rounded-lg bg-muted/50">
+                        <p className="text-2xl font-bold">
+                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
+                            .format(rejectionAnalytics.ops_cost_rejections?.summary?.total_amount || 0)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Total Rejected Value</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50">
+                        <p className="text-2xl font-bold">
+                          {rejectionAnalytics.ops_cost_rejections?.summary?.unique_tickets || 0}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Tickets Affected</p>
+                      </div>
+                    </div>
+                    {/* By Reason Breakdown */}
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">By Reason</p>
+                      {rejectionAnalytics.ops_cost_rejections?.by_reason_formatted?.slice(0, 5).map((item: any) => (
+                        <div key={item.reason} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-orange-500" />
+                            <span>{item.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{item.count}</span>
+                            <span className="text-muted-foreground">({item.percentage}%)</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Customer Quotation Rejections Summary */}
+                <Card className="border-red-200 dark:border-red-900">
+                  <CardHeader className="bg-red-50/50 dark:bg-red-950/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <XCircle className="h-5 w-5 text-red-600" />
+                        <CardTitle className="text-lg">Quotation Rejections</CardTitle>
+                      </div>
+                      <Badge variant="outline" className="border-red-500 text-red-600">
+                        {rejectionAnalytics.quotation_rejections?.summary?.total_rejections || 0} total
+                      </Badge>
+                    </div>
+                    <CardDescription>
+                      Customer quotation rejections in the last {period} days
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="p-3 rounded-lg bg-muted/50">
+                        <p className="text-2xl font-bold">
+                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
+                            .format(rejectionAnalytics.quotation_rejections?.summary?.total_value || 0)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Total Lost Value</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50">
+                        <p className="text-2xl font-bold">
+                          {rejectionAnalytics.quotation_rejections?.summary?.unique_opportunities || 0}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Opportunities Affected</p>
+                      </div>
+                    </div>
+                    {/* By Reason Breakdown */}
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">By Reason</p>
+                      {rejectionAnalytics.quotation_rejections?.by_reason_formatted?.slice(0, 5).map((item: any) => (
+                        <div key={item.reason} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-red-500" />
+                            <span>{item.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{item.count}</span>
+                            <span className="text-muted-foreground">({item.percentage}%)</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Department Breakdown */}
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Ops Cost by Department */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Ops Cost Rejections by Department</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {Object.entries(rejectionAnalytics.ops_cost_rejections?.by_department || {}).map(([dept, data]: [string, any]) => (
+                        <div key={dept} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{dept}</Badge>
+                            <span className="text-sm">{departmentLabels[dept] || dept}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-medium">{data.count}</span>
+                            <span className="text-muted-foreground text-xs ml-2">
+                              ({new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', notation: 'compact' })
+                                .format(data.amount || 0)})
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                      {Object.keys(rejectionAnalytics.ops_cost_rejections?.by_department || {}).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">No data available</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Quotation by Department */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Quotation Rejections by Department</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {Object.entries(rejectionAnalytics.quotation_rejections?.by_department || {}).map(([dept, data]: [string, any]) => (
+                        <div key={dept} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{dept}</Badge>
+                            <span className="text-sm">{departmentLabels[dept] || dept}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-medium">{data.count}</span>
+                            <span className="text-muted-foreground text-xs ml-2">
+                              ({new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', notation: 'compact' })
+                                .format(data.value || 0)})
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                      {Object.keys(rejectionAnalytics.quotation_rejections?.by_department || {}).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">No data available</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Weekly Trend */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Weekly Rejection Trend</CardTitle>
+                  <CardDescription>Rejections over the last 4 weeks</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Ops Cost Trend */}
+                    <div className="p-4 rounded-lg border border-orange-200 dark:border-orange-900">
+                      <p className="text-sm font-medium text-orange-600 mb-3">Ops Cost Rejections</p>
+                      <div className="space-y-2">
+                        {rejectionAnalytics.ops_cost_rejections?.weekly_trend?.map((week: any) => (
+                          <div key={week.week} className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              {new Date(week.week).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' })}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{week.count}</span>
+                              <span className="text-muted-foreground">
+                                ({new Intl.NumberFormat('id-ID', { notation: 'compact' }).format(week.amount || 0)})
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        {(!rejectionAnalytics.ops_cost_rejections?.weekly_trend || rejectionAnalytics.ops_cost_rejections.weekly_trend.length === 0) && (
+                          <p className="text-sm text-muted-foreground text-center py-2">No data</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Quotation Trend */}
+                    <div className="p-4 rounded-lg border border-red-200 dark:border-red-900">
+                      <p className="text-sm font-medium text-red-600 mb-3">Quotation Rejections</p>
+                      <div className="space-y-2">
+                        {rejectionAnalytics.quotation_rejections?.weekly_trend?.map((week: any) => (
+                          <div key={week.week} className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              {new Date(week.week).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' })}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{week.count}</span>
+                              <span className="text-muted-foreground">
+                                ({new Intl.NumberFormat('id-ID', { notation: 'compact' }).format(week.value || 0)})
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        {(!rejectionAnalytics.quotation_rejections?.weekly_trend || rejectionAnalytics.quotation_rejections.weekly_trend.length === 0) && (
+                          <p className="text-sm text-muted-foreground text-center py-2">No data</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+          {!rejectionAnalytics && (
+            <Card>
+              <CardContent className="flex items-center justify-center h-32">
+                <p className="text-muted-foreground">No rejection data available</p>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 

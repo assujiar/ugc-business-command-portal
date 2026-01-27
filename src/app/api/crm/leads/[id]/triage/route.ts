@@ -41,9 +41,10 @@ export async function POST(
     }
 
     // First, get current lead to validate transition (use admin client to bypass RLS)
+    // Also fetch potential_revenue to use as fallback for 'Assign to Sales'
     const { data: lead, error: fetchError } = await adminClient
       .from('leads')
-      .select('lead_id, triage_status')
+      .select('lead_id, triage_status, potential_revenue')
       .eq('lead_id', id)
       .single()
 
@@ -74,10 +75,18 @@ export async function POST(
     // Handle Assign to Sales - requires potential_revenue
     // This creates entry in lead_handover_pool for sales to claim
     if (new_status === 'Assign to Sales') {
-      if (!potential_revenue || potential_revenue <= 0) {
-        return NextResponse.json({ error: 'potential_revenue is required for Assign to Sales status' }, { status: 400 })
+      // Use request potential_revenue, or fallback to existing lead.potential_revenue
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const existingPotentialRevenue = (lead as any).potential_revenue
+      const effectivePotentialRevenue = potential_revenue || existingPotentialRevenue
+
+      if (!effectivePotentialRevenue || effectivePotentialRevenue <= 0) {
+        return NextResponse.json({
+          error: 'potential_revenue is required for Assign to Sales status. Please provide a value greater than 0.',
+          error_code: 'MISSING_POTENTIAL_REVENUE'
+        }, { status: 400 })
       }
-      updateData.potential_revenue = potential_revenue
+      updateData.potential_revenue = effectivePotentialRevenue
       updateData.claim_status = 'unclaimed'
       updateData.qualified_at = new Date().toISOString()
       updateData.handover_eligible = true

@@ -1,6 +1,19 @@
 // =====================================================
-// Ticketing API - Ticket Actions
+// Ticketing API - Ticket Actions (DEPRECATED)
 // POST: Execute ticket actions (submit-quote, request-adjustment, etc.)
+// =====================================================
+//
+// DEPRECATION NOTICE (Issue 10):
+// This generic action dispatcher is maintained for backward compatibility
+// but new code should use dedicated endpoints for better validation:
+//
+// - request_adjustment → /api/ticketing/tickets/[id]/request-adjustment
+//   (Full support for reason_type, competitor info, customer budget)
+//
+// - Other actions (submit_quote, mark_won, mark_lost, quote_sent_to_customer)
+//   still work through this route but may get dedicated endpoints in future.
+//
+// See migration 085_safe_schema_cleanup.sql for cleanup status.
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -78,9 +91,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       case 'request_adjustment':
         // Creator requests price adjustment
+        // FIX Issue 7: Use new RPC signature with proper parameters
+        // Map old 'reason' field to 'notes', use 'perlu_revisi' as default reason_type
         ({ data: result, error } = await (supabase as any).rpc('rpc_ticket_request_adjustment', {
           p_ticket_id: id,
-          p_reason: actionData.reason || null,
+          p_reason_type: actionData.reason_type || 'perlu_revisi',  // Default to general revision needed
+          p_competitor_name: actionData.competitor_name || null,
+          p_competitor_amount: actionData.competitor_amount || null,
+          p_customer_budget: actionData.customer_budget || null,
+          p_currency: actionData.currency || 'IDR',
+          p_notes: actionData.reason || actionData.notes || null,  // Support old 'reason' field as notes
+          p_actor_user_id: user.id,
+          p_correlation_id: null  // Will be auto-generated
         }))
         break
 

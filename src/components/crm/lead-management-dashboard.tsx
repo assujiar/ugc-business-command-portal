@@ -498,6 +498,13 @@ export function LeadManagementDashboard({
                                             lead,
                                             targetStatus: action,
                                           })
+                                          // Prefill potential_revenue for "Assign to Sales" action
+                                          if (action === 'Assign to Sales' && lead.potential_revenue) {
+                                            setPotentialRevenue(lead.potential_revenue.toString())
+                                          } else {
+                                            setPotentialRevenue('')
+                                          }
+                                          setNotes('')
                                         }}
                                       >
                                         <ArrowRight className="h-4 w-4 mr-2" />
@@ -561,6 +568,13 @@ export function LeadManagementDashboard({
                                           lead,
                                           targetStatus: action,
                                         })
+                                        // Prefill potential_revenue for "Assign to Sales" action
+                                        if (action === 'Assign to Sales' && lead.potential_revenue) {
+                                          setPotentialRevenue(lead.potential_revenue.toString())
+                                        } else {
+                                          setPotentialRevenue('')
+                                        }
+                                        setNotes('')
                                       }}
                                     >
                                       <ArrowRight className="h-4 w-4 mr-2" />
@@ -654,9 +668,12 @@ export function LeadManagementDashboard({
                   placeholder="Enter potential revenue"
                   value={potentialRevenue}
                   onChange={(e) => setPotentialRevenue(e.target.value)}
+                  min={1}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Wajib diisi untuk Assign to Sales
+                  {actionDialog.lead?.potential_revenue
+                    ? `Nilai sebelumnya: ${actionDialog.lead.potential_revenue.toLocaleString('id-ID')}`
+                    : 'Wajib diisi untuk Assign to Sales (harus lebih dari 0)'}
                 </p>
               </div>
             )}
@@ -701,7 +718,7 @@ export function LeadManagementDashboard({
               onClick={handleStatusChange}
               disabled={
                 isLoading === actionDialog.lead?.lead_id ||
-                (actionDialog.targetStatus === 'Assign to Sales' && !potentialRevenue)
+                (actionDialog.targetStatus === 'Assign to Sales' && (!potentialRevenue || parseFloat(potentialRevenue) <= 0))
               }
             >
               {isLoading === actionDialog.lead?.lead_id ? 'Updating...' : 'Update Status'}
