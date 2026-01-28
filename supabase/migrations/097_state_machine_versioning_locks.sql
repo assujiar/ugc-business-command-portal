@@ -143,7 +143,7 @@ BEGIN
         IF OLD.amount IS DISTINCT FROM NEW.amount OR
            OLD.terms IS DISTINCT FROM NEW.terms OR
            OLD.valid_until IS DISTINCT FROM NEW.valid_until THEN
-            RAISE EXCEPTION 'Cannot modify quote in terminal status: %. Quote is immutable.'
+            RAISE EXCEPTION 'Cannot modify quote in terminal status: %. Quote is immutable.', OLD.status
                 USING ERRCODE = '23514';
         END IF;
     END IF;
