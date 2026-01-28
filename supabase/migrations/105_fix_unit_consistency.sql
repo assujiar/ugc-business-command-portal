@@ -31,14 +31,31 @@ UPDATE public.customer_quotations
 SET cargo_quantity_unit = 'units'
 WHERE cargo_quantity_unit = 'unit';
 
--- Also fix in tickets table if present
-UPDATE public.tickets
-SET cargo_volume_unit = 'cbm'
-WHERE cargo_volume_unit = 'm3';
+-- Also fix in tickets table if columns exist (schema-guarded)
+-- NOTE: tickets table uses rfq_data JSONB, not separate columns
+-- This guard ensures migration doesn't fail if columns don't exist
+DO $$
+BEGIN
+    -- Check and update cargo_volume_unit if column exists
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+        AND table_name = 'tickets'
+        AND column_name = 'cargo_volume_unit'
+    ) THEN
+        EXECUTE $q$ UPDATE public.tickets SET cargo_volume_unit = 'cbm' WHERE cargo_volume_unit = 'm3' $q$;
+    END IF;
 
-UPDATE public.tickets
-SET cargo_quantity_unit = 'units'
-WHERE cargo_quantity_unit = 'unit';
+    -- Check and update cargo_quantity_unit if column exists
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+        AND table_name = 'tickets'
+        AND column_name = 'cargo_quantity_unit'
+    ) THEN
+        EXECUTE $q$ UPDATE public.tickets SET cargo_quantity_unit = 'units' WHERE cargo_quantity_unit = 'unit' $q$;
+    END IF;
+END $$;
 
 
 -- ============================================
