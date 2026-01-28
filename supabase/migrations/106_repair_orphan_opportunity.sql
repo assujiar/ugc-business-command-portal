@@ -18,6 +18,54 @@
 
 
 -- ============================================
+-- PART 0: DROP EXISTING FUNCTION OVERLOADS
+-- This prevents "function name is not unique" errors when CREATE OR REPLACE
+-- has a different signature from existing overloads.
+-- ============================================
+
+DO $$
+DECLARE
+    v_proc RECORD;
+BEGIN
+    -- Drop all overloads of fn_repair_orphan_opportunity
+    FOR v_proc IN
+        SELECT p.oid::regprocedure AS proc_sig
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname = 'fn_repair_orphan_opportunity'
+    LOOP
+        RAISE NOTICE '[106] Dropping existing overload: %', v_proc.proc_sig;
+        EXECUTE format('DROP FUNCTION IF EXISTS %s', v_proc.proc_sig);
+    END LOOP;
+
+    -- Drop all overloads of fn_resolve_or_create_opportunity
+    FOR v_proc IN
+        SELECT p.oid::regprocedure AS proc_sig
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname = 'fn_resolve_or_create_opportunity'
+    LOOP
+        RAISE NOTICE '[106] Dropping existing overload: %', v_proc.proc_sig;
+        EXECUTE format('DROP FUNCTION IF EXISTS %s', v_proc.proc_sig);
+    END LOOP;
+
+    -- Drop all overloads of fn_preflight_quotation_send
+    FOR v_proc IN
+        SELECT p.oid::regprocedure AS proc_sig
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname = 'fn_preflight_quotation_send'
+    LOOP
+        RAISE NOTICE '[106] Dropping existing overload: %', v_proc.proc_sig;
+        EXECUTE format('DROP FUNCTION IF EXISTS %s', v_proc.proc_sig);
+    END LOOP;
+END $$;
+
+
+-- ============================================
 -- PART 1: Create fn_repair_orphan_opportunity helper
 -- Returns repair candidates and recommendation
 -- ============================================
