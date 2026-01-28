@@ -9,12 +9,12 @@
 
 -- ============================================
 -- 1. VIEW: Ops Cost Rejection Analytics
--- Aggregates rejection reasons from ticket_rate_quotes
+-- Aggregates rejection reasons from ticket_rate_quotes via operational_cost_rejection_reasons
 -- ============================================
 
 CREATE OR REPLACE VIEW public.v_ops_cost_rejection_analytics AS
 SELECT
-    trq.rejection_reason_type,
+    ocrr.reason_type as rejection_reason_type,
     COUNT(*) as rejection_count,
     COUNT(DISTINCT trq.ticket_id) as tickets_affected,
     COUNT(DISTINCT t.assigned_to) as assignees_affected,
@@ -23,20 +23,20 @@ SELECT
     -- Department breakdown
     p.department as assignee_department,
     -- Time-based aggregation
-    DATE_TRUNC('day', trq.updated_at) as rejection_date,
-    DATE_TRUNC('week', trq.updated_at) as rejection_week,
-    DATE_TRUNC('month', trq.updated_at) as rejection_month
-FROM public.ticket_rate_quotes trq
+    DATE_TRUNC('day', ocrr.created_at) as rejection_date,
+    DATE_TRUNC('week', ocrr.created_at) as rejection_week,
+    DATE_TRUNC('month', ocrr.created_at) as rejection_month
+FROM public.operational_cost_rejection_reasons ocrr
+JOIN public.ticket_rate_quotes trq ON ocrr.operational_cost_id = trq.id
 LEFT JOIN public.tickets t ON trq.ticket_id = t.id
 LEFT JOIN public.profiles p ON t.assigned_to = p.user_id
 WHERE trq.status = 'rejected'
-AND trq.rejection_reason_type IS NOT NULL
 GROUP BY
-    trq.rejection_reason_type,
+    ocrr.reason_type,
     p.department,
-    DATE_TRUNC('day', trq.updated_at),
-    DATE_TRUNC('week', trq.updated_at),
-    DATE_TRUNC('month', trq.updated_at);
+    DATE_TRUNC('day', ocrr.created_at),
+    DATE_TRUNC('week', ocrr.created_at),
+    DATE_TRUNC('month', ocrr.created_at);
 
 COMMENT ON VIEW public.v_ops_cost_rejection_analytics IS
 'Analytics view for ops cost rejections, aggregated by rejection reason type, department, and time period.
@@ -120,9 +120,9 @@ BEGIN
         AND p.department = p_department
     ));
 
-    -- Ops Cost by Reason Type
+    -- Ops Cost by Reason Type (via operational_cost_rejection_reasons)
     SELECT COALESCE(jsonb_object_agg(
-        COALESCE(rejection_reason_type::TEXT, 'unknown'),
+        COALESCE(reason_type::TEXT, 'unknown'),
         jsonb_build_object(
             'count', count,
             'amount', total_amount,
@@ -131,19 +131,20 @@ BEGIN
     ), '{}'::JSONB) INTO v_ops_by_reason
     FROM (
         SELECT
-            rejection_reason_type,
+            ocrr.reason_type,
             COUNT(*) as count,
-            SUM(amount) as total_amount
-        FROM public.ticket_rate_quotes
-        WHERE status = 'rejected'
-        AND updated_at >= v_start_date
+            SUM(trq.amount) as total_amount
+        FROM public.operational_cost_rejection_reasons ocrr
+        JOIN public.ticket_rate_quotes trq ON ocrr.operational_cost_id = trq.id
+        WHERE trq.status = 'rejected'
+        AND ocrr.created_at >= v_start_date
         AND (p_department IS NULL OR EXISTS (
             SELECT 1 FROM public.tickets t
             JOIN public.profiles p ON t.assigned_to = p.user_id
-            WHERE t.id = ticket_rate_quotes.ticket_id
+            WHERE t.id = trq.ticket_id
             AND p.department = p_department
         ))
-        GROUP BY rejection_reason_type
+        GROUP BY ocrr.reason_type
     ) sub;
 
     -- Ops Cost by Department
