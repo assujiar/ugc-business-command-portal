@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
     const cargo_volume = body.cargo_volume ?? null
     const cargo_volume_unit = body.cargo_volume_unit || 'cbm'
     const cargo_quantity = body.cargo_quantity ?? null
-    const cargo_quantity_unit = body.cargo_quantity_unit || null
+    const cargo_quantity_unit = body.cargo_quantity_unit || 'units'
 
     const estimated_leadtime = body.estimated_leadtime || null
     const estimated_cargo_value = body.estimated_cargo_value ?? null

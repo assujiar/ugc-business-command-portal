@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       p_cargo_volume: body.cargo_volume || null,
       p_cargo_volume_unit: body.cargo_volume_unit || 'cbm',
       p_cargo_quantity: body.cargo_quantity || null,
-      p_cargo_quantity_unit: body.cargo_quantity_unit || null,
+      p_cargo_quantity_unit: body.cargo_quantity_unit || 'units',
       p_origin_address: body.origin_address || null,
       p_origin_city: body.origin_city || null,
       p_origin_country: body.origin_country || null,

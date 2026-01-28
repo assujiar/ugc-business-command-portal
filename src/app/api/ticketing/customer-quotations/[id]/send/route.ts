@@ -697,7 +697,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       if (!preflightResult?.can_proceed) {
-        // CRITICAL: Orphan opportunity_id detected - fail fast!
+        // Check if repair was attempted and failed
+        if (preflightResult?.repair_failed) {
+          console.error(`[send] Preflight check FAILED - orphan detected, repair failed:`, preflightResult, 'correlation_id:', correlationId)
+
+          // Determine status code based on error_code
+          const statusCode = preflightResult?.error_code === 'AMBIGUOUS_OPPORTUNITY' ? 409 : 404
+
+          return NextResponse.json({
+            success: false,
+            error: preflightResult?.error || 'Opportunity repair failed',
+            error_code: preflightResult?.error_code || 'REPAIR_FAILED',
+            quotation_id: id,
+            quotation_number: quotation.quotation_number,
+            orphan_opportunity_id: preflightResult?.orphan_opportunity_id || quotation.opportunity_id,
+            repair_result: preflightResult?.repair_result,
+            message: preflightResult?.error_code === 'AMBIGUOUS_OPPORTUNITY'
+              ? 'Multiple possible opportunities found. Manual resolution required - please select the correct opportunity.'
+              : 'Data integrity issue: The opportunity linked to this quotation does not exist and could not be repaired. Please fix the quotation or contact support.',
+            correlation_id: correlationId
+          }, { status: statusCode })
+        }
+
+        // Simple orphan case (no repair attempted - legacy behavior)
         console.error(`[send] Preflight check FAILED - orphan opportunity detected:`, preflightResult, 'correlation_id:', correlationId)
         return NextResponse.json({
           success: false,
@@ -711,7 +733,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }, { status: 409 }) // 409 Conflict - data integrity issue
       }
 
-      console.log(`[send] Preflight check PASSED: opportunity ${preflightResult?.opportunity_id} found with stage ${preflightResult?.opportunity_stage}, correlation_id: ${correlationId}`)
+      // Check if repair is possible and will be applied
+      if (preflightResult?.needs_repair && preflightResult?.resolved_opportunity_id) {
+        console.log(`[send] Preflight: Orphan detected but repair available. Will repair to ${preflightResult.resolved_opportunity_id} (source: ${preflightResult.resolution_source}), correlation_id: ${correlationId}`)
+      }
+
+      console.log(`[send] Preflight check PASSED: opportunity ${preflightResult?.opportunity_id || preflightResult?.resolved_opportunity_id} found/resolved with stage ${preflightResult?.opportunity_stage || 'TBD'}, correlation_id: ${correlationId}`)
     }
 
     // Get creator email for reply-to (fallback to current user if not found)

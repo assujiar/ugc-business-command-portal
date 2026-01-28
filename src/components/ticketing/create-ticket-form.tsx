@@ -155,7 +155,11 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
   const [loadingContacts, setLoadingContacts] = useState(false)
   const [accountSearchQuery, setAccountSearchQuery] = useState('')
   const [loadingAccounts, setLoadingAccounts] = useState(false)
+  const [accountOffset, setAccountOffset] = useState(0)
+  const [hasMoreAccounts, setHasMoreAccounts] = useState(false)
+  const [loadingMoreAccounts, setLoadingMoreAccounts] = useState(false)
   const debouncedAccountSearch = useDebounce(accountSearchQuery, 300)
+  const ACCOUNTS_PAGE_SIZE = 50
 
   // Source references from URL params (for linking ticket to lead/opportunity)
   const [opportunityId, setOpportunityId] = useState<string | null>(null)
@@ -294,14 +298,20 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     if (contactPhone) setSenderPhone(contactPhone)
   }, [searchParams])
 
-  // Fetch accounts for dropdown with server-side search (no hard limit trap)
+  // Reset pagination when search query changes
+  useEffect(() => {
+    setAccountOffset(0)
+    setHasMoreAccounts(false)
+  }, [debouncedAccountSearch])
+
+  // Fetch accounts for dropdown with server-side search and pagination
   useEffect(() => {
     const fetchAccounts = async () => {
       setLoadingAccounts(true)
       try {
         let query = (supabase as any)
           .from('accounts')
-          .select('account_id, company_name')
+          .select('account_id, company_name', { count: 'exact' })
           .order('company_name')
 
         // If search query provided, filter by company_name
@@ -309,17 +319,57 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
           query = query.ilike('company_name', `%${debouncedAccountSearch.trim()}%`)
         }
 
-        // Limit results for performance but allow search to find any account
-        query = query.limit(50)
+        // Fetch one extra to determine if there are more
+        query = query.range(0, ACCOUNTS_PAGE_SIZE - 1)
 
-        const { data } = await query
+        const { data, count } = await query
         setAccounts(data || [])
+        setHasMoreAccounts(count ? count > ACCOUNTS_PAGE_SIZE : false)
+        setAccountOffset(ACCOUNTS_PAGE_SIZE)
       } finally {
         setLoadingAccounts(false)
       }
     }
     fetchAccounts()
   }, [debouncedAccountSearch])
+
+  // Load more accounts (pagination)
+  const loadMoreAccounts = async () => {
+    if (loadingMoreAccounts || !hasMoreAccounts) return
+
+    setLoadingMoreAccounts(true)
+    try {
+      let query = (supabase as any)
+        .from('accounts')
+        .select('account_id, company_name', { count: 'exact' })
+        .order('company_name')
+
+      // If search query provided, filter by company_name
+      if (debouncedAccountSearch.trim()) {
+        query = query.ilike('company_name', `%${debouncedAccountSearch.trim()}%`)
+      }
+
+      // Fetch next page
+      query = query.range(accountOffset, accountOffset + ACCOUNTS_PAGE_SIZE - 1)
+
+      const { data, count } = await query
+      if (data && data.length > 0) {
+        // Append to existing accounts, avoiding duplicates
+        setAccounts(prev => {
+          const existingIds = new Set(prev.map(a => a.account_id))
+          const newAccounts = data.filter((a: Account) => !existingIds.has(a.account_id))
+          return [...prev, ...newAccounts]
+        })
+        const newOffset = accountOffset + data.length
+        setAccountOffset(newOffset)
+        setHasMoreAccounts(count ? count > newOffset : false)
+      } else {
+        setHasMoreAccounts(false)
+      }
+    } finally {
+      setLoadingMoreAccounts(false)
+    }
+  }
 
   // Apply pending account_id - fetch account by ID if not in list (prefill fix)
   useEffect(() => {
@@ -820,14 +870,41 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                         {accountSearchQuery ? 'No accounts found' : 'Type to search accounts'}
                       </div>
                     ) : (
-                      accounts.map((account) => (
-                        <SelectItem key={account.account_id} value={account.account_id}>
-                          <div className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-muted-foreground" />
-                            {account.company_name}
+                      <>
+                        {accounts.map((account) => (
+                          <SelectItem key={account.account_id} value={account.account_id}>
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-muted-foreground" />
+                              {account.company_name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                        {hasMoreAccounts && (
+                          <div className="p-2 border-t">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                loadMoreAccounts()
+                              }}
+                              disabled={loadingMoreAccounts}
+                            >
+                              {loadingMoreAccounts ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                                  Loading...
+                                </>
+                              ) : (
+                                'Load more accounts'
+                              )}
+                            </Button>
                           </div>
-                        </SelectItem>
-                      ))
+                        )}
+                      </>
                     )}
                   </SelectContent>
                 </Select>
