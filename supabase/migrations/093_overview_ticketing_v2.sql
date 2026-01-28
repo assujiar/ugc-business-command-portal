@@ -591,7 +591,7 @@ BEGIN
     WITH user_stats AS (
         SELECT
             p.user_id,
-            p.full_name as name,
+            p.name as name,
             p.role,
             p.department,
             COUNT(DISTINCT CASE WHEN t.assigned_to = p.user_id AND t.status IN ('resolved', 'closed') THEN t.id END) as tickets_completed,
@@ -609,7 +609,7 @@ BEGIN
             OR (v_scope = 'department' AND p.department = v_user_department)
             OR (v_scope = 'user' AND p.user_id = v_user_id)
         )
-        GROUP BY p.user_id, p.full_name, p.role, p.department
+        GROUP BY p.user_id, p.name, p.role, p.department
         HAVING COUNT(DISTINCT CASE WHEN t.assigned_to = p.user_id THEN t.id END) > 0
     )
     SELECT jsonb_build_object(

@@ -305,7 +305,7 @@ CREATE OR REPLACE VIEW public.v_ticketing_leaderboard AS
 WITH user_metrics AS (
     SELECT
         p.user_id,
-        p.full_name as name,
+        p.name as name,
         p.role,
         p.department,
         -- As Assignee metrics
@@ -326,7 +326,7 @@ WITH user_metrics AS (
     LEFT JOIN public.ticket_responses tr ON tr.ticket_id = t.id AND tr.user_id = p.user_id
     LEFT JOIN public.ticket_rate_quotes trq ON trq.ticket_id = t.id
     WHERE t.created_at >= NOW() - INTERVAL '30 days'
-    GROUP BY p.user_id, p.full_name, p.role, p.department
+    GROUP BY p.user_id, p.name, p.role, p.department
 )
 SELECT
     user_id,
