@@ -86,6 +86,9 @@ interface Lead {
   created_by: string | null
   created_at: string
   updated_at: string
+  // CRM linkage
+  account_id?: string | null
+  opportunity_id?: string | null
   // Creator info
   creator_name?: string | null
   creator_role?: UserRole | null
