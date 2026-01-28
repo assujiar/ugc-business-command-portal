@@ -10,14 +10,15 @@
 -- - Eliminate stuck statuses and pointer drift
 -- - Enforce snapshot vs versioned vs terminal rules
 -- - All transitions are systematic, non-ambiguous, and auditable
+--
+-- FIX: Reordered to backfill BEFORE creating unique index
+-- FIX: Changed AFTER INSERT to BEFORE INSERT trigger with advisory lock
 -- ============================================
 
 -- ============================================
--- PART 1: QUOTE STATUS VERSIONING FOR ticket_rate_quotes
--- Add is_current, superseded_by_id, superseded_at columns
+-- PART 1: ADD VERSIONING COLUMNS TO ticket_rate_quotes
 -- ============================================
 
--- Add versioning columns to ticket_rate_quotes
 ALTER TABLE public.ticket_rate_quotes
     ADD COLUMN IF NOT EXISTS is_current BOOLEAN NOT NULL DEFAULT TRUE,
     ADD COLUMN IF NOT EXISTS superseded_by_id UUID REFERENCES public.ticket_rate_quotes(id) ON DELETE SET NULL,
@@ -27,7 +28,44 @@ COMMENT ON COLUMN public.ticket_rate_quotes.is_current IS 'TRUE if this is the c
 COMMENT ON COLUMN public.ticket_rate_quotes.superseded_by_id IS 'Reference to the quote that replaced this one. NULL if this is the current quote.';
 COMMENT ON COLUMN public.ticket_rate_quotes.superseded_at IS 'Timestamp when this quote was superseded by a newer version.';
 
--- Create partial unique index to enforce only one current quote per ticket
+-- ============================================
+-- PART 2: BACKFILL is_current FOR EXISTING QUOTES
+-- IMPORTANT: Must run BEFORE creating unique index!
+-- ============================================
+
+-- Step 1: Set ALL to FALSE first
+UPDATE public.ticket_rate_quotes SET is_current = FALSE WHERE is_current = TRUE;
+
+-- Step 2: Set latest per ticket to TRUE
+WITH latest_quotes AS (
+    SELECT DISTINCT ON (ticket_id) id
+    FROM public.ticket_rate_quotes
+    WHERE ticket_id IS NOT NULL
+    ORDER BY ticket_id, created_at DESC, id DESC
+)
+UPDATE public.ticket_rate_quotes
+SET is_current = TRUE
+WHERE id IN (SELECT id FROM latest_quotes);
+
+-- Step 3: Set superseded_by_id chain for non-current quotes
+WITH quote_chain AS (
+    SELECT q1.id,
+           (SELECT id FROM public.ticket_rate_quotes q2
+            WHERE q2.ticket_id = q1.ticket_id
+            AND q2.created_at > q1.created_at
+            ORDER BY q2.created_at ASC LIMIT 1) as next_quote_id
+    FROM public.ticket_rate_quotes q1
+    WHERE q1.is_current = FALSE AND q1.superseded_by_id IS NULL
+)
+UPDATE public.ticket_rate_quotes q
+SET superseded_by_id = qc.next_quote_id, superseded_at = NOW()
+FROM quote_chain qc
+WHERE q.id = qc.id AND qc.next_quote_id IS NOT NULL;
+
+-- ============================================
+-- PART 3: CREATE UNIQUE INDEX (now safe - data is consistent)
+-- ============================================
+
 DROP INDEX IF EXISTS idx_ticket_rate_quotes_one_current_per_ticket;
 CREATE UNIQUE INDEX idx_ticket_rate_quotes_one_current_per_ticket
     ON public.ticket_rate_quotes (ticket_id)
@@ -40,15 +78,17 @@ COMMENT ON INDEX idx_ticket_rate_quotes_one_current_per_ticket IS
 CREATE INDEX IF NOT EXISTS idx_ticket_rate_quotes_is_current ON public.ticket_rate_quotes(is_current) WHERE is_current = TRUE;
 
 -- ============================================
--- PART 2: FUNCTION - Supersede Previous Quotes on Insert
--- When a new quote is inserted, mark previous current quotes as superseded
+-- PART 4: BEFORE INSERT TRIGGER - Supersede Previous Quotes
+-- Uses advisory lock to prevent race conditions
 -- ============================================
 
 CREATE OR REPLACE FUNCTION public.fn_supersede_previous_quotes()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Only process if this is a new current quote
     IF NEW.is_current = TRUE AND NEW.ticket_id IS NOT NULL THEN
+        -- Advisory lock to serialize per-ticket inserts (prevents race conditions)
+        PERFORM pg_advisory_xact_lock(hashtext(NEW.ticket_id::text)::bigint);
+
         -- Mark all previous current quotes for this ticket as superseded
         UPDATE public.ticket_rate_quotes
         SET
@@ -57,7 +97,6 @@ BEGIN
             superseded_at = NOW(),
             updated_at = NOW()
         WHERE ticket_id = NEW.ticket_id
-        AND id != NEW.id
         AND is_current = TRUE;
     END IF;
 
@@ -66,20 +105,19 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION public.fn_supersede_previous_quotes IS
-'Trigger function that marks previous current quotes as superseded when a new quote is inserted.
+'BEFORE INSERT trigger that marks previous current quotes as superseded.
+Uses advisory lock to prevent race conditions with concurrent inserts.
 Ensures only one is_current=TRUE quote exists per ticket_id.';
 
--- Create trigger for auto-superseding
 DROP TRIGGER IF EXISTS trg_supersede_previous_quotes ON public.ticket_rate_quotes;
 CREATE TRIGGER trg_supersede_previous_quotes
-    AFTER INSERT ON public.ticket_rate_quotes
+    BEFORE INSERT ON public.ticket_rate_quotes
     FOR EACH ROW
     WHEN (NEW.is_current = TRUE)
     EXECUTE FUNCTION public.fn_supersede_previous_quotes();
 
 -- ============================================
--- PART 3: TRIGGER - Block Edits on Non-Current or Terminal Quotes
--- Prevent modifications to amount/items when quote is not current or terminal
+-- PART 5: TRIGGER - Block Edits on Non-Current or Terminal Quotes
 -- ============================================
 
 CREATE OR REPLACE FUNCTION public.fn_block_non_current_quote_edits()
@@ -87,7 +125,6 @@ RETURNS TRIGGER AS $$
 BEGIN
     -- Allow status changes (needed for state machine transitions)
     IF OLD.status IS DISTINCT FROM NEW.status THEN
-        -- Status changes are always allowed
         RETURN NEW;
     END IF;
 
@@ -97,7 +134,7 @@ BEGIN
            OLD.terms IS DISTINCT FROM NEW.terms OR
            OLD.valid_until IS DISTINCT FROM NEW.valid_until THEN
             RAISE EXCEPTION 'Cannot modify non-current quote. Create a new quote instead.'
-                USING ERRCODE = '23514'; -- check_violation
+                USING ERRCODE = '23514';
         END IF;
     END IF;
 
@@ -126,7 +163,7 @@ CREATE TRIGGER trg_block_non_current_quote_edits
     EXECUTE FUNCTION public.fn_block_non_current_quote_edits();
 
 -- ============================================
--- PART 4: ADD revoked TO customer_quotation_status ENUM
+-- PART 6: ADD revoked TO customer_quotation_status ENUM
 -- ============================================
 
 DO $$
@@ -139,8 +176,7 @@ EXCEPTION
 END $$;
 
 -- ============================================
--- PART 5: SNAPSHOT LOCK FOR customer_quotations
--- Block changes to core fields after status != draft
+-- PART 7: SNAPSHOT LOCK FOR customer_quotations
 -- ============================================
 
 CREATE OR REPLACE FUNCTION public.fn_enforce_quotation_snapshot()
@@ -148,7 +184,6 @@ RETURNS TRIGGER AS $$
 BEGIN
     -- If old status was not draft, block changes to snapshot fields
     IF OLD.status != 'draft' THEN
-        -- Check for changes to immutable fields
         IF OLD.operational_cost_id IS DISTINCT FROM NEW.operational_cost_id THEN
             RAISE EXCEPTION 'Cannot change operational_cost_id after quotation is sent. Status: %', OLD.status
                 USING ERRCODE = '23514',
@@ -179,9 +214,6 @@ BEGIN
             RAISE EXCEPTION 'Cannot change terms_excludes after quotation is sent. Status: %', OLD.status
                 USING ERRCODE = '23514';
         END IF;
-
-        -- Allow changes to: status, sent_at, sent_via, sent_to, rejection_reason,
-        -- pdf_url, pdf_generated_at, updated_at
     END IF;
 
     RETURN NEW;
@@ -201,10 +233,10 @@ CREATE TRIGGER trg_enforce_quotation_snapshot
     EXECUTE FUNCTION public.fn_enforce_quotation_snapshot();
 
 -- ============================================
--- PART 6: UPDATED STATE MACHINE VALIDATORS
--- Clean ticket_status transitions (remove legacy states)
+-- PART 8: STATE MACHINE VALIDATORS
 -- ============================================
 
+-- Ticket Status Validator
 CREATE OR REPLACE FUNCTION public.fn_validate_ticket_transition(
     p_current_status TEXT,
     p_target_status TEXT
@@ -213,12 +245,6 @@ RETURNS JSONB AS $$
 DECLARE
     v_valid_transitions JSONB;
 BEGIN
-    -- Define valid state machine transitions for tickets
-    -- CLEAN STATE MACHINE (no legacy on_hold/waiting_vendor/waiting_approval)
-    -- pending_response_from rules:
-    --   need_response => creator
-    --   need_adjustment => assignee
-    --   waiting_customer => creator
     v_valid_transitions := '{
         "open": ["need_response", "in_progress", "waiting_customer", "need_adjustment", "pending", "resolved", "closed"],
         "need_response": ["in_progress", "waiting_customer", "need_adjustment", "pending", "resolved", "closed"],
@@ -230,7 +256,6 @@ BEGIN
         "closed": []
     }'::JSONB;
 
-    -- Check if current status exists in state machine
     IF NOT v_valid_transitions ? p_current_status THEN
         RETURN jsonb_build_object(
             'valid', FALSE,
@@ -239,12 +264,10 @@ BEGIN
         );
     END IF;
 
-    -- Check if target status is allowed from current status
     IF v_valid_transitions->p_current_status @> to_jsonb(p_target_status) THEN
         RETURN jsonb_build_object('valid', TRUE);
     END IF;
 
-    -- Specific conflict message for closed tickets
     IF p_current_status = 'closed' THEN
         RETURN jsonb_build_object(
             'valid', FALSE,
@@ -263,13 +286,9 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 COMMENT ON FUNCTION public.fn_validate_ticket_transition IS
 'State machine validator for ticket status transitions.
-Uses clean state machine without legacy states (on_hold, waiting_vendor, waiting_approval).
-Returns conflict (409-worthy) for closed tickets (terminal state).';
+Terminal: closed. Returns 409 error codes for invalid transitions.';
 
--- ============================================
--- PART 7: QUOTE STATUS STATE MACHINE VALIDATOR
--- ============================================
-
+-- Quote Status Validator
 CREATE OR REPLACE FUNCTION public.fn_validate_quote_status_transition(
     p_current_status TEXT,
     p_target_status TEXT
@@ -278,12 +297,6 @@ RETURNS JSONB AS $$
 DECLARE
     v_valid_transitions JSONB;
 BEGIN
-    -- Define valid state machine transitions for quote_status
-    -- Canonical flow: submitted -> accepted or revise_requested or rejected
-    --                 accepted -> sent_to_customer
-    --                 sent_to_customer -> won or rejected
-    -- Terminal: won, rejected
-    -- revise_requested is snapshot - do NOT revert to submitted, create NEW row
     v_valid_transitions := '{
         "draft": ["submitted"],
         "submitted": ["accepted", "revise_requested", "rejected", "sent_to_customer"],
@@ -295,7 +308,6 @@ BEGIN
         "sent": ["sent_to_customer", "accepted", "rejected"]
     }'::JSONB;
 
-    -- Check if current status exists in state machine
     IF NOT v_valid_transitions ? p_current_status THEN
         RETURN jsonb_build_object(
             'valid', FALSE,
@@ -304,12 +316,10 @@ BEGIN
         );
     END IF;
 
-    -- Check if target status is allowed from current status
     IF v_valid_transitions->p_current_status @> to_jsonb(p_target_status) THEN
         RETURN jsonb_build_object('valid', TRUE);
     END IF;
 
-    -- Specific conflict messages for terminal states
     IF p_current_status = 'won' THEN
         RETURN jsonb_build_object(
             'valid', FALSE,
@@ -329,7 +339,7 @@ BEGIN
     IF p_current_status = 'revise_requested' THEN
         RETURN jsonb_build_object(
             'valid', FALSE,
-            'error', 'Quote is in revise_requested status (snapshot). Create a NEW quote instead of modifying this one.',
+            'error', 'Quote is in revise_requested status (snapshot). Create a NEW quote instead.',
             'error_code', 'CONFLICT_QUOTE_SNAPSHOT'
         );
     END IF;
@@ -343,15 +353,9 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 COMMENT ON FUNCTION public.fn_validate_quote_status_transition IS
-'State machine validator for quote_status (ticket_rate_quotes) transitions.
-Terminal states: won, rejected
-Snapshot state: revise_requested (cannot transition, must create new quote)
-Canonical flow: submitted -> accepted -> sent_to_customer -> won/rejected';
+'State machine validator for quote_status. Terminal: won, rejected. Snapshot: revise_requested.';
 
--- ============================================
--- PART 8: CUSTOMER QUOTATION STATUS STATE MACHINE VALIDATOR
--- ============================================
-
+-- Customer Quotation Status Validator
 CREATE OR REPLACE FUNCTION public.fn_validate_customer_quotation_transition(
     p_current_status TEXT,
     p_target_status TEXT
@@ -360,9 +364,6 @@ RETURNS JSONB AS $$
 DECLARE
     v_valid_transitions JSONB;
 BEGIN
-    -- Define valid state machine transitions for customer_quotation_status
-    -- Once status != draft, quotation becomes SNAPSHOT (core fields immutable)
-    -- Terminal: accepted, rejected
     v_valid_transitions := '{
         "draft": ["sent", "revoked"],
         "sent": ["accepted", "rejected", "expired", "revoked"],
@@ -372,7 +373,6 @@ BEGIN
         "revoked": []
     }'::JSONB;
 
-    -- Check if current status exists in state machine
     IF NOT v_valid_transitions ? p_current_status THEN
         RETURN jsonb_build_object(
             'valid', FALSE,
@@ -381,12 +381,10 @@ BEGIN
         );
     END IF;
 
-    -- Check if target status is allowed from current status
     IF v_valid_transitions->p_current_status @> to_jsonb(p_target_status) THEN
         RETURN jsonb_build_object('valid', TRUE);
     END IF;
 
-    -- Specific conflict messages for terminal states
     IF p_current_status = 'accepted' THEN
         RETURN jsonb_build_object(
             'valid', FALSE,
@@ -428,31 +426,10 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 COMMENT ON FUNCTION public.fn_validate_customer_quotation_transition IS
-'State machine validator for customer_quotation_status transitions.
-Once status != draft, quotation is a SNAPSHOT (core fields immutable).
-Terminal states: accepted, rejected, expired, revoked';
+'State machine validator for customer_quotation_status. Terminal: accepted, rejected, expired, revoked.';
 
 -- ============================================
--- PART 9: BACKFILL is_current FOR EXISTING QUOTES
--- Set is_current based on latest quote per ticket
--- ============================================
-
--- First, set all to FALSE
-UPDATE public.ticket_rate_quotes SET is_current = FALSE WHERE is_current = TRUE;
-
--- Then set is_current = TRUE for the latest quote per ticket
-WITH latest_quotes AS (
-    SELECT DISTINCT ON (ticket_id) id
-    FROM public.ticket_rate_quotes
-    WHERE ticket_id IS NOT NULL
-    ORDER BY ticket_id, created_at DESC
-)
-UPDATE public.ticket_rate_quotes
-SET is_current = TRUE
-WHERE id IN (SELECT id FROM latest_quotes);
-
--- ============================================
--- PART 10: GRANT PERMISSIONS
+-- PART 9: GRANT PERMISSIONS
 -- ============================================
 
 GRANT EXECUTE ON FUNCTION public.fn_validate_ticket_transition(TEXT, TEXT) TO authenticated;
@@ -462,26 +439,20 @@ GRANT EXECUTE ON FUNCTION public.fn_validate_customer_quotation_transition(TEXT,
 -- ============================================
 -- SUMMARY
 -- ============================================
--- This migration implements:
+-- Fixed migration implements:
 --
 -- 1. VERSIONING for ticket_rate_quotes:
---    - is_current column (only one TRUE per ticket)
---    - superseded_by_id and superseded_at for history
+--    - is_current, superseded_by_id, superseded_at columns
+--    - Backfill runs BEFORE unique index creation
+--    - BEFORE INSERT trigger with advisory lock (prevents race conditions)
 --    - Partial unique index enforces one current per ticket
---    - Trigger auto-supersedes old quotes on insert
---    - Trigger blocks edits on non-current or terminal quotes
 --
 -- 2. SNAPSHOT LOCK for customer_quotations:
---    - After status != draft, blocks changes to:
---      operational_cost_id, total_cost, total_selling_rate,
---      target_margin_percent, terms_includes, terms_excludes
---    - Allows changes to status, timestamps, sent_* fields
+--    - After status != draft, blocks changes to core fields
 --    - Added 'revoked' status to enum
 --
--- 3. CLEAN STATE MACHINE VALIDATORS:
---    - fn_validate_ticket_transition: Clean states without legacy
+-- 3. STATE MACHINE VALIDATORS:
+--    - fn_validate_ticket_transition: Terminal closed
 --    - fn_validate_quote_status_transition: Terminal won/rejected
 --    - fn_validate_customer_quotation_transition: Terminal accepted/rejected/expired/revoked
---
--- All transitions return 409 for terminal/conflict states.
 -- ============================================
