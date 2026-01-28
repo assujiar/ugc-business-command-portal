@@ -86,6 +86,9 @@ interface Lead {
   created_by: string | null
   created_at: string
   updated_at: string
+  // CRM linkage
+  account_id?: string | null
+  opportunity_id?: string | null
   // Creator info
   creator_name?: string | null
   creator_role?: UserRole | null
@@ -297,6 +300,13 @@ export function LeadDetailDialog({
       contact_email: lead.contact_email || '',
       contact_phone: lead.contact_phone || '',
     })
+    // FIX: Pass account_id and opportunity_id for proper prefill and linkage
+    if (lead.account_id) {
+      params.set('account_id', lead.account_id)
+    }
+    if (lead.opportunity_id) {
+      params.set('opportunity_id', lead.opportunity_id)
+    }
     router.push(`/tickets/new?${params.toString()}`)
     onOpenChange(false)
   }

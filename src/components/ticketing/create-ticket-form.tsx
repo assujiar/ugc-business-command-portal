@@ -60,6 +60,16 @@ interface CreateTicketFormProps {
   profile: Profile
 }
 
+// Debounce helper for search
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay)
+    return () => clearTimeout(handler)
+  }, [value, delay])
+  return debouncedValue
+}
+
 interface ShipmentData {
   service_type_code: string
   fleet_type: string
@@ -137,11 +147,19 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
   const [ticketType, setTicketType] = useState<TicketType>('GEN')
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null) // Track selected account separately
   const [senderName, setSenderName] = useState('')
   const [senderEmail, setSenderEmail] = useState('')
   const [senderPhone, setSenderPhone] = useState('')
   const [showSenderToOps, setShowSenderToOps] = useState(true)
   const [loadingContacts, setLoadingContacts] = useState(false)
+  const [accountSearchQuery, setAccountSearchQuery] = useState('')
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
+  const [accountOffset, setAccountOffset] = useState(0)
+  const [hasMoreAccounts, setHasMoreAccounts] = useState(false)
+  const [loadingMoreAccounts, setLoadingMoreAccounts] = useState(false)
+  const debouncedAccountSearch = useDebounce(accountSearchQuery, 300)
+  const ACCOUNTS_PAGE_SIZE = 50
 
   // Source references from URL params (for linking ticket to lead/opportunity)
   const [opportunityId, setOpportunityId] = useState<string | null>(null)
@@ -280,35 +298,145 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     if (contactPhone) setSenderPhone(contactPhone)
   }, [searchParams])
 
-  // Fetch accounts for dropdown
+  // Reset pagination when search query changes
+  useEffect(() => {
+    setAccountOffset(0)
+    setHasMoreAccounts(false)
+  }, [debouncedAccountSearch])
+
+  // Fetch accounts for dropdown with server-side search and pagination
   useEffect(() => {
     const fetchAccounts = async () => {
-      const { data } = await (supabase as any)
-        .from('accounts')
-        .select('account_id, company_name')
-        .order('company_name')
-        .limit(100)
+      setLoadingAccounts(true)
+      try {
+        let query = (supabase as any)
+          .from('accounts')
+          .select('account_id, company_name', { count: 'exact' })
+          .order('company_name')
 
-      setAccounts(data || [])
+        // If search query provided, filter by company_name
+        if (debouncedAccountSearch.trim()) {
+          query = query.ilike('company_name', `%${debouncedAccountSearch.trim()}%`)
+        }
+
+        // Fetch one extra to determine if there are more
+        query = query.range(0, ACCOUNTS_PAGE_SIZE - 1)
+
+        const { data, count } = await query
+        setAccounts(data || [])
+        setHasMoreAccounts(count ? count > ACCOUNTS_PAGE_SIZE : false)
+        setAccountOffset(ACCOUNTS_PAGE_SIZE)
+      } finally {
+        setLoadingAccounts(false)
+      }
     }
     fetchAccounts()
-  }, [])
+  }, [debouncedAccountSearch])
 
-  // Apply pending account_id AFTER accounts are loaded
-  useEffect(() => {
-    if (pendingAccountId && accounts.length > 0) {
-      // Check if the account exists in the loaded accounts
-      const accountExists = accounts.some(acc => acc.account_id === pendingAccountId)
-      if (accountExists) {
-        setSelectedAccountId(pendingAccountId)
-        setValue('account_id', pendingAccountId)
-        // Also fetch contact info for this account
-        handleAccountSelect(pendingAccountId)
+  // Load more accounts (pagination)
+  const loadMoreAccounts = async () => {
+    if (loadingMoreAccounts || !hasMoreAccounts) return
+
+    setLoadingMoreAccounts(true)
+    try {
+      let query = (supabase as any)
+        .from('accounts')
+        .select('account_id, company_name', { count: 'exact' })
+        .order('company_name')
+
+      // If search query provided, filter by company_name
+      if (debouncedAccountSearch.trim()) {
+        query = query.ilike('company_name', `%${debouncedAccountSearch.trim()}%`)
       }
-      // Clear pending after applying
+
+      // Fetch next page
+      query = query.range(accountOffset, accountOffset + ACCOUNTS_PAGE_SIZE - 1)
+
+      const { data, count } = await query
+      if (data && data.length > 0) {
+        // Append to existing accounts, avoiding duplicates
+        setAccounts(prev => {
+          const existingIds = new Set(prev.map(a => a.account_id))
+          const newAccounts = data.filter((a: Account) => !existingIds.has(a.account_id))
+          return [...prev, ...newAccounts]
+        })
+        const newOffset = accountOffset + data.length
+        setAccountOffset(newOffset)
+        setHasMoreAccounts(count ? count > newOffset : false)
+      } else {
+        setHasMoreAccounts(false)
+      }
+    } finally {
+      setLoadingMoreAccounts(false)
+    }
+  }
+
+  // Apply pending account_id - fetch account by ID if not in list (prefill fix)
+  useEffect(() => {
+    const applyPendingAccount = async () => {
+      if (!pendingAccountId) return
+
+      // First check if account is already in the list
+      const existingAccount = accounts.find(acc => acc.account_id === pendingAccountId)
+      if (existingAccount) {
+        setSelectedAccountId(pendingAccountId)
+        setSelectedAccount(existingAccount)
+        setValue('account_id', pendingAccountId)
+        handleAccountSelect(pendingAccountId)
+        setPendingAccountId(null)
+        return
+      }
+
+      // If not in list, fetch the specific account by ID (critical for prefill)
+      try {
+        const { data: account } = await (supabase as any)
+          .from('accounts')
+          .select('account_id, company_name')
+          .eq('account_id', pendingAccountId)
+          .single()
+
+        if (account) {
+          // Store the selected account separately so it always displays
+          setSelectedAccount(account)
+          setSelectedAccountId(pendingAccountId)
+          setValue('account_id', pendingAccountId)
+          handleAccountSelect(pendingAccountId)
+        }
+      } catch (err) {
+        console.error('Error fetching pending account:', err)
+      }
       setPendingAccountId(null)
     }
+
+    applyPendingAccount()
   }, [pendingAccountId, accounts, setValue])
+
+  // Resolve account_id from opportunity_id if not directly provided
+  useEffect(() => {
+    const resolveAccountFromOpportunity = async () => {
+      // Only run if we have opportunity_id but no pending account_id
+      const accId = searchParams.get('account_id')
+      const oppId = searchParams.get('opportunity_id')
+
+      if (oppId && !accId && !selectedAccountId) {
+        try {
+          const { data: opportunity } = await (supabase as any)
+            .from('opportunities')
+            .select('account_id')
+            .eq('opportunity_id', oppId)
+            .single()
+
+          if (opportunity?.account_id) {
+            setPendingAccountId(opportunity.account_id)
+          }
+        } catch (err) {
+          console.error('Error resolving account from opportunity:', err)
+        }
+      }
+    }
+
+    resolveAccountFromOpportunity()
+  }, [searchParams, selectedAccountId])
 
   // Check sessionStorage for prefilled shipment data from lead/pipeline
   useEffect(() => {
@@ -700,22 +828,89 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                 <Label htmlFor="account_id">Link to Account (Optional)</Label>
                 <Select
                   value={selectedAccountId || undefined}
-                  onValueChange={handleAccountSelect}
+                  onValueChange={(value) => {
+                    const account = accounts.find(a => a.account_id === value)
+                    if (account) {
+                      setSelectedAccount(account)
+                    }
+                    handleAccountSelect(value)
+                  }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select account" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.account_id} value={account.account_id}>
+                    <SelectValue placeholder="Select account">
+                      {selectedAccount ? (
                         <div className="flex items-center gap-2">
                           <Building2 className="h-4 w-4 text-muted-foreground" />
-                          {account.company_name}
+                          {selectedAccount.company_name}
                         </div>
-                      </SelectItem>
-                    ))}
+                      ) : (
+                        'Select account'
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Search input inside dropdown */}
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="Search accounts..."
+                        value={accountSearchQuery}
+                        onChange={(e) => setAccountSearchQuery(e.target.value)}
+                        className="h-8"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    {loadingAccounts ? (
+                      <div className="py-4 text-center text-sm text-muted-foreground">
+                        <RefreshCw className="h-4 w-4 animate-spin inline mr-2" />
+                        Loading...
+                      </div>
+                    ) : accounts.length === 0 ? (
+                      <div className="py-4 text-center text-sm text-muted-foreground">
+                        {accountSearchQuery ? 'No accounts found' : 'Type to search accounts'}
+                      </div>
+                    ) : (
+                      <>
+                        {accounts.map((account) => (
+                          <SelectItem key={account.account_id} value={account.account_id}>
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-muted-foreground" />
+                              {account.company_name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                        {hasMoreAccounts && (
+                          <div className="p-2 border-t">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                loadMoreAccounts()
+                              }}
+                              disabled={loadingMoreAccounts}
+                            >
+                              {loadingMoreAccounts ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                                  Loading...
+                                </>
+                              ) : (
+                                'Load more accounts'
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Type to search all accessible accounts
+                </p>
               </div>
 
               {/* Sender Info - shows when account is selected */}

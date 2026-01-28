@@ -400,6 +400,10 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
       opportunity_id: opp.opportunity_id,
       company_name: opp.account_name || opp.name || '',
     })
+    // FIX: Pass account_id for proper prefill in ticket form
+    if (opp.account_id) {
+      params.set('account_id', opp.account_id)
+    }
     // Also pass lead_id if opportunity was created from a lead
     if (opp.lead_id) {
       params.set('lead_id', opp.lead_id)

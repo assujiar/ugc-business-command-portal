@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       p_customer_phone: body.customer_phone || null,
       p_customer_address: body.customer_address || null,
       p_service_type: body.service_type || null,
+      p_service_type_code: body.service_type_code || body.service_type || null, // FIX: Pass service_type_code
       p_incoterm: body.incoterm || null,
       p_fleet_type: body.fleet_type || null,
       p_fleet_quantity: body.fleet_quantity || null,
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
       p_cargo_volume: body.cargo_volume || null,
       p_cargo_volume_unit: body.cargo_volume_unit || 'cbm',
       p_cargo_quantity: body.cargo_quantity || null,
-      p_cargo_quantity_unit: body.cargo_quantity_unit || null,
+      p_cargo_quantity_unit: body.cargo_quantity_unit || 'units',
       p_origin_address: body.origin_address || null,
       p_origin_city: body.origin_city || null,
       p_origin_country: body.origin_country || null,

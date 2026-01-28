@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccessTicketing } from '@/lib/permissions'
+import { getServiceTypeDisplayLabel } from '@/lib/constants'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -208,7 +209,11 @@ export async function POST(request: NextRequest) {
     const customer_phone = body.customer_phone || null
     const customer_address = body.customer_address || null
 
-    const service_type = body.service_type || null
+    // FIX: Properly handle service_type and service_type_code
+    // service_type_code is the canonical identifier, service_type is the display label
+    const service_type_code = body.service_type_code || body.service_type || null
+    // Derive label from code if not explicitly provided, or use code as fallback
+    const service_type = body.service_type_label || (service_type_code ? getServiceTypeDisplayLabel(service_type_code) : null) || body.service_type || null
     const incoterm = body.incoterm || null
     const fleet_type = body.fleet_type || null
     const fleet_quantity = body.fleet_quantity || null
@@ -230,7 +235,7 @@ export async function POST(request: NextRequest) {
     const cargo_volume = body.cargo_volume ?? null
     const cargo_volume_unit = body.cargo_volume_unit || 'cbm'
     const cargo_quantity = body.cargo_quantity ?? null
-    const cargo_quantity_unit = body.cargo_quantity_unit || null
+    const cargo_quantity_unit = body.cargo_quantity_unit || 'units'
 
     const estimated_leadtime = body.estimated_leadtime || null
     const estimated_cargo_value = body.estimated_cargo_value ?? null
@@ -375,6 +380,7 @@ export async function POST(request: NextRequest) {
         customer_phone,
         customer_address,
         service_type,
+        service_type_code,
         fleet_type,
         fleet_quantity,
         incoterm,
