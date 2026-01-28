@@ -383,7 +383,7 @@ BEGIN
             -- Fetch full opportunity record
             SELECT * INTO v_opportunity
             FROM public.opportunities
-            WHERE opportunity_id = v_effective_opportunity_id
+            WHERE opportunities.opportunity_id = v_effective_opportunity_id
             FOR UPDATE;
 
             -- Refresh quotation to get updated opportunity_id
@@ -404,7 +404,7 @@ BEGIN
                     latest_quotation_id = v_quotation.id,
                     quotation_count = COALESCE(quotation_count, 0) + 1,
                     updated_at = NOW()
-                WHERE opportunity_id = v_effective_opportunity_id
+                WHERE opportunities.opportunity_id = v_effective_opportunity_id
                 RETURNING * INTO v_opportunity;
 
                 v_new_opp_stage := 'Quote Sent'::opportunity_stage;
@@ -434,8 +434,8 @@ BEGIN
                     v_old_opp_stage,
                     'Quote Sent'::opportunity_stage
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM public.opportunity_stage_history
-                    WHERE opportunity_id = v_effective_opportunity_id
+                    SELECT 1 FROM public.opportunity_stage_history osh
+                    WHERE osh.opportunity_id = v_effective_opportunity_id
                     AND new_stage = 'Quote Sent'::opportunity_stage
                     AND from_stage = v_old_opp_stage
                     AND created_at > NOW() - INTERVAL '1 minute'
@@ -460,8 +460,8 @@ BEGIN
                     p_actor_user_id,
                     NOW()
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM public.pipeline_updates
-                    WHERE opportunity_id = v_effective_opportunity_id
+                    SELECT 1 FROM public.pipeline_updates pu
+                    WHERE pu.opportunity_id = v_effective_opportunity_id
                     AND new_stage = 'Quote Sent'::opportunity_stage
                     AND old_stage = v_old_opp_stage
                     AND created_at > NOW() - INTERVAL '1 minute'
@@ -492,8 +492,8 @@ BEGIN
                     COALESCE(p_actor_user_id, v_quotation.created_by),
                     COALESCE(p_actor_user_id, v_quotation.created_by)
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM public.activities
-                    WHERE related_opportunity_id = v_effective_opportunity_id
+                    SELECT 1 FROM public.activities act
+                    WHERE act.related_opportunity_id = v_effective_opportunity_id
                     AND subject = v_activity_subject
                     AND created_at > NOW() - INTERVAL '1 minute'
                 );
@@ -504,7 +504,7 @@ BEGIN
                     quotation_status = 'sent',
                     latest_quotation_id = v_quotation.id,
                     updated_at = NOW()
-                WHERE opportunity_id = v_effective_opportunity_id;
+                WHERE opportunities.opportunity_id = v_effective_opportunity_id;
             END IF;
         END IF;
     END IF;
@@ -779,7 +779,7 @@ BEGIN
         -- Fetch full opportunity record
         SELECT * INTO v_opportunity
         FROM public.opportunities
-        WHERE opportunity_id = v_effective_opportunity_id
+        WHERE opportunities.opportunity_id = v_effective_opportunity_id
         FOR UPDATE;
 
         -- Refresh quotation to get updated opportunity_id
@@ -801,7 +801,7 @@ BEGIN
                 competitor_price = COALESCE(p_competitor_amount, competitor_price),
                 customer_budget = COALESCE(p_customer_budget, customer_budget),
                 updated_at = NOW()
-            WHERE opportunity_id = v_effective_opportunity_id
+            WHERE opportunities.opportunity_id = v_effective_opportunity_id
             RETURNING * INTO v_opportunity;
 
             v_new_opp_stage := 'Negotiation'::opportunity_stage;
@@ -833,11 +833,11 @@ BEGIN
                 v_old_opp_stage,
                 'Negotiation'::opportunity_stage
             WHERE NOT EXISTS (
-                SELECT 1 FROM public.opportunity_stage_history
-                WHERE opportunity_id = v_effective_opportunity_id
-                AND new_stage = 'Negotiation'::opportunity_stage
-                AND from_stage = v_old_opp_stage
-                AND created_at > NOW() - INTERVAL '1 minute'
+                SELECT 1 FROM public.opportunity_stage_history osh
+                WHERE osh.opportunity_id = v_effective_opportunity_id
+                AND osh.new_stage = 'Negotiation'::opportunity_stage
+                AND osh.from_stage = v_old_opp_stage
+                AND osh.created_at > NOW() - INTERVAL '1 minute'
             );
 
             -- Insert pipeline_updates (idempotent)
@@ -859,11 +859,11 @@ BEGIN
                 v_actor_id,
                 NOW()
             WHERE NOT EXISTS (
-                SELECT 1 FROM public.pipeline_updates
-                WHERE opportunity_id = v_effective_opportunity_id
-                AND new_stage = 'Negotiation'::opportunity_stage
-                AND old_stage = v_old_opp_stage
-                AND created_at > NOW() - INTERVAL '1 minute'
+                SELECT 1 FROM public.pipeline_updates pu
+                WHERE pu.opportunity_id = v_effective_opportunity_id
+                AND pu.new_stage = 'Negotiation'::opportunity_stage
+                AND pu.old_stage = v_old_opp_stage
+                AND pu.created_at > NOW() - INTERVAL '1 minute'
             );
 
             -- Insert activity record (idempotent)
@@ -891,10 +891,10 @@ BEGIN
                 COALESCE(v_actor_id, v_quotation.created_by),
                 COALESCE(v_actor_id, v_quotation.created_by)
             WHERE NOT EXISTS (
-                SELECT 1 FROM public.activities
-                WHERE related_opportunity_id = v_effective_opportunity_id
-                AND subject = v_activity_subject
-                AND created_at > NOW() - INTERVAL '1 minute'
+                SELECT 1 FROM public.activities act
+                WHERE act.related_opportunity_id = v_effective_opportunity_id
+                AND act.subject = v_activity_subject
+                AND act.created_at > NOW() - INTERVAL '1 minute'
             );
         ELSIF v_opportunity.stage = 'Negotiation' THEN
             -- Already in Negotiation, still update quotation_status and create activity
@@ -905,7 +905,7 @@ BEGIN
                 competitor_price = COALESCE(p_competitor_amount, competitor_price),
                 customer_budget = COALESCE(p_customer_budget, customer_budget),
                 updated_at = NOW()
-            WHERE opportunity_id = v_effective_opportunity_id;
+            WHERE opportunities.opportunity_id = v_effective_opportunity_id;
 
             -- Create activity for visibility even without stage change
             v_activity_subject := 'Quotation Rejected (Already in Negotiation)';
@@ -935,10 +935,10 @@ BEGIN
                 COALESCE(v_actor_id, v_quotation.created_by),
                 COALESCE(v_actor_id, v_quotation.created_by)
             WHERE NOT EXISTS (
-                SELECT 1 FROM public.activities
-                WHERE related_opportunity_id = v_effective_opportunity_id
-                AND subject = v_activity_subject
-                AND created_at > NOW() - INTERVAL '1 minute'
+                SELECT 1 FROM public.activities act
+                WHERE act.related_opportunity_id = v_effective_opportunity_id
+                AND act.subject = v_activity_subject
+                AND act.created_at > NOW() - INTERVAL '1 minute'
             );
 
             v_pipeline_updated := TRUE;
@@ -948,7 +948,7 @@ BEGIN
             SET
                 quotation_status = 'rejected',
                 updated_at = NOW()
-            WHERE opportunity_id = v_effective_opportunity_id;
+            WHERE opportunities.opportunity_id = v_effective_opportunity_id;
         END IF;
     END IF;
 
