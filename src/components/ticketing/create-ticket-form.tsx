@@ -699,6 +699,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
               <div className="space-y-2">
                 <Label htmlFor="account_id">Link to Account (Optional)</Label>
                 <Select
+                  value={selectedAccountId || undefined}
                   onValueChange={handleAccountSelect}
                 >
                   <SelectTrigger>
