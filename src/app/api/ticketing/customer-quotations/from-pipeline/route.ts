@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       p_customer_phone: body.customer_phone || null,
       p_customer_address: body.customer_address || null,
       p_service_type: body.service_type || null,
+      p_service_type_code: body.service_type_code || body.service_type || null, // FIX: Pass service_type_code
       p_incoterm: body.incoterm || null,
       p_fleet_type: body.fleet_type || null,
       p_fleet_quantity: body.fleet_quantity || null,
