@@ -8,12 +8,33 @@
 -- 1. Update create_quotation_from_pipeline to accept and store service_type_code
 -- 2. Ensure both service_type (label) and service_type_code (canonical) are stored
 --
--- IDEMPOTENCY: Safe to re-run (CREATE OR REPLACE)
+-- IDEMPOTENCY: Safe to re-run (DROP + CREATE)
 -- ============================================
 
 -- ============================================
--- PART 1: Update create_quotation_from_pipeline RPC
--- Add service_type_code parameter and ensure both fields are stored
+-- PART 0: Drop all existing overloads of create_quotation_from_pipeline
+-- This prevents "function name is not unique" errors from multiple overloads
+-- ============================================
+
+DO $$
+DECLARE
+    v_proc RECORD;
+BEGIN
+    FOR v_proc IN
+        SELECT p.oid::regprocedure AS proc_sig
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname = 'create_quotation_from_pipeline'
+    LOOP
+        RAISE NOTICE '[103] Dropping existing overload: %', v_proc.proc_sig;
+        EXECUTE format('DROP FUNCTION IF EXISTS %s', v_proc.proc_sig);
+    END LOOP;
+END $$;
+
+-- ============================================
+-- PART 1: Create create_quotation_from_pipeline RPC
+-- With service_type_code parameter and both fields stored
 -- ============================================
 
 CREATE OR REPLACE FUNCTION public.create_quotation_from_pipeline(
