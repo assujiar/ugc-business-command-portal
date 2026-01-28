@@ -139,18 +139,26 @@ export async function POST(request: NextRequest) {
       opportunity_id,
     } = body
 
-    // Handle lead_id - inherit from opportunity if not provided
+    // Handle lead_id and account_id - inherit from opportunity if not provided
     let lead_id = body.lead_id || null
-    if (opportunity_id && !lead_id) {
-      // Look up lead_id from opportunity's source_lead_id
+    let derived_account_id = account_id || null
+
+    if (opportunity_id) {
+      // Look up lead_id and account_id from opportunity
       const { data: opportunity } = await (supabase as any)
         .from('opportunities')
-        .select('source_lead_id')
+        .select('source_lead_id, account_id')
         .eq('opportunity_id', opportunity_id)
         .single()
 
-      if (opportunity && opportunity.source_lead_id) {
-        lead_id = opportunity.source_lead_id
+      if (opportunity) {
+        if (!lead_id && opportunity.source_lead_id) {
+          lead_id = opportunity.source_lead_id
+        }
+        if (!derived_account_id && opportunity.account_id) {
+          derived_account_id = opportunity.account_id
+          console.log('[Tickets POST] Derived account_id from opportunity:', derived_account_id)
+        }
       }
     }
 
@@ -169,7 +177,7 @@ export async function POST(request: NextRequest) {
       p_description: description || null,
       p_department: department,
       p_priority: priority,
-      p_account_id: account_id || null,
+      p_account_id: derived_account_id || null,
       p_contact_id: contact_id || null,
       p_rfq_data: rfq_data || null,
     })

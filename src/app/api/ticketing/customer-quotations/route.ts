@@ -161,13 +161,38 @@ export async function POST(request: NextRequest) {
     if (lead_id && !opportunity_id) {
       const { data: lead } = await (supabase as any)
         .from('leads')
-        .select('opportunity_id')
+        .select('opportunity_id, account_id')
         .eq('lead_id', lead_id)
         .single()
 
       if (lead && lead.opportunity_id) {
         opportunity_id = lead.opportunity_id
         console.log('[CustomerQuotations POST] Derived opportunity_id from lead:', opportunity_id)
+      }
+
+      // FIX: If lead has account_id but still no opportunity_id, find existing opportunity by account
+      if (!opportunity_id && lead && lead.account_id) {
+        console.log('[CustomerQuotations POST] Looking for existing opportunity by account_id:', lead.account_id)
+        const { data: existingOpp } = await (supabase as any)
+          .from('opportunities')
+          .select('opportunity_id')
+          .eq('account_id', lead.account_id)
+          .not('stage', 'in', '("Closed Won","Closed Lost")')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (existingOpp && existingOpp.opportunity_id) {
+          opportunity_id = existingOpp.opportunity_id
+          console.log('[CustomerQuotations POST] Found existing opportunity by account:', opportunity_id)
+
+          // Also update the lead to link it to this opportunity
+          await (supabase as any)
+            .from('leads')
+            .update({ opportunity_id: opportunity_id })
+            .eq('lead_id', lead_id)
+            .is('opportunity_id', null)
+        }
       }
     }
 
