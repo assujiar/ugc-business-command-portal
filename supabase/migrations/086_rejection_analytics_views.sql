@@ -12,6 +12,9 @@
 -- Aggregates rejection reasons from ticket_rate_quotes via operational_cost_rejection_reasons
 -- ============================================
 
+-- Drop existing view first to allow column name changes (rejection_reason -> rejection_reason_type)
+DROP VIEW IF EXISTS public.v_ops_cost_rejection_analytics;
+
 CREATE OR REPLACE VIEW public.v_ops_cost_rejection_analytics AS
 SELECT
     ocrr.reason_type as rejection_reason_type,
