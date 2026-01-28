@@ -597,6 +597,10 @@ When ticket_rate_quotes status becomes "submitted" AND is_current = TRUE:
 -- Accept valid pre-customer states, set revise_requested
 -- ============================================
 
+-- Drop old overloads with TEXT signature to avoid ambiguity
+DROP FUNCTION IF EXISTS public.rpc_reject_operational_cost_with_reason(uuid, text, numeric, text, text);
+DROP FUNCTION IF EXISTS public.rpc_reject_operational_cost_with_reason(uuid, text, numeric, text, text, uuid, text);
+
 CREATE OR REPLACE FUNCTION public.rpc_reject_operational_cost_with_reason(
     p_cost_id UUID,
     p_reason_type operational_cost_rejection_reason_type,
