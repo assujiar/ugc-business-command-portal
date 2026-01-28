@@ -254,13 +254,29 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  // Read URL params for lead/opportunity linking
+  // Read URL params for lead/opportunity/account linking
   useEffect(() => {
     const oppId = searchParams.get('opportunity_id')
     const lId = searchParams.get('lead_id')
+    const accId = searchParams.get('account_id')
+    const contactName = searchParams.get('contact_name')
+    const contactEmail = searchParams.get('contact_email')
+    const contactPhone = searchParams.get('contact_phone')
+
     if (oppId) setOpportunityId(oppId)
     if (lId) setLeadId(lId)
-  }, [searchParams])
+
+    // Pre-fill account if passed from pipeline/lead
+    if (accId) {
+      setSelectedAccountId(accId)
+      setValue('account_id', accId)
+    }
+
+    // Pre-fill sender info from URL params
+    if (contactName) setSenderName(contactName)
+    if (contactEmail) setSenderEmail(contactEmail)
+    if (contactPhone) setSenderPhone(contactPhone)
+  }, [searchParams, setValue])
 
   // Fetch accounts for dropdown
   useEffect(() => {
