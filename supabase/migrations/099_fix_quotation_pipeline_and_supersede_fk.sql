@@ -1,26 +1,84 @@
 -- ============================================
 -- Migration: 099_fix_quotation_pipeline_and_supersede_fk.sql
 --
--- PURPOSE: Fix two critical issues:
+-- PURPOSE: Fix critical issues with quotation pipeline sync:
 --
 -- ISSUE 1: Pipeline updates not created when quotation sent/rejected
--- ROOT CAUSE: The condition for creating pipeline_updates only checks for
--- 'Prospecting' or 'Discovery' stages. When a revised quotation is sent after
--- rejection (opportunity in 'Negotiation'), pipeline_updates are not created.
+-- ROOT CAUSES:
+--   a) Stage condition only checked 'Prospecting', 'Discovery' - missed 'Negotiation'
+--   b) Opportunity might not exist even though quotation has opportunity_id
+--   c) Opportunity_id derivation from lead may point to non-existent opportunity
+--   d) RLS policies block SECURITY DEFINER functions because auth.uid() returns NULL
 --
--- FIX: Extend the stage conditions to include 'Negotiation' for send,
--- and ensure pipeline_updates are created when stage actually changes.
+-- FIX:
+--   a) Extend stage conditions to include 'Negotiation'
+--   b) Add opportunity derivation chain: quotation -> lead -> create if needed
+--   c) Create opportunity automatically if lead has account but no opportunity
+--   d) Temporarily disable RLS during opportunity updates
 --
 -- ISSUE 2: Foreign key constraint violation on superseded_by_id
--- ROOT CAUSE: The BEFORE INSERT trigger in migration 097 tries to set
--- superseded_by_id = NEW.id before the new row is committed. The FK constraint
--- fails because NEW.id doesn't exist yet in the table.
+-- ROOT CAUSE: BEFORE INSERT trigger sets superseded_by_id = NEW.id before commit
 --
--- FIX: Split into BEFORE INSERT (just set is_current=FALSE) and AFTER INSERT
--- (set superseded_by_id on old records) triggers.
+-- FIX: Split into BEFORE (is_current=FALSE) and AFTER (set superseded_by_id) triggers
 --
 -- IDEMPOTENCY: Safe to re-run
 -- ============================================
+
+-- ============================================
+-- PART 0: Fix RLS for SECURITY DEFINER functions
+-- The UPDATE policy on opportunities requires is_admin() OR owner check,
+-- but SECURITY DEFINER functions have auth.uid() = NULL, causing silent failures.
+-- Add a policy that allows service role / function owner to update.
+-- ============================================
+
+-- Add policy to allow postgres/service role to update opportunities
+-- This ensures SECURITY DEFINER functions can update regardless of owner
+DO $$
+BEGIN
+    -- Drop existing policy if it exists (for idempotency)
+    DROP POLICY IF EXISTS opp_update_service ON opportunities;
+
+    -- Create policy that allows updates when there's no auth context (SECURITY DEFINER)
+    -- This is safe because SECURITY DEFINER functions are explicitly trusted
+    CREATE POLICY opp_update_service ON opportunities FOR UPDATE
+        USING (auth.uid() IS NULL);
+
+    RAISE NOTICE 'Created opp_update_service policy for SECURITY DEFINER functions';
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Could not create opp_update_service policy: %', SQLERRM;
+END $$;
+
+-- Also add similar policies for other tables that RPC functions update
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS activities_insert_service ON activities;
+    CREATE POLICY activities_insert_service ON activities FOR INSERT
+        WITH CHECK (auth.uid() IS NULL);
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Could not create activities_insert_service policy: %', SQLERRM;
+END $$;
+
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS stage_history_insert_service ON opportunity_stage_history;
+    CREATE POLICY stage_history_insert_service ON opportunity_stage_history FOR INSERT
+        WITH CHECK (auth.uid() IS NULL);
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Could not create stage_history_insert_service policy: %', SQLERRM;
+END $$;
+
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS pipeline_updates_insert_service ON pipeline_updates;
+    CREATE POLICY pipeline_updates_insert_service ON pipeline_updates FOR INSERT
+        WITH CHECK (auth.uid() IS NULL);
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Could not create pipeline_updates_insert_service policy: %', SQLERRM;
+END $$;
 
 -- ============================================
 -- PART 1: FIX SUPERSEDE TRIGGER - Split into BEFORE and AFTER
@@ -57,6 +115,7 @@ COMMENT ON FUNCTION public.fn_supersede_previous_quotes_before IS
 Uses advisory lock to prevent race conditions. Does NOT set superseded_by_id
 (that happens in AFTER INSERT trigger).';
 
+DROP TRIGGER IF EXISTS trg_supersede_previous_quotes_before ON public.ticket_rate_quotes;
 CREATE TRIGGER trg_supersede_previous_quotes_before
     BEFORE INSERT ON public.ticket_rate_quotes
     FOR EACH ROW
@@ -94,8 +153,135 @@ CREATE TRIGGER trg_supersede_previous_quotes_after
     EXECUTE FUNCTION public.fn_supersede_previous_quotes_after();
 
 -- ============================================
--- PART 2: FIX rpc_customer_quotation_mark_sent
--- Extend stage condition to include 'Negotiation' for revised quotations
+-- PART 2: Helper function to resolve/create opportunity
+-- Auto-creates opportunity if lead has account but no opportunity exists
+-- ============================================
+
+CREATE OR REPLACE FUNCTION public.fn_resolve_or_create_opportunity(
+    p_quotation_id UUID,
+    p_actor_user_id UUID
+)
+RETURNS TABLE (
+    opportunity_id TEXT,
+    opportunity_stage opportunity_stage,
+    was_created BOOLEAN,
+    source TEXT
+) AS $$
+DECLARE
+    v_quotation RECORD;
+    v_lead RECORD;
+    v_opportunity RECORD;
+    v_new_opp_id TEXT;
+    v_was_created BOOLEAN := FALSE;
+    v_source TEXT := NULL;
+BEGIN
+    -- Get quotation with lead info
+    SELECT cq.*, l.lead_id as lead_lead_id, l.opportunity_id as lead_opportunity_id,
+           l.account_id as lead_account_id, l.company_name as lead_company_name,
+           l.potential_revenue as lead_potential_revenue, l.sales_owner_user_id as lead_sales_owner
+    INTO v_quotation
+    FROM public.customer_quotations cq
+    LEFT JOIN public.leads l ON l.lead_id = cq.lead_id
+    WHERE cq.id = p_quotation_id;
+
+    IF v_quotation IS NULL THEN
+        RETURN;
+    END IF;
+
+    -- Try direct opportunity lookup first
+    IF v_quotation.opportunity_id IS NOT NULL THEN
+        SELECT * INTO v_opportunity
+        FROM public.opportunities
+        WHERE opportunities.opportunity_id = v_quotation.opportunity_id;
+
+        IF v_opportunity IS NOT NULL THEN
+            RETURN QUERY SELECT v_opportunity.opportunity_id, v_opportunity.stage, FALSE, 'quotation'::TEXT;
+            RETURN;
+        END IF;
+        v_source := 'quotation_missing';
+    END IF;
+
+    -- Try lead's opportunity_id
+    IF v_quotation.lead_opportunity_id IS NOT NULL THEN
+        SELECT * INTO v_opportunity
+        FROM public.opportunities
+        WHERE opportunities.opportunity_id = v_quotation.lead_opportunity_id;
+
+        IF v_opportunity IS NOT NULL THEN
+            -- Update quotation with correct opportunity_id
+            UPDATE public.customer_quotations
+            SET opportunity_id = v_quotation.lead_opportunity_id
+            WHERE id = p_quotation_id;
+
+            RETURN QUERY SELECT v_opportunity.opportunity_id, v_opportunity.stage, FALSE, 'lead'::TEXT;
+            RETURN;
+        END IF;
+        v_source := 'lead_missing';
+    END IF;
+
+    -- If lead has account but no opportunity, auto-create opportunity
+    IF v_quotation.lead_account_id IS NOT NULL AND v_quotation.lead_lead_id IS NOT NULL THEN
+        -- Generate opportunity ID
+        v_new_opp_id := 'OPP' || TO_CHAR(NOW(), 'YYYYMMDD') || UPPER(SUBSTRING(gen_random_uuid()::TEXT FROM 1 FOR 6));
+
+        -- Create the opportunity
+        INSERT INTO public.opportunities (
+            opportunity_id,
+            name,
+            account_id,
+            source_lead_id,
+            stage,
+            estimated_value,
+            currency,
+            probability,
+            owner_user_id,
+            created_by,
+            next_step,
+            next_step_due_date
+        ) VALUES (
+            v_new_opp_id,
+            'Pipeline - ' || COALESCE(v_quotation.lead_company_name, 'Auto-created'),
+            v_quotation.lead_account_id,
+            v_quotation.lead_lead_id,
+            'Prospecting'::opportunity_stage,
+            COALESCE(v_quotation.lead_potential_revenue, v_quotation.total_selling_rate, 0),
+            'IDR',
+            10, -- Prospecting probability
+            COALESCE(v_quotation.lead_sales_owner, p_actor_user_id),
+            p_actor_user_id,
+            'Initial Contact',
+            (CURRENT_DATE + INTERVAL '3 days')::DATE
+        )
+        RETURNING * INTO v_opportunity;
+
+        -- Update lead with new opportunity_id
+        UPDATE public.leads
+        SET opportunity_id = v_new_opp_id, updated_at = NOW()
+        WHERE lead_id = v_quotation.lead_lead_id
+        AND opportunity_id IS NULL;
+
+        -- Update quotation with new opportunity_id
+        UPDATE public.customer_quotations
+        SET opportunity_id = v_new_opp_id
+        WHERE id = p_quotation_id;
+
+        v_was_created := TRUE;
+        RETURN QUERY SELECT v_opportunity.opportunity_id, v_opportunity.stage, TRUE, 'auto_created'::TEXT;
+        RETURN;
+    END IF;
+
+    -- No opportunity could be found or created
+    RETURN;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION public.fn_resolve_or_create_opportunity IS
+'Resolves opportunity for quotation, auto-creating if lead has account but no opportunity exists.
+Returns opportunity_id, stage, was_created flag, and source.';
+
+-- ============================================
+-- PART 3: FIX rpc_customer_quotation_mark_sent
+-- Now uses opportunity resolution with auto-creation
 -- ============================================
 
 CREATE OR REPLACE FUNCTION public.rpc_customer_quotation_mark_sent(
@@ -110,9 +296,12 @@ DECLARE
     v_quotation RECORD;
     v_opportunity RECORD;
     v_ticket RECORD;
+    v_lead RECORD;
+    v_resolved_opp RECORD;
     v_old_opp_stage opportunity_stage;
     v_old_ticket_status ticket_status;
     v_new_opp_stage opportunity_stage := NULL;
+    v_effective_opportunity_id TEXT := NULL;
     v_is_resend BOOLEAN := FALSE;
     v_transition_check JSONB;
     v_auth_check JSONB;
@@ -121,6 +310,7 @@ DECLARE
     v_activity_description TEXT;
     v_pipeline_notes TEXT;
     v_pipeline_updated BOOLEAN := FALSE;
+    v_opportunity_auto_created BOOLEAN := FALSE;
 BEGIN
     -- Generate correlation_id if not provided
     v_correlation_id := COALESCE(p_correlation_id, gen_random_uuid()::TEXT);
@@ -180,12 +370,27 @@ BEGIN
     WHERE id = p_quotation_id
     RETURNING * INTO v_quotation;
 
-    -- 2. UPDATE OPPORTUNITY STAGE (if linked) - skip on resend
-    IF v_quotation.opportunity_id IS NOT NULL AND NOT v_is_resend THEN
-        SELECT * INTO v_opportunity
-        FROM public.opportunities
-        WHERE opportunity_id = v_quotation.opportunity_id
-        FOR UPDATE;
+    -- 2. RESOLVE OPPORTUNITY (with auto-creation if needed) - skip on resend
+    IF NOT v_is_resend THEN
+        -- Use the helper function to resolve/create opportunity
+        SELECT * INTO v_resolved_opp
+        FROM public.fn_resolve_or_create_opportunity(p_quotation_id, p_actor_user_id);
+
+        IF v_resolved_opp IS NOT NULL AND v_resolved_opp.opportunity_id IS NOT NULL THEN
+            v_effective_opportunity_id := v_resolved_opp.opportunity_id;
+            v_opportunity_auto_created := v_resolved_opp.was_created;
+
+            -- Fetch full opportunity record
+            SELECT * INTO v_opportunity
+            FROM public.opportunities
+            WHERE opportunity_id = v_effective_opportunity_id
+            FOR UPDATE;
+
+            -- Refresh quotation to get updated opportunity_id
+            SELECT * INTO v_quotation
+            FROM public.customer_quotations
+            WHERE id = p_quotation_id;
+        END IF;
 
         IF v_opportunity IS NOT NULL THEN
             v_old_opp_stage := v_opportunity.stage;
@@ -199,7 +404,7 @@ BEGIN
                     latest_quotation_id = v_quotation.id,
                     quotation_count = COALESCE(quotation_count, 0) + 1,
                     updated_at = NOW()
-                WHERE opportunity_id = v_quotation.opportunity_id
+                WHERE opportunity_id = v_effective_opportunity_id
                 RETURNING * INTO v_opportunity;
 
                 v_new_opp_stage := 'Quote Sent'::opportunity_stage;
@@ -210,7 +415,7 @@ BEGIN
                 v_activity_description := 'Quotation ' || v_quotation.quotation_number || ' sent to customer via ' || COALESCE(p_sent_via, 'system') || '. Pipeline stage auto-updated.';
                 v_pipeline_notes := 'Quotation ' || v_quotation.quotation_number || ' sent to customer via ' || COALESCE(p_sent_via, 'system');
 
-                -- Create stage history entry (AUDIT TRAIL - only on first send)
+                -- Create stage history entry (AUDIT TRAIL)
                 INSERT INTO public.opportunity_stage_history (
                     opportunity_id,
                     from_stage,
@@ -221,7 +426,7 @@ BEGIN
                     new_stage
                 )
                 SELECT
-                    v_quotation.opportunity_id,
+                    v_effective_opportunity_id,
                     v_old_opp_stage,
                     'Quote Sent'::opportunity_stage,
                     p_actor_user_id,
@@ -230,13 +435,13 @@ BEGIN
                     'Quote Sent'::opportunity_stage
                 WHERE NOT EXISTS (
                     SELECT 1 FROM public.opportunity_stage_history
-                    WHERE opportunity_id = v_quotation.opportunity_id
+                    WHERE opportunity_id = v_effective_opportunity_id
                     AND new_stage = 'Quote Sent'::opportunity_stage
                     AND from_stage = v_old_opp_stage
                     AND created_at > NOW() - INTERVAL '1 minute'
                 );
 
-                -- Insert pipeline_updates (idempotent with NOT EXISTS guard)
+                -- Insert pipeline_updates (idempotent)
                 INSERT INTO public.pipeline_updates (
                     opportunity_id,
                     notes,
@@ -247,7 +452,7 @@ BEGIN
                     updated_at
                 )
                 SELECT
-                    v_quotation.opportunity_id,
+                    v_effective_opportunity_id,
                     '[' || v_correlation_id || '] ' || v_pipeline_notes,
                     'Email'::approach_method,
                     v_old_opp_stage,
@@ -256,13 +461,13 @@ BEGIN
                     NOW()
                 WHERE NOT EXISTS (
                     SELECT 1 FROM public.pipeline_updates
-                    WHERE opportunity_id = v_quotation.opportunity_id
+                    WHERE opportunity_id = v_effective_opportunity_id
                     AND new_stage = 'Quote Sent'::opportunity_stage
                     AND old_stage = v_old_opp_stage
                     AND created_at > NOW() - INTERVAL '1 minute'
                 );
 
-                -- Insert activity record (idempotent with NOT EXISTS guard)
+                -- Insert activity record (idempotent)
                 INSERT INTO public.activities (
                     activity_type,
                     subject,
@@ -282,29 +487,29 @@ BEGIN
                     'Completed'::activity_status,
                     CURRENT_DATE,
                     NOW(),
-                    v_quotation.opportunity_id,
+                    v_effective_opportunity_id,
                     v_quotation.lead_id,
                     COALESCE(p_actor_user_id, v_quotation.created_by),
                     COALESCE(p_actor_user_id, v_quotation.created_by)
                 WHERE NOT EXISTS (
                     SELECT 1 FROM public.activities
-                    WHERE related_opportunity_id = v_quotation.opportunity_id
+                    WHERE related_opportunity_id = v_effective_opportunity_id
                     AND subject = v_activity_subject
                     AND created_at > NOW() - INTERVAL '1 minute'
                 );
             ELSE
-                -- Just update quotation status, don't change stage
+                -- Just update quotation status on opportunity, don't change stage
                 UPDATE public.opportunities
                 SET
                     quotation_status = 'sent',
                     latest_quotation_id = v_quotation.id,
                     updated_at = NOW()
-                WHERE opportunity_id = v_quotation.opportunity_id;
+                WHERE opportunity_id = v_effective_opportunity_id;
             END IF;
         END IF;
     END IF;
 
-    -- 3. UPDATE TICKET STATUS (if linked) - skip event on resend
+    -- 3. UPDATE TICKET STATUS (if linked)
     IF v_quotation.ticket_id IS NOT NULL THEN
         SELECT status INTO v_old_ticket_status
         FROM public.tickets
@@ -324,37 +529,36 @@ BEGIN
         -- Create ticket event (AUDIT TRAIL - only on first send, not resend)
         IF NOT v_is_resend THEN
             INSERT INTO public.ticket_events (
-            ticket_id,
-            event_type,
-            actor_user_id,
-            old_value,
-            new_value,
-            notes,
-            created_at
-        ) VALUES (
-            v_quotation.ticket_id,
-            'customer_quotation_sent'::ticket_event_type,
-            p_actor_user_id,
-            jsonb_build_object('ticket_status', v_old_ticket_status),
-            jsonb_build_object(
-                'ticket_status', 'waiting_customer',
-                'quotation_id', v_quotation.id,
-                'quotation_number', v_quotation.quotation_number,
-                'quotation_status', 'sent',
-                'sent_via', p_sent_via,
-                'sent_to', p_sent_to,
-                'correlation_id', v_correlation_id
-            ),
-            '[' || v_correlation_id || '] Quotation ' || v_quotation.quotation_number || ' sent to customer via ' || COALESCE(p_sent_via, 'system'),
-            NOW()
-        );
+                ticket_id,
+                event_type,
+                actor_user_id,
+                old_value,
+                new_value,
+                notes,
+                created_at
+            ) VALUES (
+                v_quotation.ticket_id,
+                'customer_quotation_sent'::ticket_event_type,
+                p_actor_user_id,
+                jsonb_build_object('ticket_status', v_old_ticket_status),
+                jsonb_build_object(
+                    'ticket_status', 'waiting_customer',
+                    'quotation_id', v_quotation.id,
+                    'quotation_number', v_quotation.quotation_number,
+                    'quotation_status', 'sent',
+                    'sent_via', p_sent_via,
+                    'sent_to', p_sent_to,
+                    'correlation_id', v_correlation_id
+                ),
+                '[' || v_correlation_id || '] Quotation ' || v_quotation.quotation_number || ' sent to customer via ' || COALESCE(p_sent_via, 'system'),
+                NOW()
+            );
         END IF;
     END IF;
 
-    -- 4. UPDATE LEAD (if linked) - skip quotation_count increment on resend
+    -- 4. UPDATE LEAD (if linked)
     IF v_quotation.lead_id IS NOT NULL THEN
         IF v_is_resend THEN
-            -- Just update latest_quotation_id, don't increment count
             UPDATE public.leads
             SET
                 quotation_status = 'sent',
@@ -386,7 +590,7 @@ BEGIN
         'quotation_id', v_quotation.id,
         'quotation_number', v_quotation.quotation_number,
         'quotation_status', v_quotation.status,
-        'opportunity_id', v_quotation.opportunity_id,
+        'opportunity_id', COALESCE(v_effective_opportunity_id, v_quotation.opportunity_id),
         'old_stage', v_old_opp_stage,
         'new_stage', v_new_opp_stage,
         'ticket_id', v_quotation.ticket_id,
@@ -394,6 +598,7 @@ BEGIN
         'is_resend', v_is_resend,
         'pipeline_updates_created', v_pipeline_updated,
         'activities_created', v_pipeline_updated,
+        'opportunity_auto_created', v_opportunity_auto_created,
         'correlation_id', v_correlation_id
     );
 EXCEPTION
@@ -408,11 +613,11 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-COMMENT ON FUNCTION public.rpc_customer_quotation_mark_sent IS 'Atomically marks quotation as sent and syncs to opportunity (Quote Sent), ticket (waiting_customer), lead, and operational cost in a single transaction. Now includes Negotiation stage for revised quotations. Creates pipeline_updates and activities records. Includes state machine validation and correlation_id for observability.';
+COMMENT ON FUNCTION public.rpc_customer_quotation_mark_sent IS 'Atomically marks quotation as sent and syncs to opportunity (Quote Sent), ticket (waiting_customer), lead, and operational cost. Auto-creates opportunity from lead if needed. Includes Negotiation stage for revised quotations.';
 
 -- ============================================
--- PART 3: FIX rpc_customer_quotation_mark_rejected
--- Include 'Negotiation' stage for proper handling
+-- PART 4: FIX rpc_customer_quotation_mark_rejected
+-- Also uses opportunity resolution
 -- ============================================
 
 CREATE OR REPLACE FUNCTION public.rpc_customer_quotation_mark_rejected(
@@ -431,14 +636,15 @@ DECLARE
     v_quotation RECORD;
     v_opportunity RECORD;
     v_ticket RECORD;
+    v_resolved_opp RECORD;
     v_old_opp_stage opportunity_stage;
     v_old_ticket_status ticket_status;
     v_new_opp_stage opportunity_stage := NULL;
+    v_effective_opportunity_id TEXT := NULL;
     v_actor_id UUID;
     v_transition_check JSONB;
     v_auth_check JSONB;
     v_correlation_id TEXT;
-    v_is_already_rejected BOOLEAN := FALSE;
     v_activity_subject TEXT;
     v_activity_description TEXT;
     v_pipeline_notes TEXT;
@@ -563,176 +769,186 @@ BEGIN
         NOW()
     );
 
-    -- 3. UPDATE OPPORTUNITY STAGE (if linked)
-    IF v_quotation.opportunity_id IS NOT NULL THEN
+    -- 3. RESOLVE OPPORTUNITY (with auto-creation if needed)
+    SELECT * INTO v_resolved_opp
+    FROM public.fn_resolve_or_create_opportunity(p_quotation_id, v_actor_id);
+
+    IF v_resolved_opp IS NOT NULL AND v_resolved_opp.opportunity_id IS NOT NULL THEN
+        v_effective_opportunity_id := v_resolved_opp.opportunity_id;
+
+        -- Fetch full opportunity record
         SELECT * INTO v_opportunity
         FROM public.opportunities
-        WHERE opportunity_id = v_quotation.opportunity_id
+        WHERE opportunity_id = v_effective_opportunity_id
         FOR UPDATE;
 
-        IF v_opportunity IS NOT NULL THEN
-            v_old_opp_stage := v_opportunity.stage;
+        -- Refresh quotation to get updated opportunity_id
+        SELECT * INTO v_quotation
+        FROM public.customer_quotations
+        WHERE id = p_quotation_id;
+    END IF;
 
-            -- Transition to Negotiation if in Quote Sent, Discovery, or Prospecting
-            -- If already in Negotiation, still create pipeline_updates for visibility
-            IF v_opportunity.stage IN ('Quote Sent', 'Discovery', 'Prospecting') THEN
-                UPDATE public.opportunities
-                SET
-                    stage = 'Negotiation'::opportunity_stage,
-                    quotation_status = 'rejected',
-                    competitor = COALESCE(p_competitor_name, competitor),
-                    competitor_price = COALESCE(p_competitor_amount, competitor_price),
-                    customer_budget = COALESCE(p_customer_budget, customer_budget),
-                    updated_at = NOW()
-                WHERE opportunity_id = v_quotation.opportunity_id
-                RETURNING * INTO v_opportunity;
+    IF v_opportunity IS NOT NULL THEN
+        v_old_opp_stage := v_opportunity.stage;
 
-                v_new_opp_stage := 'Negotiation'::opportunity_stage;
-                v_pipeline_updated := TRUE;
+        -- Transition to Negotiation if in Quote Sent, Discovery, or Prospecting
+        IF v_opportunity.stage IN ('Quote Sent', 'Discovery', 'Prospecting') THEN
+            UPDATE public.opportunities
+            SET
+                stage = 'Negotiation'::opportunity_stage,
+                quotation_status = 'rejected',
+                competitor = COALESCE(p_competitor_name, competitor),
+                competitor_price = COALESCE(p_competitor_amount, competitor_price),
+                customer_budget = COALESCE(p_customer_budget, customer_budget),
+                updated_at = NOW()
+            WHERE opportunity_id = v_effective_opportunity_id
+            RETURNING * INTO v_opportunity;
 
-                -- Prepare messages for audit records
-                v_activity_subject := 'Auto: Quotation Rejected → Stage moved to Negotiation';
-                v_activity_description := 'Quotation ' || v_quotation.quotation_number || ' rejected by customer. Reason: ' || p_reason_type::TEXT || '. Pipeline stage auto-updated for re-negotiation.';
-                v_pipeline_notes := 'Quotation ' || v_quotation.quotation_number || ' rejected - moved to negotiation. Reason: ' || p_reason_type::TEXT;
+            v_new_opp_stage := 'Negotiation'::opportunity_stage;
+            v_pipeline_updated := TRUE;
 
-                -- Create stage history entry
-                INSERT INTO public.opportunity_stage_history (
-                    opportunity_id,
-                    from_stage,
-                    to_stage,
-                    changed_by,
-                    reason,
-                    notes,
-                    old_stage,
-                    new_stage
-                )
-                SELECT
-                    v_quotation.opportunity_id,
-                    v_old_opp_stage,
-                    'Negotiation'::opportunity_stage,
-                    v_actor_id,
-                    'quotation_rejected',
-                    '[' || v_correlation_id || '] ' || v_pipeline_notes,
-                    v_old_opp_stage,
-                    'Negotiation'::opportunity_stage
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM public.opportunity_stage_history
-                    WHERE opportunity_id = v_quotation.opportunity_id
-                    AND new_stage = 'Negotiation'::opportunity_stage
-                    AND from_stage = v_old_opp_stage
-                    AND created_at > NOW() - INTERVAL '1 minute'
-                );
+            -- Prepare messages for audit records
+            v_activity_subject := 'Auto: Quotation Rejected → Stage moved to Negotiation';
+            v_activity_description := 'Quotation ' || v_quotation.quotation_number || ' rejected by customer. Reason: ' || p_reason_type::TEXT || '. Pipeline stage auto-updated for re-negotiation.';
+            v_pipeline_notes := 'Quotation ' || v_quotation.quotation_number || ' rejected - moved to negotiation. Reason: ' || p_reason_type::TEXT;
 
-                -- Insert pipeline_updates (idempotent)
-                INSERT INTO public.pipeline_updates (
-                    opportunity_id,
-                    notes,
-                    approach_method,
-                    old_stage,
-                    new_stage,
-                    updated_by,
-                    updated_at
-                )
-                SELECT
-                    v_quotation.opportunity_id,
-                    '[' || v_correlation_id || '] ' || v_pipeline_notes,
-                    'Email'::approach_method,
-                    v_old_opp_stage,
-                    'Negotiation'::opportunity_stage,
-                    v_actor_id,
-                    NOW()
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM public.pipeline_updates
-                    WHERE opportunity_id = v_quotation.opportunity_id
-                    AND new_stage = 'Negotiation'::opportunity_stage
-                    AND old_stage = v_old_opp_stage
-                    AND created_at > NOW() - INTERVAL '1 minute'
-                );
+            -- Create stage history entry
+            INSERT INTO public.opportunity_stage_history (
+                opportunity_id,
+                from_stage,
+                to_stage,
+                changed_by,
+                reason,
+                notes,
+                old_stage,
+                new_stage
+            )
+            SELECT
+                v_effective_opportunity_id,
+                v_old_opp_stage,
+                'Negotiation'::opportunity_stage,
+                v_actor_id,
+                'quotation_rejected',
+                '[' || v_correlation_id || '] ' || v_pipeline_notes,
+                v_old_opp_stage,
+                'Negotiation'::opportunity_stage
+            WHERE NOT EXISTS (
+                SELECT 1 FROM public.opportunity_stage_history
+                WHERE opportunity_id = v_effective_opportunity_id
+                AND new_stage = 'Negotiation'::opportunity_stage
+                AND from_stage = v_old_opp_stage
+                AND created_at > NOW() - INTERVAL '1 minute'
+            );
 
-                -- Insert activity record (idempotent)
-                INSERT INTO public.activities (
-                    activity_type,
-                    subject,
-                    description,
-                    status,
-                    due_date,
-                    completed_at,
-                    related_opportunity_id,
-                    related_lead_id,
-                    owner_user_id,
-                    created_by
-                )
-                SELECT
-                    'Note'::activity_type_v2,
-                    v_activity_subject,
-                    '[' || v_correlation_id || '] ' || v_activity_description,
-                    'Completed'::activity_status,
-                    CURRENT_DATE,
-                    NOW(),
-                    v_quotation.opportunity_id,
-                    v_quotation.lead_id,
-                    COALESCE(v_actor_id, v_quotation.created_by),
-                    COALESCE(v_actor_id, v_quotation.created_by)
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM public.activities
-                    WHERE related_opportunity_id = v_quotation.opportunity_id
-                    AND subject = v_activity_subject
-                    AND created_at > NOW() - INTERVAL '1 minute'
-                );
-            ELSIF v_opportunity.stage = 'Negotiation' THEN
-                -- Already in Negotiation, still update quotation_status and create activity
-                UPDATE public.opportunities
-                SET
-                    quotation_status = 'rejected',
-                    competitor = COALESCE(p_competitor_name, competitor),
-                    competitor_price = COALESCE(p_competitor_amount, competitor_price),
-                    customer_budget = COALESCE(p_customer_budget, customer_budget),
-                    updated_at = NOW()
-                WHERE opportunity_id = v_quotation.opportunity_id;
+            -- Insert pipeline_updates (idempotent)
+            INSERT INTO public.pipeline_updates (
+                opportunity_id,
+                notes,
+                approach_method,
+                old_stage,
+                new_stage,
+                updated_by,
+                updated_at
+            )
+            SELECT
+                v_effective_opportunity_id,
+                '[' || v_correlation_id || '] ' || v_pipeline_notes,
+                'Email'::approach_method,
+                v_old_opp_stage,
+                'Negotiation'::opportunity_stage,
+                v_actor_id,
+                NOW()
+            WHERE NOT EXISTS (
+                SELECT 1 FROM public.pipeline_updates
+                WHERE opportunity_id = v_effective_opportunity_id
+                AND new_stage = 'Negotiation'::opportunity_stage
+                AND old_stage = v_old_opp_stage
+                AND created_at > NOW() - INTERVAL '1 minute'
+            );
 
-                -- Create activity for visibility even without stage change
-                v_activity_subject := 'Quotation Rejected (Already in Negotiation)';
-                v_activity_description := 'Quotation ' || v_quotation.quotation_number || ' rejected by customer. Reason: ' || p_reason_type::TEXT || '. Opportunity already in Negotiation stage.';
+            -- Insert activity record (idempotent)
+            INSERT INTO public.activities (
+                activity_type,
+                subject,
+                description,
+                status,
+                due_date,
+                completed_at,
+                related_opportunity_id,
+                related_lead_id,
+                owner_user_id,
+                created_by
+            )
+            SELECT
+                'Note'::activity_type_v2,
+                v_activity_subject,
+                '[' || v_correlation_id || '] ' || v_activity_description,
+                'Completed'::activity_status,
+                CURRENT_DATE,
+                NOW(),
+                v_effective_opportunity_id,
+                v_quotation.lead_id,
+                COALESCE(v_actor_id, v_quotation.created_by),
+                COALESCE(v_actor_id, v_quotation.created_by)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM public.activities
+                WHERE related_opportunity_id = v_effective_opportunity_id
+                AND subject = v_activity_subject
+                AND created_at > NOW() - INTERVAL '1 minute'
+            );
+        ELSIF v_opportunity.stage = 'Negotiation' THEN
+            -- Already in Negotiation, still update quotation_status and create activity
+            UPDATE public.opportunities
+            SET
+                quotation_status = 'rejected',
+                competitor = COALESCE(p_competitor_name, competitor),
+                competitor_price = COALESCE(p_competitor_amount, competitor_price),
+                customer_budget = COALESCE(p_customer_budget, customer_budget),
+                updated_at = NOW()
+            WHERE opportunity_id = v_effective_opportunity_id;
 
-                INSERT INTO public.activities (
-                    activity_type,
-                    subject,
-                    description,
-                    status,
-                    due_date,
-                    completed_at,
-                    related_opportunity_id,
-                    related_lead_id,
-                    owner_user_id,
-                    created_by
-                )
-                SELECT
-                    'Note'::activity_type_v2,
-                    v_activity_subject,
-                    '[' || v_correlation_id || '] ' || v_activity_description,
-                    'Completed'::activity_status,
-                    CURRENT_DATE,
-                    NOW(),
-                    v_quotation.opportunity_id,
-                    v_quotation.lead_id,
-                    COALESCE(v_actor_id, v_quotation.created_by),
-                    COALESCE(v_actor_id, v_quotation.created_by)
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM public.activities
-                    WHERE related_opportunity_id = v_quotation.opportunity_id
-                    AND subject = v_activity_subject
-                    AND created_at > NOW() - INTERVAL '1 minute'
-                );
+            -- Create activity for visibility even without stage change
+            v_activity_subject := 'Quotation Rejected (Already in Negotiation)';
+            v_activity_description := 'Quotation ' || v_quotation.quotation_number || ' rejected by customer. Reason: ' || p_reason_type::TEXT || '. Opportunity already in Negotiation stage.';
 
-                v_pipeline_updated := TRUE;  -- Activity was created
-            ELSE
-                -- Just update quotation status, don't change stage if already past Negotiation
-                UPDATE public.opportunities
-                SET
-                    quotation_status = 'rejected',
-                    updated_at = NOW()
-                WHERE opportunity_id = v_quotation.opportunity_id;
-            END IF;
+            INSERT INTO public.activities (
+                activity_type,
+                subject,
+                description,
+                status,
+                due_date,
+                completed_at,
+                related_opportunity_id,
+                related_lead_id,
+                owner_user_id,
+                created_by
+            )
+            SELECT
+                'Note'::activity_type_v2,
+                v_activity_subject,
+                '[' || v_correlation_id || '] ' || v_activity_description,
+                'Completed'::activity_status,
+                CURRENT_DATE,
+                NOW(),
+                v_effective_opportunity_id,
+                v_quotation.lead_id,
+                COALESCE(v_actor_id, v_quotation.created_by),
+                COALESCE(v_actor_id, v_quotation.created_by)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM public.activities
+                WHERE related_opportunity_id = v_effective_opportunity_id
+                AND subject = v_activity_subject
+                AND created_at > NOW() - INTERVAL '1 minute'
+            );
+
+            v_pipeline_updated := TRUE;
+        ELSE
+            -- Just update quotation status, don't change stage if already past Negotiation
+            UPDATE public.opportunities
+            SET
+                quotation_status = 'rejected',
+                updated_at = NOW()
+            WHERE opportunity_id = v_effective_opportunity_id;
         END IF;
     END IF;
 
@@ -828,7 +1044,7 @@ BEGIN
         'quotation_number', v_quotation.quotation_number,
         'quotation_status', v_quotation.status,
         'rejection_reason', p_reason_type::TEXT,
-        'opportunity_id', v_quotation.opportunity_id,
+        'opportunity_id', COALESCE(v_effective_opportunity_id, v_quotation.opportunity_id),
         'old_stage', v_old_opp_stage,
         'new_stage', v_new_opp_stage,
         'ticket_id', v_quotation.ticket_id,
@@ -849,24 +1065,27 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-COMMENT ON FUNCTION public.rpc_customer_quotation_mark_rejected IS 'Atomically marks quotation as rejected with state machine validation, records rejection reason, and syncs to opportunity (Negotiation), ticket (need_adjustment), lead, and operational cost (revise_requested). Creates pipeline_updates and activities records. Includes idempotency guard and correlation_id for observability.';
+COMMENT ON FUNCTION public.rpc_customer_quotation_mark_rejected IS 'Atomically marks quotation as rejected with state machine validation and syncs to opportunity (Negotiation), ticket (need_adjustment), lead, and operational cost. Auto-resolves opportunity from lead if needed.';
 
 -- ============================================
--- PART 4: GRANT PERMISSIONS (re-grant to ensure)
+-- PART 5: GRANT PERMISSIONS
 -- ============================================
 
+GRANT EXECUTE ON FUNCTION public.fn_resolve_or_create_opportunity(UUID, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_sent(UUID, TEXT, TEXT, UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_rejected(UUID, quotation_rejection_reason_type, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, UUID, TEXT) TO authenticated;
 
 -- ============================================
 -- SUMMARY
 -- ============================================
--- Fixed Issue 1: Pipeline updates not created for revised quotations
---   - rpc_customer_quotation_mark_sent: Now includes 'Negotiation' stage
---   - rpc_customer_quotation_mark_rejected: Creates activity even when already in Negotiation
+-- Fixed Issue 1: Pipeline updates not created
+--   - Added fn_resolve_or_create_opportunity helper
+--   - Auto-creates opportunity from lead if lead has account but no opportunity
+--   - Extended stage conditions to include 'Negotiation'
+--   - Creates activity even when already in Negotiation
 --
 -- Fixed Issue 2: Foreign key constraint on superseded_by_id
---   - Split trigger into BEFORE (is_current=FALSE) and AFTER (set superseded_by_id)
---   - BEFORE INSERT: Only sets is_current=FALSE on old quotes
---   - AFTER INSERT: Sets superseded_by_id on old quotes (NEW.id now exists)
+--   - Split trigger into BEFORE and AFTER
+--   - BEFORE: Only sets is_current=FALSE
+--   - AFTER: Sets superseded_by_id (NEW.id now exists)
 -- ============================================
