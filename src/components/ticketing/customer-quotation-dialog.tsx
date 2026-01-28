@@ -391,7 +391,8 @@ export function CustomerQuotationDialog({
     // ============================================
     if (lead?.shipment_details) {
       const sd = lead.shipment_details
-      setServiceType(sd.service_type_code || '')
+      // Convert service_type_code to display format (e.g., "DOM_AIRFREIGHT" -> "Domestics | Airfreight")
+      setServiceType(sd.service_type_code ? getServiceTypeDisplayLabel(sd.service_type_code) : '')
       setFleetType(sd.fleet_type || '')
       setFleetQuantity(sd.fleet_quantity || 1)
       setIncoterm(sd.incoterm || '')
@@ -407,7 +408,10 @@ export function CustomerQuotationDialog({
       setDestinationCountry(sd.destination_country || '')
     } else if (ticketData?.rfq_data) {
       const rfq = ticketData.rfq_data
-      setServiceType(rfq.service_type || '')
+      // Use service_type if available, otherwise convert service_type_code
+      const displayServiceType = rfq.service_type ||
+        (rfq.service_type_code ? getServiceTypeDisplayLabel(rfq.service_type_code) : '')
+      setServiceType(displayServiceType)
       setIncoterm(rfq.incoterm || '')
       setFleetType(rfq.fleet_type || '')
       setFleetQuantity(rfq.fleet_quantity || 1)

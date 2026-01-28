@@ -478,6 +478,13 @@ export function PipelineDetailDialog({
       contact_email: data.pic_email || '',
       contact_phone: data.pic_phone || '',
     })
+    // Add account_id and lead_id if available (for linking ticket to account)
+    if (data.account_id) {
+      params.set('account_id', data.account_id)
+    }
+    if (data.lead_id) {
+      params.set('lead_id', data.lead_id)
+    }
     router.push(`/tickets/new?${params.toString()}`)
     onOpenChange(false)
   }
