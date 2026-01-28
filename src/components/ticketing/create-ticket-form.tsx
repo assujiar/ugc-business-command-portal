@@ -254,6 +254,9 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  // Store URL params for later use (after accounts are loaded)
+  const [pendingAccountId, setPendingAccountId] = useState<string | null>(null)
+
   // Read URL params for lead/opportunity/account linking
   useEffect(() => {
     const oppId = searchParams.get('opportunity_id')
@@ -266,17 +269,16 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     if (oppId) setOpportunityId(oppId)
     if (lId) setLeadId(lId)
 
-    // Pre-fill account if passed from pipeline/lead
+    // Store account_id for later - will be applied after accounts are loaded
     if (accId) {
-      setSelectedAccountId(accId)
-      setValue('account_id', accId)
+      setPendingAccountId(accId)
     }
 
     // Pre-fill sender info from URL params
     if (contactName) setSenderName(contactName)
     if (contactEmail) setSenderEmail(contactEmail)
     if (contactPhone) setSenderPhone(contactPhone)
-  }, [searchParams, setValue])
+  }, [searchParams])
 
   // Fetch accounts for dropdown
   useEffect(() => {
@@ -291,6 +293,22 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     }
     fetchAccounts()
   }, [])
+
+  // Apply pending account_id AFTER accounts are loaded
+  useEffect(() => {
+    if (pendingAccountId && accounts.length > 0) {
+      // Check if the account exists in the loaded accounts
+      const accountExists = accounts.some(acc => acc.account_id === pendingAccountId)
+      if (accountExists) {
+        setSelectedAccountId(pendingAccountId)
+        setValue('account_id', pendingAccountId)
+        // Also fetch contact info for this account
+        handleAccountSelect(pendingAccountId)
+      }
+      // Clear pending after applying
+      setPendingAccountId(null)
+    }
+  }, [pendingAccountId, accounts, setValue])
 
   // Check sessionStorage for prefilled shipment data from lead/pipeline
   useEffect(() => {
