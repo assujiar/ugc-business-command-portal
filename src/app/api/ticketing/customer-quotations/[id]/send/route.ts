@@ -671,6 +671,49 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }, { status: 404 })
     }
 
+    // ============================================
+    // PREFLIGHT CHECK: Verify opportunity exists if quotation references one
+    // This prevents the scenario where quotation.opportunity_id is set but the
+    // opportunity row doesn't exist, which would cause the RPC to auto-create
+    // a NEW opportunity (polluting the pipeline with duplicates).
+    // ============================================
+    if (quotation.opportunity_id) {
+      console.log(`[send] Preflight check: verifying opportunity ${quotation.opportunity_id} exists, correlation_id: ${correlationId}`)
+
+      const adminClient = createAdminClient()
+      const { data: preflightResult, error: preflightError } = await (adminClient as any).rpc('fn_preflight_quotation_send', {
+        p_quotation_id: id
+      })
+
+      if (preflightError) {
+        console.error(`[send] Preflight check failed with error:`, preflightError, 'correlation_id:', correlationId)
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to verify quotation data integrity',
+          error_code: 'PREFLIGHT_ERROR',
+          detail: preflightError.message,
+          correlation_id: correlationId
+        }, { status: 500 })
+      }
+
+      if (!preflightResult?.can_proceed) {
+        // CRITICAL: Orphan opportunity_id detected - fail fast!
+        console.error(`[send] Preflight check FAILED - orphan opportunity detected:`, preflightResult, 'correlation_id:', correlationId)
+        return NextResponse.json({
+          success: false,
+          error: preflightResult?.error || 'Opportunity referenced by quotation does not exist',
+          error_code: preflightResult?.error_code || 'OPPORTUNITY_NOT_FOUND',
+          quotation_id: id,
+          quotation_number: quotation.quotation_number,
+          orphan_opportunity_id: preflightResult?.orphan_opportunity_id || quotation.opportunity_id,
+          message: 'Data integrity issue: The opportunity linked to this quotation does not exist. Please fix the quotation or contact support.',
+          correlation_id: correlationId
+        }, { status: 409 }) // 409 Conflict - data integrity issue
+      }
+
+      console.log(`[send] Preflight check PASSED: opportunity ${preflightResult?.opportunity_id} found with stage ${preflightResult?.opportunity_stage}, correlation_id: ${correlationId}`)
+    }
+
     // Get creator email for reply-to (fallback to current user if not found)
     const creatorEmail = quotation.creator?.email || profileData.email
 
@@ -735,7 +778,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           p_sent_via: 'email',
           p_sent_to: quotation.customer_email,
           p_actor_user_id: user.id,
-          p_correlation_id: correlationId
+          p_correlation_id: correlationId,
+          p_allow_autocreate: false // CRITICAL: Prevent orphan opportunity creation
         })
 
         if (fallbackError || !fallbackResult?.success) {
@@ -819,12 +863,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Use atomic RPC for quotation sent - updates quotation, opportunity, ticket, lead in ONE transaction
     // This is idempotent: if already sent, will update sent_via/sent_to but not create duplicate events
+    // p_allow_autocreate=false: CRITICAL - fail fast if quotation.opportunity_id references non-existent opportunity
     const { data: atomicResult, error: atomicError } = await (adminClient as any).rpc('rpc_customer_quotation_mark_sent', {
       p_quotation_id: id,
       p_sent_via: method,
       p_sent_to: sentTo,
       p_actor_user_id: user.id,
-      p_correlation_id: correlationId
+      p_correlation_id: correlationId,
+      p_allow_autocreate: false // CRITICAL: Prevent orphan opportunity creation
     })
 
     if (atomicError) {
@@ -846,17 +892,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!atomicResult?.success) {
       console.error('Atomic quotation send returned error:', atomicResult, 'correlation_id:', correlationId)
-      // Map error codes to HTTP status codes (409 for conflict/invalid transition)
-      const statusCode = atomicResult?.error_code === 'INVALID_STATUS_TRANSITION' ? 409 :
-                         atomicResult?.error_code?.startsWith('CONFLICT_') ? 409 : 500
+
+      // Map error codes to HTTP status codes
+      // 409 for data integrity/conflict issues, 422 for validation errors
+      let statusCode = 500
+      let userMessage = method === 'email'
+        ? 'Email was sent but system sync failed. Please retry.'
+        : 'WhatsApp text generated but system sync failed. Please retry.'
+
+      if (atomicResult?.error_code === 'OPPORTUNITY_NOT_FOUND') {
+        statusCode = 409 // Conflict - data integrity issue
+        userMessage = 'Data integrity issue: The opportunity linked to this quotation does not exist. Please fix the quotation or contact support.'
+      } else if (atomicResult?.error_code === 'INVALID_STATUS_TRANSITION') {
+        statusCode = 409
+      } else if (atomicResult?.error_code?.startsWith('CONFLICT_')) {
+        statusCode = 409
+      } else if (atomicResult?.error_code === 'NO_OPPORTUNITY_FOUND' || atomicResult?.error_code === 'INSUFFICIENT_DATA') {
+        statusCode = 422 // Unprocessable - missing required data
+        userMessage = 'Cannot complete send: quotation is missing required pipeline data.'
+      }
+
       return NextResponse.json({
         success: false,
         error: atomicResult?.error || 'Failed to sync quotation status',
         error_code: atomicResult?.error_code || 'SYNC_FAILED',
+        opportunity_source: atomicResult?.opportunity_source,
+        orphan_opportunity_id: atomicResult?.quotation_opportunity_id, // Include for debugging
         email_sent: method === 'email' ? true : false,
-        message: method === 'email'
-          ? 'Email was sent but system sync failed. Please retry.'
-          : 'WhatsApp text generated but system sync failed. Please retry.',
+        message: userMessage,
         data: responseData,
         correlation_id: correlationId
       }, { status: statusCode })
