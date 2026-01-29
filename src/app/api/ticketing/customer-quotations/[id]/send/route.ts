@@ -954,6 +954,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     console.log('Atomic quotation send succeeded:', atomicResult, 'correlation_id:', correlationId)
 
+    // Build message with sequence info if available
+    const sequenceLabel = atomicResult.sequence_label || ''
+    const previousRejections = atomicResult.previous_rejected_count || 0
+    let successMessage = ''
+
+    if (atomicResult.is_resend || isResend) {
+      successMessage = `Quotation resent via ${method}`
+    } else if (sequenceLabel && previousRejections > 0) {
+      // This is a revised quotation after rejection(s)
+      successMessage = method === 'email'
+        ? `${sequenceLabel} quotation sent successfully (revised after ${previousRejections} rejection${previousRejections > 1 ? 's' : ''}).`
+        : `${sequenceLabel} quotation ready to send via WhatsApp (revised after ${previousRejections} rejection${previousRejections > 1 ? 's' : ''}).`
+    } else {
+      successMessage = method === 'email'
+        ? 'Email sent successfully to customer.'
+        : 'WhatsApp text generated. Click the link to send via WhatsApp.'
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -968,6 +986,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           opportunity_id: atomicResult.opportunity_id,
           pipeline_updates_created: atomicResult.pipeline_updates_created,
           activities_created: atomicResult.activities_created,
+          quotation_sequence: atomicResult.quotation_sequence,
+          sequence_label: atomicResult.sequence_label,
+          previous_rejected_count: atomicResult.previous_rejected_count,
         },
       },
       sync_result: {
@@ -979,12 +1000,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         opportunity_id: atomicResult.opportunity_id,
         pipeline_updates_created: atomicResult.pipeline_updates_created,
         activities_created: atomicResult.activities_created,
+        quotation_sequence: atomicResult.quotation_sequence,
+        sequence_label: atomicResult.sequence_label,
+        previous_rejected_count: atomicResult.previous_rejected_count,
       },
-      message: atomicResult.is_resend || isResend
-        ? `Quotation resent via ${method}`
-        : method === 'email'
-          ? 'Email sent successfully to customer.'
-          : 'WhatsApp text generated. Click the link to send via WhatsApp.',
+      message: successMessage,
       correlation_id: correlationId
     })
   } catch (err) {
