@@ -548,7 +548,8 @@ CREATE OR REPLACE FUNCTION public.rpc_customer_quotation_mark_sent(
     p_sent_via TEXT,
     p_sent_to TEXT,
     p_actor_user_id UUID,
-    p_correlation_id TEXT DEFAULT NULL
+    p_correlation_id TEXT DEFAULT NULL,
+    p_allow_autocreate BOOLEAN DEFAULT TRUE
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -635,8 +636,21 @@ BEGIN
     -- 2. RESOLVE OPPORTUNITY (with auto-creation if needed) - skip on resend
     IF NOT v_is_resend THEN
         -- Use the helper function to resolve/create opportunity
+        -- Pass p_allow_autocreate to control whether new opportunities can be created
         SELECT resolved.* INTO v_resolved_opp
-        FROM public.fn_resolve_or_create_opportunity(p_quotation_id, p_actor_user_id) resolved;
+        FROM public.fn_resolve_or_create_opportunity(p_quotation_id, p_actor_user_id, p_allow_autocreate) resolved;
+
+        -- Check if there was an error (e.g., orphan opportunity, autocreate not allowed)
+        IF v_resolved_opp.error_code IS NOT NULL THEN
+            RETURN jsonb_build_object(
+                'success', FALSE,
+                'error', COALESCE(v_resolved_opp.error_message, 'Failed to resolve opportunity'),
+                'error_code', v_resolved_opp.error_code,
+                'quotation_id', v_quotation.id,
+                'quotation_number', v_quotation.quotation_number,
+                'correlation_id', v_correlation_id
+            );
+        END IF;
 
         IF v_resolved_opp IS NOT NULL AND v_resolved_opp.opportunity_id IS NOT NULL THEN
             v_effective_opportunity_id := v_resolved_opp.opportunity_id;
@@ -1318,7 +1332,7 @@ Includes state machine validation and correlation_id for observability.';
 -- ============================================
 
 GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_rejected(UUID, quotation_rejection_reason_type, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, UUID, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_sent(UUID, TEXT, TEXT, UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_sent(UUID, TEXT, TEXT, UUID, TEXT, BOOLEAN) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_accepted(UUID, UUID, TEXT) TO authenticated;
 
 -- ============================================
