@@ -20,8 +20,29 @@
 --
 -- PATTERN: Follow the atomic pattern used in quotation RPCs (rpc_customer_quotation_mark_sent)
 --
--- IDEMPOTENCY: Safe to re-run (CREATE OR REPLACE)
+-- IDEMPOTENCY: Safe to re-run (DROP + CREATE)
 -- ============================================
+
+-- ============================================
+-- PART 0: Drop all existing overloads of rpc_opportunity_change_stage
+-- This prevents "function name is not unique" errors
+-- ============================================
+
+DO $$
+DECLARE
+    v_proc RECORD;
+BEGIN
+    FOR v_proc IN
+        SELECT p.oid::regprocedure AS proc_sig
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname = 'rpc_opportunity_change_stage'
+    LOOP
+        RAISE NOTICE '[109] Dropping existing overload: %', v_proc.proc_sig;
+        EXECUTE format('DROP FUNCTION IF EXISTS %s', v_proc.proc_sig);
+    END LOOP;
+END $$;
 
 -- ============================================
 -- PART 1: Enhanced rpc_opportunity_change_stage
