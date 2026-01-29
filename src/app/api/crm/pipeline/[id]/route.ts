@@ -192,6 +192,39 @@ export async function GET(
       changer_name: changerMap[history.changed_by] || null,
     }))
 
+    // Get activities related to this opportunity (for quotation events)
+    const { data: activities } = await (adminClient as any)
+      .from('activities')
+      .select('*')
+      .eq('related_opportunity_id', opportunityId)
+      .order('created_at', { ascending: true })
+
+    // Get activity creator/owner names
+    const activityUserIds = Array.from(new Set([
+      ...(activities || []).map((a: any) => a.owner_user_id),
+      ...(activities || []).map((a: any) => a.created_by),
+    ].filter(Boolean))) as string[]
+    let activityUserMap: Record<string, string> = {}
+
+    if (activityUserIds.length > 0) {
+      const { data: activityUsersData } = await supabase
+        .from('profiles')
+        .select('user_id, name')
+        .in('user_id', activityUserIds)
+
+      const activityUsers = activityUsersData as Array<{ user_id: string; name: string }> | null
+      activityUserMap = (activityUsers || []).reduce((acc: Record<string, string>, u) => {
+        acc[u.user_id] = u.name
+        return acc
+      }, {})
+    }
+
+    const activitiesWithNames = (activities || []).map((activity: any) => ({
+      ...activity,
+      owner_name: activityUserMap[activity.owner_user_id] || null,
+      creator_name: activityUserMap[activity.created_by] || null,
+    }))
+
     // Transform response with complete info
     const responseData = {
       opportunity_id: opportunity.opportunity_id,
@@ -245,6 +278,7 @@ export async function GET(
       // Pipeline activities & history
       pipeline_updates: updatesWithNames,
       stage_history: historyWithNames,
+      activities: activitiesWithNames,
 
       // Permissions
       can_update: canUpdatePipeline(profile.role, user.id, {
