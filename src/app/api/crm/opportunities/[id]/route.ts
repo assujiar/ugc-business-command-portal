@@ -42,7 +42,19 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
 
-    return NextResponse.json({ data })
+    // Fetch shipment details for this opportunity
+    const { data: shipmentDetails } = await (supabase as any)
+      .from('shipment_details')
+      .select('*')
+      .eq('opportunity_id', id)
+      .single()
+
+    return NextResponse.json({
+      data: {
+        ...data,
+        shipment_details: shipmentDetails || null
+      }
+    })
   } catch (error) {
     console.error('Error fetching opportunity:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

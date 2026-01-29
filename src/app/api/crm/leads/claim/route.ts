@@ -205,6 +205,23 @@ export async function POST(request: NextRequest) {
         console.error('Error creating opportunity:', oppError)
       } else {
         opportunityId = newOpportunity?.opportunity_id
+
+        // Copy full shipment_details from lead to opportunity
+        if (opportunityId) {
+          const { data: copyResult, error: copyError } = await (adminClient as any).rpc(
+            'copy_shipment_details_to_opportunity',
+            {
+              p_lead_id: lead.lead_id,
+              p_opportunity_id: opportunityId,
+              p_user_id: user.id,
+            }
+          )
+          if (copyError) {
+            console.error('Error copying shipment details:', copyError)
+          } else {
+            console.log('Shipment details copied:', copyResult)
+          }
+        }
       }
     }
 

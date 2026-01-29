@@ -270,18 +270,16 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     // Auto-get location when dialog opens
     getCurrentLocation()
 
-    // Fetch shipment details from linked lead if available
-    if (opportunity.lead_id) {
-      try {
-        const response = await fetch(`/api/crm/leads/${opportunity.lead_id}`)
-        if (response.ok) {
-          const result = await response.json()
-          console.log('[PipelineDashboard] Fetched shipment from lead:', result.data?.shipment_details)
-          setUpdateDialogShipment(result.data?.shipment_details || null)
-        }
-      } catch (error) {
-        console.error('[PipelineDashboard] Error fetching lead shipment:', error)
+    // Fetch shipment details from opportunity (auto-created opportunities have shipment copied from lead)
+    try {
+      const response = await fetch(`/api/crm/opportunities/${opportunity.opportunity_id}`)
+      if (response.ok) {
+        const result = await response.json()
+        console.log('[PipelineDashboard] Fetched shipment from opportunity:', result.data?.shipment_details)
+        setUpdateDialogShipment(result.data?.shipment_details || null)
       }
+    } catch (error) {
+      console.error('[PipelineDashboard] Error fetching opportunity shipment:', error)
     }
   }
 
