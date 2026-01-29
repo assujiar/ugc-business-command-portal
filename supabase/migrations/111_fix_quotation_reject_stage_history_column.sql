@@ -99,6 +99,10 @@ DECLARE
     v_stage_history_inserted BOOLEAN := FALSE;
     v_pipeline_updates_inserted BOOLEAN := FALSE;
     v_activities_inserted BOOLEAN := FALSE;
+    -- Quotation sequence tracking
+    v_quotation_sequence INTEGER := 1;
+    v_sequence_label TEXT := '';
+    v_previous_rejected_count INTEGER := 0;
 BEGIN
     -- Generate correlation_id if not provided
     v_correlation_id := COALESCE(p_correlation_id, gen_random_uuid()::TEXT);
@@ -241,6 +245,30 @@ BEGIN
     IF v_opportunity IS NOT NULL THEN
         v_old_opp_stage := v_opportunity.stage;
 
+        -- ============================================
+        -- Calculate quotation sequence for this opportunity
+        -- Count all quotations (sent + rejected) to show "2nd quotation rejected", etc.
+        -- ============================================
+        SELECT COUNT(*) INTO v_quotation_sequence
+        FROM public.customer_quotations cq
+        WHERE cq.opportunity_id = v_effective_opportunity_id
+        AND cq.status IN ('sent', 'rejected', 'accepted');
+
+        -- Count previously rejected quotations for context
+        SELECT COUNT(*) INTO v_previous_rejected_count
+        FROM public.customer_quotations cq
+        WHERE cq.opportunity_id = v_effective_opportunity_id
+        AND cq.status = 'rejected'
+        AND cq.id != p_quotation_id;
+
+        -- Generate sequence label (1st, 2nd, 3rd, etc.)
+        v_sequence_label := CASE v_quotation_sequence
+            WHEN 1 THEN '1st'
+            WHEN 2 THEN '2nd'
+            WHEN 3 THEN '3rd'
+            ELSE v_quotation_sequence::TEXT || 'th'
+        END;
+
         -- Transition to Negotiation if in Quote Sent, Discovery, or Prospecting
         IF v_opportunity.stage IN ('Quote Sent', 'Discovery', 'Prospecting') THEN
             UPDATE public.opportunities opp_upd
@@ -257,10 +285,11 @@ BEGIN
             v_new_opp_stage := 'Negotiation'::opportunity_stage;
             v_pipeline_updated := TRUE;
 
-            -- Prepare messages for audit records
-            v_activity_subject := 'Auto: Quotation Rejected → Stage moved to Negotiation';
-            v_activity_description := 'Quotation ' || v_quotation.quotation_number || ' rejected by customer. Reason: ' || p_reason_type::TEXT || '. Pipeline stage auto-updated for re-negotiation.';
-            v_pipeline_notes := 'Quotation ' || v_quotation.quotation_number || ' rejected - moved to negotiation. Reason: ' || p_reason_type::TEXT;
+            -- Prepare messages for audit records with sequence info
+            v_activity_subject := v_sequence_label || ' Quotation Rejected → Stage moved to Negotiation';
+            v_activity_description := v_sequence_label || ' quotation (' || v_quotation.quotation_number || ') rejected by customer. Reason: ' || p_reason_type::TEXT || '. Pipeline stage auto-updated for re-negotiation.' ||
+                CASE WHEN v_previous_rejected_count > 0 THEN ' (Previous rejections: ' || v_previous_rejected_count || ')' ELSE '' END;
+            v_pipeline_notes := v_sequence_label || ' quotation (' || v_quotation.quotation_number || ') rejected. Reason: ' || p_reason_type::TEXT;
 
             -- ============================================
             -- FIX: Use changed_at instead of created_at for opportunity_stage_history
@@ -368,9 +397,10 @@ BEGIN
                 updated_at = NOW()
             WHERE opp_upd.opportunity_id = v_effective_opportunity_id;
 
-            -- Create activity for visibility even without stage change
-            v_activity_subject := 'Quotation Rejected (Already in Negotiation)';
-            v_activity_description := 'Quotation ' || v_quotation.quotation_number || ' rejected by customer. Reason: ' || p_reason_type::TEXT || '. Opportunity already in Negotiation stage.';
+            -- Create activity for visibility even without stage change (with sequence info)
+            v_activity_subject := v_sequence_label || ' Quotation Rejected (Already in Negotiation)';
+            v_activity_description := v_sequence_label || ' quotation (' || v_quotation.quotation_number || ') rejected by customer. Reason: ' || p_reason_type::TEXT || '. Opportunity already in Negotiation stage.' ||
+                CASE WHEN v_previous_rejected_count > 0 THEN ' (Previous rejections: ' || v_previous_rejected_count || ')' ELSE '' END;
 
             IF NOT EXISTS (
                 SELECT 1 FROM public.activities act
@@ -516,6 +546,9 @@ BEGIN
         'stage_history_inserted', v_stage_history_inserted,
         'pipeline_updates_inserted', v_pipeline_updates_inserted,
         'activities_inserted', v_activities_inserted,
+        'quotation_sequence', v_quotation_sequence,
+        'sequence_label', v_sequence_label,
+        'previous_rejected_count', v_previous_rejected_count,
         'correlation_id', v_correlation_id
     );
 EXCEPTION
@@ -532,6 +565,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION public.rpc_customer_quotation_mark_rejected IS
 'Atomically marks quotation as rejected with state machine validation and syncs to opportunity (Negotiation), ticket (need_adjustment), lead, and operational cost.
+
+FIX in migration 111:
+- Changed osh.created_at to osh.changed_at (opportunity_stage_history uses changed_at, not created_at)
+- Added quotation sequence tracking (1st, 2nd, 3rd quotation) in activity notes
+- Added detailed return values: quotation_sequence, sequence_label, previous_rejected_count
 
 FIX in migration 111:
 - Changed osh.created_at to osh.changed_at (opportunity_stage_history uses changed_at, not created_at)
@@ -574,6 +612,10 @@ DECLARE
     v_stage_history_inserted BOOLEAN := FALSE;
     v_pipeline_updates_inserted BOOLEAN := FALSE;
     v_activities_inserted BOOLEAN := FALSE;
+    -- Quotation sequence tracking
+    v_quotation_sequence INTEGER := 1;
+    v_sequence_label TEXT := '';
+    v_previous_rejected_count INTEGER := 0;
 BEGIN
     -- Generate correlation_id if not provided
     v_correlation_id := COALESCE(p_correlation_id, gen_random_uuid()::TEXT);
@@ -671,6 +713,29 @@ BEGIN
         IF v_opportunity IS NOT NULL THEN
             v_old_opp_stage := v_opportunity.stage;
 
+            -- ============================================
+            -- Calculate quotation sequence for this opportunity
+            -- Count all quotations that have been sent/rejected/accepted
+            -- ============================================
+            SELECT COUNT(*) INTO v_quotation_sequence
+            FROM public.customer_quotations cq
+            WHERE cq.opportunity_id = v_effective_opportunity_id
+            AND cq.status IN ('sent', 'rejected', 'accepted');
+
+            -- Count previously rejected quotations for context
+            SELECT COUNT(*) INTO v_previous_rejected_count
+            FROM public.customer_quotations cq
+            WHERE cq.opportunity_id = v_effective_opportunity_id
+            AND cq.status = 'rejected';
+
+            -- Generate sequence label (1st, 2nd, 3rd, etc.)
+            v_sequence_label := CASE v_quotation_sequence
+                WHEN 1 THEN '1st'
+                WHEN 2 THEN '2nd'
+                WHEN 3 THEN '3rd'
+                ELSE v_quotation_sequence::TEXT || 'th'
+            END;
+
             -- FIX: Include 'Negotiation' for revised quotations after rejection
             IF v_opportunity.stage IN ('Prospecting', 'Discovery', 'Negotiation') THEN
                 UPDATE public.opportunities opp_upd
@@ -686,10 +751,12 @@ BEGIN
                 v_new_opp_stage := 'Quote Sent'::opportunity_stage;
                 v_pipeline_updated := TRUE;
 
-                -- Prepare messages for audit records
-                v_activity_subject := 'Auto: Quotation Sent → Stage moved to Quote Sent';
-                v_activity_description := 'Quotation ' || v_quotation.quotation_number || ' sent to customer via ' || COALESCE(p_sent_via, 'system') || '. Pipeline stage auto-updated.';
-                v_pipeline_notes := 'Quotation ' || v_quotation.quotation_number || ' sent to customer via ' || COALESCE(p_sent_via, 'system');
+                -- Prepare messages for audit records with sequence info
+                v_activity_subject := v_sequence_label || ' Quotation Sent → Stage moved to Quote Sent';
+                v_activity_description := v_sequence_label || ' quotation (' || v_quotation.quotation_number || ') sent to customer via ' || COALESCE(p_sent_via, 'system') || '. Pipeline stage auto-updated.' ||
+                    CASE WHEN v_previous_rejected_count > 0 THEN ' (After ' || v_previous_rejected_count || ' rejected quotation(s))' ELSE '' END;
+                v_pipeline_notes := v_sequence_label || ' quotation (' || v_quotation.quotation_number || ') sent via ' || COALESCE(p_sent_via, 'system') ||
+                    CASE WHEN v_previous_rejected_count > 0 THEN ' [revised after ' || v_previous_rejected_count || ' rejection(s)]' ELSE '' END;
 
                 -- ============================================
                 -- FIX: Use changed_at instead of created_at for opportunity_stage_history
@@ -885,6 +952,9 @@ BEGIN
         'stage_history_inserted', v_stage_history_inserted,
         'pipeline_updates_inserted', v_pipeline_updates_inserted,
         'activities_inserted', v_activities_inserted,
+        'quotation_sequence', v_quotation_sequence,
+        'sequence_label', v_sequence_label,
+        'previous_rejected_count', v_previous_rejected_count,
         'correlation_id', v_correlation_id
     );
 EXCEPTION
@@ -901,6 +971,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION public.rpc_customer_quotation_mark_sent IS
 'Atomically marks quotation as sent and syncs to opportunity (Quote Sent), ticket (waiting_customer), lead, and operational cost.
+
+FIX in migration 111:
+- Changed osh.created_at to osh.changed_at (opportunity_stage_history uses changed_at, not created_at)
+- Added quotation sequence tracking (1st, 2nd, 3rd quotation) in activity notes
+- Added detailed return values: quotation_sequence, sequence_label, previous_rejected_count
 
 FIX in migration 111:
 - Changed osh.created_at to osh.changed_at (opportunity_stage_history uses changed_at, not created_at)
