@@ -131,25 +131,11 @@ export function MultiShipmentForm({
   return (
     <div className={cn('space-y-4', className)}>
       {/* Header with shipment count */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Package className="h-5 w-5 text-muted-foreground" />
-          <span className="font-medium">
-            Shipment Details ({shipments.length} shipment{shipments.length > 1 ? 's' : ''})
-          </span>
-        </div>
-        {!readOnly && shipments.length < maxShipments && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addShipment}
-            className="gap-1"
-          >
-            <Plus className="h-4 w-4" />
-            Add Shipment
-          </Button>
-        )}
+      <div className="flex items-center gap-2">
+        <Package className="h-5 w-5 text-muted-foreground" />
+        <span className="font-medium">
+          Shipment Details ({shipments.length} shipment{shipments.length > 1 ? 's' : ''})
+        </span>
       </div>
 
       {/* Shipment cards */}
@@ -171,6 +157,20 @@ export function MultiShipmentForm({
           />
         ))}
       </div>
+
+      {/* Add Shipment button - placed below shipment cards for easier access */}
+      {!readOnly && shipments.length < maxShipments && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addShipment}
+          className="gap-1"
+        >
+          <Plus className="h-4 w-4" />
+          Add Shipment
+        </Button>
+      )}
     </div>
   )
 }
