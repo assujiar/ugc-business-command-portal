@@ -81,7 +81,7 @@ BEGIN
         ) VALUES (
             NEW.opportunity_id,
             'Pipeline created' || CASE WHEN NEW.source_lead_id IS NOT NULL THEN ' from lead' ELSE '' END,
-            'Other'::approach_method,
+            'Email'::approach_method,
             NULL, -- No old stage for initial creation
             NEW.stage,
             v_actor_id,
