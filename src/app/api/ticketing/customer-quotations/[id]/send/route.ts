@@ -959,13 +959,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const previousRejections = atomicResult.previous_rejected_count || 0
     let successMessage = ''
 
+    const stageChanged = atomicResult.old_stage !== atomicResult.new_stage
+    const stageInfo = stageChanged
+      ? `Stage moved to ${atomicResult.new_stage}`
+      : `Stage remains in ${atomicResult.new_stage || 'current stage'}`
+
     if (atomicResult.is_resend || isResend) {
       successMessage = `Quotation resent via ${method}`
     } else if (sequenceLabel && previousRejections > 0) {
-      // This is a revised quotation after rejection(s)
+      // This is a revised quotation after rejection(s) - typically stays in Negotiation
       successMessage = method === 'email'
-        ? `${sequenceLabel} quotation sent successfully (revised after ${previousRejections} rejection${previousRejections > 1 ? 's' : ''}).`
-        : `${sequenceLabel} quotation ready to send via WhatsApp (revised after ${previousRejections} rejection${previousRejections > 1 ? 's' : ''}).`
+        ? `${sequenceLabel} quotation sent successfully (revised after ${previousRejections} rejection${previousRejections > 1 ? 's' : ''}). ${stageInfo}.`
+        : `${sequenceLabel} quotation ready to send via WhatsApp (revised after ${previousRejections} rejection${previousRejections > 1 ? 's' : ''}). ${stageInfo}.`
+    } else if (sequenceLabel) {
+      // First quotation - stage moves to Quote Sent
+      successMessage = method === 'email'
+        ? `${sequenceLabel} quotation sent successfully. ${stageInfo}.`
+        : `${sequenceLabel} quotation ready to send via WhatsApp. ${stageInfo}.`
     } else {
       successMessage = method === 'email'
         ? 'Email sent successfully to customer.'

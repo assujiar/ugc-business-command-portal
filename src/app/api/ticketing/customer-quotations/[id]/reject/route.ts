@@ -176,15 +176,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Build message with sequence info if available
     const sequenceLabel = result.sequence_label || ''
     const previousRejections = result.previous_rejected_count || 0
+    const stageChanged = result.old_stage !== result.new_stage
     let successMessage = ''
 
     if (sequenceLabel && previousRejections > 0) {
-      // This is not the first rejection
-      successMessage = `${sequenceLabel} quotation rejected. This is rejection #${previousRejections + 1} for this opportunity. Pipeline moved to Negotiation.`
+      // This is not the first rejection - stage typically stays in Negotiation
+      const stageInfo = stageChanged
+        ? `Pipeline moved to ${result.new_stage}`
+        : `Pipeline remains in ${result.new_stage || 'Negotiation'}`
+      successMessage = `${sequenceLabel} quotation rejected. This is rejection #${previousRejections + 1} for this opportunity. ${stageInfo}.`
     } else if (sequenceLabel) {
-      successMessage = `${sequenceLabel} quotation rejected. Pipeline moved to Negotiation, ticket moved to need_adjustment.`
+      // First rejection - stage moves to Negotiation
+      const stageInfo = stageChanged
+        ? `Pipeline moved to ${result.new_stage || 'Negotiation'}`
+        : `Pipeline remains in ${result.new_stage || 'Negotiation'}`
+      successMessage = `${sequenceLabel} quotation rejected. ${stageInfo}, ticket moved to need_adjustment.`
     } else {
-      successMessage = 'Quotation rejected successfully. Pipeline moved to Negotiation, ticket moved to need_adjustment.'
+      const stageInfo = stageChanged
+        ? `Pipeline moved to ${result.new_stage || 'Negotiation'}`
+        : `Pipeline remains in ${result.new_stage || 'Negotiation'}`
+      successMessage = `Quotation rejected successfully. ${stageInfo}, ticket moved to need_adjustment.`
     }
 
     return NextResponse.json({
