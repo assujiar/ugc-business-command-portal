@@ -298,6 +298,12 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
       return
     }
 
+    // Validate for On Hold - reason is required
+    if (newStage === 'On Hold' && (!notes || notes.trim() === '')) {
+      alert('Alasan on hold wajib diisi di field Notes')
+      return
+    }
+
     // Check if price is required for lost reason
     const lostReasonConfig = LOST_REASONS.find(r => r.value === lostReason)
     if (newStage === 'Closed Lost' && lostReasonConfig?.requiresPrice) {
@@ -972,9 +978,11 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
 
             {/* Notes */}
             <div className="space-y-2">
-              <Label>Notes</Label>
+              <Label>
+                Notes {newStage === 'On Hold' && <span className="text-red-500">* (Wajib untuk On Hold)</span>}
+              </Label>
               <Textarea
-                placeholder="Add notes about this update"
+                placeholder={newStage === 'On Hold' ? 'Alasan on hold wajib diisi' : 'Add notes about this update'}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
@@ -1141,7 +1149,8 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
                 !newStage ||
                 !approachMethod ||
                 (requiresCamera && !evidenceFile) ||
-                (newStage === 'Closed Lost' && !lostReason)
+                (newStage === 'Closed Lost' && !lostReason) ||
+                (newStage === 'On Hold' && (!notes || notes.trim() === ''))
               }
             >
               {isLoading === updateDialog.opportunity?.opportunity_id ? 'Updating...' : 'Update Pipeline'}

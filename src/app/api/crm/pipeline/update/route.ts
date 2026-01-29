@@ -40,6 +40,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Validate On Hold requires notes (reason)
+    if (newStage === 'On Hold' && (!notes || notes.trim() === '')) {
+      return NextResponse.json({ error: 'Reason (notes) is required when putting an opportunity on hold' }, { status: 400 })
+    }
+
     // Get current opportunity with account info for watermark
     // Note: leads join won't work with source_lead_id, need to fetch separately
     const { data: opportunity, error: oppError } = await (adminClient as any)
@@ -356,6 +361,56 @@ export async function POST(request: NextRequest) {
       console.error('Error creating stage history (all attempts failed):', historyError)
     }
 
+    // 7. Sync tickets when pipeline is Closed Lost or On Hold
+    let ticketsSynced = 0
+    if (newStage === 'Closed Lost' || newStage === 'On Hold') {
+      // Build close reason
+      let closeReason = newStage === 'Closed Lost'
+        ? `Pipeline closed as lost. Reason: ${lostReason || 'Not specified'}`
+        : `Pipeline put on hold. Reason: ${notes || 'Not specified'}`
+
+      // Close all linked tickets
+      const { data: linkedTickets, error: ticketsQueryError } = await (adminClient as any)
+        .from('tickets')
+        .select('id, ticket_code, status')
+        .eq('opportunity_id', opportunityId)
+        .not('status', 'in', '("closed","resolved")')
+
+      if (!ticketsQueryError && linkedTickets && linkedTickets.length > 0) {
+        for (const ticket of linkedTickets) {
+          const { error: ticketUpdateError } = await (adminClient as any)
+            .from('tickets')
+            .update({
+              status: 'closed',
+              close_outcome: 'lost',
+              close_reason: closeReason,
+              closed_at: updateTime.toISOString(),
+              resolved_at: updateTime.toISOString(),
+              updated_at: updateTime.toISOString(),
+            })
+            .eq('id', ticket.id)
+
+          if (!ticketUpdateError) {
+            ticketsSynced++
+
+            // Create ticket event for audit trail
+            await (adminClient as any)
+              .from('ticket_events')
+              .insert({
+                ticket_id: ticket.id,
+                event_type: 'status_change',
+                actor_user_id: user.id,
+                old_value: { status: ticket.status },
+                new_value: { status: 'closed', close_outcome: 'lost' },
+                notes: `Auto-closed due to pipeline ${newStage}. ${closeReason}`,
+              })
+          } else {
+            console.error('Error updating ticket:', ticket.id, ticketUpdateError)
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       data: {
         success: true,
@@ -364,6 +419,7 @@ export async function POST(request: NextRequest) {
         new_stage: newStage,
         evidence_url: evidenceUrl,
         evidence_original_url: evidenceOriginalUrl,
+        tickets_synced: ticketsSynced,
       }
     })
   } catch (error) {

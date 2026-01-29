@@ -49,6 +49,14 @@ export async function POST(
       )
     }
 
+    // ENFORCE: notes is required when putting on hold
+    if (new_stage === 'On Hold' && (!notes || notes.trim() === '')) {
+      return NextResponse.json(
+        { error: 'Reason (notes) is required when putting an opportunity on hold' },
+        { status: 400 }
+      )
+    }
+
     // Call atomic RPC function with extended parameters
     const { data, error } = await (supabase.rpc as any)('rpc_opportunity_change_stage', {
       p_opportunity_id: id,
