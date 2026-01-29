@@ -288,7 +288,12 @@ function buildTimeline(
       if (isQuotationActivity) {
         // Determine which stage this activity relates to based on subject
         let activityStage: OpportunityStage = 'Negotiation'
-        if (activity.subject.includes('Quote Sent') || activity.subject.includes('Quotation Sent')) {
+
+        // Check for "(Negotiation in progress)" first - these stay in Negotiation stage
+        if (activity.subject.includes('Negotiation in progress')) {
+          activityStage = 'Negotiation'
+        } else if (activity.subject.includes('→ Stage moved to Quote Sent') ||
+                   (activity.subject.includes('Quotation Sent') && !activity.subject.includes('Rejected'))) {
           activityStage = 'Quote Sent'
         } else if (activity.subject.includes('Negotiation') || activity.subject.includes('Rejected')) {
           activityStage = 'Negotiation'
