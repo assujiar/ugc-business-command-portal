@@ -121,6 +121,11 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
   const [rejectFieldErrors, setRejectFieldErrors] = useState<Record<string, string>>({})
   const [rejectModalError, setRejectModalError] = useState<string | null>(null)
 
+  // Pipeline update confirmation dialog state
+  const [showPipelineUpdateDialog, setShowPipelineUpdateDialog] = useState(false)
+  const [pendingOpportunityId, setPendingOpportunityId] = useState<string | null>(null)
+  const [pipelineUpdateLoading, setPipelineUpdateLoading] = useState(false)
+
   // Fetch quotation
   const fetchQuotation = async () => {
     setLoading(true)
@@ -171,6 +176,58 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
   const isExpired = (validUntil: string) => {
     if (!validUntil) return false
     return new Date(validUntil) < new Date()
+  }
+
+  // Handle manual pipeline update to Quote Sent
+  const handleUpdatePipelineToQuoteSent = async () => {
+    if (!pendingOpportunityId) return
+
+    setPipelineUpdateLoading(true)
+    try {
+      const response = await fetch(`/api/crm/opportunities/${pendingOpportunityId}/stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          new_stage: 'Quote Sent',
+          notes: 'Pipeline updated after quotation sent to customer',
+        }),
+      })
+      const result = await response.json()
+
+      if (response.ok && result.data) {
+        toast({
+          title: 'Pipeline Updated',
+          description: 'Pipeline stage moved to Quote Sent.',
+        })
+        fetchQuotation() // Refresh to show updated stage
+      } else {
+        toast({
+          title: 'Failed to Update Pipeline',
+          description: result.error || 'Could not update pipeline stage.',
+          variant: 'destructive',
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update pipeline',
+        variant: 'destructive',
+      })
+    } finally {
+      setPipelineUpdateLoading(false)
+      setShowPipelineUpdateDialog(false)
+      setPendingOpportunityId(null)
+    }
+  }
+
+  // Skip pipeline update
+  const handleSkipPipelineUpdate = () => {
+    setShowPipelineUpdateDialog(false)
+    setPendingOpportunityId(null)
+    toast({
+      title: 'Pipeline Not Updated',
+      description: 'You can manually update the pipeline stage from the Pipeline page.',
+    })
   }
 
   // Generate PDF preview
@@ -275,13 +332,32 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
 
       if (result.success) {
         await navigator.clipboard.writeText(result.data.whatsapp_text)
-        toast({
-          title: 'WhatsApp Text Copied',
-          description: 'Text copied to clipboard. Pipeline moved to Quote Sent.',
-        })
 
         if (result.data.whatsapp_url) {
           window.open(result.data.whatsapp_url, '_blank')
+        }
+
+        // Check if pipeline was updated automatically
+        // sync_result is available in both result.data.sync_result and result.sync_result
+        const syncResult = result.data?.sync_result || result.sync_result || {}
+        const pipelineUpdated = syncResult.pipeline_updates_created === true || syncResult.new_stage === 'Quote Sent'
+        const opportunityId = syncResult.opportunity_id || quotation?.opportunity_id
+
+        if (pipelineUpdated) {
+          toast({
+            title: 'WhatsApp Text Copied',
+            description: 'Text copied to clipboard. Pipeline moved to Quote Sent.',
+          })
+        } else {
+          toast({
+            title: 'WhatsApp Text Copied',
+            description: 'Text copied to clipboard. Quotation sent successfully.',
+          })
+          // Show confirmation dialog to update pipeline if opportunity exists
+          if (opportunityId) {
+            setPendingOpportunityId(opportunityId)
+            setShowPipelineUpdateDialog(true)
+          }
         }
 
         fetchQuotation()
@@ -332,13 +408,33 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
       const result = await response.json()
 
       if (result.success) {
-        // Email sent successfully via SMTP
-        toast({
-          title: isResend ? 'Email Resent Successfully' : 'Email Sent Successfully',
-          description: isResend
-            ? `Quotation has been resent to ${result.data.recipient_email}`
-            : `Quotation sent to ${result.data.recipient_email}. Pipeline moved to Quote Sent.`,
-        })
+        // Check if pipeline was updated automatically
+        // sync_result is available in both result.data.sync_result and result.sync_result
+        const syncResult = result.data?.sync_result || result.sync_result || {}
+        const pipelineUpdated = syncResult.pipeline_updates_created === true || syncResult.new_stage === 'Quote Sent'
+        const opportunityId = syncResult.opportunity_id || quotation?.opportunity_id
+
+        if (isResend) {
+          toast({
+            title: 'Email Resent Successfully',
+            description: `Quotation has been resent to ${result.data.recipient_email}`,
+          })
+        } else if (pipelineUpdated) {
+          toast({
+            title: 'Email Sent Successfully',
+            description: `Quotation sent to ${result.data.recipient_email}. Pipeline moved to Quote Sent.`,
+          })
+        } else {
+          toast({
+            title: 'Email Sent Successfully',
+            description: `Quotation sent to ${result.data.recipient_email}.`,
+          })
+          // Show confirmation dialog to update pipeline if opportunity exists (first send only)
+          if (opportunityId) {
+            setPendingOpportunityId(opportunityId)
+            setShowPipelineUpdateDialog(true)
+          }
+        }
 
         // Always refresh quotation data to get updated status
         fetchQuotation()
@@ -1526,6 +1622,33 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Pipeline Update Confirmation Dialog */}
+      <AlertDialog open={showPipelineUpdateDialog} onOpenChange={setShowPipelineUpdateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Update Pipeline Status?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Quotation sent to customer. Would you like to update the pipeline stage to &quot;Quote Sent&quot;?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleSkipPipelineUpdate} disabled={pipelineUpdateLoading}>
+              No, Skip
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleUpdatePipelineToQuoteSent} disabled={pipelineUpdateLoading}>
+              {pipelineUpdateLoading ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                'Yes, Update Pipeline'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
