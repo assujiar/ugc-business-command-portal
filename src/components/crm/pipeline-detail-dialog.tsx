@@ -436,32 +436,32 @@ export function PipelineDetailDialog({
     }
   }, [open, opportunityId])
 
-  // Fetch shipment details from linked lead when data is loaded
+  // Fetch shipment details from opportunity when data is loaded
+  // Shipment data is now copied to opportunity during lead claim (auto-create)
   useEffect(() => {
     const fetchShipmentDetails = async () => {
-      console.log('[PipelineDetail] Checking lead_id:', data?.lead_id)
-      if (!data?.lead_id) {
-        console.log('[PipelineDetail] No lead_id found, skipping shipment fetch')
+      if (!opportunityId) {
+        console.log('[PipelineDetail] No opportunity_id, skipping shipment fetch')
         setShipmentDetails(null)
         return
       }
       try {
-        console.log('[PipelineDetail] Fetching shipment details for lead:', data.lead_id)
-        const response = await fetch(`/api/crm/leads/${data.lead_id}`)
+        console.log('[PipelineDetail] Fetching shipment details for opportunity:', opportunityId)
+        const response = await fetch(`/api/crm/opportunities/${opportunityId}`)
         if (response.ok) {
           const result = await response.json()
-          console.log('[PipelineDetail] Lead data received:', result.data)
+          console.log('[PipelineDetail] Opportunity data received:', result.data)
           console.log('[PipelineDetail] Shipment details:', result.data?.shipment_details)
           setShipmentDetails(result.data?.shipment_details || null)
         } else {
-          console.error('[PipelineDetail] Failed to fetch lead:', response.status)
+          console.error('[PipelineDetail] Failed to fetch opportunity:', response.status)
         }
       } catch (error) {
         console.error('[PipelineDetail] Error fetching shipment details:', error)
       }
     }
     fetchShipmentDetails()
-  }, [data?.lead_id])
+  }, [opportunityId])
 
   const fetchPipelineDetails = async (oppId: string, forceRefresh = false) => {
     setLoading(true)

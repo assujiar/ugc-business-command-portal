@@ -61,10 +61,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Lead already claimed' }, { status: 400 })
       }
 
-      // Fetch lead data separately
+      // Fetch lead data separately - include shipment data for prefilling opportunity
       const { data: leadData, error: leadError } = await (adminClient as any)
         .from('leads')
-        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status, created_by')
+        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status, created_by, origin, destination, route, service_code, volume_estimate')
         .eq('lead_id', poolEntry.lead_id)
         .single()
 
@@ -75,10 +75,10 @@ export async function POST(request: NextRequest) {
 
       lead = leadData
     } else if (lead_id) {
-      // Fetch lead directly by lead_id
+      // Fetch lead directly by lead_id - include shipment data for prefilling opportunity
       const { data: leadData, error: leadError } = await (adminClient as any)
         .from('leads')
-        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status, created_by')
+        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status, created_by, origin, destination, route, service_code, volume_estimate')
         .eq('lead_id', lead_id)
         .single()
 
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
       const stageConfig = getStageConfig(initialStage)
       const nextStepDueDate = calculateNextStepDueDate(initialStage)
 
-      const opportunityData = {
+      const opportunityData: Record<string, unknown> = {
         name: `Pipeline - ${lead.company_name}`,
         account_id: accountId,
         source_lead_id: lead.lead_id,
@@ -188,6 +188,11 @@ export async function POST(request: NextRequest) {
         next_step: stageConfig?.nextStep || 'Initial Contact',
         next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
         original_creator_id: lead.created_by, // Track original creator for marketing visibility
+        // Copy shipment data from lead to auto-created opportunity
+        origin: lead.origin || null,
+        destination: lead.destination || null,
+        route: lead.route || null,
+        service_codes: lead.service_code ? [lead.service_code] : null,
       }
 
       const { data: newOpportunity, error: oppError } = await (adminClient as any)
@@ -200,6 +205,23 @@ export async function POST(request: NextRequest) {
         console.error('Error creating opportunity:', oppError)
       } else {
         opportunityId = newOpportunity?.opportunity_id
+
+        // Copy full shipment_details from lead to opportunity
+        if (opportunityId) {
+          const { data: copyResult, error: copyError } = await (adminClient as any).rpc(
+            'copy_shipment_details_to_opportunity',
+            {
+              p_lead_id: lead.lead_id,
+              p_opportunity_id: opportunityId,
+              p_user_id: user.id,
+            }
+          )
+          if (copyError) {
+            console.error('Error copying shipment details:', copyError)
+          } else {
+            console.log('Shipment details copied:', copyResult)
+          }
+        }
       }
     }
 

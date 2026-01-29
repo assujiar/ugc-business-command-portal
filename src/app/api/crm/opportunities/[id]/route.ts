@@ -42,7 +42,25 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
 
-    return NextResponse.json({ data })
+    // Fetch all shipment details for this opportunity (supports multi-shipment)
+    const { data: shipmentDetailsList } = await (supabase as any)
+      .from('shipment_details')
+      .select('*')
+      .eq('opportunity_id', id)
+      .order('shipment_order', { ascending: true })
+
+    // Return opportunity with shipment details (array for multi-shipment, single object for backward compatibility)
+    const shipments = shipmentDetailsList || []
+    return NextResponse.json({
+      data: {
+        ...data,
+        // Keep shipment_details as single object for backward compatibility (first shipment)
+        shipment_details: shipments.length > 0 ? shipments[0] : null,
+        // Add shipments array for multi-shipment support
+        shipments: shipments,
+        shipment_count: shipments.length,
+      }
+    })
   } catch (error) {
     console.error('Error fetching opportunity:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

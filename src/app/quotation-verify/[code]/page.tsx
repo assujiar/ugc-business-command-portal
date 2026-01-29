@@ -5,6 +5,18 @@ import { useParams } from 'next/navigation'
 import Image from 'next/image'
 import { CheckCircle, XCircle, Clock, AlertTriangle, MapPin, Package, FileText, Calendar, User, Phone, Mail, Globe, Truck, Box, Scale, Ruler, MessageCircle } from 'lucide-react'
 
+interface ShipmentData {
+  index: number
+  origin_city: string | null
+  origin_country: string | null
+  destination_city: string | null
+  destination_country: string | null
+  cargo_description: string | null
+  weight: number | null
+  volume: number | null
+  route: string
+}
+
 interface QuotationData {
   quotation_number: string
   status: string
@@ -17,6 +29,9 @@ interface QuotationData {
   service_type: string | null
   incoterm: string | null
   route: string | null
+  // Multi-shipment support
+  shipments: ShipmentData[] | null
+  shipment_count: number
   // Cargo details
   commodity: string | null
   cargo_description: string | null
@@ -319,8 +334,37 @@ export default function QuotationVerifyPage() {
                 </div>
               )}
 
-              {/* Route */}
-              {data.route && (
+              {/* Route / Multi-Shipment */}
+              {data.shipments && data.shipments.length > 1 ? (
+                <div className="space-y-3 md:col-span-2">
+                  <h3 className="font-semibold text-[#ff4600] flex items-center gap-2 text-sm uppercase tracking-wide">
+                    <MapPin className="h-4 w-4" />
+                    Shipments ({data.shipments.length})
+                  </h3>
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
+                    {data.shipments.map((shipment) => (
+                      <div key={shipment.index} className="flex items-start gap-3 pb-3 border-b border-gray-200 last:border-0 last:pb-0">
+                        <span className="flex-shrink-0 bg-[#ff4600] text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
+                          {shipment.index}
+                        </span>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">{shipment.route}</p>
+                          {shipment.cargo_description && (
+                            <p className="text-xs text-gray-500 mt-1">{shipment.cargo_description}</p>
+                          )}
+                          {(shipment.weight || shipment.volume) && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              {shipment.weight && <span>{shipment.weight} kg</span>}
+                              {shipment.weight && shipment.volume && ' | '}
+                              {shipment.volume && <span>{shipment.volume} cbm</span>}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : data.route && (
                 <div className="space-y-3">
                   <h3 className="font-semibold text-[#ff4600] flex items-center gap-2 text-sm uppercase tracking-wide">
                     <MapPin className="h-4 w-4" />
