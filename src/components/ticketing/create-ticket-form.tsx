@@ -52,6 +52,8 @@ import {
 } from '@/lib/constants'
 import type { Database } from '@/types/database'
 import type { TicketType, TicketPriority, TicketingDepartment } from '@/types/database'
+import { FormSection, SERVICE_CATEGORY_STYLES } from '@/components/ui/form-section'
+import { cn } from '@/lib/utils'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 type Account = Database['public']['Tables']['accounts']['Row']
@@ -1097,8 +1099,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Service Information */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium">Service Information</h4>
+            <FormSection variant="service" title="Service Information" glass>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="service_type">Service Type</Label>
@@ -1113,38 +1114,63 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                       }))
                     }
                   >
-                    <SelectTrigger id="service_type">
+                    <SelectTrigger id="service_type" className="bg-background/80 backdrop-blur-sm">
                       <SelectValue placeholder="Select service type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectLabel>Domestics Service (Domestics Ops Dept)</SelectLabel>
+                        <SelectLabel className={cn(
+                          'py-2 px-2 -mx-1 rounded',
+                          SERVICE_CATEGORY_STYLES['Domestics']?.label,
+                          SERVICE_CATEGORY_STYLES['Domestics']?.bg
+                        )}>
+                          <Truck className="inline h-3 w-3 mr-1" />
+                          Domestics Service (Domestics Ops Dept)
+                        </SelectLabel>
                         {domesticsServices.map((service) => (
-                          <SelectItem key={service.code} value={service.code}>
+                          <SelectItem key={service.code} value={service.code} className="pl-6">
                             {service.scope} | {service.name}
                           </SelectItem>
                         ))}
                       </SelectGroup>
                       <SelectGroup>
-                        <SelectLabel>Export (Exim Ops Dept)</SelectLabel>
+                        <SelectLabel className={cn(
+                          'py-2 px-2 -mx-1 rounded',
+                          SERVICE_CATEGORY_STYLES['Export']?.label,
+                          SERVICE_CATEGORY_STYLES['Export']?.bg
+                        )}>
+                          Export (Exim Ops Dept)
+                        </SelectLabel>
                         {exportServices.map((service) => (
-                          <SelectItem key={service.code} value={service.code}>
+                          <SelectItem key={service.code} value={service.code} className="pl-6">
                             {service.scope} | {service.name}
                           </SelectItem>
                         ))}
                       </SelectGroup>
                       <SelectGroup>
-                        <SelectLabel>Import (Exim Ops Dept)</SelectLabel>
+                        <SelectLabel className={cn(
+                          'py-2 px-2 -mx-1 rounded',
+                          SERVICE_CATEGORY_STYLES['Import']?.label,
+                          SERVICE_CATEGORY_STYLES['Import']?.bg
+                        )}>
+                          Import (Exim Ops Dept)
+                        </SelectLabel>
                         {importServices.map((service) => (
-                          <SelectItem key={service.code} value={service.code}>
+                          <SelectItem key={service.code} value={service.code} className="pl-6">
                             {service.scope} | {service.name}
                           </SelectItem>
                         ))}
                       </SelectGroup>
                       <SelectGroup>
-                        <SelectLabel>Import DTD (Import DTD Ops Dept)</SelectLabel>
+                        <SelectLabel className={cn(
+                          'py-2 px-2 -mx-1 rounded',
+                          SERVICE_CATEGORY_STYLES['Import DTD']?.label,
+                          SERVICE_CATEGORY_STYLES['Import DTD']?.bg
+                        )}>
+                          Import DTD (Import DTD Ops Dept)
+                        </SelectLabel>
                         {importDtdServices.map((service) => (
-                          <SelectItem key={service.code} value={service.code}>
+                          <SelectItem key={service.code} value={service.code} className="pl-6">
                             {service.scope} | {service.name}
                           </SelectItem>
                         ))}
@@ -1224,14 +1250,10 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                   </div>
                 )}
               </div>
-            </div>
+            </FormSection>
 
             {/* Cargo Information */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium flex items-center gap-2">
-                <Truck className="h-4 w-4" />
-                Cargo Information
-              </h4>
+            <FormSection variant="cargo" title="Cargo Information" glass>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="cargo_category">Cargo Category</Label>
@@ -1272,18 +1294,14 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                   />
                 </div>
               </div>
-            </div>
+            </FormSection>
 
             {/* Origin & Destination */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                Origin & Destination
-              </h4>
+            <FormSection variant="route" title="Origin & Destination" glass>
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* Origin */}
-                <div className="space-y-3 p-3 border rounded-md bg-muted/30">
-                  <p className="text-xs font-medium text-muted-foreground uppercase">
+                <div className="space-y-3 p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
+                  <p className="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-400">
                     Origin
                   </p>
                   <div className="space-y-2">
@@ -1340,8 +1358,8 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                 </div>
 
                 {/* Destination */}
-                <div className="space-y-3 p-3 border rounded-md bg-muted/30">
-                  <p className="text-xs font-medium text-muted-foreground uppercase">
+                <div className="space-y-3 p-3 bg-rose-500/5 rounded-lg border border-rose-500/20">
+                  <p className="text-xs font-semibold uppercase text-rose-600 dark:text-rose-400">
                     Destination
                   </p>
                   <div className="space-y-2">
@@ -1397,11 +1415,10 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                   </div>
                 </div>
               </div>
-            </div>
+            </FormSection>
 
             {/* Quantity & Dimensions */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium">Quantity & Dimensions</h4>
+            <FormSection variant="dimensions" title="Quantity & Dimensions" glass>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="quantity">Quantity (Koli)</Label>
@@ -1548,11 +1565,10 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                   </p>
                 </div>
               </div>
-            </div>
+            </FormSection>
 
             {/* Estimated Leadtime & Cargo Value */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium">Leadtime & Cargo Value</h4>
+            <FormSection variant="schedule" title="Leadtime & Cargo Value" glass>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="estimated_leadtime">Estimated Leadtime</Label>
@@ -1617,11 +1633,10 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                   </p>
                 </div>
               </div>
-            </div>
+            </FormSection>
 
             {/* Scope of Work */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium">Scope of Work</h4>
+            <FormSection variant="scope" title="Scope of Work" glass>
               <Textarea
                 id="scope_of_work"
                 value={shipmentData.scope_of_work}
@@ -1634,11 +1649,10 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                 placeholder="Detail pekerjaan dan kebutuhan..."
                 rows={3}
               />
-            </div>
+            </FormSection>
 
             {/* Additional Services */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium">Additional Services</h4>
+            <FormSection variant="additional" title="Additional Services" glass>
               <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4">
                 {ADDITIONAL_SERVICES.map((service) => (
                   <div
@@ -1663,7 +1677,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
                   </div>
                 ))}
               </div>
-            </div>
+            </FormSection>
           </CardContent>
         </Card>
       )}
