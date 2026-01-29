@@ -39,6 +39,7 @@ import { toast } from '@/hooks/use-toast'
 import type { AccountStatus } from '@/types/database'
 import { MultiShipmentForm } from '@/components/shared/multi-shipment-form'
 import { ShipmentDetail, createEmptyShipment } from '@/types/shipment'
+import { FormSection } from '@/components/ui/form-section'
 
 interface Account {
   account_id: string
@@ -211,11 +212,7 @@ export function CreatePipelineDialog({ trigger }: CreatePipelineDialogProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Account Selection */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium text-muted-foreground">
-              Select Account
-            </h4>
-
+          <FormSection variant="company" title="Select Account" glass>
             <div className="space-y-2">
               <Label htmlFor="account">
                 Account <span className="text-destructive">*</span>
@@ -253,10 +250,10 @@ export function CreatePipelineDialog({ trigger }: CreatePipelineDialogProps) {
 
             {/* Account Details */}
             {selectedAccount && (
-              <div className="p-4 border rounded-lg bg-muted/30 space-y-3 animate-fade-in">
+              <div className="p-4 border rounded-lg bg-indigo-500/5 space-y-3 animate-fade-in border-indigo-500/20">
                 <div className="flex items-center justify-between">
                   <h5 className="font-medium flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
+                    <Building2 className="h-4 w-4 text-indigo-500" />
                     {selectedAccount.company_name}
                   </h5>
                   {getAccountStatusBadge(selectedAccount.account_status)}
@@ -290,14 +287,10 @@ export function CreatePipelineDialog({ trigger }: CreatePipelineDialogProps) {
                 </div>
               </div>
             )}
-          </div>
+          </FormSection>
 
           {/* Pipeline Details */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium text-muted-foreground">
-              Pipeline Details
-            </h4>
-
+          <FormSection variant="lead" title="Pipeline Details" glass>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="name">
@@ -335,7 +328,7 @@ export function CreatePipelineDialog({ trigger }: CreatePipelineDialogProps) {
                 />
               </div>
             </div>
-          </div>
+          </FormSection>
 
           {/* Shipment Details Toggle */}
           <div className="border-t pt-4">

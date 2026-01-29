@@ -50,6 +50,9 @@ import {
 } from '@/lib/constants'
 import { ShipmentDetail, createEmptyShipment, formatShipmentRoute } from '@/types/shipment'
 import { cn } from '@/lib/utils'
+import { FormSection, SERVICE_CATEGORY_STYLES, FormSectionIcons } from '@/components/ui/form-section'
+
+const { Truck, Ship, Plane, MapPin } = FormSectionIcons
 
 interface MultiShipmentFormProps {
   shipments: ShipmentDetail[]
@@ -325,7 +328,7 @@ function ShipmentCard({
             )}
 
             {/* Shipment label */}
-            <div className="grid gap-4">
+            <div className="grid gap-4 mb-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor={`label-${index}`}>Shipment Label</Label>
@@ -338,36 +341,46 @@ function ShipmentCard({
                   />
                 </div>
               </div>
+            </div>
 
-              {/* Service Type */}
-              <div className="space-y-2">
-                <Label>Service Type</Label>
-                <Select
-                  value={shipment.service_type_code || ''}
-                  onValueChange={(value) => onUpdate({ service_type_code: value })}
-                  disabled={readOnly}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select service type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SERVICE_SCOPES.map((scopeItem) => (
+            {/* Service Type Section */}
+            <FormSection variant="service" title="Service Type" icon={Truck} glass>
+              <Select
+                value={shipment.service_type_code || ''}
+                onValueChange={(value) => onUpdate({ service_type_code: value })}
+                disabled={readOnly}
+              >
+                <SelectTrigger className="bg-background/80 backdrop-blur-sm">
+                  <SelectValue placeholder="Select service type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SERVICE_SCOPES.map((scopeItem) => {
+                    const categoryStyle = SERVICE_CATEGORY_STYLES[scopeItem.value as keyof typeof SERVICE_CATEGORY_STYLES]
+                    const CategoryIcon = categoryStyle?.icon || Truck
+                    return (
                       <SelectGroup key={scopeItem.value}>
-                        <SelectLabel>{scopeItem.label}</SelectLabel>
+                        <SelectLabel className={cn(
+                          'py-2 px-2 -mx-1 rounded',
+                          categoryStyle?.label,
+                          categoryStyle?.bg
+                        )}>
+                          <CategoryIcon className="inline h-3 w-3 mr-1" />
+                          {scopeItem.label}
+                        </SelectLabel>
                         {getServicesByScope(scopeItem.value).map((service) => (
-                          <SelectItem key={service.code} value={service.code}>
+                          <SelectItem key={service.code} value={service.code} className="pl-6">
                             {service.name}
                           </SelectItem>
                         ))}
                       </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
 
               {/* Fleet Type (Domestics only) */}
               {isDomesticsService && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                   <div className="space-y-2">
                     <Label>Fleet Type</Label>
                     <Select
@@ -402,7 +415,7 @@ function ShipmentCard({
 
               {/* Incoterm (Exim only) */}
               {isEximService && (
-                <div className="space-y-2">
+                <div className="space-y-2 pt-2">
                   <Label>Incoterm</Label>
                   <Select
                     value={shipment.incoterm || ''}
@@ -422,10 +435,11 @@ function ShipmentCard({
                   </Select>
                 </div>
               )}
+            </FormSection>
 
-              {/* Cargo Information */}
-              <div className="space-y-4 pt-2">
-                <h4 className="font-medium text-sm text-muted-foreground">Cargo Information</h4>
+            {/* Cargo Information Section */}
+            <div className="mt-4">
+              <FormSection variant="cargo" title="Cargo Information" glass>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Cargo Category</Label>
@@ -457,15 +471,16 @@ function ShipmentCard({
                     rows={2}
                   />
                 </div>
-              </div>
+              </FormSection>
+            </div>
 
-              {/* Origin & Destination */}
-              <div className="space-y-4 pt-2">
-                <h4 className="font-medium text-sm text-muted-foreground">Origin & Destination</h4>
+            {/* Origin & Destination Section */}
+            <div className="mt-4">
+              <FormSection variant="route" title="Origin & Destination" icon={MapPin} glass>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Origin */}
-                  <div className="space-y-3 p-3 bg-muted/30 rounded-lg">
-                    <span className="text-xs font-semibold uppercase text-muted-foreground">Origin</span>
+                  <div className="space-y-3 p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
+                    <span className="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-400">Origin</span>
                     <div className="space-y-2">
                       <Label className="text-xs">Address</Label>
                       <Input
@@ -506,8 +521,8 @@ function ShipmentCard({
                   </div>
 
                   {/* Destination */}
-                  <div className="space-y-3 p-3 bg-muted/30 rounded-lg">
-                    <span className="text-xs font-semibold uppercase text-muted-foreground">Destination</span>
+                  <div className="space-y-3 p-3 bg-rose-500/5 rounded-lg border border-rose-500/20">
+                    <span className="text-xs font-semibold uppercase text-rose-600 dark:text-rose-400">Destination</span>
                     <div className="space-y-2">
                       <Label className="text-xs">Address</Label>
                       <Input
@@ -547,11 +562,12 @@ function ShipmentCard({
                     </div>
                   </div>
                 </div>
-              </div>
+              </FormSection>
+            </div>
 
-              {/* Quantity & Dimensions */}
-              <div className="space-y-4 pt-2">
-                <h4 className="font-medium text-sm text-muted-foreground">Quantity & Dimensions</h4>
+            {/* Quantity & Dimensions Section */}
+            <div className="mt-4">
+              <FormSection variant="dimensions" title="Quantity & Dimensions" glass>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs">Quantity</Label>
@@ -648,11 +664,12 @@ function ShipmentCard({
                   />
                   <span className="text-xs text-muted-foreground">Auto-calculated: Quantity x Weight/Unit</span>
                 </div>
-              </div>
+              </FormSection>
+            </div>
 
-              {/* Scope of Work */}
-              <div className="space-y-2 pt-2">
-                <Label>Scope of Work</Label>
+            {/* Scope of Work Section */}
+            <div className="mt-4">
+              <FormSection variant="scope" title="Scope of Work" glass>
                 <Textarea
                   placeholder="Detail pekerjaan dan kebutuhan..."
                   value={shipment.scope_of_work || ''}
@@ -660,11 +677,12 @@ function ShipmentCard({
                   disabled={readOnly}
                   rows={3}
                 />
-              </div>
+              </FormSection>
+            </div>
 
-              {/* Additional Services */}
-              <div className="space-y-3 pt-2">
-                <Label>Additional Services</Label>
+            {/* Additional Services Section */}
+            <div className="mt-4">
+              <FormSection variant="additional" title="Additional Services" glass>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {ADDITIONAL_SERVICES.map((service) => (
                     <div key={service.code} className="flex items-center space-x-2">
@@ -689,7 +707,7 @@ function ShipmentCard({
                     </div>
                   ))}
                 </div>
-              </div>
+              </FormSection>
             </div>
           </CardContent>
         </CollapsibleContent>
