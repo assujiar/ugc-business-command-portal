@@ -245,7 +245,7 @@ INSERT INTO public.pipeline_updates (
 SELECT
     o.opportunity_id,
     'Pipeline created (backfilled)',
-    'Email'::approach_method,
+    'MKT Lead Bidding'::approach_method,
     NULL,
     COALESCE(
         (SELECT h.to_stage FROM public.opportunity_stage_history h
