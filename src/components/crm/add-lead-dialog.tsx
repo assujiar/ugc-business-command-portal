@@ -36,18 +36,9 @@ import {
   INDUSTRIES,
   PRIORITY_LEVELS,
   SERVICE_TYPES,
-  SERVICE_SCOPES,
-  DOMESTICS_SERVICE_CODES,
-  EXIM_SERVICE_CODES,
-  FLEET_TYPES,
-  INCOTERMS,
-  CARGO_CATEGORIES,
-  UNITS_OF_MEASURE,
-  ADDITIONAL_SERVICES,
-  COUNTRIES,
-  getServicesByScope,
-  getServiceTypeDisplayLabel,
 } from '@/lib/constants'
+import { MultiShipmentForm } from '@/components/shared/multi-shipment-form'
+import { ShipmentDetail, createEmptyShipment } from '@/types/shipment'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,31 +53,6 @@ import { toast } from '@/hooks/use-toast'
 
 interface AddLeadDialogProps {
   trigger?: React.ReactNode
-}
-
-interface ShipmentData {
-  service_type_code: string
-  fleet_type: string
-  fleet_quantity: number
-  incoterm: string
-  cargo_category: string
-  cargo_description: string
-  origin_address: string
-  origin_city: string
-  origin_country: string
-  destination_address: string
-  destination_city: string
-  destination_country: string
-  quantity: number
-  unit_of_measure: string
-  weight_per_unit_kg: number | null
-  weight_total_kg: number | null
-  length_cm: number | null
-  width_cm: number | null
-  height_cm: number | null
-  volume_total_cbm: number | null
-  scope_of_work: string
-  additional_services: string[]
 }
 
 interface CreatedLead {
@@ -118,86 +84,8 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
     inquiry_text: '',
   })
 
-  const [shipmentData, setShipmentData] = React.useState<ShipmentData>({
-    service_type_code: '',
-    fleet_type: '',
-    fleet_quantity: 1,
-    incoterm: '',
-    cargo_category: 'General Cargo',
-    cargo_description: '',
-    origin_address: '',
-    origin_city: '',
-    origin_country: 'Indonesia',
-    destination_address: '',
-    destination_city: '',
-    destination_country: 'Indonesia',
-    quantity: 1,
-    unit_of_measure: 'Boxes',
-    weight_per_unit_kg: null,
-    weight_total_kg: null,
-    length_cm: null,
-    width_cm: null,
-    height_cm: null,
-    volume_total_cbm: null,
-    scope_of_work: '',
-    additional_services: [],
-  })
-
-  // Use callback ref to always get latest state (fixes stale closure issue)
-  const getShipmentData = React.useCallback(() => shipmentData, [shipmentData])
-
-  // Check if selected service is domestics (shows fleet)
-  const isDomesticsService = DOMESTICS_SERVICE_CODES.includes(
-    shipmentData.service_type_code as any
-  )
-
-  // Check if selected service is export/import (shows incoterms)
-  const isEximService = EXIM_SERVICE_CODES.includes(
-    shipmentData.service_type_code as any
-  )
-
-  // Get department for selected service
-  const selectedService = SERVICE_TYPES.find(
-    (s) => s.code === shipmentData.service_type_code
-  )
-
-  // Auto-calculate weight total
-  React.useEffect(() => {
-    if (shipmentData.quantity && shipmentData.weight_per_unit_kg) {
-      const total = shipmentData.quantity * shipmentData.weight_per_unit_kg
-      setShipmentData((prev) => ({ ...prev, weight_total_kg: total }))
-    } else {
-      setShipmentData((prev) => ({ ...prev, weight_total_kg: null }))
-    }
-  }, [shipmentData.quantity, shipmentData.weight_per_unit_kg])
-
-  // Auto-calculate volume in CBM
-  React.useEffect(() => {
-    if (
-      shipmentData.length_cm &&
-      shipmentData.width_cm &&
-      shipmentData.height_cm &&
-      shipmentData.quantity
-    ) {
-      const volumeCbm =
-        (shipmentData.length_cm *
-          shipmentData.width_cm *
-          shipmentData.height_cm *
-          shipmentData.quantity) /
-        1000000
-      setShipmentData((prev) => ({
-        ...prev,
-        volume_total_cbm: Math.round(volumeCbm * 10000) / 10000,
-      }))
-    } else {
-      setShipmentData((prev) => ({ ...prev, volume_total_cbm: null }))
-    }
-  }, [
-    shipmentData.length_cm,
-    shipmentData.width_cm,
-    shipmentData.height_cm,
-    shipmentData.quantity,
-  ])
+  // Multi-shipment state
+  const [shipments, setShipments] = React.useState<ShipmentDetail[]>([])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -210,40 +98,21 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
     setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleAdditionalServiceToggle = (serviceCode: string) => {
-    setShipmentData((prev) => ({
-      ...prev,
-      additional_services: prev.additional_services.includes(serviceCode)
-        ? prev.additional_services.filter((s) => s !== serviceCode)
-        : [...prev.additional_services, serviceCode],
-    }))
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      // Get latest shipmentData using callback (fixes stale closure issue)
-      const currentShipmentData = getShipmentData()
-
-      // Debug log to verify data is correct
-      if (showShipmentDetails) {
-        console.log('[AddLeadDialog] Submitting with shipment data:', JSON.stringify(currentShipmentData, null, 2))
-      }
-
-      // Get current selected service for department
-      const currentSelectedService = SERVICE_TYPES.find(
-        (s) => s.code === currentShipmentData.service_type_code
-      )
-
-      // Prepare shipment data if enabled
-      const shipment = showShipmentDetails
-        ? {
-            ...currentShipmentData,
-            department: currentSelectedService?.department || null,
-          }
+      // Prepare shipment data with department info
+      const shipmentsWithDept = showShipmentDetails && shipments.length > 0
+        ? shipments.map(s => {
+            const service = SERVICE_TYPES.find(st => st.code === s.service_type_code)
+            return {
+              ...s,
+              department: service?.department || null,
+            }
+          })
         : null
 
       // If source is "Lainnya", use custom_source as source_detail
@@ -253,7 +122,7 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
         source_detail: formData.source === 'Lainnya'
           ? formData.custom_source || null
           : formData.source_detail || null,
-        shipment_details: shipment,
+        shipment_details: shipmentsWithDept, // Array of shipments
       }
       // Remove custom_source from submission (it's stored in source_detail)
       const { custom_source: _, ...dataToSubmit } = submitData
@@ -312,30 +181,7 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
         priority: 2,
         inquiry_text: '',
       })
-      setShipmentData({
-        service_type_code: '',
-        fleet_type: '',
-        fleet_quantity: 1,
-        incoterm: '',
-        cargo_category: 'General Cargo',
-        cargo_description: '',
-        origin_address: '',
-        origin_city: '',
-        origin_country: 'Indonesia',
-        destination_address: '',
-        destination_city: '',
-        destination_country: 'Indonesia',
-        quantity: 1,
-        unit_of_measure: 'Boxes',
-        weight_per_unit_kg: null,
-        weight_total_kg: null,
-        length_cm: null,
-        width_cm: null,
-        height_cm: null,
-        volume_total_cbm: null,
-        scope_of_work: '',
-        additional_services: [],
-      })
+      setShipments([])
       setAttachments([])
       setShowShipmentDetails(false)
       setOpen(false)
@@ -351,12 +197,6 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
       setLoading(false)
     }
   }
-
-  // Group services by scope for the dropdown
-  const domesticsServices = getServicesByScope('Domestics')
-  const exportServices = getServicesByScope('Export')
-  const importServices = getServicesByScope('Import')
-  const importDtdServices = getServicesByScope('Import DTD')
 
   return (
     <>
@@ -585,515 +425,17 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
             </Button>
           </div>
 
-          {/* Shipment Details Section */}
+          {/* Shipment Details Section - Multi-Shipment Form */}
           {showShipmentDetails && (
-            <div className="space-y-6 border rounded-lg p-4 bg-muted/30">
-              {/* Service Type */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">Service Information</h4>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="service_type">Service Type</Label>
-                    <Select
-                      value={shipmentData.service_type_code}
-                      onValueChange={(value) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          service_type_code: value,
-                          fleet_type: '',
-                          incoterm: '',
-                        }))
-                      }
-                    >
-                      <SelectTrigger id="service_type">
-                        <SelectValue placeholder="Select service type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel>Domestics Service (Domestics Ops Dept)</SelectLabel>
-                          {domesticsServices.map((service) => (
-                            <SelectItem key={service.code} value={service.code}>
-                              {service.scope} | {service.name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel>Export (Exim Ops Dept)</SelectLabel>
-                          {exportServices.map((service) => (
-                            <SelectItem key={service.code} value={service.code}>
-                              {service.scope} | {service.name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel>Import (Exim Ops Dept)</SelectLabel>
-                          {importServices.map((service) => (
-                            <SelectItem key={service.code} value={service.code}>
-                              {service.scope} | {service.name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel>Import DTD (Import DTD Ops Dept)</SelectLabel>
-                          {importDtdServices.map((service) => (
-                            <SelectItem key={service.code} value={service.code}>
-                              {service.scope} | {service.name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    {selectedService && (
-                      <p className="text-xs text-muted-foreground">
-                        Department: {selectedService.department}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Fleet Type (only for Domestics) */}
-                  {isDomesticsService && (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="fleet_type">Fleet Requirement</Label>
-                        <Select
-                          value={shipmentData.fleet_type}
-                          onValueChange={(value) =>
-                            setShipmentData((prev) => ({ ...prev, fleet_type: value }))
-                          }
-                        >
-                          <SelectTrigger id="fleet_type">
-                            <SelectValue placeholder="Select fleet type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {FLEET_TYPES.map((fleet) => (
-                              <SelectItem key={fleet} value={fleet}>
-                                {fleet}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="fleet_quantity">Fleet Quantity</Label>
-                        <Input
-                          id="fleet_quantity"
-                          type="number"
-                          min="1"
-                          value={shipmentData.fleet_quantity}
-                          onChange={(e) =>
-                            setShipmentData((prev) => ({
-                              ...prev,
-                              fleet_quantity: parseInt(e.target.value) || 1,
-                            }))
-                          }
-                          placeholder="Enter quantity"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Incoterms (only for Export/Import) */}
-                  {isEximService && (
-                    <div className="space-y-2">
-                      <Label htmlFor="incoterm">Incoterms</Label>
-                      <Select
-                        value={shipmentData.incoterm}
-                        onValueChange={(value) =>
-                          setShipmentData((prev) => ({ ...prev, incoterm: value }))
-                        }
-                      >
-                        <SelectTrigger id="incoterm">
-                          <SelectValue placeholder="Select incoterm" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {INCOTERMS.map((term) => (
-                            <SelectItem key={term.code} value={term.code}>
-                              {term.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Cargo Information */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">Cargo Information</h4>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="cargo_category">Cargo Category</Label>
-                    <Select
-                      value={shipmentData.cargo_category}
-                      onValueChange={(value) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          cargo_category: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger id="cargo_category">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CARGO_CATEGORIES.map((cat) => (
-                          <SelectItem key={cat} value={cat}>
-                            {cat}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="cargo_description">Cargo Description</Label>
-                    <Textarea
-                      id="cargo_description"
-                      value={shipmentData.cargo_description}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          cargo_description: e.target.value,
-                        }))
-                      }
-                      placeholder="Describe the cargo..."
-                      rows={2}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Origin & Destination */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">Origin & Destination</h4>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {/* Origin */}
-                  <div className="space-y-3 p-3 border rounded-md">
-                    <p className="text-xs font-medium text-muted-foreground uppercase">
-                      Origin
-                    </p>
-                    <div className="space-y-2">
-                      <Label htmlFor="origin_address">Address</Label>
-                      <Input
-                        id="origin_address"
-                        value={shipmentData.origin_address}
-                        onChange={(e) =>
-                          setShipmentData((prev) => ({
-                            ...prev,
-                            origin_address: e.target.value,
-                          }))
-                        }
-                        placeholder="Street address"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="origin_city">City</Label>
-                      <Input
-                        id="origin_city"
-                        value={shipmentData.origin_city}
-                        onChange={(e) =>
-                          setShipmentData((prev) => ({
-                            ...prev,
-                            origin_city: e.target.value,
-                          }))
-                        }
-                        placeholder="City"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="origin_country">Country</Label>
-                      <Select
-                        value={shipmentData.origin_country}
-                        onValueChange={(value) =>
-                          setShipmentData((prev) => ({
-                            ...prev,
-                            origin_country: value,
-                          }))
-                        }
-                      >
-                        <SelectTrigger id="origin_country">
-                          <SelectValue placeholder="Select country" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COUNTRIES.map((country) => (
-                            <SelectItem key={country} value={country}>
-                              {country}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Destination */}
-                  <div className="space-y-3 p-3 border rounded-md">
-                    <p className="text-xs font-medium text-muted-foreground uppercase">
-                      Destination
-                    </p>
-                    <div className="space-y-2">
-                      <Label htmlFor="destination_address">Address</Label>
-                      <Input
-                        id="destination_address"
-                        value={shipmentData.destination_address}
-                        onChange={(e) =>
-                          setShipmentData((prev) => ({
-                            ...prev,
-                            destination_address: e.target.value,
-                          }))
-                        }
-                        placeholder="Street address"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="destination_city">City</Label>
-                      <Input
-                        id="destination_city"
-                        value={shipmentData.destination_city}
-                        onChange={(e) =>
-                          setShipmentData((prev) => ({
-                            ...prev,
-                            destination_city: e.target.value,
-                          }))
-                        }
-                        placeholder="City"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="destination_country">Country</Label>
-                      <Select
-                        value={shipmentData.destination_country}
-                        onValueChange={(value) =>
-                          setShipmentData((prev) => ({
-                            ...prev,
-                            destination_country: value,
-                          }))
-                        }
-                      >
-                        <SelectTrigger id="destination_country">
-                          <SelectValue placeholder="Select country" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COUNTRIES.map((country) => (
-                            <SelectItem key={country} value={country}>
-                              {country}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quantity & Dimensions */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">Quantity & Dimensions</h4>
-
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity">Quantity (Koli)</Label>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      min="1"
-                      value={shipmentData.quantity}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          quantity: parseInt(e.target.value) || 1,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="unit_of_measure">Unit of Measure</Label>
-                    <Select
-                      value={shipmentData.unit_of_measure}
-                      onValueChange={(value) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          unit_of_measure: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger id="unit_of_measure">
-                        <SelectValue placeholder="Select unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {UNITS_OF_MEASURE.map((unit) => (
-                          <SelectItem key={unit} value={unit}>
-                            {unit}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="weight_per_unit">Weight/Unit (Kg)</Label>
-                    <Input
-                      id="weight_per_unit"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={shipmentData.weight_per_unit_kg ?? ''}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          weight_per_unit_kg: e.target.value
-                            ? parseFloat(e.target.value)
-                            : null,
-                        }))
-                      }
-                      placeholder="Gross weight"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="length_cm">Length (cm)</Label>
-                    <Input
-                      id="length_cm"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={shipmentData.length_cm ?? ''}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          length_cm: e.target.value
-                            ? parseFloat(e.target.value)
-                            : null,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="width_cm">Width (cm)</Label>
-                    <Input
-                      id="width_cm"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={shipmentData.width_cm ?? ''}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          width_cm: e.target.value
-                            ? parseFloat(e.target.value)
-                            : null,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="height_cm">Height (cm)</Label>
-                    <Input
-                      id="height_cm"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={shipmentData.height_cm ?? ''}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          height_cm: e.target.value
-                            ? parseFloat(e.target.value)
-                            : null,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Total Volume (CBM)</Label>
-                    <Input
-                      value={
-                        shipmentData.volume_total_cbm !== null
-                          ? shipmentData.volume_total_cbm.toFixed(4)
-                          : '-'
-                      }
-                      disabled
-                      className="bg-muted"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Total Weight (Kg)</Label>
-                    <Input
-                      value={
-                        shipmentData.weight_total_kg !== null
-                          ? shipmentData.weight_total_kg.toFixed(2)
-                          : '-'
-                      }
-                      disabled
-                      className="bg-muted"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Auto-calculated: Quantity x Weight/Unit
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Scope of Work */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">Scope of Work</h4>
-                <Textarea
-                  id="scope_of_work"
-                  value={shipmentData.scope_of_work}
-                  onChange={(e) =>
-                    setShipmentData((prev) => ({
-                      ...prev,
-                      scope_of_work: e.target.value,
-                    }))
-                  }
-                  placeholder="Detail pekerjaan dan kebutuhan..."
-                  rows={3}
-                />
-              </div>
-
-              {/* Additional Services */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">Additional Services</h4>
-                <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4">
-                  {ADDITIONAL_SERVICES.map((service) => (
-                    <div
-                      key={service.code}
-                      className="flex items-center space-x-2"
-                    >
-                      <Checkbox
-                        id={`service-${service.code}`}
-                        checked={shipmentData.additional_services.includes(
-                          service.code
-                        )}
-                        onCheckedChange={() =>
-                          handleAdditionalServiceToggle(service.code)
-                        }
-                      />
-                      <Label
-                        htmlFor={`service-${service.code}`}
-                        className="text-sm font-normal cursor-pointer"
-                      >
-                        {service.name}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className="animate-slide-in-up">
+              <MultiShipmentForm
+                shipments={shipments}
+                onChange={setShipments}
+                maxShipments={10}
+              />
 
               {/* Attachments */}
-              <div className="space-y-4">
+              <div className="space-y-4 mt-6 border rounded-lg p-4 bg-muted/30">
                 <h4 className="text-sm font-medium">Attachments</h4>
                 <div className="space-y-3">
                   <input
