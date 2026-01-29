@@ -26,10 +26,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get lead data
+    // Get lead data including created_by for original_creator_id propagation
     const { data: lead, error: leadError } = await (adminClient as any)
       .from('leads')
-      .select('lead_id, company_name, potential_revenue, account_id, opportunity_id, claim_status, sales_owner_user_id')
+      .select('lead_id, company_name, potential_revenue, account_id, opportunity_id, claim_status, sales_owner_user_id, created_by')
       .eq('lead_id', leadId)
       .single()
 
@@ -66,6 +66,9 @@ export async function POST(
       probability: stageConfig?.probability || 10,
       owner_user_id: lead.sales_owner_user_id || user.id,
       created_by: user.id,
+      // Propagate original_creator_id from lead for marketing visibility
+      // This tracks who originally created the lead that became this opportunity
+      original_creator_id: lead.created_by || user.id,
       next_step: stageConfig?.nextStep || 'Initial Contact',
       next_step_due_date: nextStepDueDate.toISOString().split('T')[0],
     }
