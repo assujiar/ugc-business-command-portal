@@ -541,9 +541,21 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
       const result = await response.json()
 
       if (result.success) {
+        // Build success message with deal details if available
+        const data = result.data
+        let description = 'Quotation marked as accepted. Pipeline moved to Closed Won.'
+        if (data?.deal_value) {
+          const dealValue = formatCurrency(data.deal_value, data.currency || 'IDR')
+          description = `Deal Won! Value: ${dealValue}`
+          if (data.actual_margin_percent != null) {
+            description += ` | Margin: ${data.actual_margin_percent}%`
+          } else if (data.target_margin_percent != null) {
+            description += ` | Target Margin: ${data.target_margin_percent}%`
+          }
+        }
         toast({
-          title: 'Quotation Accepted',
-          description: 'Quotation marked as accepted. Pipeline moved to Closed Won.',
+          title: '🎉 Quotation Accepted',
+          description,
         })
         fetchQuotation()
       } else {
