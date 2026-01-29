@@ -74,6 +74,23 @@ interface StageHistory {
   changer_name?: string | null
 }
 
+interface Activity {
+  activity_id: string
+  activity_type: string
+  subject: string
+  description: string | null
+  status: string
+  due_date: string | null
+  completed_at: string | null
+  related_opportunity_id: string | null
+  related_lead_id: string | null
+  owner_user_id: string
+  created_by: string
+  created_at: string
+  owner_name?: string | null
+  creator_name?: string | null
+}
+
 interface PipelineDetailData {
   opportunity_id: string
   name: string
@@ -118,6 +135,7 @@ interface PipelineDetailData {
   // Activities
   pipeline_updates: PipelineUpdate[]
   stage_history: StageHistory[]
+  activities: Activity[]
   can_update: boolean
 }
 
@@ -224,8 +242,18 @@ function buildTimeline(
       status = dueDate && dueDate < now ? 'overdue' : 'current'
     }
 
-    // Add activities for this stage
+    // Add activities for this stage (from pipeline_updates)
+    // Skip quotation-related updates (they have correlation ID prefix) since we'll show richer activities from activities table
     stageUpdates.forEach(update => {
+      const isQuotationUpdate = update.notes &&
+        (update.notes.match(/^\[[\w-]+\]/) &&
+         (update.notes.toLowerCase().includes('quotation') || update.notes.toLowerCase().includes('deal')))
+
+      // Skip quotation updates - they'll be shown from activities table with richer info
+      if (isQuotationUpdate) {
+        return
+      }
+
       items.push({
         id: update.update_id,
         type: 'activity',
@@ -245,6 +273,51 @@ function buildTimeline(
       })
     })
   })
+
+  // Add quotation-related activities from activities table
+  // These have rich subjects like "1st Quotation Rejected → Stage moved to Negotiation"
+  if (data.activities && data.activities.length > 0) {
+    data.activities.forEach(activity => {
+      // Only include quotation-related activities (check subject for keywords)
+      const isQuotationActivity = activity.subject &&
+        (activity.subject.includes('Quotation') ||
+         activity.subject.includes('quotation') ||
+         activity.subject.includes('Deal Won') ||
+         activity.subject.includes('Deal Lost'))
+
+      if (isQuotationActivity) {
+        // Determine which stage this activity relates to based on subject
+        let activityStage: OpportunityStage = 'Negotiation'
+        if (activity.subject.includes('Quote Sent') || activity.subject.includes('Quotation Sent')) {
+          activityStage = 'Quote Sent'
+        } else if (activity.subject.includes('Negotiation') || activity.subject.includes('Rejected')) {
+          activityStage = 'Negotiation'
+        } else if (activity.subject.includes('Deal Won') || activity.subject.includes('Accepted')) {
+          activityStage = 'Closed Won'
+        } else if (activity.subject.includes('Deal Lost')) {
+          activityStage = 'Closed Lost'
+        }
+
+        // Strip correlation ID prefix from description for cleaner display
+        let cleanDescription = activity.description || ''
+        const correlationMatch = cleanDescription.match(/^\[[\w-]+\]\s*/)
+        if (correlationMatch) {
+          cleanDescription = cleanDescription.substring(correlationMatch[0].length)
+        }
+
+        items.push({
+          id: activity.activity_id,
+          type: 'activity',
+          stage: activityStage,
+          date: activity.completed_at || activity.created_at,
+          status: 'done',
+          title: activity.subject,
+          subtitle: cleanDescription || undefined,
+          actorName: activity.creator_name || activity.owner_name,
+        })
+      }
+    })
+  }
 
   // Add closed stage if applicable
   if (isClosed && data.closed_at) {
