@@ -373,6 +373,7 @@ export async function POST(request: NextRequest) {
         source_type,
         sequence_number,
         operational_cost_id,
+        source_rate_quote_id: operational_cost_id, // Bidirectional link to ticket_rate_quotes
         quotation_number,
         customer_name,
         customer_company,
@@ -470,6 +471,22 @@ export async function POST(request: NextRequest) {
       if (itemsError) {
         console.error('Error inserting quotation items:', itemsError)
         // Continue even if items fail - quotation is created
+      }
+    }
+
+    // Update ticket_rate_quotes with bidirectional link (backup in case trigger doesn't fire)
+    if (operational_cost_id) {
+      const { error: linkError } = await (supabase as any)
+        .from('ticket_rate_quotes')
+        .update({ customer_quotation_id: quotation_id })
+        .eq('id', operational_cost_id)
+        .is('customer_quotation_id', null) // Only if not already linked
+
+      if (linkError) {
+        console.error('[CustomerQuotations POST] Error linking to ticket_rate_quotes:', linkError)
+        // Continue even if link fails - quotation is created
+      } else {
+        console.log('[CustomerQuotations POST] Linked ticket_rate_quotes to quotation:', operational_cost_id)
       }
     }
 
