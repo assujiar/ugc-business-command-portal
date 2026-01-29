@@ -281,6 +281,10 @@ export function PipelineDetailDialog({
   const [showCreateOptions, setShowCreateOptions] = useState(false)
   const [creatingQuotation, setCreatingQuotation] = useState(false)
 
+  // Linked tickets state
+  const [linkedTickets, setLinkedTickets] = useState<any[]>([])
+  const [loadingTickets, setLoadingTickets] = useState(false)
+
   // Shipment details from linked lead
   const [shipmentDetails, setShipmentDetails] = useState<any>(null)
 
@@ -295,6 +299,7 @@ export function PipelineDetailDialog({
       await Promise.all([
         fetchPipelineDetails(opportunityId, true),
         fetchQuotations(opportunityId, true),
+        fetchLinkedTickets(opportunityId, true),
       ])
     }
   }
@@ -305,9 +310,11 @@ export function PipelineDetailDialog({
       // This ensures stage updates are immediately visible after quotation operations
       fetchPipelineDetails(opportunityId, true)
       fetchQuotations(opportunityId, true)
+      fetchLinkedTickets(opportunityId, true)
     } else {
       setData(null)
       setQuotations([])
+      setLinkedTickets([])
       setShipmentDetails(null)
     }
   }, [open, opportunityId])
@@ -430,6 +437,29 @@ export function PipelineDetailDialog({
       console.error('Error fetching quotations:', error)
     } finally {
       setLoadingQuotations(false)
+    }
+  }
+
+  const fetchLinkedTickets = async (oppId: string, forceRefresh = false) => {
+    setLoadingTickets(true)
+    try {
+      const url = forceRefresh
+        ? `/api/ticketing/tickets?opportunity_id=${oppId}&_t=${Date.now()}`
+        : `/api/ticketing/tickets?opportunity_id=${oppId}`
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      })
+      if (response.ok) {
+        const result = await response.json()
+        setLinkedTickets(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error fetching linked tickets:', error)
+    } finally {
+      setLoadingTickets(false)
     }
   }
 
@@ -933,6 +963,81 @@ export function PipelineDetailDialog({
                     ) : (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         No quotations yet. Create one to proceed.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Linked Tickets Section */}
+              {(linkedTickets.length > 0 || loadingTickets) && (
+                <Card className="overflow-hidden">
+                  <CardContent className="p-4">
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                      <Ticket className="h-4 w-4" />
+                      Linked Tickets
+                    </h3>
+
+                    {loadingTickets ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+                      </div>
+                    ) : linkedTickets.length > 0 ? (
+                      <div className="space-y-2">
+                        {linkedTickets.map((ticket) => (
+                          <div
+                            key={ticket.id}
+                            onClick={() => {
+                              router.push(`/tickets/${ticket.id}`)
+                              onOpenChange(false)
+                            }}
+                            className="flex items-center justify-between p-3 border rounded-md bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Ticket className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">{ticket.ticket_code}</p>
+                                <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                  {ticket.subject}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge
+                                    variant={
+                                      ticket.status === 'resolved' || ticket.status === 'completed' ? 'default' :
+                                      ticket.status === 'cancelled' ? 'destructive' :
+                                      ticket.status === 'in_progress' ? 'secondary' : 'outline'
+                                    }
+                                    className={
+                                      ticket.status === 'resolved' || ticket.status === 'completed' ? 'bg-green-500' :
+                                      ticket.status === 'in_progress' ? 'bg-blue-500 text-white' : ''
+                                    }
+                                  >
+                                    {ticket.status?.replace(/_/g, ' ')}
+                                  </Badge>
+                                  {ticket.priority && (
+                                    <Badge
+                                      variant="outline"
+                                      className={
+                                        ticket.priority === 'urgent' ? 'border-red-500 text-red-500' :
+                                        ticket.priority === 'high' ? 'border-orange-500 text-orange-500' :
+                                        ticket.priority === 'medium' ? 'border-yellow-500 text-yellow-600' :
+                                        'border-gray-400 text-gray-500'
+                                      }
+                                    >
+                                      {ticket.priority}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No linked tickets.
                       </p>
                     )}
                   </CardContent>

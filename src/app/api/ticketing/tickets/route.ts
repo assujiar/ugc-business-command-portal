@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
     const department = searchParams.get('department')
     const search = searchParams.get('search')
     const accountId = searchParams.get('account_id')
+    const opportunityId = searchParams.get('opportunity_id')
     const limit = parseInt(searchParams.get('limit') || '100')
     const offset = parseInt(searchParams.get('offset') || '0')
 
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest) {
     if (ticketType) query = query.eq('ticket_type', ticketType)
     if (department) query = query.eq('department', department)
     if (accountId) query = query.eq('account_id', accountId)
+    if (opportunityId) query = query.eq('opportunity_id', opportunityId)
     if (search) {
       query = query.or(`ticket_code.ilike.%${search}%,subject.ilike.%${search}%`)
     }
