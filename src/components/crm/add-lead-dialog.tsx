@@ -39,6 +39,7 @@ import {
 } from '@/lib/constants'
 import { MultiShipmentForm } from '@/components/shared/multi-shipment-form'
 import { ShipmentDetail, createEmptyShipment } from '@/types/shipment'
+import { FormSection } from '@/components/ui/form-section'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -220,11 +221,7 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Company Information */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium text-muted-foreground">
-              Company Information
-            </h4>
-
+          <FormSection variant="company" title="Company Information" glass>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="company_name">
@@ -262,14 +259,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                 </Select>
               </div>
             </div>
-          </div>
+          </FormSection>
 
           {/* Contact Person */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium text-muted-foreground">
-              Contact Person (PIC)
-            </h4>
-
+          <FormSection variant="contact" title="Contact Person (PIC)" glass>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="pic_name">Name</Label>
@@ -309,14 +302,10 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                 />
               </div>
             </div>
-          </div>
+          </FormSection>
 
           {/* Lead Details */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium text-muted-foreground">
-              Lead Details
-            </h4>
-
+          <FormSection variant="lead" title="Lead Details" glass>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="source">
@@ -403,7 +392,7 @@ export function AddLeadDialog({ trigger }: AddLeadDialogProps) {
                 rows={3}
               />
             </div>
-          </div>
+          </FormSection>
 
           {/* Shipment Details Toggle */}
           <div className="border-t pt-4">
