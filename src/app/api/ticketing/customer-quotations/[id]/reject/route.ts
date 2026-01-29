@@ -173,10 +173,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     console.log('Quotation rejected successfully:', result, 'correlation_id:', correlationId)
 
+    // Build message with sequence info if available
+    const sequenceLabel = result.sequence_label || ''
+    const previousRejections = result.previous_rejected_count || 0
+    let successMessage = ''
+
+    if (sequenceLabel && previousRejections > 0) {
+      // This is not the first rejection
+      successMessage = `${sequenceLabel} quotation rejected. This is rejection #${previousRejections + 1} for this opportunity. Pipeline moved to Negotiation.`
+    } else if (sequenceLabel) {
+      successMessage = `${sequenceLabel} quotation rejected. Pipeline moved to Negotiation, ticket moved to need_adjustment.`
+    } else {
+      successMessage = 'Quotation rejected successfully. Pipeline moved to Negotiation, ticket moved to need_adjustment.'
+    }
+
     return NextResponse.json({
       success: true,
       data: result,
-      message: 'Quotation rejected successfully. Pipeline moved to Negotiation, ticket moved to need_adjustment.',
+      message: successMessage,
       correlation_id: correlationId
     })
   } catch (err) {
