@@ -184,17 +184,20 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
 
     setPipelineUpdateLoading(true)
     try {
-      const response = await fetch(`/api/crm/opportunities/${pendingOpportunityId}/stage`, {
+      // Use /api/crm/pipeline/update which creates both opportunity stage update AND pipeline_updates record
+      const formData = new FormData()
+      formData.append('opportunity_id', pendingOpportunityId)
+      formData.append('new_stage', 'Quote Sent')
+      formData.append('approach_method', 'Email') // Default approach method
+      formData.append('notes', `Pipeline updated after quotation ${quotation?.quotation_number} sent to customer`)
+
+      const response = await fetch('/api/crm/pipeline/update', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          new_stage: 'Quote Sent',
-          notes: 'Pipeline updated after quotation sent to customer',
-        }),
+        body: formData,
       })
       const result = await response.json()
 
-      if (response.ok && result.data) {
+      if (response.ok) {
         toast({
           title: 'Pipeline Updated',
           description: 'Pipeline stage moved to Quote Sent.',
