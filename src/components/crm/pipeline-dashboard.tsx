@@ -270,13 +270,15 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     // Auto-get location when dialog opens
     getCurrentLocation()
 
-    // Fetch shipment details from opportunity (auto-created opportunities have shipment copied from lead)
+    // Fetch shipment details from opportunity (supports multi-shipment)
     try {
       const response = await fetch(`/api/crm/opportunities/${opportunity.opportunity_id}`)
       if (response.ok) {
         const result = await response.json()
-        console.log('[PipelineDashboard] Fetched shipment from opportunity:', result.data?.shipment_details)
-        setUpdateDialogShipment(result.data?.shipment_details || null)
+        // Use shipments array if available, otherwise fall back to shipment_details for backward compatibility
+        const shipments = result.data?.shipments || (result.data?.shipment_details ? [result.data.shipment_details] : [])
+        console.log('[PipelineDashboard] Fetched shipments from opportunity:', shipments.length, 'shipment(s)')
+        setUpdateDialogShipment(shipments.length > 0 ? shipments : null)
       }
     } catch (error) {
       console.error('[PipelineDashboard] Error fetching opportunity shipment:', error)
@@ -369,33 +371,37 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     if (!updateDialog.opportunity) return
     const opp = updateDialog.opportunity
 
-    // Store shipment data in sessionStorage for ticket form to read
-    if (updateDialogShipment) {
-      console.log('[PipelineDashboard] Storing shipment for ticket:', updateDialogShipment)
+    // Store shipment data in sessionStorage for ticket form to read (supports multi-shipment)
+    if (updateDialogShipment && Array.isArray(updateDialogShipment) && updateDialogShipment.length > 0) {
+      console.log('[PipelineDashboard] Storing shipments for ticket:', updateDialogShipment.length, 'shipment(s)')
+      // Store full shipments array for multi-shipment support
+      sessionStorage.setItem('prefill_ticket_shipments', JSON.stringify(updateDialogShipment))
+      // Also store first shipment in legacy format for backward compatibility
+      const firstShipment = updateDialogShipment[0]
       sessionStorage.setItem('prefill_ticket_shipment', JSON.stringify({
-        service_type_code: updateDialogShipment.service_type_code,
-        department: updateDialogShipment.department,
-        fleet_type: updateDialogShipment.fleet_type,
-        fleet_quantity: updateDialogShipment.fleet_quantity,
-        incoterm: updateDialogShipment.incoterm,
-        cargo_category: updateDialogShipment.cargo_category,
-        cargo_description: updateDialogShipment.cargo_description,
-        origin_address: updateDialogShipment.origin_address,
-        origin_city: updateDialogShipment.origin_city,
-        origin_country: updateDialogShipment.origin_country,
-        destination_address: updateDialogShipment.destination_address,
-        destination_city: updateDialogShipment.destination_city,
-        destination_country: updateDialogShipment.destination_country,
-        quantity: updateDialogShipment.quantity,
-        unit_of_measure: updateDialogShipment.unit_of_measure,
-        weight_per_unit_kg: updateDialogShipment.weight_per_unit_kg,
-        weight_total_kg: updateDialogShipment.weight_total_kg,
-        length_cm: updateDialogShipment.length_cm,
-        width_cm: updateDialogShipment.width_cm,
-        height_cm: updateDialogShipment.height_cm,
-        volume_total_cbm: updateDialogShipment.volume_total_cbm,
-        scope_of_work: updateDialogShipment.scope_of_work,
-        additional_services: updateDialogShipment.additional_services,
+        service_type_code: firstShipment.service_type_code,
+        department: firstShipment.department,
+        fleet_type: firstShipment.fleet_type,
+        fleet_quantity: firstShipment.fleet_quantity,
+        incoterm: firstShipment.incoterm,
+        cargo_category: firstShipment.cargo_category,
+        cargo_description: firstShipment.cargo_description,
+        origin_address: firstShipment.origin_address,
+        origin_city: firstShipment.origin_city,
+        origin_country: firstShipment.origin_country,
+        destination_address: firstShipment.destination_address,
+        destination_city: firstShipment.destination_city,
+        destination_country: firstShipment.destination_country,
+        quantity: firstShipment.quantity,
+        unit_of_measure: firstShipment.unit_of_measure,
+        weight_per_unit_kg: firstShipment.weight_per_unit_kg,
+        weight_total_kg: firstShipment.weight_total_kg,
+        length_cm: firstShipment.length_cm,
+        width_cm: firstShipment.width_cm,
+        height_cm: firstShipment.height_cm,
+        volume_total_cbm: firstShipment.volume_total_cbm,
+        scope_of_work: firstShipment.scope_of_work,
+        additional_services: firstShipment.additional_services,
       }))
     }
 
@@ -424,6 +430,12 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
 
     setCreatingQuotation(true)
     try {
+      // Get first shipment for backward compatibility, plus full array for multi-shipment
+      const firstShipment = Array.isArray(updateDialogShipment) && updateDialogShipment.length > 0
+        ? updateDialogShipment[0]
+        : updateDialogShipment
+      const allShipments = Array.isArray(updateDialogShipment) ? updateDialogShipment : (updateDialogShipment ? [updateDialogShipment] : [])
+
       const response = await fetch('/api/ticketing/customer-quotations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -433,27 +445,29 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
           source_type: 'opportunity',
           customer_name: opp.account_name || opp.name || '',
           customer_company: opp.account_name,
-          // Shipment details from linked lead
-          service_type: updateDialogShipment?.service_type_code,
-          department: updateDialogShipment?.department,
-          fleet_type: updateDialogShipment?.fleet_type,
-          fleet_quantity: updateDialogShipment?.fleet_quantity,
-          incoterm: updateDialogShipment?.incoterm,
-          commodity: updateDialogShipment?.cargo_category,
-          cargo_description: updateDialogShipment?.cargo_description,
-          cargo_weight: updateDialogShipment?.weight_total_kg,
+          // Shipment details from first shipment (backward compatibility)
+          service_type: firstShipment?.service_type_code,
+          department: firstShipment?.department,
+          fleet_type: firstShipment?.fleet_type,
+          fleet_quantity: firstShipment?.fleet_quantity,
+          incoterm: firstShipment?.incoterm,
+          commodity: firstShipment?.cargo_category,
+          cargo_description: firstShipment?.cargo_description,
+          cargo_weight: firstShipment?.weight_total_kg,
           cargo_weight_unit: 'kg',
-          cargo_volume: updateDialogShipment?.volume_total_cbm,
+          cargo_volume: firstShipment?.volume_total_cbm,
           cargo_volume_unit: 'cbm',
-          cargo_quantity: updateDialogShipment?.quantity,
-          cargo_quantity_unit: updateDialogShipment?.unit_of_measure,
-          origin_address: updateDialogShipment?.origin_address,
-          origin_city: updateDialogShipment?.origin_city,
-          origin_country: updateDialogShipment?.origin_country,
-          destination_address: updateDialogShipment?.destination_address,
-          destination_city: updateDialogShipment?.destination_city,
-          destination_country: updateDialogShipment?.destination_country,
-          scope_of_work: updateDialogShipment?.scope_of_work,
+          cargo_quantity: firstShipment?.quantity,
+          cargo_quantity_unit: firstShipment?.unit_of_measure,
+          origin_address: firstShipment?.origin_address,
+          origin_city: firstShipment?.origin_city,
+          origin_country: firstShipment?.origin_country,
+          destination_address: firstShipment?.destination_address,
+          destination_city: firstShipment?.destination_city,
+          destination_country: firstShipment?.destination_country,
+          scope_of_work: firstShipment?.scope_of_work,
+          // Full shipments array for multi-shipment support
+          shipments: allShipments,
         }),
       })
 

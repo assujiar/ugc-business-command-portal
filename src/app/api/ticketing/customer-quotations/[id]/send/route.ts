@@ -62,9 +62,27 @@ const generateWhatsAppText = (quotation: any, profile: ProfileData, validationUr
   const customerName = quotation.customer_name || 'Bapak/Ibu'
   const companyName = quotation.customer_company || ''
 
-  // Build route info
+  // Parse multi-shipment data
+  let shipments: any[] = []
+  if (quotation.shipments) {
+    try {
+      shipments = typeof quotation.shipments === 'string'
+        ? JSON.parse(quotation.shipments)
+        : quotation.shipments
+    } catch {
+      shipments = []
+    }
+  }
+  const hasMultipleShipments = Array.isArray(shipments) && shipments.length > 1
+
+  // Build route info (supports multi-shipment)
   let routeInfo = ''
-  if (quotation.origin_city && quotation.destination_city) {
+  if (hasMultipleShipments) {
+    // Multiple shipments - list all routes
+    routeInfo = shipments.map((s: any, idx: number) =>
+      `${idx + 1}. ${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`
+    ).join('\n')
+  } else if (quotation.origin_city && quotation.destination_city) {
     routeInfo = `${quotation.origin_city} - ${quotation.destination_city}`
   }
 
@@ -86,6 +104,11 @@ const generateWhatsAppText = (quotation: any, profile: ProfileData, validationUr
     ? `*${companyName}*\nU.p ${customerName}`
     : `Yth. ${customerName}`
 
+  // Build route section for message
+  const routeSection = hasMultipleShipments
+    ? `Rute (${shipments.length} shipment):\n${routeInfo}\n`
+    : (routeInfo ? `Rute: ${routeInfo}\n` : '')
+
   // Build message with clean formatting
   let text = `${greeting},
 
@@ -96,7 +119,7 @@ Terima kasih atas kepercayaan Anda kepada *${UGC_INFO.shortName}*.
 Berikut penawaran harga kami:
 
 *QUOTATION ${quotation.quotation_number}*
-${routeInfo ? `Rute: ${routeInfo}\n` : ''}${quotation.service_type ? `Layanan: ${quotation.service_type}\n` : ''}${cargoSummary ? `Cargo: ${cargoSummary}\n` : ''}
+${routeSection}${quotation.service_type ? `Layanan: ${quotation.service_type}\n` : ''}${cargoSummary ? `Cargo: ${cargoSummary}\n` : ''}
 *Total: ${formatCurrency(quotation.total_selling_rate, quotation.currency)}*
 Berlaku s/d ${formatDate(quotation.valid_until)}
 
@@ -121,9 +144,24 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
   const customerName = quotation.customer_name || 'Bapak/Ibu'
   const companyName = quotation.customer_company || ''
 
-  // Build route display
+  // Parse multi-shipment data
+  let shipments: any[] = []
+  if (quotation.shipments) {
+    try {
+      shipments = typeof quotation.shipments === 'string'
+        ? JSON.parse(quotation.shipments)
+        : quotation.shipments
+    } catch {
+      shipments = []
+    }
+  }
+  const hasMultipleShipments = Array.isArray(shipments) && shipments.length > 1
+
+  // Build route display (supports multi-shipment)
   let routeDisplay = ''
-  if (quotation.origin_city && quotation.destination_city) {
+  if (hasMultipleShipments) {
+    routeDisplay = `${shipments.length} Shipments`
+  } else if (quotation.origin_city && quotation.destination_city) {
     routeDisplay = `${quotation.origin_city} → ${quotation.destination_city}`
   }
 
@@ -289,8 +327,24 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
                     Dengan senang hati kami sampaikan penawaran harga${routeDisplay ? ` untuk pengiriman rute <strong style="color: #1e293b;">${routeDisplay}</strong>` : ''} sebagai berikut:
                   </p>
 
-                  <!-- Route & Fleet Cards -->
-                  ${(routeDisplay || quotation.fleet_type) ? `
+                  <!-- Route & Fleet Cards (supports multi-shipment) -->
+                  ${hasMultipleShipments ? `
+                  <!-- Multi-shipment routes -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fef9c3" style="border-radius: 12px; border-left: 4px solid #eab308; margin-bottom: 24px;">
+                    <tr>
+                      <td style="padding: 18px 20px;">
+                        <p style="margin: 0 0 12px; color: #a16207; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Rute Pengiriman (${shipments.length} Shipment)</p>
+                        ${shipments.map((s: any, idx: number) => `
+                          <p style="margin: ${idx > 0 ? '8px' : '0'} 0 0; color: #713f12; font-size: 14px; font-family: 'Segoe UI', Arial, sans-serif;">
+                            <strong style="color: #ff4600;">${idx + 1}.</strong> ${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}
+                            ${s.cargo_description ? `<span style="color: #a16207; font-size: 12px;"> (${s.cargo_description})</span>` : ''}
+                          </p>
+                        `).join('')}
+                      </td>
+                    </tr>
+                  </table>
+                  ` : (routeDisplay || quotation.fleet_type) ? `
+                  <!-- Single shipment route -->
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
                     <tr>
                       ${routeDisplay ? `
@@ -532,9 +586,35 @@ const generateEmailPlainText = (quotation: any, profile: ProfileData, validation
   const customerName = quotation.customer_name || 'Bapak/Ibu'
   const companyName = quotation.customer_company || ''
 
+  // Parse multi-shipment data
+  let shipments: any[] = []
+  if (quotation.shipments) {
+    try {
+      shipments = typeof quotation.shipments === 'string'
+        ? JSON.parse(quotation.shipments)
+        : quotation.shipments
+    } catch {
+      shipments = []
+    }
+  }
+  const hasMultipleShipments = Array.isArray(shipments) && shipments.length > 1
+
+  // Build route info (supports multi-shipment)
   let routeInfo = ''
-  if (quotation.origin_city && quotation.destination_city) {
+  if (hasMultipleShipments) {
+    routeInfo = ` untuk ${shipments.length} shipment`
+  } else if (quotation.origin_city && quotation.destination_city) {
     routeInfo = ` dari ${quotation.origin_city} ke ${quotation.destination_city}`
+  }
+
+  // Build shipment routes section for multi-shipment
+  let shipmentRoutes = ''
+  if (hasMultipleShipments) {
+    shipmentRoutes = '\n\nRUTE PENGIRIMAN:'
+    shipments.forEach((s: any, idx: number) => {
+      shipmentRoutes += `\n${idx + 1}. ${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`
+      if (s.cargo_description) shipmentRoutes += ` (${s.cargo_description})`
+    })
   }
 
   // Build cargo details
@@ -564,7 +644,7 @@ Terima kasih atas kepercayaan Anda kepada ${UGC_INFO.shortName}. Dengan senang h
 No. Quotation: ${quotation.quotation_number}
 Tanggal: ${formatDate(quotation.created_at)}
 ${quotation.ticket?.ticket_code ? `Reference: ${quotation.ticket.ticket_code}` : ''}
-
+${shipmentRoutes}
 TOTAL PENAWARAN: ${formatCurrency(quotation.total_selling_rate, quotation.currency)}
 ${cargoDetails}
 

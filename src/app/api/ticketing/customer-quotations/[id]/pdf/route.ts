@@ -66,6 +66,19 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
   const isBreakdown = quotation.rate_structure === 'breakdown'
   const status = STATUS_CONFIG[quotation.status] || STATUS_CONFIG.draft
 
+  // Parse multi-shipment data from JSONB field
+  let shipments: any[] = []
+  if (quotation.shipments) {
+    try {
+      shipments = typeof quotation.shipments === 'string'
+        ? JSON.parse(quotation.shipments)
+        : quotation.shipments
+    } catch {
+      shipments = []
+    }
+  }
+  const hasMultipleShipments = Array.isArray(shipments) && shipments.length > 1
+
   let rateHTML = ''
   if (isBreakdown && items.length > 0) {
     rateHTML = `
@@ -256,6 +269,32 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         </div>
       </div>
 
+      ${hasMultipleShipments ? `
+      <div class="keep" style="margin-bottom:10px">
+        <div class="sec">Shipments (${shipments.length})</div>
+        ${shipments.map((s: any, idx: number) => `
+          <div class="route" style="margin-bottom:${idx < shipments.length - 1 ? '6px' : '0'}">
+            <div style="font-size:7px;font-weight:600;color:#ff4600;margin-right:8px">#${idx + 1}</div>
+            <div class="pt">
+              <div class="city">${s.origin_city || 'Origin'}</div>
+              <div class="ctry">${s.origin_country || ''}${s.origin_port ? ' • ' + s.origin_port : ''}</div>
+            </div>
+            <div class="arr">→</div>
+            <div class="pt">
+              <div class="city">${s.destination_city || 'Destination'}</div>
+              <div class="ctry">${s.destination_country || ''}${s.destination_port ? ' • ' + s.destination_port : ''}</div>
+            </div>
+            ${s.cargo_description || s.weight_total_kg || s.volume_total_cbm ? `
+              <div style="margin-left:auto;font-size:6px;color:#666;text-align:right">
+                ${s.cargo_description ? `<div>${s.cargo_description}</div>` : ''}
+                ${s.weight_total_kg ? `<span>${s.weight_total_kg} kg</span>` : ''}
+                ${s.volume_total_cbm ? `<span> | ${s.volume_total_cbm} cbm</span>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+      ` : `
       <div class="route keep">
         <div class="pt">
           <div class="city">${quotation.origin_city || 'Origin'}</div>
@@ -267,6 +306,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           <div class="ctry">${quotation.destination_country || ''}${quotation.destination_port ? ' • ' + quotation.destination_port : ''}</div>
         </div>
       </div>
+      `}
 
       ${(quotation.cargo_weight || quotation.cargo_volume || quotation.commodity || quotation.estimated_leadtime) ? `
       <div class="keep">

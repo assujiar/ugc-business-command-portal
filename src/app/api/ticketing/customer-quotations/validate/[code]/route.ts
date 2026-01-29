@@ -57,6 +57,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         currency,
         rate_structure,
         scope_of_work,
+        shipments,
+        shipment_count,
         terms_includes,
         terms_excludes,
         terms_notes,
@@ -106,6 +108,33 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         customer_company: quotation.customer_company,
         service_type: quotation.service_type,
         incoterm: quotation.incoterm,
+        // Parse shipments array from JSONB
+        shipments: (() => {
+          if (!quotation.shipments) return null
+          try {
+            const parsed = typeof quotation.shipments === 'string'
+              ? JSON.parse(quotation.shipments)
+              : quotation.shipments
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              return parsed.map((s: any, idx: number) => ({
+                index: idx + 1,
+                origin_city: s.origin_city,
+                origin_country: s.origin_country,
+                destination_city: s.destination_city,
+                destination_country: s.destination_country,
+                cargo_description: s.cargo_description,
+                weight: s.weight_total_kg,
+                volume: s.volume_total_cbm,
+                route: `${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`,
+              }))
+            }
+            return null
+          } catch {
+            return null
+          }
+        })(),
+        shipment_count: quotation.shipment_count || 1,
+        // Legacy single route (for backward compatibility)
         route: quotation.origin_city && quotation.destination_city
           ? `${quotation.origin_city}, ${quotation.origin_country || ''} → ${quotation.destination_city}, ${quotation.destination_country || ''}`
           : null,

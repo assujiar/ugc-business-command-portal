@@ -255,6 +255,11 @@ export async function POST(request: NextRequest) {
 
     const items = body.items || []
 
+    // Multi-shipment support: shipments array
+    // The 'shipments' field is a JSONB array stored directly in customer_quotations table
+    const shipments = Array.isArray(body.shipments) ? body.shipments : []
+    const shipment_count = shipments.length > 0 ? shipments.length : 1
+
     // Validation - use 422 for validation errors
     if (!customer_name) {
       return NextResponse.json(
@@ -415,6 +420,8 @@ export async function POST(request: NextRequest) {
         terms_notes,
         validity_days,
         valid_until: valid_until_str,
+        shipments: shipments.length > 0 ? JSON.stringify(shipments) : '[]',
+        shipment_count,
         created_by: user.id,
       })
       .select('id, quotation_number')

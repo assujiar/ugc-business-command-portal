@@ -439,45 +439,71 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
   }, [searchParams, selectedAccountId])
 
   // Check sessionStorage for prefilled shipment data from lead/pipeline
+  // Supports both single shipment (prefill_ticket_shipment) and multi-shipment (prefill_ticket_shipments)
   useEffect(() => {
-    const prefillData = sessionStorage.getItem('prefill_ticket_shipment')
-    if (prefillData) {
+    // First try multi-shipment data
+    const multiShipmentData = sessionStorage.getItem('prefill_ticket_shipments')
+    const singleShipmentData = sessionStorage.getItem('prefill_ticket_shipment')
+
+    // Use first shipment from array or single shipment
+    let shipmentToUse: any = null
+
+    if (multiShipmentData) {
       try {
-        const data = JSON.parse(prefillData)
-        setShipmentData(prev => ({
-          ...prev,
-          service_type_code: data.service_type_code || '',
-          fleet_type: data.fleet_type || '',
-          fleet_quantity: data.fleet_quantity || 1,
-          incoterm: data.incoterm || '',
-          cargo_category: data.cargo_category || 'General Cargo',
-          cargo_description: data.cargo_description || '',
-          origin_address: data.origin_address || '',
-          origin_city: data.origin_city || '',
-          origin_country: data.origin_country || 'Indonesia',
-          destination_address: data.destination_address || '',
-          destination_city: data.destination_city || '',
-          destination_country: data.destination_country || 'Indonesia',
-          quantity: data.quantity || 1,
-          unit_of_measure: data.unit_of_measure || 'Boxes',
-          weight_per_unit_kg: data.weight_per_unit_kg || null,
-          weight_total_kg: data.weight_total_kg || null,
-          length_cm: data.length_cm || null,
-          width_cm: data.width_cm || null,
-          height_cm: data.height_cm || null,
-          volume_total_cbm: data.volume_total_cbm || null,
-          scope_of_work: data.scope_of_work || '',
-          additional_services: data.additional_services || [],
-        }))
-        // Auto-switch to RFQ type if shipment data is present
-        if (data.service_type_code) {
-          setTicketType('RFQ')
-          setValue('ticket_type', 'RFQ')
+        const shipments = JSON.parse(multiShipmentData)
+        if (Array.isArray(shipments) && shipments.length > 0) {
+          shipmentToUse = shipments[0] // Use first shipment for the form
+          // TODO: In future, could add multi-shipment UI to ticket form
         }
-        // Clear the sessionStorage after reading
+        sessionStorage.removeItem('prefill_ticket_shipments')
+      } catch (err) {
+        console.error('Error parsing multi-shipment data:', err)
+      }
+    }
+
+    if (!shipmentToUse && singleShipmentData) {
+      try {
+        shipmentToUse = JSON.parse(singleShipmentData)
         sessionStorage.removeItem('prefill_ticket_shipment')
       } catch (err) {
-        console.error('Error parsing prefill shipment data:', err)
+        console.error('Error parsing single shipment data:', err)
+      }
+    }
+
+    if (shipmentToUse) {
+      const data = shipmentToUse
+      setShipmentData(prev => ({
+        ...prev,
+        service_type_code: data.service_type_code || '',
+        fleet_type: data.fleet_type || '',
+        fleet_quantity: data.fleet_quantity || 1,
+        incoterm: data.incoterm || '',
+        cargo_category: data.cargo_category || 'General Cargo',
+        cargo_description: data.cargo_description || '',
+        origin_address: data.origin_address || '',
+        origin_city: data.origin_city || '',
+        origin_country: data.origin_country || 'Indonesia',
+        destination_address: data.destination_address || '',
+        destination_city: data.destination_city || '',
+        destination_country: data.destination_country || 'Indonesia',
+        quantity: data.quantity || 1,
+        unit_of_measure: data.unit_of_measure || 'Boxes',
+        weight_per_unit_kg: data.weight_per_unit_kg || null,
+        weight_total_kg: data.weight_total_kg || null,
+        length_cm: data.length_cm || null,
+        width_cm: data.width_cm || null,
+        height_cm: data.height_cm || null,
+        volume_total_cbm: data.volume_total_cbm || null,
+        scope_of_work: data.scope_of_work || '',
+        additional_services: data.additional_services || [],
+        estimated_leadtime: data.estimated_leadtime || '',
+        estimated_cargo_value: data.estimated_cargo_value || null,
+        cargo_value_currency: data.cargo_value_currency || 'IDR',
+      }))
+      // Auto-switch to RFQ type if shipment data is present
+      if (data.service_type_code) {
+        setTicketType('RFQ')
+        setValue('ticket_type', 'RFQ')
       }
     }
   }, [])
