@@ -289,20 +289,27 @@ export async function POST(request: NextRequest) {
           console.error('Error updating account status:', accountUpdateError)
         }
       } else if (newStage === 'Closed Lost') {
-        // Pipeline lost - account becomes failed_account
-        newAccountStatus = 'failed_account'
+        // Pipeline lost - only mark as failed_account if currently calon_account
+        // Don't downgrade existing customers (new_account, active_account) to failed
+        const currentAccountStatus = opportunity.accounts?.account_status
 
-        const { error: accountUpdateError } = await (adminClient as any)
-          .from('accounts')
-          .update({
-            account_status: newAccountStatus,
-            updated_at: updateTime.toISOString(),
-          })
-          .eq('account_id', opportunity.account_id)
+        if (currentAccountStatus === 'calon_account') {
+          newAccountStatus = 'failed_account'
 
-        if (accountUpdateError) {
-          console.error('Error updating account status:', accountUpdateError)
+          const { error: accountUpdateError } = await (adminClient as any)
+            .from('accounts')
+            .update({
+              account_status: newAccountStatus,
+              updated_at: updateTime.toISOString(),
+            })
+            .eq('account_id', opportunity.account_id)
+
+          if (accountUpdateError) {
+            console.error('Error updating account status:', accountUpdateError)
+          }
         }
+        // If account is already new_account, active_account, or churned_account,
+        // don't change status - this is a lost opportunity on an existing customer
       }
     }
 
