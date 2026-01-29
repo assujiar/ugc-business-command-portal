@@ -231,7 +231,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create shipment details if provided (save even without service_type_code)
+    // Create shipment details if provided (supports both single object and array for multi-shipment)
     if (shipment_details) {
       // Map department from constants to database enum values
       const mapDepartmentToEnum = (dept: string | null): string | null => {
@@ -244,41 +244,51 @@ export async function POST(request: NextRequest) {
         return mapping[dept] || dept
       }
 
-      const shipmentInsertData = {
-        lead_id: leadResult.lead_id,
-        service_type_code: shipment_details.service_type_code || null,
-        department: mapDepartmentToEnum(shipment_details.department),
-        fleet_type: shipment_details.fleet_type || null,
-        fleet_quantity: shipment_details.fleet_quantity || 1,
-        incoterm: shipment_details.incoterm || null,
-        cargo_category: shipment_details.cargo_category || 'General Cargo',
-        cargo_description: shipment_details.cargo_description || null,
-        origin_address: shipment_details.origin_address || null,
-        origin_city: shipment_details.origin_city || null,
-        origin_country: shipment_details.origin_country || 'Indonesia',
-        destination_address: shipment_details.destination_address || null,
-        destination_city: shipment_details.destination_city || null,
-        destination_country: shipment_details.destination_country || 'Indonesia',
-        quantity: shipment_details.quantity || 1,
-        unit_of_measure: shipment_details.unit_of_measure || 'Boxes',
-        weight_per_unit_kg: shipment_details.weight_per_unit_kg || null,
-        weight_total_kg: shipment_details.weight_total_kg || null,
-        length_cm: shipment_details.length_cm || null,
-        width_cm: shipment_details.width_cm || null,
-        height_cm: shipment_details.height_cm || null,
-        volume_total_cbm: shipment_details.volume_total_cbm || null,
-        scope_of_work: shipment_details.scope_of_work || null,
-        additional_services: shipment_details.additional_services || [],
-        created_by: user.id,
-      }
+      // Normalize to array (support both single object and array)
+      const shipmentsArray = Array.isArray(shipment_details) ? shipment_details : [shipment_details]
 
-      const { error: shipmentError } = await (supabase as any)
-        .from('shipment_details' as any)
-        .insert(shipmentInsertData)
+      // Insert each shipment with proper order
+      for (let i = 0; i < shipmentsArray.length; i++) {
+        const shipment = shipmentsArray[i]
+        const shipmentInsertData = {
+          lead_id: leadResult.lead_id,
+          shipment_order: shipment.shipment_order || i + 1,
+          shipment_label: shipment.shipment_label || `Shipment ${i + 1}`,
+          service_type_code: shipment.service_type_code || null,
+          department: mapDepartmentToEnum(shipment.department),
+          fleet_type: shipment.fleet_type || null,
+          fleet_quantity: shipment.fleet_quantity || 1,
+          incoterm: shipment.incoterm || null,
+          cargo_category: shipment.cargo_category || 'General Cargo',
+          cargo_description: shipment.cargo_description || null,
+          origin_address: shipment.origin_address || null,
+          origin_city: shipment.origin_city || null,
+          origin_country: shipment.origin_country || 'Indonesia',
+          destination_address: shipment.destination_address || null,
+          destination_city: shipment.destination_city || null,
+          destination_country: shipment.destination_country || 'Indonesia',
+          quantity: shipment.quantity || 1,
+          unit_of_measure: shipment.unit_of_measure || 'Boxes',
+          weight_per_unit_kg: shipment.weight_per_unit_kg || null,
+          weight_total_kg: shipment.weight_total_kg || null,
+          length_cm: shipment.length_cm || null,
+          width_cm: shipment.width_cm || null,
+          height_cm: shipment.height_cm || null,
+          volume_total_cbm: shipment.volume_total_cbm || null,
+          scope_of_work: shipment.scope_of_work || null,
+          additional_services: shipment.additional_services || [],
+          created_by: user.id,
+        }
 
-      if (shipmentError) {
-        console.error('Error creating shipment details:', shipmentError)
+        const { error: shipmentError } = await (supabase as any)
+          .from('shipment_details' as any)
+          .insert(shipmentInsertData)
+
+        if (shipmentError) {
+          console.error(`Error creating shipment ${i + 1}:`, shipmentError)
+        }
       }
+      console.log(`[LeadsAPI] Created ${shipmentsArray.length} shipment(s) for lead ${leadResult.lead_id}`)
     }
 
     return NextResponse.json({ data: leadResult }, { status: 201 })

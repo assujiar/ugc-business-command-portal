@@ -38,18 +38,23 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
 
-    // Fetch shipment details for this lead
-    const { data: shipmentDetails } = await (supabase as any)
+    // Fetch all shipment details for this lead (supports multi-shipment)
+    const { data: shipmentDetailsList } = await (supabase as any)
       .from('shipment_details')
       .select('*')
       .eq('lead_id', id)
-      .single()
+      .order('shipment_order', { ascending: true })
 
-    // Return lead with shipment details
+    // Return lead with shipment details (array for multi-shipment, single object for backward compatibility)
+    const shipments = shipmentDetailsList || []
     return NextResponse.json({
       data: {
         ...data,
-        shipment_details: shipmentDetails || null
+        // Keep shipment_details as single object for backward compatibility (first shipment)
+        shipment_details: shipments.length > 0 ? shipments[0] : null,
+        // Add shipments array for multi-shipment support
+        shipments: shipments,
+        shipment_count: shipments.length,
       }
     })
   } catch (error) {
