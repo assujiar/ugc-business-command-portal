@@ -959,11 +959,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       data: {
         ...responseData,
         is_resend: atomicResult.is_resend || isResend,
+        sync_result: {
+          quotation_status: atomicResult.quotation_status,
+          opportunity_stage: atomicResult.new_stage,
+          new_stage: atomicResult.new_stage,
+          old_stage: atomicResult.old_stage,
+          ticket_status: atomicResult.ticket_status,
+          opportunity_id: atomicResult.opportunity_id,
+          pipeline_updates_created: atomicResult.pipeline_updates_created,
+          activities_created: atomicResult.activities_created,
+        },
       },
       sync_result: {
         quotation_status: atomicResult.quotation_status,
         opportunity_stage: atomicResult.new_stage,
+        new_stage: atomicResult.new_stage,
+        old_stage: atomicResult.old_stage,
         ticket_status: atomicResult.ticket_status,
+        opportunity_id: atomicResult.opportunity_id,
+        pipeline_updates_created: atomicResult.pipeline_updates_created,
+        activities_created: atomicResult.activities_created,
       },
       message: atomicResult.is_resend || isResend
         ? `Quotation resent via ${method}`
