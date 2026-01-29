@@ -110,44 +110,59 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create shipment details if provided
-    if (shipment_details && shipment_details.service_type_code) {
-      const shipmentInsertData = {
-        lead_id: account.lead_id || null,
-        opportunity_id: opportunity.opportunity_id,
-        service_type_code: shipment_details.service_type_code || null,
-        department: shipment_details.department || null,
-        fleet_type: shipment_details.fleet_type || null,
-        fleet_quantity: shipment_details.fleet_quantity || 1,
-        incoterm: shipment_details.incoterm || null,
-        cargo_category: shipment_details.cargo_category || 'General Cargo',
-        cargo_description: shipment_details.cargo_description || null,
-        origin_address: shipment_details.origin_address || null,
-        origin_city: shipment_details.origin_city || null,
-        origin_country: shipment_details.origin_country || 'Indonesia',
-        destination_address: shipment_details.destination_address || null,
-        destination_city: shipment_details.destination_city || null,
-        destination_country: shipment_details.destination_country || 'Indonesia',
-        quantity: shipment_details.quantity || 1,
-        unit_of_measure: shipment_details.unit_of_measure || 'Boxes',
-        weight_per_unit_kg: shipment_details.weight_per_unit_kg || null,
-        weight_total_kg: shipment_details.weight_total_kg || null,
-        length_cm: shipment_details.length_cm || null,
-        width_cm: shipment_details.width_cm || null,
-        height_cm: shipment_details.height_cm || null,
-        volume_total_cbm: shipment_details.volume_total_cbm || null,
-        scope_of_work: shipment_details.scope_of_work || null,
-        additional_services: shipment_details.additional_services || [],
-        created_by: user.id,
-      }
+    // Create shipment details if provided (supports both single object and array)
+    if (shipment_details) {
+      // Normalize to array: support both single object and array of shipments
+      const shipmentsArray = Array.isArray(shipment_details) ? shipment_details : [shipment_details]
 
-      const { error: shipmentError } = await (adminClient as any)
-        .from('shipment_details')
-        .insert(shipmentInsertData)
+      // Filter out empty shipments (no service_type_code)
+      const validShipments = shipmentsArray.filter(s => s && s.service_type_code)
 
-      if (shipmentError) {
-        console.error('Error creating shipment details:', shipmentError)
-        // Don't fail the whole request, just log the error
+      // Insert each shipment with proper order
+      for (let i = 0; i < validShipments.length; i++) {
+        const shipment = validShipments[i]
+        const shipmentInsertData = {
+          lead_id: account.lead_id || null,
+          opportunity_id: opportunity.opportunity_id,
+          shipment_order: shipment.shipment_order || i + 1,
+          shipment_label: shipment.shipment_label || `Shipment ${i + 1}`,
+          service_type_code: shipment.service_type_code || null,
+          department: shipment.department || null,
+          fleet_type: shipment.fleet_type || null,
+          fleet_quantity: shipment.fleet_quantity || 1,
+          incoterm: shipment.incoterm || null,
+          cargo_category: shipment.cargo_category || 'General Cargo',
+          cargo_description: shipment.cargo_description || null,
+          origin_address: shipment.origin_address || null,
+          origin_city: shipment.origin_city || null,
+          origin_country: shipment.origin_country || 'Indonesia',
+          destination_address: shipment.destination_address || null,
+          destination_city: shipment.destination_city || null,
+          destination_country: shipment.destination_country || 'Indonesia',
+          quantity: shipment.quantity || 1,
+          unit_of_measure: shipment.unit_of_measure || 'Boxes',
+          weight_per_unit_kg: shipment.weight_per_unit_kg || null,
+          weight_total_kg: shipment.weight_total_kg || null,
+          length_cm: shipment.length_cm || null,
+          width_cm: shipment.width_cm || null,
+          height_cm: shipment.height_cm || null,
+          volume_total_cbm: shipment.volume_total_cbm || null,
+          scope_of_work: shipment.scope_of_work || null,
+          additional_services: shipment.additional_services || [],
+          estimated_leadtime: shipment.estimated_leadtime || null,
+          estimated_cargo_value: shipment.estimated_cargo_value || null,
+          cargo_value_currency: shipment.cargo_value_currency || 'IDR',
+          created_by: user.id,
+        }
+
+        const { error: shipmentError } = await (adminClient as any)
+          .from('shipment_details')
+          .insert(shipmentInsertData)
+
+        if (shipmentError) {
+          console.error(`Error creating shipment details #${i + 1}:`, shipmentError)
+          // Don't fail the whole request, just log the error
+        }
       }
     }
 
