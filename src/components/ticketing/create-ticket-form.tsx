@@ -269,6 +269,9 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     cargo_value_currency: 'IDR',
   })
 
+  // All shipments from prefill (for multi-shipment display)
+  const [allPrefillShipments, setAllPrefillShipments] = useState<any[]>([])
+
   const supabase = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -455,7 +458,9 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
         const shipments = JSON.parse(multiShipmentData)
         if (Array.isArray(shipments) && shipments.length > 0) {
           shipmentToUse = shipments[0] // Use first shipment for the form
-          // TODO: In future, could add multi-shipment UI to ticket form
+          // Store all shipments for display
+          setAllPrefillShipments(shipments)
+          console.log('[CreateTicket] Loaded', shipments.length, 'shipments from sessionStorage')
         }
         sessionStorage.removeItem('prefill_ticket_shipments')
       } catch (err) {
@@ -1085,6 +1090,64 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
         </CardContent>
       </Card>
 
+      {/* Multi-Shipment Summary - Show all shipments from lead/opportunity */}
+      {ticketType === 'RFQ' && allPrefillShipments.length > 1 && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-blue-700">
+              <Package className="h-5 w-5" />
+              Multi-Shipment RFQ
+              <Badge variant="secondary" className="ml-auto">
+                {allPrefillShipments.length} shipments
+              </Badge>
+            </CardTitle>
+            <CardDescription className="text-blue-600">
+              This RFQ has {allPrefillShipments.length} shipments from the lead/opportunity.
+              The form below is prefilled with the first shipment. You can create separate tickets for each shipment or modify as needed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {allPrefillShipments.map((shipment, index) => (
+                <div
+                  key={index}
+                  className={`p-3 rounded-md border ${index === 0 ? 'bg-white border-blue-300' : 'bg-blue-50/30 border-blue-100'}`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant={index === 0 ? 'default' : 'outline'} className="text-xs">
+                      {shipment.shipment_label || `Shipment ${shipment.shipment_order || index + 1}`}
+                    </Badge>
+                    {index === 0 && (
+                      <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
+                        Form prefilled
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Service:</span>{' '}
+                      <span className="font-medium">{shipment.service_type_code || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Fleet:</span>{' '}
+                      <span className="font-medium">{shipment.fleet_type || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Route:</span>{' '}
+                      <span className="font-medium">{shipment.origin_city || '-'} → {shipment.destination_city || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Weight:</span>{' '}
+                      <span className="font-medium">{shipment.weight_total_kg ? `${shipment.weight_total_kg} kg` : '-'}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* RFQ Specific Fields - Same as Create Lead Shipment Details */}
       {ticketType === 'RFQ' && (
         <Card>
@@ -1092,6 +1155,11 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
             <CardTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
               Shipment Details
+              {allPrefillShipments.length > 1 && (
+                <Badge variant="outline" className="ml-2 text-xs">
+                  Editing: {allPrefillShipments[0]?.shipment_label || 'Shipment 1'}
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription>
               Provide details about the shipment for accurate quoting
