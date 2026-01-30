@@ -77,7 +77,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     switch (action) {
       case 'submit_quote':
         // Assignee submits quote to creator
-        // Use rpc_ticket_create_quote which supports rate_structure and items
+        // Use rpc_ticket_create_quote which supports rate_structure, items, and shipment info
         ({ data: result, error } = await (supabase as any).rpc('rpc_ticket_create_quote', {
           p_ticket_id: id,
           p_amount: actionData.amount,
@@ -86,6 +86,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           p_terms: actionData.terms || null,
           p_rate_structure: actionData.rate_structure || 'bundling',
           p_items: actionData.items || [],
+          // Multi-shipment support: include shipment reference
+          p_shipment_detail_id: actionData.shipment_detail_id || null,
+          p_shipment_label: actionData.shipment_label || null,
         }))
         break
 
