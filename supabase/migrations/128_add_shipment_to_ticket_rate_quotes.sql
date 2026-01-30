@@ -3,44 +3,50 @@
 
 -- Add shipment columns to ticket_rate_quotes
 ALTER TABLE public.ticket_rate_quotes
-ADD COLUMN IF NOT EXISTS shipment_detail_id TEXT REFERENCES public.shipment_details(shipment_detail_id),
-ADD COLUMN IF NOT EXISTS shipment_label TEXT;
+ADD COLUMN IF NOT EXISTS shipment_detail_id VARCHAR REFERENCES public.shipment_details(shipment_detail_id),
+ADD COLUMN IF NOT EXISTS shipment_label VARCHAR;
 
 -- Add index for shipment lookups
 CREATE INDEX IF NOT EXISTS idx_ticket_rate_quotes_shipment
 ON public.ticket_rate_quotes(shipment_detail_id)
 WHERE shipment_detail_id IS NOT NULL;
 
+-- Drop any incorrectly typed function overloads that may have been created
+-- (from previous migration attempts with wrong parameter types)
+DROP FUNCTION IF EXISTS public.rpc_ticket_create_quote(TEXT, NUMERIC, TEXT, TIMESTAMP WITH TIME ZONE, TEXT, TEXT, JSONB, TEXT, TEXT);
+
 -- Update the rpc_ticket_create_quote function to accept shipment info
+-- IMPORTANT: Must match existing function signature types (UUID, DECIMAL, VARCHAR, DATE)
 CREATE OR REPLACE FUNCTION public.rpc_ticket_create_quote(
-    p_ticket_id TEXT,
-    p_amount NUMERIC,
-    p_currency TEXT DEFAULT 'IDR',
-    p_valid_until TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    p_ticket_id UUID,
+    p_amount DECIMAL,
+    p_currency VARCHAR DEFAULT 'IDR',
+    p_valid_until DATE DEFAULT NULL,
     p_terms TEXT DEFAULT NULL,
-    p_rate_structure TEXT DEFAULT 'bundling',
-    p_items JSONB DEFAULT '[]'::JSONB,
-    p_shipment_detail_id TEXT DEFAULT NULL,
-    p_shipment_label TEXT DEFAULT NULL
+    p_rate_structure VARCHAR DEFAULT 'bundling',
+    p_items JSONB DEFAULT '[]'::jsonb,
+    p_shipment_detail_id VARCHAR DEFAULT NULL,
+    p_shipment_label VARCHAR DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
 AS $$
 DECLARE
-    v_ticket_code TEXT;
-    v_quote_id TEXT;
-    v_quote_number TEXT;
-    v_next_sequence INTEGER;
-    v_actor_user_id TEXT;
+    v_quote_id UUID;
+    v_quote_number VARCHAR(30);
+    v_ticket_code VARCHAR(20);
+    v_sequence INTEGER;
+    v_actor_user_id UUID;
     v_item JSONB;
-    v_item_id TEXT;
+    i INTEGER;
 BEGIN
-    -- Get actor user
+    -- Get current user
     v_actor_user_id := auth.uid();
-    IF v_actor_user_id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Not authenticated');
+
+    -- Validate user is ops or admin
+    IF NOT public.is_ticketing_admin(v_actor_user_id) AND NOT public.is_ticketing_ops(v_actor_user_id) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Only ops/admin can create quotes');
     END IF;
 
     -- Get ticket code for quote number generation
@@ -54,24 +60,23 @@ BEGIN
 
     -- Get next sequence number for this ticket's quotes
     SELECT COALESCE(MAX(
-        CASE
-            WHEN quote_number ~ '-Q[0-9]+$'
-            THEN SUBSTRING(quote_number FROM '-Q([0-9]+)$')::INTEGER
-            ELSE 0
-        END
-    ), 0) + 1 INTO v_next_sequence
+        CAST(
+            SUBSTRING(quote_number FROM LENGTH(v_ticket_code) + 5) AS INTEGER
+        )
+    ), 0) + 1 INTO v_sequence
     FROM public.ticket_rate_quotes
     WHERE ticket_id = p_ticket_id;
 
-    -- Generate quote number
-    v_quote_number := v_ticket_code || '-Q' || LPAD(v_next_sequence::TEXT, 3, '0');
+    -- Generate quote number: QT-[TICKET_CODE]-XXX
+    v_quote_number := 'QT-' || v_ticket_code || '-' || LPAD(v_sequence::TEXT, 3, '0');
 
-    -- Generate quote ID
-    v_quote_id := 'QUO-' || gen_random_uuid()::TEXT;
+    -- Set default valid_until if not provided (14 days from now)
+    IF p_valid_until IS NULL THEN
+        p_valid_until := CURRENT_DATE + INTERVAL '14 days';
+    END IF;
 
-    -- Insert quote with shipment info
+    -- Insert the quote with status = 'submitted' (not 'draft')
     INSERT INTO public.ticket_rate_quotes (
-        id,
         ticket_id,
         quote_number,
         amount,
@@ -79,32 +84,30 @@ BEGIN
         valid_until,
         terms,
         rate_structure,
-        shipment_detail_id,
-        shipment_label,
+        status,
         created_by,
-        created_at
+        shipment_detail_id,
+        shipment_label
     ) VALUES (
-        v_quote_id,
         p_ticket_id,
         v_quote_number,
         p_amount,
         p_currency,
-        COALESCE(p_valid_until, NOW() + INTERVAL '7 days'),
+        p_valid_until,
         p_terms,
         p_rate_structure,
-        p_shipment_detail_id,
-        p_shipment_label,
+        'submitted',
         v_actor_user_id,
-        NOW()
-    );
+        p_shipment_detail_id,
+        p_shipment_label
+    )
+    RETURNING id INTO v_quote_id;
 
-    -- Insert breakdown items if rate_structure is breakdown
+    -- Insert breakdown items if rate_structure is 'breakdown'
     IF p_rate_structure = 'breakdown' AND jsonb_array_length(p_items) > 0 THEN
-        FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
-        LOOP
-            v_item_id := 'ITEM-' || gen_random_uuid()::TEXT;
+        FOR i IN 0..jsonb_array_length(p_items) - 1 LOOP
+            v_item := p_items->i;
             INSERT INTO public.ticket_rate_quote_items (
-                id,
                 quote_id,
                 component_type,
                 component_name,
@@ -112,61 +115,62 @@ BEGIN
                 cost_amount,
                 quantity,
                 unit,
-                sort_order,
-                created_at
+                sort_order
             ) VALUES (
-                v_item_id,
                 v_quote_id,
                 v_item->>'component_type',
-                COALESCE(v_item->>'component_name', v_item->>'component_type'),
+                v_item->>'component_name',
                 v_item->>'description',
-                COALESCE((v_item->>'cost_amount')::NUMERIC, 0),
-                (v_item->>'quantity')::INTEGER,
+                COALESCE((v_item->>'cost_amount')::DECIMAL, 0),
+                CASE WHEN v_item->>'quantity' IS NOT NULL THEN (v_item->>'quantity')::DECIMAL ELSE NULL END,
                 v_item->>'unit',
-                COALESCE((v_item->>'sort_order')::INTEGER, 0),
-                NOW()
+                i + 1
             );
         END LOOP;
     END IF;
 
-    -- Update ticket status to in_progress if currently open
-    UPDATE public.tickets
-    SET status = 'in_progress',
-        updated_at = NOW()
-    WHERE id = p_ticket_id
-    AND status = 'open';
-
-    -- Record event
+    -- Create event for quote submission
     INSERT INTO public.ticket_events (
-        id,
         ticket_id,
         event_type,
         actor_user_id,
-        old_value,
         new_value,
-        created_at
+        notes
     ) VALUES (
-        'EVT-' || gen_random_uuid()::TEXT,
         p_ticket_id,
         'quote_created',
         v_actor_user_id,
-        NULL,
         jsonb_build_object(
             'quote_id', v_quote_id,
             'quote_number', v_quote_number,
             'amount', p_amount,
             'currency', p_currency,
             'rate_structure', p_rate_structure,
+            'status', 'submitted',
             'shipment_detail_id', p_shipment_detail_id,
             'shipment_label', p_shipment_label
         ),
-        NOW()
+        CASE
+            WHEN p_shipment_label IS NOT NULL THEN 'Operational cost ' || v_quote_number || ' submitted for ' || p_shipment_label
+            ELSE 'Operational cost ' || v_quote_number || ' submitted'
+        END
     );
+
+    -- Update ticket status
+    UPDATE public.tickets
+    SET
+        status = 'need_response',
+        pending_response_from = 'creator',
+        updated_at = NOW()
+    WHERE id = p_ticket_id;
 
     RETURN jsonb_build_object(
         'success', true,
         'quote_id', v_quote_id,
-        'quote_number', v_quote_number
+        'quote_number', v_quote_number,
+        'status', 'submitted',
+        'shipment_detail_id', p_shipment_detail_id,
+        'shipment_label', p_shipment_label
     );
 EXCEPTION
     WHEN OTHERS THEN
@@ -174,8 +178,9 @@ EXCEPTION
 END;
 $$;
 
--- Grant execute permission
-GRANT EXECUTE ON FUNCTION public.rpc_ticket_create_quote(TEXT, NUMERIC, TEXT, TIMESTAMP WITH TIME ZONE, TEXT, TEXT, JSONB, TEXT, TEXT) TO authenticated;
+-- Grant permissions for both old and new function signatures
+GRANT EXECUTE ON FUNCTION public.rpc_ticket_create_quote(UUID, DECIMAL, VARCHAR, DATE, TEXT, VARCHAR, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_ticket_create_quote(UUID, DECIMAL, VARCHAR, DATE, TEXT, VARCHAR, JSONB, VARCHAR, VARCHAR) TO authenticated;
 
 -- Comment
 COMMENT ON COLUMN public.ticket_rate_quotes.shipment_detail_id IS 'Reference to specific shipment this cost is for (multi-shipment support)';
