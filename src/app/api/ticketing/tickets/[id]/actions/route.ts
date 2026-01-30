@@ -77,8 +77,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     switch (action) {
       case 'submit_quote':
         // Assignee submits quote to creator
-        // Use rpc_ticket_create_quote which supports rate_structure, items, and shipment info
-        ({ data: result, error } = await (supabase as any).rpc('rpc_ticket_create_quote', {
+        // Use rpc_ticket_create_quote which supports rate_structure and items
+        // Try with shipment params first (for DB with migration 128+), fallback to without
+        const baseQuoteParams = {
           p_ticket_id: id,
           p_amount: actionData.amount,
           p_currency: actionData.currency || 'IDR',
@@ -86,10 +87,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           p_terms: actionData.terms || null,
           p_rate_structure: actionData.rate_structure || 'bundling',
           p_items: actionData.items || [],
-          // Multi-shipment support: include shipment reference
-          p_shipment_detail_id: actionData.shipment_detail_id || null,
-          p_shipment_label: actionData.shipment_label || null,
-        }))
+        }
+
+        // First try with shipment params (requires migration 128)
+        if (actionData.shipment_detail_id || actionData.shipment_label) {
+          ({ data: result, error } = await (supabase as any).rpc('rpc_ticket_create_quote', {
+            ...baseQuoteParams,
+            p_shipment_detail_id: actionData.shipment_detail_id || null,
+            p_shipment_label: actionData.shipment_label || null,
+          }))
+
+          // If failed due to function signature mismatch, retry without shipment params
+          if (error?.code === 'PGRST202') {
+            console.log('Falling back to rpc_ticket_create_quote without shipment params (migration 128 not applied)')
+            ;({ data: result, error } = await (supabase as any).rpc('rpc_ticket_create_quote', baseQuoteParams))
+          }
+        } else {
+          // No shipment params, use base call
+          ({ data: result, error } = await (supabase as any).rpc('rpc_ticket_create_quote', baseQuoteParams))
+        }
         break
 
       case 'request_adjustment':
