@@ -21,6 +21,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -64,6 +70,8 @@ interface ShipmentDetails {
   scope_of_work: string | null
   additional_services: string[] | null
   created_at: string
+  shipment_order?: number
+  shipment_label?: string | null
 }
 
 interface Lead {
@@ -94,8 +102,11 @@ interface Lead {
   creator_role?: UserRole | null
   creator_department?: string | null
   creator_is_marketing?: boolean | null
-  // Shipment details
+  // Shipment details (legacy single shipment for backward compatibility)
   shipment_details?: ShipmentDetails | null
+  // Multiple shipments support
+  shipments?: ShipmentDetails[]
+  shipment_count?: number
   // Quotation tracking
   quotation_status?: string | null
   quotation_count?: number
@@ -733,162 +744,208 @@ export function LeadDetailDialog({
             </div>
           </div>
 
-          {/* Shipment Details */}
-          {lead.shipment_details && (
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium text-muted-foreground border-b pb-2 flex items-center gap-2">
-                <Package className="h-4 w-4" />
-                Shipment Details
-              </h4>
+          {/* Shipment Details - Multi-shipment support with tabs */}
+          {(() => {
+            // Get all shipments - prefer shipments array over single shipment_details
+            const allShipments = lead.shipments && lead.shipments.length > 0
+              ? lead.shipments
+              : lead.shipment_details
+                ? [lead.shipment_details]
+                : []
 
-              {/* Service Information */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Service Type</Label>
-                  <p className="text-sm font-medium">{lead.shipment_details.service_type_code || '-'}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Department</Label>
-                  <p className="text-sm">{lead.shipment_details.department || '-'}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Fleet Type</Label>
-                  <p className="text-sm">{lead.shipment_details.fleet_type || '-'}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Fleet Quantity</Label>
-                  <p className="text-sm">{lead.shipment_details.fleet_quantity || '-'}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Incoterm</Label>
-                  <p className="text-sm">{lead.shipment_details.incoterm || '-'}</p>
-                </div>
-              </div>
+            if (allShipments.length === 0) return null
 
-              {/* Cargo Information */}
-              <div className="space-y-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
-                  <Truck className="h-3 w-3" /> Cargo Information
-                </p>
+            // Render shipment content helper
+            const renderShipmentContent = (shipment: ShipmentDetails) => (
+              <div className="space-y-4">
+                {/* Service Information */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Cargo Category</Label>
-                    <p className="text-sm">{lead.shipment_details.cargo_category || '-'}</p>
+                    <Label className="text-xs text-muted-foreground">Service Type</Label>
+                    <p className="text-sm font-medium">{shipment.service_type_code || '-'}</p>
                   </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <Label className="text-xs text-muted-foreground">Cargo Description</Label>
-                    <p className="text-sm bg-muted p-2 rounded">{lead.shipment_details.cargo_description || '-'}</p>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Department</Label>
+                    <p className="text-sm">{shipment.department || '-'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Fleet Type</Label>
+                    <p className="text-sm">{shipment.fleet_type || '-'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Fleet Quantity</Label>
+                    <p className="text-sm">{shipment.fleet_quantity || '-'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Incoterm</Label>
+                    <p className="text-sm">{shipment.incoterm || '-'}</p>
                   </div>
                 </div>
-              </div>
 
-              {/* Origin & Destination */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* Origin */}
-                <div className="space-y-2 p-3 border rounded-md bg-muted/30">
+                {/* Cargo Information */}
+                <div className="space-y-3">
                   <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
-                    <MapPin className="h-3 w-3" /> Origin
+                    <Truck className="h-3 w-3" /> Cargo Information
                   </p>
-                  <div className="space-y-2">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Address</Label>
-                      <p className="text-sm">{lead.shipment_details.origin_address || '-'}</p>
+                      <Label className="text-xs text-muted-foreground">Cargo Category</Label>
+                      <p className="text-sm">{shipment.cargo_category || '-'}</p>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">City</Label>
-                      <p className="text-sm">{lead.shipment_details.origin_city || '-'}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Country</Label>
-                      <p className="text-sm">{lead.shipment_details.origin_country || '-'}</p>
+                    <div className="space-y-1 sm:col-span-2">
+                      <Label className="text-xs text-muted-foreground">Cargo Description</Label>
+                      <p className="text-sm bg-muted p-2 rounded">{shipment.cargo_description || '-'}</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Destination */}
-                <div className="space-y-2 p-3 border rounded-md bg-muted/30">
-                  <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
-                    <MapPin className="h-3 w-3" /> Destination
+                {/* Origin & Destination */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {/* Origin */}
+                  <div className="space-y-2 p-3 border rounded-md bg-muted/30">
+                    <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
+                      <MapPin className="h-3 w-3" /> Origin
+                    </p>
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Address</Label>
+                        <p className="text-sm">{shipment.origin_address || '-'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">City</Label>
+                        <p className="text-sm">{shipment.origin_city || '-'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Country</Label>
+                        <p className="text-sm">{shipment.origin_country || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Destination */}
+                  <div className="space-y-2 p-3 border rounded-md bg-muted/30">
+                    <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
+                      <MapPin className="h-3 w-3" /> Destination
+                    </p>
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Address</Label>
+                        <p className="text-sm">{shipment.destination_address || '-'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">City</Label>
+                        <p className="text-sm">{shipment.destination_city || '-'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Country</Label>
+                        <p className="text-sm">{shipment.destination_country || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quantity & Dimensions */}
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Quantity & Dimensions</p>
+                  <div className="grid gap-4 sm:grid-cols-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Quantity</Label>
+                      <p className="text-sm">{shipment.quantity || '-'} {shipment.unit_of_measure || ''}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Weight/Unit</Label>
+                      <p className="text-sm">{shipment.weight_per_unit_kg ? `${shipment.weight_per_unit_kg} Kg` : '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Total Weight</Label>
+                      <p className="text-sm">{shipment.weight_total_kg ? `${shipment.weight_total_kg} Kg` : '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Total Volume</Label>
+                      <p className="text-sm">{shipment.volume_total_cbm ? `${shipment.volume_total_cbm} CBM` : '-'}</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Length</Label>
+                      <p className="text-sm">{shipment.length_cm ? `${shipment.length_cm} cm` : '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Width</Label>
+                      <p className="text-sm">{shipment.width_cm ? `${shipment.width_cm} cm` : '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Height</Label>
+                      <p className="text-sm">{shipment.height_cm ? `${shipment.height_cm} cm` : '-'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scope of Work */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Scope of Work</Label>
+                  <p className="text-sm whitespace-pre-wrap bg-muted p-3 rounded-md">
+                    {shipment.scope_of_work || '-'}
                   </p>
-                  <div className="space-y-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Address</Label>
-                      <p className="text-sm">{lead.shipment_details.destination_address || '-'}</p>
+                </div>
+
+                {/* Additional Services */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Additional Services</Label>
+                  {shipment.additional_services && shipment.additional_services.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {shipment.additional_services.map((service, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs">
+                          {service}
+                        </Badge>
+                      ))}
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">City</Label>
-                      <p className="text-sm">{lead.shipment_details.destination_city || '-'}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Country</Label>
-                      <p className="text-sm">{lead.shipment_details.destination_country || '-'}</p>
-                    </div>
-                  </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">-</p>
+                  )}
                 </div>
               </div>
+            )
 
-              {/* Quantity & Dimensions */}
-              <div className="space-y-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase">Quantity & Dimensions</p>
-                <div className="grid gap-4 sm:grid-cols-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Quantity</Label>
-                    <p className="text-sm">{lead.shipment_details.quantity || '-'} {lead.shipment_details.unit_of_measure || ''}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Weight/Unit</Label>
-                    <p className="text-sm">{lead.shipment_details.weight_per_unit_kg ? `${lead.shipment_details.weight_per_unit_kg} Kg` : '-'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Total Weight</Label>
-                    <p className="text-sm">{lead.shipment_details.weight_total_kg ? `${lead.shipment_details.weight_total_kg} Kg` : '-'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Total Volume</Label>
-                    <p className="text-sm">{lead.shipment_details.volume_total_cbm ? `${lead.shipment_details.volume_total_cbm} CBM` : '-'}</p>
-                  </div>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Length</Label>
-                    <p className="text-sm">{lead.shipment_details.length_cm ? `${lead.shipment_details.length_cm} cm` : '-'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Width</Label>
-                    <p className="text-sm">{lead.shipment_details.width_cm ? `${lead.shipment_details.width_cm} cm` : '-'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Height</Label>
-                    <p className="text-sm">{lead.shipment_details.height_cm ? `${lead.shipment_details.height_cm} cm` : '-'}</p>
-                  </div>
-                </div>
-              </div>
+            return (
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-muted-foreground border-b pb-2 flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  Shipment Details
+                  {allShipments.length > 1 && (
+                    <Badge variant="secondary" className="ml-auto">
+                      {allShipments.length} shipments
+                    </Badge>
+                  )}
+                </h4>
 
-              {/* Scope of Work */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Scope of Work</Label>
-                <p className="text-sm whitespace-pre-wrap bg-muted p-3 rounded-md">
-                  {lead.shipment_details.scope_of_work || '-'}
-                </p>
-              </div>
-
-              {/* Additional Services */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Additional Services</Label>
-                {lead.shipment_details.additional_services && lead.shipment_details.additional_services.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {lead.shipment_details.additional_services.map((service, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
-                        {service}
-                      </Badge>
-                    ))}
-                  </div>
+                {allShipments.length === 1 ? (
+                  // Single shipment - no tabs needed
+                  renderShipmentContent(allShipments[0])
                 ) : (
-                  <p className="text-sm text-muted-foreground">-</p>
+                  // Multiple shipments - show tabs
+                  <Tabs defaultValue="shipment-0" className="w-full">
+                    <TabsList className="w-full flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
+                      {allShipments.map((shipment, index) => (
+                        <TabsTrigger
+                          key={index}
+                          value={`shipment-${index}`}
+                          className="flex-1 min-w-[100px] text-xs data-[state=active]:bg-background"
+                        >
+                          {shipment.shipment_label || `Shipment ${shipment.shipment_order || index + 1}`}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                    {allShipments.map((shipment, index) => (
+                      <TabsContent key={index} value={`shipment-${index}`} className="mt-4">
+                        {renderShipmentContent(shipment)}
+                      </TabsContent>
+                    ))}
+                  </Tabs>
                 )}
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Attachments */}
           <div className="space-y-4">
