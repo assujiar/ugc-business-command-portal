@@ -104,7 +104,11 @@ interface CustomerQuotationDialogProps {
     contact_name?: string
     contact_email?: string
     contact_phone?: string
+    // Single shipment_details for backward compatibility
     shipment_details?: {
+      shipment_detail_id?: string
+      shipment_order?: number
+      shipment_label?: string
       service_type_code?: string
       fleet_type?: string
       fleet_quantity?: number
@@ -120,6 +124,26 @@ interface CustomerQuotationDialogProps {
       destination_city?: string
       destination_country?: string
     }
+    // Multi-shipment support
+    shipments?: Array<{
+      shipment_detail_id?: string
+      shipment_order?: number
+      shipment_label?: string
+      service_type_code?: string
+      fleet_type?: string | null
+      fleet_quantity?: number
+      incoterm?: string | null
+      cargo_category?: string
+      cargo_description?: string
+      weight_total_kg?: number | null
+      volume_total_cbm?: number | null
+      origin_address?: string
+      origin_city?: string
+      origin_country?: string
+      destination_address?: string
+      destination_city?: string
+      destination_country?: string
+    }>
   }
   // Opportunity prop (for sales pipeline flow)
   opportunity?: {
@@ -249,6 +273,11 @@ export function CustomerQuotationDialog({
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [activeSection, setActiveSection] = useState<string>('customer')
+
+  // Multi-shipment support
+  const allShipments = lead?.shipments || (lead?.shipment_details ? [lead.shipment_details] : [])
+  const [selectedShipmentIndex, setSelectedShipmentIndex] = useState(0)
+  const hasMultipleShipments = allShipments.length > 1
 
   // Customer data
   const [customerName, setCustomerName] = useState('')
@@ -387,10 +416,11 @@ export function CustomerQuotationDialog({
     }
 
     // ============================================
-    // 2. SHIPMENT DETAILS (Priority: lead.shipment_details > ticket.rfq_data)
+    // 2. SHIPMENT DETAILS (Priority: lead shipments/shipment_details > ticket.rfq_data)
     // ============================================
-    if (lead?.shipment_details) {
-      const sd = lead.shipment_details
+    // Use allShipments array which is already populated from lead.shipments or lead.shipment_details
+    if (allShipments.length > 0) {
+      const sd = allShipments[selectedShipmentIndex] || allShipments[0]
       // Convert service_type_code to display format (e.g., "DOM_AIRFREIGHT" -> "Domestics | Airfreight")
       setServiceType(sd.service_type_code ? getServiceTypeDisplayLabel(sd.service_type_code) : '')
       setFleetType(sd.fleet_type || '')
@@ -469,7 +499,7 @@ export function CustomerQuotationDialog({
 
     // Fetch term templates
     fetchTermTemplates()
-  }, [open, ticketData, operationalCost, lead, opportunity])
+  }, [open, ticketData, operationalCost, lead, opportunity, selectedShipmentIndex, allShipments.length])
 
   // Fetch term templates
   const fetchTermTemplates = async () => {
@@ -658,6 +688,27 @@ export function CustomerQuotationDialog({
             unit: item.unit,
             sort_order: index,
           })) : [],
+        // Multi-shipment support: include all shipments
+        shipments: allShipments.map((s, idx) => ({
+          shipment_detail_id: s.shipment_detail_id || null,
+          shipment_order: s.shipment_order || idx + 1,
+          shipment_label: s.shipment_label || `Shipment ${idx + 1}`,
+          service_type_code: s.service_type_code || null,
+          fleet_type: s.fleet_type || null,
+          fleet_quantity: s.fleet_quantity || 1,
+          incoterm: s.incoterm || null,
+          cargo_category: s.cargo_category || null,
+          cargo_description: s.cargo_description || null,
+          weight_total_kg: s.weight_total_kg || null,
+          volume_total_cbm: s.volume_total_cbm || null,
+          origin_address: s.origin_address || null,
+          origin_city: s.origin_city || null,
+          origin_country: s.origin_country || null,
+          destination_address: s.destination_address || null,
+          destination_city: s.destination_city || null,
+          destination_country: s.destination_country || null,
+        })),
+        shipment_count: allShipments.length,
       }
 
       const response = await fetch('/api/ticketing/customer-quotations', {
@@ -946,6 +997,38 @@ export function CustomerQuotationDialog({
           {/* Service Section */}
           {activeSection === 'service' && (
             <div className="space-y-4">
+              {/* Multi-Shipment Selector */}
+              {hasMultipleShipments && (
+                <div className="p-3 border rounded-lg bg-blue-50 dark:bg-blue-900/20 mb-4">
+                  <Label className="text-blue-700 dark:text-blue-300 text-sm font-medium">
+                    This quotation has {allShipments.length} shipments
+                  </Label>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">
+                    Select a shipment to view/edit its details. All shipments will be included in the quotation.
+                  </p>
+                  <Select
+                    value={String(selectedShipmentIndex)}
+                    onValueChange={(val) => setSelectedShipmentIndex(parseInt(val))}
+                  >
+                    <SelectTrigger className="bg-white dark:bg-gray-900">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allShipments.map((shipment, idx) => (
+                        <SelectItem key={idx} value={String(idx)}>
+                          <div className="flex items-center gap-2">
+                            <Package className="h-3 w-3" />
+                            {shipment.shipment_label || `Shipment ${idx + 1}`}
+                            <span className="text-xs text-muted-foreground">
+                              ({shipment.origin_city || '-'} → {shipment.destination_city || '-'})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Service Details</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
