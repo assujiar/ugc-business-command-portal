@@ -850,9 +850,20 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     if (slaDetails?.metrics?.assignee?.first_response_formatted) {
       return slaDetails.metrics.assignee.first_response_formatted
     }
-    // Fallback to exchanges - find first assignee response
+
+    // Calculate from first_response_at and created_at timestamps
+    if (slaDetails?.sla?.first_response_at && slaDetails?.created_at) {
+      const responseTime = new Date(slaDetails.sla.first_response_at).getTime()
+      const createdTime = new Date(slaDetails.created_at).getTime()
+      const diffSeconds = Math.floor((responseTime - createdTime) / 1000)
+      if (diffSeconds >= 0) {
+        return formatDuration(diffSeconds)
+      }
+    }
+
+    // Fallback to exchanges - find first assignee response (not necessarily exchange_number === 1)
     const firstAssigneeExchange = slaDetails?.exchanges?.find(
-      (ex) => ex.responder_type === 'assignee' && ex.exchange_number === 1
+      (ex) => ex.responder_type === 'assignee'
     )
     if (firstAssigneeExchange?.business_response_seconds) {
       return formatDuration(firstAssigneeExchange.business_response_seconds)
