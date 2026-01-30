@@ -363,8 +363,9 @@ export function PipelineDetailDialog({
   const [linkedTickets, setLinkedTickets] = useState<any[]>([])
   const [loadingTickets, setLoadingTickets] = useState(false)
 
-  // Shipment details from linked lead
+  // Shipment details from linked lead (supports multi-shipment)
   const [shipmentDetails, setShipmentDetails] = useState<any>(null)
+  const [allShipments, setAllShipments] = useState<any[]>([])
 
   // Prevent hydration mismatch - only render dynamic content after mount
   useEffect(() => {
@@ -394,6 +395,7 @@ export function PipelineDetailDialog({
       setQuotations([])
       setLinkedTickets([])
       setShipmentDetails(null)
+      setAllShipments([])
     }
   }, [open, opportunityId])
 
@@ -452,7 +454,10 @@ export function PipelineDetailDialog({
           const result = await response.json()
           console.log('[PipelineDetail] Opportunity data received:', result.data)
           console.log('[PipelineDetail] Shipment details:', result.data?.shipment_details)
+          console.log('[PipelineDetail] All shipments:', result.data?.shipments)
           setShipmentDetails(result.data?.shipment_details || null)
+          // Store all shipments for multi-shipment support
+          setAllShipments(result.data?.shipments || [])
         } else {
           console.error('[PipelineDetail] Failed to fetch opportunity:', response.status)
         }
@@ -548,9 +553,42 @@ export function PipelineDetailDialog({
     console.log('[PipelineDetail] handleCreateTicket called')
     console.log('[PipelineDetail] data.lead_id:', data.lead_id)
     console.log('[PipelineDetail] shipmentDetails:', shipmentDetails)
+    console.log('[PipelineDetail] allShipments:', allShipments)
 
-    // Store shipment data in sessionStorage for ticket form to read
-    if (shipmentDetails) {
+    // Store ALL shipment data in sessionStorage for ticket form to read (multi-shipment support)
+    if (allShipments.length > 0) {
+      // Store all shipments as array
+      const shipmentsToStore = allShipments.map(s => ({
+        shipment_order: s.shipment_order,
+        shipment_label: s.shipment_label,
+        service_type_code: s.service_type_code,
+        department: s.department,
+        fleet_type: s.fleet_type,
+        fleet_quantity: s.fleet_quantity,
+        incoterm: s.incoterm,
+        cargo_category: s.cargo_category,
+        cargo_description: s.cargo_description,
+        origin_address: s.origin_address,
+        origin_city: s.origin_city,
+        origin_country: s.origin_country,
+        destination_address: s.destination_address,
+        destination_city: s.destination_city,
+        destination_country: s.destination_country,
+        quantity: s.quantity,
+        unit_of_measure: s.unit_of_measure,
+        weight_per_unit_kg: s.weight_per_unit_kg,
+        weight_total_kg: s.weight_total_kg,
+        length_cm: s.length_cm,
+        width_cm: s.width_cm,
+        height_cm: s.height_cm,
+        volume_total_cbm: s.volume_total_cbm,
+        scope_of_work: s.scope_of_work,
+        additional_services: s.additional_services,
+      }))
+      sessionStorage.setItem('prefill_ticket_shipments', JSON.stringify(shipmentsToStore))
+      console.log('[PipelineDetail] Stored', shipmentsToStore.length, 'shipments in sessionStorage')
+    } else if (shipmentDetails) {
+      // Fallback to single shipment for backward compatibility
       sessionStorage.setItem('prefill_ticket_shipment', JSON.stringify({
         service_type_code: shipmentDetails.service_type_code,
         department: shipmentDetails.department,
