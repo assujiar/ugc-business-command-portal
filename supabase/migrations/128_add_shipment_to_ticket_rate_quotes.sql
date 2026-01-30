@@ -36,6 +36,8 @@ DECLARE
     v_quote_id UUID;
     v_quote_number VARCHAR(30);
     v_ticket_code VARCHAR(20);
+    v_ticket_created_at TIMESTAMPTZ;
+    v_ticket_first_response_at TIMESTAMPTZ;
     v_sequence INTEGER;
     v_actor_user_id UUID;
     v_item JSONB;
@@ -49,8 +51,9 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'Only ops/admin can create quotes');
     END IF;
 
-    -- Get ticket code for quote number generation
-    SELECT ticket_code INTO v_ticket_code
+    -- Get ticket info for quote number generation and SLA tracking
+    SELECT ticket_code, created_at, first_response_at
+    INTO v_ticket_code, v_ticket_created_at, v_ticket_first_response_at
     FROM public.tickets
     WHERE id = p_ticket_id;
 
@@ -163,6 +166,31 @@ BEGIN
         pending_response_from = 'creator',
         updated_at = NOW()
     WHERE id = p_ticket_id;
+
+    -- =====================================================
+    -- FIRST RESPONSE TRACKING (SLA)
+    -- Cost submission by assignee (ops) counts as first response
+    -- =====================================================
+    IF v_ticket_first_response_at IS NULL THEN
+        -- Update ticket_sla_tracking
+        UPDATE public.ticket_sla_tracking
+        SET
+            first_response_at = NOW(),
+            first_response_met = EXTRACT(EPOCH FROM (NOW() - v_ticket_created_at)) / 3600 <= first_response_sla_hours,
+            updated_at = NOW()
+        WHERE ticket_id = p_ticket_id
+        AND first_response_at IS NULL;
+
+        -- Update tickets table
+        UPDATE public.tickets
+        SET first_response_at = NOW()
+        WHERE id = p_ticket_id
+        AND first_response_at IS NULL;
+    END IF;
+
+    -- Record response exchange for SLA tracking
+    -- This tracks the assignee's response (cost submission) in the exchange log
+    PERFORM public.record_response_exchange(p_ticket_id, v_actor_user_id, NULL);
 
     RETURN jsonb_build_object(
         'success', true,
