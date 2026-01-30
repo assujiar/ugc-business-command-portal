@@ -924,6 +924,11 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         ? `${ordinalLabels[index]} Cost`
         : `Cost #${index + 1}`
 
+      // Find shipment info if cost has shipment_detail_id
+      const linkedShipment = cost.shipment_detail_id
+        ? shipments.find(s => s.shipment_detail_id === cost.shipment_detail_id)
+        : null
+
       items.push({
         id: `cost-${cost.id}`,
         type: 'cost',
@@ -942,6 +947,19 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
           valid_until: cost.valid_until,
           terms: cost.terms,
           cost_sequence: index + 1,
+          rate_structure: cost.rate_structure,
+          // Shipment info for multi-shipment support
+          shipment_detail_id: cost.shipment_detail_id || null,
+          shipment_label: cost.shipment_label || linkedShipment?.shipment_label || null,
+          shipment_route: linkedShipment
+            ? `${linkedShipment.origin_city || '-'} → ${linkedShipment.destination_city || '-'}`
+            : null,
+          shipment_service: linkedShipment?.service_type_code || null,
+          shipment_fleet: linkedShipment?.fleet_type
+            ? `${linkedShipment.fleet_type} x ${linkedShipment.fleet_quantity || 1}`
+            : null,
+          shipment_weight: linkedShipment?.weight_total_kg || null,
+          shipment_volume: linkedShipment?.volume_total_cbm || null,
         },
       })
     })
@@ -2030,11 +2048,88 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                                    Cost will be linked to this specific shipment
-                                  </p>
                                 </div>
                               )}
+
+                              {/* Shipment Summary Card - Essential operational info for costing */}
+                              {shipments.length > 0 && (() => {
+                                const selectedShipment = shipments.find(s => s.shipment_detail_id === costShipmentId) || shipments[0]
+                                return (
+                                  <div className="p-3 border rounded-lg bg-slate-50 dark:bg-slate-900/50 space-y-2">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Package className="h-4 w-4 text-slate-600" />
+                                      <span className="font-medium text-sm">
+                                        {selectedShipment.shipment_label || 'Shipment Details'}
+                                      </span>
+                                      {selectedShipment.service_type_code && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {selectedShipment.service_type_code}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                      {/* Route */}
+                                      <div className="col-span-2 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                        <span className="text-emerald-600">{selectedShipment.origin_city || '-'}</span>
+                                        <span className="text-muted-foreground">→</span>
+                                        <span className="text-rose-600">{selectedShipment.destination_city || '-'}</span>
+                                        {(selectedShipment.origin_country !== selectedShipment.destination_country) && (
+                                          <span className="text-muted-foreground text-xs">
+                                            ({selectedShipment.origin_country} → {selectedShipment.destination_country})
+                                          </span>
+                                        )}
+                                      </div>
+                                      {/* Fleet or Incoterm */}
+                                      {selectedShipment.fleet_type && (
+                                        <div>
+                                          <span className="text-muted-foreground">Fleet:</span>{' '}
+                                          <span className="font-medium">{selectedShipment.fleet_type} x {selectedShipment.fleet_quantity || 1}</span>
+                                        </div>
+                                      )}
+                                      {selectedShipment.incoterm && (
+                                        <div>
+                                          <span className="text-muted-foreground">Incoterm:</span>{' '}
+                                          <span className="font-medium">{selectedShipment.incoterm}</span>
+                                        </div>
+                                      )}
+                                      {/* Cargo */}
+                                      {selectedShipment.cargo_category && (
+                                        <div>
+                                          <span className="text-muted-foreground">Cargo:</span>{' '}
+                                          <span className="font-medium">{selectedShipment.cargo_category}</span>
+                                        </div>
+                                      )}
+                                      {/* Quantity */}
+                                      {selectedShipment.quantity && (
+                                        <div>
+                                          <span className="text-muted-foreground">Qty:</span>{' '}
+                                          <span className="font-medium">{selectedShipment.quantity} {selectedShipment.unit_of_measure || 'units'}</span>
+                                        </div>
+                                      )}
+                                      {/* Weight */}
+                                      {selectedShipment.weight_total_kg && (
+                                        <div>
+                                          <span className="text-muted-foreground">Weight:</span>{' '}
+                                          <span className="font-medium">{selectedShipment.weight_total_kg.toLocaleString()} kg</span>
+                                        </div>
+                                      )}
+                                      {/* Volume */}
+                                      {selectedShipment.volume_total_cbm && (
+                                        <div>
+                                          <span className="text-muted-foreground">Volume:</span>{' '}
+                                          <span className="font-medium">{selectedShipment.volume_total_cbm} CBM</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {/* Cargo Description */}
+                                    {selectedShipment.cargo_description && (
+                                      <p className="text-xs text-muted-foreground border-t pt-2 mt-2">
+                                        {selectedShipment.cargo_description}
+                                      </p>
+                                    )}
+                                  </div>
+                                )
+                              })()}
 
                               {/* Rate Structure Toggle */}
                               <div className="flex items-center justify-between">
@@ -2412,6 +2507,11 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                     <DollarSign className="h-3 w-3" />
                                     <span>Operational Cost</span>
                                     <span className="font-mono text-[10px]">{item.extra_data.cost_number}</span>
+                                    {item.extra_data.rate_structure && (
+                                      <Badge variant="outline" className="text-[10px] py-0">
+                                        {item.extra_data.rate_structure}
+                                      </Badge>
+                                    )}
                                   </div>
                                   <p className="text-lg font-bold text-green-500">
                                     {item.extra_data.currency} {Number(item.extra_data.amount).toLocaleString('id-ID')}
@@ -2420,6 +2520,38 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                     <p className="text-[10px] text-muted-foreground">
                                       Valid until: {new Date(item.extra_data.valid_until).toLocaleDateString('id-ID')}
                                     </p>
+                                  )}
+                                  {/* Shipment Info for multi-shipment */}
+                                  {(item.extra_data.shipment_label || item.extra_data.shipment_route) && (
+                                    <div className="mt-2 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs">
+                                      <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                        <Package className="h-3 w-3" />
+                                        {item.extra_data.shipment_label || 'Shipment'}
+                                        {item.extra_data.shipment_service && (
+                                          <Badge variant="secondary" className="text-[10px] py-0 px-1">
+                                            {item.extra_data.shipment_service}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                                        {item.extra_data.shipment_route && (
+                                          <div className="col-span-2">
+                                            <span className="text-emerald-600">{item.extra_data.shipment_route.split('→')[0]?.trim()}</span>
+                                            <span className="mx-1">→</span>
+                                            <span className="text-rose-600">{item.extra_data.shipment_route.split('→')[1]?.trim()}</span>
+                                          </div>
+                                        )}
+                                        {item.extra_data.shipment_fleet && (
+                                          <div>Fleet: <span className="text-foreground">{item.extra_data.shipment_fleet}</span></div>
+                                        )}
+                                        {item.extra_data.shipment_weight && (
+                                          <div>Weight: <span className="text-foreground">{item.extra_data.shipment_weight.toLocaleString()} kg</span></div>
+                                        )}
+                                        {item.extra_data.shipment_volume && (
+                                          <div>Volume: <span className="text-foreground">{item.extra_data.shipment_volume} CBM</span></div>
+                                        )}
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
                               )}
