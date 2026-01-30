@@ -9,8 +9,6 @@ import {
   Ticket,
   Building2,
   RefreshCw,
-  MapPin,
-  Truck,
   Package,
   Upload,
   X,
@@ -21,16 +19,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -38,23 +33,11 @@ import { useToast } from '@/hooks/use-toast'
 import { getUserTicketingDepartment, isOps } from '@/lib/permissions'
 import {
   SERVICE_TYPES,
-  SERVICE_SCOPES,
-  DOMESTICS_SERVICE_CODES,
-  EXIM_SERVICE_CODES,
-  FLEET_TYPES,
-  INCOTERMS,
-  CARGO_CATEGORIES,
-  UNITS_OF_MEASURE,
-  ADDITIONAL_SERVICES,
-  COUNTRIES,
-  getServicesByScope,
-  getServiceTypeDisplayLabel,
-  type ServiceScope,
 } from '@/lib/constants'
 import type { Database } from '@/types/database'
 import type { TicketType, TicketPriority, TicketingDepartment } from '@/types/database'
-import { FormSection, SERVICE_CATEGORY_STYLES } from '@/components/ui/form-section'
-import { cn } from '@/lib/utils'
+import { MultiShipmentForm } from '@/components/shared/multi-shipment-form'
+import { ShipmentDetail, createEmptyShipment } from '@/types/shipment'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 type Account = Database['public']['Tables']['accounts']['Row']
@@ -73,33 +56,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue
 }
 
-interface ShipmentData {
-  service_type_code: string
-  fleet_type: string
-  fleet_quantity: number
-  incoterm: string
-  cargo_category: string
-  cargo_description: string
-  origin_address: string
-  origin_city: string
-  origin_country: string
-  destination_address: string
-  destination_city: string
-  destination_country: string
-  quantity: number
-  unit_of_measure: string
-  weight_per_unit_kg: number | null
-  weight_total_kg: number | null
-  length_cm: number | null
-  width_cm: number | null
-  height_cm: number | null
-  volume_total_cbm: number | null
-  scope_of_work: string
-  additional_services: string[]
-  estimated_leadtime: string
-  estimated_cargo_value: number | null
-  cargo_value_currency: string
-}
+// ShipmentData interface removed - using ShipmentDetail from @/types/shipment
 
 interface FormData {
   ticket_type: TicketType
@@ -241,37 +198,8 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     }
   }
 
-  // Shipment data state (same as create lead)
-  const [shipmentData, setShipmentData] = useState<ShipmentData>({
-    service_type_code: '',
-    fleet_type: '',
-    fleet_quantity: 1,
-    incoterm: '',
-    cargo_category: 'General Cargo',
-    cargo_description: '',
-    origin_address: '',
-    origin_city: '',
-    origin_country: 'Indonesia',
-    destination_address: '',
-    destination_city: '',
-    destination_country: 'Indonesia',
-    quantity: 1,
-    unit_of_measure: 'Boxes',
-    weight_per_unit_kg: null,
-    weight_total_kg: null,
-    length_cm: null,
-    width_cm: null,
-    height_cm: null,
-    volume_total_cbm: null,
-    scope_of_work: '',
-    additional_services: [],
-    estimated_leadtime: '',
-    estimated_cargo_value: null,
-    cargo_value_currency: 'IDR',
-  })
-
-  // All shipments from prefill (for multi-shipment display)
-  const [allPrefillShipments, setAllPrefillShipments] = useState<any[]>([])
+  // Shipments state (multi-shipment support)
+  const [shipments, setShipments] = useState<ShipmentDetail[]>([createEmptyShipment(1)])
 
   const supabase = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -451,17 +379,42 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     const multiShipmentData = sessionStorage.getItem('prefill_ticket_shipments')
     const singleShipmentData = sessionStorage.getItem('prefill_ticket_shipment')
 
-    // Use first shipment from array or single shipment
-    let shipmentToUse: any = null
+    let loadedShipments: ShipmentDetail[] = []
 
     if (multiShipmentData) {
       try {
-        const shipments = JSON.parse(multiShipmentData)
-        if (Array.isArray(shipments) && shipments.length > 0) {
-          shipmentToUse = shipments[0] // Use first shipment for the form
-          // Store all shipments for display
-          setAllPrefillShipments(shipments)
-          console.log('[CreateTicket] Loaded', shipments.length, 'shipments from sessionStorage')
+        const parsed = JSON.parse(multiShipmentData)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Map to ShipmentDetail format with proper order
+          loadedShipments = parsed.map((s: any, i: number) => ({
+            shipment_detail_id: s.shipment_detail_id,
+            shipment_order: s.shipment_order || i + 1,
+            shipment_label: s.shipment_label || `Shipment ${i + 1}`,
+            service_type_code: s.service_type_code || '',
+            department: s.department || null,
+            fleet_type: s.fleet_type || null,
+            fleet_quantity: s.fleet_quantity || 1,
+            incoterm: s.incoterm || null,
+            cargo_category: s.cargo_category || 'General Cargo',
+            cargo_description: s.cargo_description || '',
+            origin_address: s.origin_address || '',
+            origin_city: s.origin_city || '',
+            origin_country: s.origin_country || 'Indonesia',
+            destination_address: s.destination_address || '',
+            destination_city: s.destination_city || '',
+            destination_country: s.destination_country || 'Indonesia',
+            quantity: s.quantity || 1,
+            unit_of_measure: s.unit_of_measure || 'Boxes',
+            weight_per_unit_kg: s.weight_per_unit_kg || null,
+            weight_total_kg: s.weight_total_kg || null,
+            length_cm: s.length_cm || null,
+            width_cm: s.width_cm || null,
+            height_cm: s.height_cm || null,
+            volume_total_cbm: s.volume_total_cbm || null,
+            scope_of_work: s.scope_of_work || '',
+            additional_services: s.additional_services || [],
+          }))
+          console.log('[CreateTicket] Loaded', loadedShipments.length, 'shipments from sessionStorage')
         }
         sessionStorage.removeItem('prefill_ticket_shipments')
       } catch (err) {
@@ -469,67 +422,60 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
       }
     }
 
-    if (!shipmentToUse && singleShipmentData) {
+    if (loadedShipments.length === 0 && singleShipmentData) {
       try {
-        shipmentToUse = JSON.parse(singleShipmentData)
+        const s = JSON.parse(singleShipmentData)
+        loadedShipments = [{
+          shipment_detail_id: s.shipment_detail_id,
+          shipment_order: 1,
+          shipment_label: s.shipment_label || 'Shipment 1',
+          service_type_code: s.service_type_code || '',
+          department: s.department || null,
+          fleet_type: s.fleet_type || null,
+          fleet_quantity: s.fleet_quantity || 1,
+          incoterm: s.incoterm || null,
+          cargo_category: s.cargo_category || 'General Cargo',
+          cargo_description: s.cargo_description || '',
+          origin_address: s.origin_address || '',
+          origin_city: s.origin_city || '',
+          origin_country: s.origin_country || 'Indonesia',
+          destination_address: s.destination_address || '',
+          destination_city: s.destination_city || '',
+          destination_country: s.destination_country || 'Indonesia',
+          quantity: s.quantity || 1,
+          unit_of_measure: s.unit_of_measure || 'Boxes',
+          weight_per_unit_kg: s.weight_per_unit_kg || null,
+          weight_total_kg: s.weight_total_kg || null,
+          length_cm: s.length_cm || null,
+          width_cm: s.width_cm || null,
+          height_cm: s.height_cm || null,
+          volume_total_cbm: s.volume_total_cbm || null,
+          scope_of_work: s.scope_of_work || '',
+          additional_services: s.additional_services || [],
+        }]
         sessionStorage.removeItem('prefill_ticket_shipment')
       } catch (err) {
         console.error('Error parsing single shipment data:', err)
       }
     }
 
-    if (shipmentToUse) {
-      const data = shipmentToUse
-      setShipmentData(prev => ({
-        ...prev,
-        service_type_code: data.service_type_code || '',
-        fleet_type: data.fleet_type || '',
-        fleet_quantity: data.fleet_quantity || 1,
-        incoterm: data.incoterm || '',
-        cargo_category: data.cargo_category || 'General Cargo',
-        cargo_description: data.cargo_description || '',
-        origin_address: data.origin_address || '',
-        origin_city: data.origin_city || '',
-        origin_country: data.origin_country || 'Indonesia',
-        destination_address: data.destination_address || '',
-        destination_city: data.destination_city || '',
-        destination_country: data.destination_country || 'Indonesia',
-        quantity: data.quantity || 1,
-        unit_of_measure: data.unit_of_measure || 'Boxes',
-        weight_per_unit_kg: data.weight_per_unit_kg || null,
-        weight_total_kg: data.weight_total_kg || null,
-        length_cm: data.length_cm || null,
-        width_cm: data.width_cm || null,
-        height_cm: data.height_cm || null,
-        volume_total_cbm: data.volume_total_cbm || null,
-        scope_of_work: data.scope_of_work || '',
-        additional_services: data.additional_services || [],
-        estimated_leadtime: data.estimated_leadtime || '',
-        estimated_cargo_value: data.estimated_cargo_value || null,
-        cargo_value_currency: data.cargo_value_currency || 'IDR',
-      }))
-      // Auto-switch to RFQ type if shipment data is present
-      if (data.service_type_code) {
+    if (loadedShipments.length > 0) {
+      setShipments(loadedShipments)
+      // Auto-switch to RFQ type if shipment data is present with service_type_code
+      if (loadedShipments[0].service_type_code) {
         setTicketType('RFQ')
         setValue('ticket_type', 'RFQ')
       }
     }
   }, [])
 
-  // Check if selected service is domestics (shows fleet)
-  const isDomesticsService = DOMESTICS_SERVICE_CODES.includes(
-    shipmentData.service_type_code as any
-  )
+  // Get first shipment for service type checks and department auto-mapping
+  const firstShipment = shipments[0]
 
-  // Check if selected service is export/import (shows incoterms)
-  const isEximService = EXIM_SERVICE_CODES.includes(
-    shipmentData.service_type_code as any
-  )
-
-  // Get department for selected service
-  const selectedService = SERVICE_TYPES.find(
-    (s) => s.code === shipmentData.service_type_code
-  )
+  // Get department for selected service (using first shipment)
+  const selectedService = firstShipment?.service_type_code
+    ? SERVICE_TYPES.find((s) => s.code === firstShipment.service_type_code)
+    : null
 
   // Auto-map department based on service type for RFQ tickets
   useEffect(() => {
@@ -541,53 +487,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     }
   }, [ticketType, selectedService, setValue])
 
-  // Auto-calculate weight total
-  useEffect(() => {
-    if (shipmentData.quantity && shipmentData.weight_per_unit_kg) {
-      const total = shipmentData.quantity * shipmentData.weight_per_unit_kg
-      setShipmentData((prev) => ({ ...prev, weight_total_kg: total }))
-    } else {
-      setShipmentData((prev) => ({ ...prev, weight_total_kg: null }))
-    }
-  }, [shipmentData.quantity, shipmentData.weight_per_unit_kg])
-
-  // Auto-calculate volume in CBM
-  useEffect(() => {
-    if (
-      shipmentData.length_cm &&
-      shipmentData.width_cm &&
-      shipmentData.height_cm &&
-      shipmentData.quantity
-    ) {
-      const volumeCbm =
-        (shipmentData.length_cm *
-          shipmentData.width_cm *
-          shipmentData.height_cm *
-          shipmentData.quantity) /
-        1000000
-      setShipmentData((prev) => ({
-        ...prev,
-        volume_total_cbm: Math.round(volumeCbm * 10000) / 10000,
-      }))
-    } else {
-      setShipmentData((prev) => ({ ...prev, volume_total_cbm: null }))
-    }
-  }, [
-    shipmentData.length_cm,
-    shipmentData.width_cm,
-    shipmentData.height_cm,
-    shipmentData.quantity,
-  ])
-
-  // Handle additional service toggle
-  const handleAdditionalServiceToggle = (serviceCode: string) => {
-    setShipmentData((prev) => ({
-      ...prev,
-      additional_services: prev.additional_services.includes(serviceCode)
-        ? prev.additional_services.filter((s) => s !== serviceCode)
-        : [...prev.additional_services, serviceCode],
-    }))
-  }
+  // Note: Auto-calculation for weight/volume is now handled by MultiShipmentForm component
 
   // Handle file selection
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -625,70 +525,72 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  // Group services by scope for the dropdown
-  const domesticsServices = getServicesByScope('Domestics')
-  const exportServices = getServicesByScope('Export')
-  const importServices = getServicesByScope('Import')
-  const importDtdServices = getServicesByScope('Import DTD')
-
   // Submit form
   const onSubmit = async (data: FormData) => {
     setLoading(true)
     try {
       // Build RFQ data if ticket type is RFQ
       let rfq_data = null
+      let shipments_data: ShipmentDetail[] | null = null
       let finalDepartment = data.department
 
       if (ticketType === 'RFQ') {
-        // Validate service type is selected
-        if (!shipmentData.service_type_code || !selectedService) {
+        // Validate at least one shipment has service type selected
+        const validShipments = shipments.filter(s => s.service_type_code)
+        if (validShipments.length === 0) {
           toast({
             title: 'Error',
-            description: 'Pilih Service Type terlebih dahulu',
+            description: 'Pilih Service Type untuk minimal satu shipment',
             variant: 'destructive',
           })
           setLoading(false)
           return
         }
 
-        // Auto-determine department from service type
-        const mappedDept = serviceDepartmentToTicketingDept[selectedService.department]
-        if (mappedDept) {
-          finalDepartment = mappedDept
+        // Auto-determine department from first shipment's service type
+        if (selectedService?.department) {
+          const mappedDept = serviceDepartmentToTicketingDept[selectedService.department]
+          if (mappedDept) {
+            finalDepartment = mappedDept
+          }
         }
 
+        // Use first shipment for legacy rfq_data format (backward compatibility)
+        const firstShip = shipments[0]
+        const firstService = SERVICE_TYPES.find(s => s.code === firstShip.service_type_code)
+
         rfq_data = {
-          service_type_code: shipmentData.service_type_code,
-          service_type: selectedService ? `${selectedService.scope} | ${selectedService.name}` : null,
-          service_scope: selectedService?.scope || null,
-          service_name: selectedService?.name || null,
-          department: selectedService?.department || null,
-          fleet_type: shipmentData.fleet_type || null,
-          fleet_quantity: shipmentData.fleet_quantity || null,
-          incoterm: shipmentData.incoterm || null,
-          cargo_category: shipmentData.cargo_category,
-          cargo_description: shipmentData.cargo_description,
-          origin_address: shipmentData.origin_address,
-          origin_city: shipmentData.origin_city,
-          origin_country: shipmentData.origin_country,
-          destination_address: shipmentData.destination_address,
-          destination_city: shipmentData.destination_city,
-          destination_country: shipmentData.destination_country,
-          quantity: shipmentData.quantity,
-          unit_of_measure: shipmentData.unit_of_measure,
-          weight_per_unit_kg: shipmentData.weight_per_unit_kg,
-          weight_total_kg: shipmentData.weight_total_kg,
-          length_cm: shipmentData.length_cm,
-          width_cm: shipmentData.width_cm,
-          height_cm: shipmentData.height_cm,
-          volume_total_cbm: shipmentData.volume_total_cbm,
-          total_volume: shipmentData.volume_total_cbm,
-          scope_of_work: shipmentData.scope_of_work,
-          additional_services: shipmentData.additional_services,
-          estimated_leadtime: shipmentData.estimated_leadtime || null,
-          estimated_cargo_value: shipmentData.estimated_cargo_value,
-          cargo_value_currency: shipmentData.cargo_value_currency,
+          service_type_code: firstShip.service_type_code || '',
+          service_type: firstService ? `${firstService.scope} | ${firstService.name}` : null,
+          service_scope: firstService?.scope || null,
+          service_name: firstService?.name || null,
+          department: firstService?.department || null,
+          fleet_type: firstShip.fleet_type || null,
+          fleet_quantity: firstShip.fleet_quantity || null,
+          incoterm: firstShip.incoterm || null,
+          cargo_category: firstShip.cargo_category || 'General Cargo',
+          cargo_description: firstShip.cargo_description || '',
+          origin_address: firstShip.origin_address || '',
+          origin_city: firstShip.origin_city || '',
+          origin_country: firstShip.origin_country || 'Indonesia',
+          destination_address: firstShip.destination_address || '',
+          destination_city: firstShip.destination_city || '',
+          destination_country: firstShip.destination_country || 'Indonesia',
+          quantity: firstShip.quantity || 1,
+          unit_of_measure: firstShip.unit_of_measure || 'Boxes',
+          weight_per_unit_kg: firstShip.weight_per_unit_kg || null,
+          weight_total_kg: firstShip.weight_total_kg || null,
+          length_cm: firstShip.length_cm || null,
+          width_cm: firstShip.width_cm || null,
+          height_cm: firstShip.height_cm || null,
+          volume_total_cbm: firstShip.volume_total_cbm || null,
+          total_volume: firstShip.volume_total_cbm || null,
+          scope_of_work: firstShip.scope_of_work || '',
+          additional_services: firstShip.additional_services || [],
         }
+
+        // Include all shipments data for multi-shipment support
+        shipments_data = shipments
       }
 
       const response = await fetch('/api/ticketing/tickets', {
@@ -702,6 +604,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
           priority: data.priority,
           account_id: data.account_id || null,
           rfq_data,
+          shipments: shipments_data, // All shipments for multi-shipment support
           sender_name: senderName || null,
           sender_email: senderEmail || null,
           sender_phone: senderPhone || null,
@@ -1091,662 +994,34 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
         </CardContent>
       </Card>
 
-      {/* Multi-Shipment Summary - Show all shipments from lead/opportunity */}
-      {ticketType === 'RFQ' && allPrefillShipments.length > 1 && (
-        <Card className="border-blue-200 bg-blue-50/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-blue-700">
-              <Package className="h-5 w-5" />
-              Multi-Shipment RFQ
-              <Badge variant="secondary" className="ml-auto">
-                {allPrefillShipments.length} shipments
-              </Badge>
-            </CardTitle>
-            <CardDescription className="text-blue-600">
-              This RFQ has {allPrefillShipments.length} shipments from the lead/opportunity.
-              The form below is prefilled with the first shipment. You can create separate tickets for each shipment or modify as needed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {allPrefillShipments.map((shipment, index) => (
-                <div
-                  key={index}
-                  className={`p-3 rounded-md border ${index === 0 ? 'bg-white border-blue-300' : 'bg-blue-50/30 border-blue-100'}`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant={index === 0 ? 'default' : 'outline'} className="text-xs">
-                      {shipment.shipment_label || `Shipment ${shipment.shipment_order || index + 1}`}
-                    </Badge>
-                    {index === 0 && (
-                      <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
-                        Form prefilled
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Service:</span>{' '}
-                      <span className="font-medium">{shipment.service_type_code || '-'}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Fleet:</span>{' '}
-                      <span className="font-medium">{shipment.fleet_type || '-'}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Route:</span>{' '}
-                      <span className="font-medium">{shipment.origin_city || '-'} → {shipment.destination_city || '-'}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Weight:</span>{' '}
-                      <span className="font-medium">{shipment.weight_total_kg ? `${shipment.weight_total_kg} kg` : '-'}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* RFQ Specific Fields - Same as Create Lead Shipment Details */}
+      {/* RFQ Shipment Details - Using MultiShipmentForm for full editing of all shipments */}
       {ticketType === 'RFQ' && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
               Shipment Details
-              {allPrefillShipments.length > 1 && (
-                <Badge variant="outline" className="ml-2 text-xs">
-                  Editing: {allPrefillShipments[0]?.shipment_label || 'Shipment 1'}
+              {shipments.length > 1 && (
+                <Badge variant="secondary" className="ml-auto">
+                  {shipments.length} shipments
                 </Badge>
               )}
             </CardTitle>
             <CardDescription>
-              Provide details about the shipment for accurate quoting
+              Provide details about the shipment(s) for accurate quoting. You can add multiple shipments.
+              {selectedService && (
+                <span className="block mt-1 text-xs">
+                  Department: <strong>{selectedService.department}</strong> (auto-determined from first shipment)
+                </span>
+              )}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Service Information */}
-            <FormSection variant="service" title="Service Information" glass>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="service_type">Service Type</Label>
-                  <Select
-                    value={shipmentData.service_type_code}
-                    onValueChange={(value) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        service_type_code: value,
-                        fleet_type: '',
-                        incoterm: '',
-                      }))
-                    }
-                  >
-                    <SelectTrigger id="service_type" className="bg-background/80 backdrop-blur-sm">
-                      <SelectValue placeholder="Select service type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectLabel className={cn(
-                          'py-2 px-2 -mx-1 rounded',
-                          SERVICE_CATEGORY_STYLES['Domestics']?.label,
-                          SERVICE_CATEGORY_STYLES['Domestics']?.bg
-                        )}>
-                          <Truck className="inline h-3 w-3 mr-1" />
-                          Domestics Service (Domestics Ops Dept)
-                        </SelectLabel>
-                        {domesticsServices.map((service) => (
-                          <SelectItem key={service.code} value={service.code} className="pl-6">
-                            {service.scope} | {service.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel className={cn(
-                          'py-2 px-2 -mx-1 rounded',
-                          SERVICE_CATEGORY_STYLES['Export']?.label,
-                          SERVICE_CATEGORY_STYLES['Export']?.bg
-                        )}>
-                          Export (Exim Ops Dept)
-                        </SelectLabel>
-                        {exportServices.map((service) => (
-                          <SelectItem key={service.code} value={service.code} className="pl-6">
-                            {service.scope} | {service.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel className={cn(
-                          'py-2 px-2 -mx-1 rounded',
-                          SERVICE_CATEGORY_STYLES['Import']?.label,
-                          SERVICE_CATEGORY_STYLES['Import']?.bg
-                        )}>
-                          Import (Exim Ops Dept)
-                        </SelectLabel>
-                        {importServices.map((service) => (
-                          <SelectItem key={service.code} value={service.code} className="pl-6">
-                            {service.scope} | {service.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel className={cn(
-                          'py-2 px-2 -mx-1 rounded',
-                          SERVICE_CATEGORY_STYLES['Import DTD']?.label,
-                          SERVICE_CATEGORY_STYLES['Import DTD']?.bg
-                        )}>
-                          Import DTD (Import DTD Ops Dept)
-                        </SelectLabel>
-                        {importDtdServices.map((service) => (
-                          <SelectItem key={service.code} value={service.code} className="pl-6">
-                            {service.scope} | {service.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  {selectedService && (
-                    <p className="text-xs text-muted-foreground">
-                      Department: {selectedService.department}
-                    </p>
-                  )}
-                </div>
-
-                {/* Fleet Type (only for Domestics) */}
-                {isDomesticsService && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="fleet_type">Fleet Requirement</Label>
-                      <Select
-                        value={shipmentData.fleet_type}
-                        onValueChange={(value) =>
-                          setShipmentData((prev) => ({ ...prev, fleet_type: value }))
-                        }
-                      >
-                        <SelectTrigger id="fleet_type">
-                          <SelectValue placeholder="Select fleet type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FLEET_TYPES.map((fleet) => (
-                            <SelectItem key={fleet} value={fleet}>
-                              {fleet}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="fleet_quantity">Fleet Quantity</Label>
-                      <Input
-                        id="fleet_quantity"
-                        type="number"
-                        min="1"
-                        value={shipmentData.fleet_quantity}
-                        onChange={(e) =>
-                          setShipmentData((prev) => ({
-                            ...prev,
-                            fleet_quantity: parseInt(e.target.value) || 1,
-                          }))
-                        }
-                        placeholder="Enter quantity"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Incoterms (only for Export/Import) */}
-                {isEximService && (
-                  <div className="space-y-2">
-                    <Label htmlFor="incoterm">Incoterms</Label>
-                    <Select
-                      value={shipmentData.incoterm}
-                      onValueChange={(value) =>
-                        setShipmentData((prev) => ({ ...prev, incoterm: value }))
-                      }
-                    >
-                      <SelectTrigger id="incoterm">
-                        <SelectValue placeholder="Select incoterm" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INCOTERMS.map((term) => (
-                          <SelectItem key={term.code} value={term.code}>
-                            {term.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-            </FormSection>
-
-            {/* Cargo Information */}
-            <FormSection variant="cargo" title="Cargo Information" glass>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="cargo_category">Cargo Category</Label>
-                  <Select
-                    value={shipmentData.cargo_category}
-                    onValueChange={(value) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        cargo_category: value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger id="cargo_category">
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CARGO_CATEGORIES.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {cat}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="cargo_description">Cargo Description</Label>
-                  <Textarea
-                    id="cargo_description"
-                    value={shipmentData.cargo_description}
-                    onChange={(e) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        cargo_description: e.target.value,
-                      }))
-                    }
-                    placeholder="Describe the cargo..."
-                    rows={2}
-                  />
-                </div>
-              </div>
-            </FormSection>
-
-            {/* Origin & Destination */}
-            <FormSection variant="route" title="Origin & Destination" glass>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* Origin */}
-                <div className="space-y-3 p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
-                  <p className="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-400">
-                    Origin
-                  </p>
-                  <div className="space-y-2">
-                    <Label htmlFor="origin_address">Address</Label>
-                    <Input
-                      id="origin_address"
-                      value={shipmentData.origin_address}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          origin_address: e.target.value,
-                        }))
-                      }
-                      placeholder="Street address"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="origin_city">City</Label>
-                    <Input
-                      id="origin_city"
-                      value={shipmentData.origin_city}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          origin_city: e.target.value,
-                        }))
-                      }
-                      placeholder="City"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="origin_country">Country</Label>
-                    <Select
-                      value={shipmentData.origin_country}
-                      onValueChange={(value) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          origin_country: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger id="origin_country">
-                        <SelectValue placeholder="Select country" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COUNTRIES.map((country) => (
-                          <SelectItem key={country} value={country}>
-                            {country}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Destination */}
-                <div className="space-y-3 p-3 bg-rose-500/5 rounded-lg border border-rose-500/20">
-                  <p className="text-xs font-semibold uppercase text-rose-600 dark:text-rose-400">
-                    Destination
-                  </p>
-                  <div className="space-y-2">
-                    <Label htmlFor="destination_address">Address</Label>
-                    <Input
-                      id="destination_address"
-                      value={shipmentData.destination_address}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          destination_address: e.target.value,
-                        }))
-                      }
-                      placeholder="Street address"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="destination_city">City</Label>
-                    <Input
-                      id="destination_city"
-                      value={shipmentData.destination_city}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          destination_city: e.target.value,
-                        }))
-                      }
-                      placeholder="City"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="destination_country">Country</Label>
-                    <Select
-                      value={shipmentData.destination_country}
-                      onValueChange={(value) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          destination_country: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger id="destination_country">
-                        <SelectValue placeholder="Select country" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COUNTRIES.map((country) => (
-                          <SelectItem key={country} value={country}>
-                            {country}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            </FormSection>
-
-            {/* Quantity & Dimensions */}
-            <FormSection variant="dimensions" title="Quantity & Dimensions" glass>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantity (Koli)</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    min="1"
-                    value={shipmentData.quantity}
-                    onChange={(e) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        quantity: parseInt(e.target.value) || 1,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="unit_of_measure">Unit of Measure</Label>
-                  <Select
-                    value={shipmentData.unit_of_measure}
-                    onValueChange={(value) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        unit_of_measure: value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger id="unit_of_measure">
-                      <SelectValue placeholder="Select unit" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {UNITS_OF_MEASURE.map((unit) => (
-                        <SelectItem key={unit} value={unit}>
-                          {unit}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="weight_per_unit">Weight/Unit (Kg)</Label>
-                  <Input
-                    id="weight_per_unit"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={shipmentData.weight_per_unit_kg ?? ''}
-                    onChange={(e) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        weight_per_unit_kg: e.target.value
-                          ? parseFloat(e.target.value)
-                          : null,
-                      }))
-                    }
-                    placeholder="Gross weight"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-4">
-                <div className="space-y-2">
-                  <Label htmlFor="length_cm">Length (cm)</Label>
-                  <Input
-                    id="length_cm"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={shipmentData.length_cm ?? ''}
-                    onChange={(e) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        length_cm: e.target.value
-                          ? parseFloat(e.target.value)
-                          : null,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="width_cm">Width (cm)</Label>
-                  <Input
-                    id="width_cm"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={shipmentData.width_cm ?? ''}
-                    onChange={(e) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        width_cm: e.target.value
-                          ? parseFloat(e.target.value)
-                          : null,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="height_cm">Height (cm)</Label>
-                  <Input
-                    id="height_cm"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={shipmentData.height_cm ?? ''}
-                    onChange={(e) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        height_cm: e.target.value
-                          ? parseFloat(e.target.value)
-                          : null,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Total Volume (CBM)</Label>
-                  <Input
-                    value={
-                      shipmentData.volume_total_cbm !== null
-                        ? shipmentData.volume_total_cbm.toFixed(4)
-                        : '-'
-                    }
-                    disabled
-                    className="bg-muted"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Total Weight (Kg)</Label>
-                  <Input
-                    value={
-                      shipmentData.weight_total_kg !== null
-                        ? shipmentData.weight_total_kg.toFixed(2)
-                        : '-'
-                    }
-                    disabled
-                    className="bg-muted"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Auto-calculated: Quantity x Weight/Unit
-                  </p>
-                </div>
-              </div>
-            </FormSection>
-
-            {/* Estimated Leadtime & Cargo Value */}
-            <FormSection variant="schedule" title="Leadtime & Cargo Value" glass>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="estimated_leadtime">Estimated Leadtime</Label>
-                  <Input
-                    id="estimated_leadtime"
-                    value={shipmentData.estimated_leadtime}
-                    onChange={(e) =>
-                      setShipmentData((prev) => ({
-                        ...prev,
-                        estimated_leadtime: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g., 3-5 hari, 1 minggu"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Estimasi waktu pengiriman
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="estimated_cargo_value">Estimated Cargo Value</Label>
-                  <div className="flex gap-2">
-                    <Select
-                      value={shipmentData.cargo_value_currency}
-                      onValueChange={(value) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          cargo_value_currency: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="w-[100px]">
-                        <SelectValue placeholder="Currency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="IDR">IDR</SelectItem>
-                        <SelectItem value="USD">USD</SelectItem>
-                        <SelectItem value="EUR">EUR</SelectItem>
-                        <SelectItem value="SGD">SGD</SelectItem>
-                        <SelectItem value="CNY">CNY</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      id="estimated_cargo_value"
-                      type="number"
-                      min="0"
-                      step="1000"
-                      className="flex-1"
-                      value={shipmentData.estimated_cargo_value ?? ''}
-                      onChange={(e) =>
-                        setShipmentData((prev) => ({
-                          ...prev,
-                          estimated_cargo_value: e.target.value
-                            ? parseFloat(e.target.value)
-                            : null,
-                        }))
-                      }
-                      placeholder="Estimated value"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Perkiraan nilai barang yang dikirim
-                  </p>
-                </div>
-              </div>
-            </FormSection>
-
-            {/* Scope of Work */}
-            <FormSection variant="scope" title="Scope of Work" glass>
-              <Textarea
-                id="scope_of_work"
-                value={shipmentData.scope_of_work}
-                onChange={(e) =>
-                  setShipmentData((prev) => ({
-                    ...prev,
-                    scope_of_work: e.target.value,
-                  }))
-                }
-                placeholder="Detail pekerjaan dan kebutuhan..."
-                rows={3}
-              />
-            </FormSection>
-
-            {/* Additional Services */}
-            <FormSection variant="additional" title="Additional Services" glass>
-              <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4">
-                {ADDITIONAL_SERVICES.map((service) => (
-                  <div
-                    key={service.code}
-                    className="flex items-center space-x-2"
-                  >
-                    <Checkbox
-                      id={`service-${service.code}`}
-                      checked={shipmentData.additional_services.includes(
-                        service.code
-                      )}
-                      onCheckedChange={() =>
-                        handleAdditionalServiceToggle(service.code)
-                      }
-                    />
-                    <Label
-                      htmlFor={`service-${service.code}`}
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      {service.name}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            </FormSection>
+          <CardContent>
+            <MultiShipmentForm
+              shipments={shipments}
+              onChange={setShipments}
+              maxShipments={10}
+            />
           </CardContent>
         </Card>
       )}
