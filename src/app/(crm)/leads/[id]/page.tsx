@@ -52,7 +52,8 @@ export default async function LeadDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  const shipment = lead.shipment_details?.[0]
+  // Get all shipments (not just the first one)
+  const shipments = lead.shipment_details || []
 
   return (
     <div className="space-y-6">
@@ -169,62 +170,89 @@ export default async function LeadDetailPage({ params }: PageProps) {
           </CardContent>
         </Card>
 
-        {/* Shipment Details */}
-        {shipment && (
+        {/* Shipment Details - Multi-shipment support */}
+        {shipments.length > 0 && (
           <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Truck className="h-5 w-5" />
                 Detail Shipment
+                {shipments.length > 1 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {shipments.length} shipments
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
-                {shipment.service_type_code && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Jenis Layanan</p>
-                    <p className="font-medium">{shipment.service_type_code}</p>
+            <CardContent className="space-y-6">
+              {shipments.map((shipment: any, index: number) => (
+                <div key={shipment.shipment_detail_id || index} className={shipments.length > 1 ? 'pb-6 border-b last:border-0 last:pb-0' : ''}>
+                  {/* Shipment header for multi-shipment */}
+                  {shipments.length > 1 && (
+                    <div className="flex items-center gap-2 mb-4">
+                      <Badge variant="outline" className="font-mono">
+                        #{shipment.shipment_order || index + 1}
+                      </Badge>
+                      <span className="font-medium text-sm">
+                        {shipment.shipment_label || `Shipment ${shipment.shipment_order || index + 1}`}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {shipment.service_type_code && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Jenis Layanan</p>
+                        <p className="font-medium">{shipment.service_type_code}</p>
+                      </div>
+                    )}
+                    {(shipment.origin_city || shipment.destination_city) && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Rute</p>
+                        <p className="font-medium">
+                          {shipment.origin_city || '-'} → {shipment.destination_city || '-'}
+                        </p>
+                      </div>
+                    )}
+                    {shipment.incoterm && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Incoterm</p>
+                        <p className="font-medium">{shipment.incoterm}</p>
+                      </div>
+                    )}
+                    {shipment.fleet_type && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Fleet Type</p>
+                        <p className="font-medium">{shipment.fleet_type}</p>
+                      </div>
+                    )}
+                    {shipment.cargo_category && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Kategori Cargo</p>
+                        <p className="font-medium">{shipment.cargo_category}</p>
+                      </div>
+                    )}
+                    {shipment.weight_total_kg && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Berat Total</p>
+                        <p className="font-medium">{shipment.weight_total_kg} kg</p>
+                      </div>
+                    )}
+                    {shipment.volume_total_cbm && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Volume Total</p>
+                        <p className="font-medium">{shipment.volume_total_cbm} CBM</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                {(shipment.origin_city || shipment.destination_city) && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Rute</p>
-                    <p className="font-medium">
-                      {shipment.origin_city || '-'} → {shipment.destination_city || '-'}
-                    </p>
-                  </div>
-                )}
-                {shipment.incoterm && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Incoterm</p>
-                    <p className="font-medium">{shipment.incoterm}</p>
-                  </div>
-                )}
-                {shipment.cargo_category && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Kategori Cargo</p>
-                    <p className="font-medium">{shipment.cargo_category}</p>
-                  </div>
-                )}
-                {shipment.weight_total_kg && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Berat Total</p>
-                    <p className="font-medium">{shipment.weight_total_kg} kg</p>
-                  </div>
-                )}
-                {shipment.volume_total_cbm && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Volume Total</p>
-                    <p className="font-medium">{shipment.volume_total_cbm} CBM</p>
-                  </div>
-                )}
-              </div>
-              {shipment.cargo_description && (
-                <div className="mt-4">
-                  <p className="text-sm text-muted-foreground">Deskripsi Cargo</p>
-                  <p className="font-medium">{shipment.cargo_description}</p>
+                  {shipment.cargo_description && (
+                    <div className="mt-4">
+                      <p className="text-sm text-muted-foreground">Deskripsi Cargo</p>
+                      <p className="font-medium">{shipment.cargo_description}</p>
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
             </CardContent>
           </Card>
         )}
