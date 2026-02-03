@@ -130,8 +130,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 // Service type per shipment
                 service_type: s.service_type_code ? getServiceTypeDisplayLabel(s.service_type_code) : null,
                 incoterm: s.incoterm || null,
-                // Multi-shipment cost support
-                cost_amount: s.cost_amount || null,
+                // Multi-shipment selling rate (NOTE: cost_amount is NOT included - never expose cost to public)
                 selling_rate: s.selling_rate || null,
                 selling_rate_formatted: s.selling_rate
                   ? formatCurrency(s.selling_rate, s.cost_currency || quotation.currency)

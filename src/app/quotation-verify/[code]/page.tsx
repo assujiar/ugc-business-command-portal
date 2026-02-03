@@ -18,8 +18,7 @@ interface ShipmentData {
   // Service type per shipment
   service_type: string | null
   incoterm: string | null
-  // Multi-shipment cost support
-  cost_amount: number | null
+  // Multi-shipment selling rate (NOTE: cost is NEVER exposed to public)
   selling_rate: number | null
   selling_rate_formatted: string | null
   fleet_type: string | null

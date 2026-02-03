@@ -109,8 +109,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           component_type,
           component_name,
           description,
-          cost_amount,
-          target_margin_percent,
           selling_rate,
           quantity,
           unit,
