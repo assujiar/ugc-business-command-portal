@@ -126,6 +126,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 weight: s.weight_total_kg,
                 volume: s.volume_total_cbm,
                 route: `${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`,
+                // Multi-shipment cost support
+                cost_amount: s.cost_amount || null,
+                selling_rate: s.selling_rate || null,
+                selling_rate_formatted: s.selling_rate
+                  ? formatCurrency(s.selling_rate, s.cost_currency || quotation.currency)
+                  : null,
+                fleet_type: s.fleet_type || null,
+                fleet_quantity: s.fleet_quantity || 1,
               }))
             }
             return null

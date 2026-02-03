@@ -15,6 +15,12 @@ interface ShipmentData {
   weight: number | null
   volume: number | null
   route: string
+  // Multi-shipment cost support
+  cost_amount: number | null
+  selling_rate: number | null
+  selling_rate_formatted: string | null
+  fleet_type: string | null
+  fleet_quantity: number | null
 }
 
 interface QuotationData {
@@ -348,17 +354,33 @@ export default function QuotationVerifyPage() {
                           {shipment.index}
                         </span>
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">{shipment.route}</p>
-                          {shipment.cargo_description && (
-                            <p className="text-xs text-gray-500 mt-1">{shipment.cargo_description}</p>
-                          )}
-                          {(shipment.weight || shipment.volume) && (
-                            <p className="text-xs text-gray-400 mt-1">
-                              {shipment.weight && <span>{shipment.weight} kg</span>}
-                              {shipment.weight && shipment.volume && ' | '}
-                              {shipment.volume && <span>{shipment.volume} cbm</span>}
-                            </p>
-                          )}
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{shipment.route}</p>
+                              {shipment.cargo_description && (
+                                <p className="text-xs text-gray-500 mt-1">{shipment.cargo_description}</p>
+                              )}
+                              <div className="flex flex-wrap gap-2 mt-1 text-xs text-gray-400">
+                                {shipment.weight && <span>{shipment.weight} kg</span>}
+                                {shipment.weight && shipment.volume && <span>|</span>}
+                                {shipment.volume && <span>{shipment.volume} cbm</span>}
+                                {shipment.fleet_type && (
+                                  <>
+                                    <span>|</span>
+                                    <span className="text-[#ff4600]">
+                                      {shipment.fleet_type}
+                                      {shipment.fleet_quantity && shipment.fleet_quantity > 1 && ` × ${shipment.fleet_quantity}`}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            {shipment.selling_rate_formatted && (
+                              <span className="text-sm font-bold text-[#ff4600] whitespace-nowrap">
+                                {shipment.selling_rate_formatted}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
