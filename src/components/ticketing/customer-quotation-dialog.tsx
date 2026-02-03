@@ -1663,13 +1663,14 @@ export function CustomerQuotationDialog({
                         </p>
                         <div className="grid grid-cols-2 gap-2">
                           {allShipments.map((shipment, idx) => {
-                            const shipmentCost = operationalCosts?.find(
-                              c => c.shipment_detail_id === shipment.shipment_detail_id
+                            // Calculate from items' actual values (realtime update when user edits)
+                            const shipmentLabel = shipment.shipment_label || `Shipment ${idx + 1}`
+                            const shipmentItems = items.filter(item =>
+                              item.component_name?.startsWith(`${shipmentLabel}:`)
                             )
-                            const costAmount = shipmentCost?.amount || 0
-                            // FIX: Use user's targetMarginPercent instead of hardcoded 15%
-                            const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
-                            const sellingRate = Math.round(costAmount * (1 + marginValue / 100))
+                            // Sum cost and selling_rate from items
+                            const costAmount = shipmentItems.reduce((sum, item) => sum + (item.cost_amount || 0), 0)
+                            const sellingRate = shipmentItems.reduce((sum, item) => sum + (item.selling_rate || 0), 0)
                             return (
                               <div key={idx} className="p-2 bg-white dark:bg-gray-800 rounded border text-xs">
                                 <div className="font-medium truncate">
