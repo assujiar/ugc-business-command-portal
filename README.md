@@ -10,6 +10,7 @@ A comprehensive Business Command Portal for PT. Utama Global Indo Cargo (UGC Log
 - **Authentication**: Supabase Auth with SSR
 - **State Management**: React Server Components + React Hook Form
 - **Email**: Nodemailer SMTP integration
+- **PDF**: Server-side HTML-to-PDF with Puppeteer
 
 ## System Overview
 
@@ -22,7 +23,7 @@ Lead management, pipeline, and opportunity tracking for sales operations.
 RFQ (Request for Quotation) and General ticket handling for operations team.
 
 ### 3. Quotation Module
-Customer quotation creation, sending, and management.
+Customer quotation creation, sending, and management with multi-shipment support.
 
 ---
 
@@ -69,20 +70,30 @@ Customer quotation creation, sending, and management.
 - **Quotation Creation**: From operational costs or standalone
 - **Multi-Shipment Support**: Single quotation ID for multiple shipments with individual costs
 - **Rate Structures**: Bundling (all-in) or Breakdown (itemized)
+- **Per-Shipment Display**: Each shipment displayed as separate section with its own rate (no aggregate total)
 - **Terms & Conditions**: Customizable includes/excludes
 - **Validity Period**: Configurable validity days
 - **Outputs**:
-  - Professional PDF generation
-  - Email sending with HTML templates
-  - WhatsApp message generation
+  - Professional PDF generation (per-shipment sections)
+  - Email sending with HTML templates (per-shipment display)
+  - WhatsApp message generation (per-shipment rates)
   - Online verification page with QR code
 
-### Multi-Shipment Support
-- **Per-Ticket Multi-Shipment**: Add multiple shipments to single ticket
-- **Per-Shipment Costing**: Each shipment has its own operational cost
-- **Batch Cost Submission**: Ops can submit costs for all shipments in one action
-- **Aggregated Quotations**: Customer quotation includes all shipment costs
-- **PDF/Email Display**: All shipments shown with individual routes and costs
+### Multi-Shipment Quotation Display (v1.5.2)
+- **Separate Shipment Sections**: Each shipment displayed independently with:
+  - Shipment header (Shipment 1, Shipment 2, etc.)
+  - Route information (origin → destination)
+  - Cargo description
+  - Fleet type if applicable
+  - Rate breakdown items (if breakdown mode)
+  - Subtotal for that shipment only
+- **No Aggregate Total**: For multi-shipment quotations, no combined total is shown
+- **Consistent Display**: Same per-shipment format across:
+  - PDF documents
+  - Email HTML
+  - WhatsApp text messages
+  - Online verification page
+  - Public PDF download
 
 ---
 
@@ -115,7 +126,16 @@ ugc-business-command-portal/
 │   │   ├── api/               # API Routes (BFF)
 │   │   │   ├── crm/           # CRM APIs
 │   │   │   ├── ticketing/     # Ticketing APIs
+│   │   │   │   └── customer-quotations/
+│   │   │   │       ├── [id]/
+│   │   │   │       │   ├── pdf/route.ts       # PDF generation
+│   │   │   │       │   ├── send/route.ts      # Email/WhatsApp
+│   │   │   │       │   ├── accept/route.ts
+│   │   │   │       │   └── reject/route.ts
+│   │   │   │       ├── validate/[code]/route.ts  # Public validation
+│   │   │   │       └── route.ts               # List/Create
 │   │   │   └── public/        # Public APIs (no auth)
+│   │   │       └── quotation/[code]/pdf/route.ts  # Public PDF
 │   │   ├── quotation-verify/[code]/ # Public quotation verification
 │   │   └── login/
 │   ├── components/
@@ -125,7 +145,8 @@ ugc-business-command-portal/
 │   │   │   ├── create-ticket-form.tsx
 │   │   │   ├── customer-quotation-dialog.tsx
 │   │   │   ├── customer-quotation-edit-form.tsx
-│   │   │   ├── multi-shipment-cost-dialog.tsx  # NEW
+│   │   │   ├── customer-quotation-detail.tsx
+│   │   │   ├── multi-shipment-cost-dialog.tsx
 │   │   │   └── operational-cost-detail.tsx
 │   │   ├── shared/            # Shared components
 │   │   │   └── multi-shipment-form.tsx
@@ -133,6 +154,9 @@ ugc-business-command-portal/
 │   │   └── ui/                # shadcn/ui components
 │   ├── lib/
 │   │   ├── supabase/          # Supabase clients
+│   │   │   ├── server.ts      # Server-side client
+│   │   │   ├── admin.ts       # Admin/service role client
+│   │   │   └── client.ts      # Client-side client
 │   │   ├── email.ts           # Email service (Nodemailer)
 │   │   ├── utils.ts           # Utility functions
 │   │   ├── constants.ts       # Service types, departments
@@ -145,12 +169,13 @@ ugc-business-command-portal/
 │       ├── database.ts        # Supabase generated types
 │       └── shipment.ts        # Shipment type definitions
 ├── supabase/
-│   └── migrations/            # 129 SQL migrations
+│   └── migrations/            # 130+ SQL migrations
 │       ├── 001-034: Core CRM tables
 │       ├── 035-060: Ticketing tables
 │       ├── 061-090: Quotation system
 │       ├── 091-128: Enhancements
-│       └── 129_multi_shipment_cost_support.sql  # NEW
+│       ├── 129_multi_shipment_cost_support.sql
+│       └── 130_fix_multi_shipment_cost_revision.sql
 └── public/
     └── logo/                  # Brand assets
 ```
@@ -177,7 +202,7 @@ ugc-business-command-portal/
 - `activities` - Tasks, calls, meetings
 
 #### Quotations
-- `customer_quotations` - Customer quotations
+- `customer_quotations` - Customer quotations (includes `shipments` JSONB field)
 - `customer_quotation_items` - Breakdown items
 - `quotation_term_templates` - Terms & conditions templates
 
@@ -213,12 +238,13 @@ record_response_exchange(p_ticket_id, p_responder_user_id, p_response_type)
 | POST | `/api/ticketing/tickets/[id]/assign` | Assign ticket |
 | POST | `/api/ticketing/tickets/[id]/transition` | Status transition |
 | GET/POST | `/api/ticketing/operational-costs` | List/Create costs |
-| POST | `/api/ticketing/operational-costs/batch` | **Batch cost creation** |
+| POST | `/api/ticketing/operational-costs/batch` | Batch cost creation |
 | GET | `/api/ticketing/operational-costs/batch` | Get all shipment costs |
 | GET/POST | `/api/ticketing/customer-quotations` | List/Create quotations |
 | POST | `/api/ticketing/customer-quotations/[id]/send` | Send via email/WhatsApp |
 | POST | `/api/ticketing/customer-quotations/[id]/pdf` | Generate PDF HTML |
 | GET | `/api/ticketing/customer-quotations/validate/[code]` | Public validation |
+| GET | `/api/public/quotation/[code]/pdf` | Public PDF download |
 
 ### CRM APIs
 
@@ -254,7 +280,7 @@ record_response_exchange(p_ticket_id, p_responder_user_id, p_response_type)
 
 ## Key Workflows
 
-### Multi-Shipment Cost Submission (NEW)
+### Multi-Shipment Cost Submission
 1. Creator creates RFQ ticket with multiple shipments
 2. Ticket routed to Ops department based on service type
 3. Ops opens ticket, clicks "Submit Costs (N Shipments)"
@@ -263,14 +289,18 @@ record_response_exchange(p_ticket_id, p_responder_user_id, p_response_type)
 6. Submit creates costs atomically for all shipments
 7. First response SLA tracked on first cost submission
 
-### Customer Quotation with Multi-Shipment
+### Customer Quotation with Multi-Shipment (v1.5.2)
 1. Sales creates quotation from ticket with costs
 2. System loads all shipment costs automatically
-3. Each shipment shows with its route and cost
-4. Total = sum of all shipment selling rates
-5. Send quotation via email or WhatsApp
-6. Customer receives quotation with all shipments listed
-7. Online verification shows shipment details
+3. Each shipment stored with its route, cost, and selling rate
+4. **Display**: Each shipment shown as separate section with:
+   - Shipment header and route
+   - Items breakdown (if breakdown mode)
+   - Subtotal for that shipment
+5. **No aggregate total** for multi-shipment scenarios
+6. Send quotation via email or WhatsApp
+7. Customer receives quotation with per-shipment rates
+8. Online verification shows same per-shipment format
 
 ### Cost Revision Flow (After Quotation Rejection)
 1. Customer rejects quotation → Cost status changes to `revise_requested`
@@ -339,7 +369,7 @@ SMTP_FROM=noreply@ugc.co.id
 
 3. **Run Database Migrations**
 
-In Supabase SQL Editor, run migrations in order (001-129).
+In Supabase SQL Editor, run migrations in order (001-130).
 
 4. **Start Development Server**
 
@@ -364,6 +394,7 @@ Open [http://localhost:3000](http://localhost:3000)
 Built on shadcn/ui with custom components:
 - `MultiShipmentCostDialog` - Batch cost submission
 - `CustomerQuotationDialog` - Quotation creation
+- `CustomerQuotationEditForm` - Quotation editing with multi-shipment
 - `MultiShipmentForm` - Shipment editor
 - `PipelineBoard` - Kanban pipeline
 - `LeadInboxTable` / `SalesInboxTable`
@@ -387,7 +418,16 @@ npm run lint
 
 ## Version History
 
-### Latest Changes (v1.5.1)
+### Latest Changes (v1.5.2)
+- **Per-Shipment Quotation Display**: Multi-shipment quotations now display each shipment as a separate section
+- **No Aggregate Total**: For quotations with multiple shipments, no combined total is shown
+- **PDF Enhancement**: Each shipment shown with header, route, items (if breakdown), and subtotal
+- **Email HTML Enhancement**: Per-shipment cards with route and rate information
+- **WhatsApp Enhancement**: Per-shipment rates listed without aggregate total
+- **Validation Page Enhancement**: Header shows "Multiple Shipments" instead of aggregate total
+- **Backward Compatible**: Single-shipment quotations still show total as before
+
+### v1.5.1
 - **Cost Revision Fix for Multi-Shipment**: When a quotation is rejected and ops submits a revised cost, only the latest submitted cost per shipment is used
 - **Deduplication Logic**: `fn_resolve_all_shipment_costs` now uses `DISTINCT ON (shipment_detail_id)` to return only the most recent submitted cost per shipment
 - **Status Filtering**: Customer quotation dialog now properly filters for `status === 'submitted'` costs, excluding rejected costs
@@ -406,6 +446,62 @@ npm run lint
 - v1.2.0: Customer quotation system with PDF/email
 - v1.1.0: Operational cost management
 - v1.0.0: Initial CRM and ticketing modules
+
+---
+
+## Technical Notes
+
+### Multi-Shipment Quotation Data Structure
+
+The `customer_quotations` table stores shipment data in a JSONB field:
+
+```typescript
+interface ShipmentData {
+  shipment_detail_id: string
+  origin_city: string
+  origin_country: string
+  destination_city: string
+  destination_country: string
+  cost_amount: number
+  selling_rate: number
+  cost_currency: string
+  margin_percent: number
+  cargo_description?: string
+  fleet_type?: string
+  fleet_quantity?: number
+}
+```
+
+### Item Grouping by Shipment
+
+For breakdown rate structure, items are stored with shipment prefix:
+- `component_name: "Shipment 1: Sea Freight"`
+- `component_name: "Shipment 2: THC Origin"`
+
+The display logic parses these prefixes to group items per shipment:
+
+```typescript
+const groupItemsByShipment = (items: any[], shipments: any[]): Map<number, any[]> => {
+  const itemsByShipment = new Map<number, any[]>()
+  shipments.forEach((_, idx) => itemsByShipment.set(idx, []))
+
+  items.forEach((item: any) => {
+    const componentName = item.component_name || ''
+    const shipmentMatch = componentName.match(/^Shipment\s*(\d+)\s*:\s*/i)
+    if (shipmentMatch) {
+      const shipmentIndex = parseInt(shipmentMatch[1]) - 1
+      if (itemsByShipment.has(shipmentIndex)) {
+        const cleanedItem = {
+          ...item,
+          component_name: componentName.replace(/^Shipment\s*\d+\s*:\s*/i, '')
+        }
+        itemsByShipment.get(shipmentIndex)!.push(cleanedItem)
+      }
+    }
+  })
+  return itemsByShipment
+}
+```
 
 ---
 

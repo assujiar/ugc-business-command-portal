@@ -61,6 +61,41 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   expired: { label: 'EXPIRED', color: '#d97706', bg: '#fef3c7' },
 }
 
+// Helper to group items by shipment label prefix
+const groupItemsByShipment = (items: any[], shipments: any[]): Map<number, any[]> => {
+  const itemsByShipment = new Map<number, any[]>()
+
+  // Initialize with empty arrays for each shipment
+  shipments.forEach((_, idx) => {
+    itemsByShipment.set(idx, [])
+  })
+
+  items.forEach((item: any) => {
+    const componentName = item.component_name || ''
+    // Check if item has shipment prefix like "Shipment 1: " or "Shipment 2: "
+    const shipmentMatch = componentName.match(/^Shipment\s*(\d+)\s*:\s*/i)
+    if (shipmentMatch) {
+      const shipmentIndex = parseInt(shipmentMatch[1]) - 1
+      if (itemsByShipment.has(shipmentIndex)) {
+        // Remove the prefix from component_name for display
+        const cleanedItem = {
+          ...item,
+          component_name: componentName.replace(/^Shipment\s*\d+\s*:\s*/i, '')
+        }
+        itemsByShipment.get(shipmentIndex)!.push(cleanedItem)
+      }
+    } else {
+      // Item without shipment prefix goes to first shipment (or general items)
+      if (!itemsByShipment.has(-1)) {
+        itemsByShipment.set(-1, [])
+      }
+      itemsByShipment.get(-1)!.push(item)
+    }
+  })
+
+  return itemsByShipment
+}
+
 const generateQuotationHTML = (quotation: any, profile: ProfileData, validationUrl: string, printDate: string): string => {
   const items = quotation.items || []
   const isBreakdown = quotation.rate_structure === 'breakdown'
@@ -79,8 +114,59 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
   }
   const hasMultipleShipments = Array.isArray(shipments) && shipments.length > 1
 
+  // Group items by shipment for multi-shipment breakdown
+  const itemsByShipment = hasMultipleShipments && isBreakdown
+    ? groupItemsByShipment(items, shipments)
+    : null
+
   let rateHTML = ''
-  if (isBreakdown && items.length > 0) {
+
+  // Multi-shipment: Display each shipment with its own rate section
+  if (hasMultipleShipments) {
+    rateHTML = shipments.map((s: any, idx: number) => {
+      const shipmentItems = itemsByShipment?.get(idx) || []
+      const shipmentSellingRate = s.selling_rate || 0
+
+      let shipmentRateContent = ''
+      if (isBreakdown && shipmentItems.length > 0) {
+        // Breakdown mode: show items for this shipment
+        shipmentRateContent = `
+          <table class="tbl" style="margin-bottom:4px">
+            <thead><tr><th style="width:28px">#</th><th>Description</th><th style="width:70px">Qty</th><th style="width:90px;text-align:right">Amount</th></tr></thead>
+            <tbody>
+              ${shipmentItems.map((item: any, i: number) => `
+                <tr>
+                  <td class="c">${i + 1}</td>
+                  <td><b>${item.component_name || item.component_type}</b>${item.description ? `<br><span class="m">${item.description}</span>` : ''}</td>
+                  <td class="c">${item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}</td>
+                  <td class="r">${formatCurrency(item.selling_rate, s.cost_currency || quotation.currency)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `
+      }
+
+      return `
+        <div class="shipment-section" style="margin-bottom:${idx < shipments.length - 1 ? '12px' : '0'};padding:8px;background:#fafafa;border-radius:4px;border-left:3px solid #ff4600">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div>
+              <span style="font-size:9px;font-weight:700;color:#ff4600">SHIPMENT ${idx + 1}</span>
+              <span style="font-size:8px;color:#666;margin-left:8px">${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}</span>
+            </div>
+          </div>
+          ${s.cargo_description ? `<div style="font-size:7px;color:#666;margin-bottom:4px">${s.cargo_description}</div>` : ''}
+          ${s.fleet_type ? `<div style="font-size:7px;color:#666;margin-bottom:4px">Fleet: ${s.fleet_type}${s.fleet_quantity > 1 ? ' × ' + s.fleet_quantity : ''}</div>` : ''}
+          ${shipmentRateContent}
+          <div style="background:#ff4600;color:#fff;padding:4px 8px;border-radius:3px;display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+            <span style="font-size:7px;font-weight:600;text-transform:uppercase">Subtotal Shipment ${idx + 1}</span>
+            <span style="font-size:11px;font-weight:700">${formatCurrency(shipmentSellingRate, s.cost_currency || quotation.currency)}</span>
+          </div>
+        </div>
+      `
+    }).join('')
+  } else if (isBreakdown && items.length > 0) {
+    // Single shipment with breakdown
     rateHTML = `
       <table class="tbl">
         <thead><tr><th style="width:28px">#</th><th>Description</th><th style="width:70px">Qty</th><th style="width:90px;text-align:right">Amount</th></tr></thead>
@@ -97,6 +183,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
       </table>
     `
   } else {
+    // Single shipment bundling
     rateHTML = `
       <table class="tbl">
         <thead><tr><th>Service</th><th style="width:90px;text-align:right">Amount</th></tr></thead>
@@ -269,36 +356,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         </div>
       </div>
 
-      ${hasMultipleShipments ? `
-      <div class="keep" style="margin-bottom:10px">
-        <div class="sec">Shipments (${shipments.length})</div>
-        ${shipments.map((s: any, idx: number) => `
-          <div class="route" style="margin-bottom:${idx < shipments.length - 1 ? '6px' : '0'}">
-            <div style="font-size:7px;font-weight:600;color:#ff4600;margin-right:8px">#${idx + 1}</div>
-            <div class="pt">
-              <div class="city">${s.origin_city || 'Origin'}</div>
-              <div class="ctry">${s.origin_country || ''}${s.origin_port ? ' • ' + s.origin_port : ''}</div>
-            </div>
-            <div class="arr">→</div>
-            <div class="pt">
-              <div class="city">${s.destination_city || 'Destination'}</div>
-              <div class="ctry">${s.destination_country || ''}${s.destination_port ? ' • ' + s.destination_port : ''}</div>
-            </div>
-            <div style="margin-left:auto;text-align:right">
-              ${s.selling_rate ? `
-                <div style="font-size:9px;font-weight:700;color:#ff4600">${formatCurrency(s.selling_rate, s.cost_currency || quotation.currency)}</div>
-              ` : ''}
-              <div style="font-size:6px;color:#666">
-                ${s.cargo_description ? `<div>${s.cargo_description}</div>` : ''}
-                ${s.weight_total_kg ? `<span>${s.weight_total_kg} kg</span>` : ''}
-                ${s.volume_total_cbm ? `<span> | ${s.volume_total_cbm} cbm</span>` : ''}
-                ${s.fleet_type ? `<span> | ${s.fleet_type}${s.fleet_quantity > 1 ? ' x' + s.fleet_quantity : ''}</span>` : ''}
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-      ` : `
+      ${!hasMultipleShipments ? `
       <div class="route keep">
         <div class="pt">
           <div class="city">${quotation.origin_city || 'Origin'}</div>
@@ -310,7 +368,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
           <div class="ctry">${quotation.destination_country || ''}${quotation.destination_port ? ' • ' + quotation.destination_port : ''}</div>
         </div>
       </div>
-      `}
+      ` : ''}
 
       ${(quotation.cargo_weight || quotation.cargo_volume || quotation.commodity || quotation.estimated_leadtime) ? `
       <div class="keep">
@@ -329,12 +387,14 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
       ${quotation.cargo_description ? `<div class="note keep"><h4>Cargo Description</h4><p>${quotation.cargo_description}</p></div>` : ''}
 
       <div class="keep">
-        <div class="sec">Rate (${quotation.currency || 'IDR'})</div>
+        <div class="sec">${hasMultipleShipments ? `Shipments & Rates (${shipments.length} shipments)` : `Rate (${quotation.currency || 'IDR'})`}</div>
         ${rateHTML}
+        ${!hasMultipleShipments ? `
         <div class="total">
           <span class="lbl">Total</span>
           <span class="amt">${formatCurrency(quotation.total_selling_rate, quotation.currency)}</span>
         </div>
+        ` : ''}
       </div>
 
       ${quotation.scope_of_work ? `<div class="note keep"><h4>Scope of Work</h4><p>${quotation.scope_of_work}</p></div>` : ''}
