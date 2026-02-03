@@ -803,9 +803,9 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
   const hasMultipleShipments = shipments.length > 1
 
   // Helper function to group items by shipment prefix
-  const groupItemsByShipment = (itemsList: any[], shipmentsList: any[]): Map<number, { items: any[], subtotal: number }> => {
-    const itemsByShipment = new Map<number, { items: any[], subtotal: number }>()
-    shipmentsList.forEach((_, idx) => itemsByShipment.set(idx, { items: [], subtotal: 0 }))
+  const groupItemsByShipment = (itemsList: any[], shipmentsList: any[]): Map<number, { items: any[], subtotal: number, totalCost: number }> => {
+    const itemsByShipment = new Map<number, { items: any[], subtotal: number, totalCost: number }>()
+    shipmentsList.forEach((_, idx) => itemsByShipment.set(idx, { items: [], subtotal: 0, totalCost: 0 }))
 
     itemsList.forEach((item: any) => {
       const componentName = item.component_name || ''
@@ -820,6 +820,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
           const group = itemsByShipment.get(shipmentIndex)!
           group.items.push(cleanedItem)
           group.subtotal += item.selling_rate || 0
+          group.totalCost += item.cost_amount || 0
         }
       }
     })
@@ -1110,29 +1111,51 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                             </div>
                             {/* Shipment Items */}
                             <div className="divide-y">
-                              {group.items.map((item: any, itemIdx: number) => (
-                                <div key={item.id || itemIdx} className="flex items-center justify-between p-3 bg-white dark:bg-gray-900">
-                                  <div>
-                                    <p className="font-medium">{item.component_name || item.component_type}</p>
-                                    {item.description && (
-                                      <p className="text-sm text-muted-foreground">{item.description}</p>
-                                    )}
+                              {group.items.map((item: any, itemIdx: number) => {
+                                const itemMargin = item.cost_amount > 0
+                                  ? Math.round(((item.selling_rate - item.cost_amount) / item.cost_amount) * 100 * 100) / 100
+                                  : 0
+                                return (
+                                  <div key={item.id || itemIdx} className="p-3 bg-white dark:bg-gray-900">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="font-medium">{item.component_name || item.component_type}</p>
+                                        {item.description && (
+                                          <p className="text-sm text-muted-foreground">{item.description}</p>
+                                        )}
+                                      </div>
+                                      <p className="font-mono font-medium text-green-600">
+                                        {formatCurrency(item.selling_rate, quotation.currency)}
+                                      </p>
+                                    </div>
+                                    {/* Cost and Margin per item */}
+                                    <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+                                      <span>Cost: <span className="font-mono">{formatCurrency(item.cost_amount || 0, quotation.currency)}</span></span>
+                                      <span>Margin: <span className="font-semibold text-blue-600">{itemMargin}%</span></span>
+                                    </div>
                                   </div>
-                                  <p className="font-mono font-medium">
-                                    {formatCurrency(item.selling_rate, quotation.currency)}
+                                )
+                              })}
+                            </div>
+                            {/* Shipment Summary: Cost, Margin, Subtotal */}
+                            <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-t">
+                              <div className="grid grid-cols-3 gap-4 text-sm">
+                                <div>
+                                  <span className="text-muted-foreground">Total Cost</span>
+                                  <p className="font-mono font-medium">{formatCurrency(group.totalCost, quotation.currency)}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Margin</span>
+                                  <p className="font-semibold text-blue-600">
+                                    {group.totalCost > 0
+                                      ? Math.round(((group.subtotal - group.totalCost) / group.totalCost) * 100 * 100) / 100
+                                      : 0}%
                                   </p>
                                 </div>
-                              ))}
-                            </div>
-                            {/* Shipment Subtotal */}
-                            <div className="bg-green-50 dark:bg-green-900/30 px-4 py-3 border-t border-green-200 dark:border-green-800">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-green-700 dark:text-green-300">
-                                  Subtotal Shipment {idx + 1}
-                                </span>
-                                <span className="font-bold font-mono text-green-700 dark:text-green-400">
-                                  {formatCurrency(group.subtotal, quotation.currency)}
-                                </span>
+                                <div className="text-right">
+                                  <span className="text-muted-foreground">Total Selling</span>
+                                  <p className="font-bold font-mono text-green-600">{formatCurrency(group.subtotal, quotation.currency)}</p>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1140,21 +1163,33 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                       })}
                     </div>
                   ) : (
-                    // Single shipment: show flat list
+                    // Single shipment: show flat list with cost and margin
                     <div className="space-y-2">
-                      {items.map((item: any) => (
-                        <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div>
-                            <p className="font-medium">{item.component_name || item.component_type}</p>
-                            {item.description && (
-                              <p className="text-sm text-muted-foreground">{item.description}</p>
-                            )}
+                      {items.map((item: any) => {
+                        const itemMargin = item.cost_amount > 0
+                          ? Math.round(((item.selling_rate - item.cost_amount) / item.cost_amount) * 100 * 100) / 100
+                          : 0
+                        return (
+                          <div key={item.id} className="p-3 border rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium">{item.component_name || item.component_type}</p>
+                                {item.description && (
+                                  <p className="text-sm text-muted-foreground">{item.description}</p>
+                                )}
+                              </div>
+                              <p className="font-mono font-medium text-green-600">
+                                {formatCurrency(item.selling_rate, quotation.currency)}
+                              </p>
+                            </div>
+                            {/* Cost and Margin per item */}
+                            <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+                              <span>Cost: <span className="font-mono">{formatCurrency(item.cost_amount || 0, quotation.currency)}</span></span>
+                              <span>Margin: <span className="font-semibold text-blue-600">{itemMargin}%</span></span>
+                            </div>
                           </div>
-                          <p className="font-mono font-medium">
-                            {formatCurrency(item.selling_rate, quotation.currency)}
-                          </p>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>
