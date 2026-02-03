@@ -73,6 +73,8 @@ Customer quotation creation, sending, and management with multi-shipment support
 - **Per-Shipment Display**: Each shipment displayed as separate section with its own rate (no aggregate total)
 - **Terms & Conditions**: Customizable includes/excludes
 - **Validity Period**: Configurable validity days
+- **Margin Validation**: User-determined margin with low margin warning (< 15%)
+- **Low Margin Notification**: Automatic email to Sales Manager for quotations below 15% margin
 - **Outputs**:
   - Professional PDF generation (per-shipment sections)
   - Email sending with HTML templates (per-shipment display)
@@ -175,7 +177,8 @@ ugc-business-command-portal/
 │       ├── 061-090: Quotation system
 │       ├── 091-128: Enhancements
 │       ├── 129_multi_shipment_cost_support.sql
-│       └── 130_fix_multi_shipment_cost_revision.sql
+│       ├── 130_fix_multi_shipment_cost_revision.sql
+│       └── 131_fix_multi_shipment_cost_sync.sql
 └── public/
     └── logo/                  # Brand assets
 ```
@@ -216,8 +219,19 @@ ugc-business-command-portal/
 fn_resolve_all_shipment_costs(p_ticket_id, p_lead_id, p_opportunity_id)
 rpc_batch_create_shipment_costs(p_ticket_id, p_shipment_costs, p_currency, p_valid_until)
 
--- Quotation functions
-rpc_customer_quotation_mark_sent(p_quotation_id, p_sent_via, p_sent_to, ...)
+-- Quotation state transition functions (with multi-shipment cost sync)
+rpc_customer_quotation_mark_sent(p_quotation_id, p_sent_via, p_sent_to, p_actor_user_id, p_correlation_id, p_allow_autocreate)
+-- Updates quotation to 'sent', syncs opportunity to 'Quote Sent', ticket to 'waiting_customer'
+-- Updates ALL costs in operational_cost_ids to 'sent_to_customer' (Migration 131 fix)
+
+rpc_customer_quotation_mark_rejected(p_quotation_id, p_reason_type, p_competitor_name, p_competitor_amount, ...)
+-- Updates quotation to 'rejected', syncs opportunity to 'Negotiation', ticket to 'need_adjustment'
+-- Updates ALL costs in operational_cost_ids to 'revise_requested' (Migration 131 fix)
+
+rpc_customer_quotation_mark_accepted(p_quotation_id, p_actor_user_id, p_correlation_id)
+-- Updates quotation to 'accepted', syncs opportunity to 'Closed Won', ticket to 'closed'
+-- Updates ALL costs in operational_cost_ids to 'accepted' (Migration 131 fix)
+
 fn_resolve_latest_operational_cost(p_ticket_id, p_lead_id, p_opportunity_id, p_provided_cost_id)
 
 -- Ticket functions
@@ -242,7 +256,10 @@ record_response_exchange(p_ticket_id, p_responder_user_id, p_response_type)
 | GET | `/api/ticketing/operational-costs/batch` | Get all shipment costs |
 | GET/POST | `/api/ticketing/customer-quotations` | List/Create quotations |
 | POST | `/api/ticketing/customer-quotations/[id]/send` | Send via email/WhatsApp |
+| POST | `/api/ticketing/customer-quotations/[id]/accept` | Accept quotation (Closed Won) |
+| POST | `/api/ticketing/customer-quotations/[id]/reject` | Reject quotation with reason |
 | POST | `/api/ticketing/customer-quotations/[id]/pdf` | Generate PDF HTML |
+| POST | `/api/ticketing/customer-quotations/low-margin-notification` | Send low margin email to Sales Manager |
 | GET | `/api/ticketing/customer-quotations/validate/[code]` | Public validation |
 | GET | `/api/public/quotation/[code]/pdf` | Public PDF download |
 
@@ -418,7 +435,22 @@ npm run lint
 
 ## Version History
 
-### Latest Changes (v1.5.2)
+### Latest Changes (v1.6.0)
+- **Multi-Shipment Cost Sync Fix**: When quotation is sent/rejected/accepted, ALL operational costs in `operational_cost_ids` array are now updated (not just single `operational_cost_id`)
+- **Bidirectional Cost-Quotation Link Fix**: When quotation is created, ALL costs in `operational_cost_ids` now have their `customer_quotation_id` updated (not just single cost)
+- **Margin Validation Enhancement**:
+  - No hardcoded default margin - user must explicitly set target margin
+  - Input shows placeholder instead of default value
+  - Warning alert when margin < 15%
+  - Confirmation dialog required for low margin quotations
+- **Low Margin Email Notification**: Automatic email to Sales Manager when quotation is created with margin below 15%
+  - Professional HTML email template
+  - Shows quotation details, customer info, and financial summary
+  - Links to quotation detail page
+  - Queries Sales Manager users from database with fallback to environment variable
+- **Database Migration 131**: Updates all three RPC functions to sync multi-shipment costs atomically
+
+### v1.5.2
 - **Per-Shipment Quotation Display**: Multi-shipment quotations now display each shipment as a separate section
 - **No Aggregate Total**: For quotations with multiple shipments, no combined total is shown
 - **PDF Enhancement**: Each shipment shown with header, route, items (if breakdown), and subtotal
@@ -450,6 +482,38 @@ npm run lint
 ---
 
 ## Technical Notes
+
+### Multi-Shipment Cost Sync (v1.6.0)
+
+When a quotation with multiple shipments is sent/rejected/accepted, ALL operational costs need to be updated atomically:
+
+**Data Structure:**
+- `customer_quotations.operational_cost_id` - Single cost (legacy/backward compatible)
+- `customer_quotations.operational_cost_ids` - Array of cost IDs (multi-shipment)
+
+**Flow Example (2-shipment quotation):**
+1. User creates quotation with `operational_cost_ids = [cost_A, cost_B]`
+2. User sends quotation → BOTH cost_A AND cost_B become `sent_to_customer`
+3. Customer rejects → BOTH cost_A AND cost_B become `revise_requested`
+4. Ops revises both costs → cost_A2, cost_B2 created as `submitted`
+5. User creates new quotation with `[cost_A2, cost_B2]`
+6. Customer accepts → BOTH cost_A2 AND cost_B2 become `accepted`
+
+**Status Transitions:**
+| Quotation Action | Single Cost Status | Multi-Cost Status |
+|-----------------|-------------------|-------------------|
+| Send | `sent_to_customer` | All → `sent_to_customer` |
+| Reject | `revise_requested` | All → `revise_requested` |
+| Accept | `accepted` | All → `accepted` |
+
+### Margin Validation (v1.6.0)
+
+- **No default margin**: User must explicitly set `targetMarginPercent`
+- **Input shows placeholder**: Empty input initially, not pre-filled with 15%
+- **Warning threshold**: 15% minimum margin
+- **Confirmation required**: AlertDialog appears when margin < 15%
+- **Email notification**: Sent to Sales Manager for low margin quotations
+- **Recipients**: Queries `profiles` table for `role = 'sales manager'` plus fallback `SALES_MANAGER_EMAIL` env var
 
 ### Multi-Shipment Quotation Data Structure
 
