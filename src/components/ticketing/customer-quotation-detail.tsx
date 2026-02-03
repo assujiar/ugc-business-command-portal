@@ -1021,8 +1021,8 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Total Amount - Show per-shipment for multi-shipment quotations */}
-            {hasMultipleShipments ? (
-              // Multi-shipment: show per-shipment rates instead of aggregate
+            {hasMultipleShipments && itemsByShipment ? (
+              // Multi-shipment: show per-shipment rates calculated from items
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2 mb-3">
                   <Package className="h-5 w-5 text-blue-600" />
@@ -1031,21 +1031,36 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {shipments.map((shipment: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border">
-                      <div>
-                        <p className="font-medium">
-                          {shipment.shipment_label || `Shipment ${idx + 1}`}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {shipment.origin_city || '-'} → {shipment.destination_city || '-'}
-                        </p>
+                  {shipments.map((shipment: any, idx: number) => {
+                    const group = itemsByShipment.get(idx)
+                    const calculatedTotal = group ? group.subtotal : 0
+                    const calculatedCost = group ? group.totalCost : 0
+                    const marginPercent = calculatedCost > 0
+                      ? Math.round(((calculatedTotal - calculatedCost) / calculatedCost) * 100 * 100) / 100
+                      : 0
+                    return (
+                      <div key={idx} className="p-3 bg-white dark:bg-gray-800 rounded-lg border">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">
+                              {shipment.shipment_label || `Shipment ${idx + 1}`}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {shipment.origin_city || '-'} → {shipment.destination_city || '-'}
+                            </p>
+                          </div>
+                          <p className="text-lg font-bold text-green-600 dark:text-green-400 font-mono">
+                            {formatCurrency(calculatedTotal, quotation.currency)}
+                          </p>
+                        </div>
+                        {/* Cost and Margin summary for this shipment */}
+                        <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+                          <span>Cost: <span className="font-mono">{formatCurrency(calculatedCost, quotation.currency)}</span></span>
+                          <span>Margin: <span className="font-semibold text-blue-600">{marginPercent}%</span></span>
+                        </div>
                       </div>
-                      <p className="text-lg font-bold text-green-600 dark:text-green-400 font-mono">
-                        {formatCurrency(shipment.selling_rate || 0, shipment.cost_currency || quotation.currency)}
-                      </p>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             ) : (
