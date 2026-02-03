@@ -308,25 +308,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log the notification in database (optional - for tracking)
-    const supabase = createAdminClient()
-    await supabase.from('notification_logs').insert({
-      type: 'low_margin_quotation',
-      reference_id: quotation_id,
-      reference_type: 'customer_quotation',
+    // Log to console for tracking
+    console.log('Low margin notification sent:', {
+      quotation_number,
+      customer_name,
+      margin_percent,
       recipients: managerEmails,
-      subject: `Low Margin Alert: ${quotation_number}`,
-      status: 'sent',
-      metadata: {
-        quotation_number,
-        customer_name,
-        margin_percent,
-        total_cost,
-        total_selling_rate,
-      },
-    }).catch(err => {
-      // Don't fail if logging fails
-      console.error('Failed to log notification:', err)
     })
 
     return NextResponse.json({
