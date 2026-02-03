@@ -385,7 +385,8 @@ EXCEPTION
             'correlation_id', v_correlation_id
         );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp;
 
 
 -- ============================================
@@ -792,7 +793,8 @@ EXCEPTION
             'correlation_id', v_correlation_id
         );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp;
 
 
 -- ============================================
