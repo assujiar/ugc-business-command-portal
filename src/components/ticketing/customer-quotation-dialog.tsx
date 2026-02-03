@@ -362,12 +362,12 @@ export function CustomerQuotationDialog({
   const [quotationNumber, setQuotationNumber] = useState<string | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
 
-  // Calculate selling rate based on cost and margin
+  // Calculate selling rate based on cost and margin (with rounding to avoid floating point issues)
   const totalSellingRate = useMemo(() => {
     if (rateStructure === 'bundling') {
-      return totalCost * (1 + targetMarginPercent / 100)
+      return Math.round(totalCost * (1 + targetMarginPercent / 100))
     } else {
-      return items.reduce((sum, item) => sum + item.selling_rate, 0)
+      return Math.round(items.reduce((sum, item) => sum + item.selling_rate, 0))
     }
   }, [rateStructure, totalCost, targetMarginPercent, items])
 
@@ -516,7 +516,7 @@ export function CustomerQuotationDialog({
           description: item.description || '',
           cost_amount: item.cost_amount,
           target_margin_percent: defaultMargin,
-          selling_rate: item.cost_amount * (1 + defaultMargin / 100),
+          selling_rate: Math.round(item.cost_amount * (1 + defaultMargin / 100)),
           quantity: item.quantity || null,
           unit: item.unit || null,
         }))
@@ -542,7 +542,7 @@ export function CustomerQuotationDialog({
           description: item.description || '',
           cost_amount: item.cost_amount,
           target_margin_percent: defaultMargin,
-          selling_rate: item.cost_amount * (1 + defaultMargin / 100),
+          selling_rate: Math.round(item.cost_amount * (1 + defaultMargin / 100)),
           quantity: item.quantity || null,
           unit: item.unit || null,
         }))
@@ -603,9 +603,9 @@ export function CustomerQuotationDialog({
     setItems(items.map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value }
-        // Auto-calculate selling rate when cost or margin changes
+        // Auto-calculate selling rate when cost or margin changes (with rounding)
         if (field === 'cost_amount' || field === 'target_margin_percent') {
-          updated.selling_rate = updated.cost_amount * (1 + updated.target_margin_percent / 100)
+          updated.selling_rate = Math.round(updated.cost_amount * (1 + updated.target_margin_percent / 100))
         }
         // Auto-fill component name from type
         if (field === 'component_type' && !item.component_name) {
@@ -759,7 +759,7 @@ export function CustomerQuotationDialog({
           )
           const defaultMargin = 15
           const costAmount = shipmentCost?.amount || 0
-          const sellingRate = costAmount * (1 + defaultMargin / 100)
+          const sellingRate = Math.round(costAmount * (1 + defaultMargin / 100))
 
           return {
             shipment_detail_id: s.shipment_detail_id || null,
@@ -1457,66 +1457,159 @@ export function CustomerQuotationDialog({
 
               {rateStructure === 'bundling' ? (
                 <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="total-cost">Total Cost (from Ops)</Label>
-                      <Input
-                        id="total-cost"
-                        type="number"
-                        value={totalCost}
-                        onChange={(e) => setTotalCost(parseFloat(e.target.value) || 0)}
-                        className="text-right font-mono"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="margin">Target Margin (%)</Label>
-                      <Input
-                        id="margin"
-                        type="number"
-                        value={targetMarginPercent}
-                        onChange={(e) => setTargetMarginPercent(parseFloat(e.target.value) || 0)}
-                        className="text-right"
-                      />
-                    </div>
-                    <div>
-                      <Label>Selling Rate</Label>
-                      <div className="h-10 flex items-center justify-end px-3 bg-green-100 dark:bg-green-900/30 rounded-md font-mono font-bold text-green-700 dark:text-green-400">
-                        {formatCurrency(totalSellingRate)}
+                  {/* For multi-shipment bundling, show per-shipment rates instead of aggregate */}
+                  {hasMultipleShipments ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Package className="h-4 w-4 text-blue-600" />
+                        <span className="font-medium text-blue-700 dark:text-blue-300">
+                          {allShipments.length} Shipments (Bundling Mode)
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Each shipment will be displayed separately in the quotation output with its own rate.
+                      </p>
+                      <div className="space-y-2">
+                        {allShipments.map((shipment, idx) => {
+                          const shipmentCost = operationalCosts?.find(
+                            c => c.shipment_detail_id === shipment.shipment_detail_id
+                          )
+                          const costAmount = shipmentCost?.amount || 0
+                          const sellingRate = Math.round(costAmount * (1 + targetMarginPercent / 100))
+                          return (
+                            <div key={idx} className="p-3 bg-white dark:bg-gray-800 rounded-lg border">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="font-medium">
+                                    {shipment.shipment_label || `Shipment ${idx + 1}`}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {shipment.origin_city || '-'} → {shipment.destination_city || '-'}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-xs text-muted-foreground">Cost: {formatCurrency(costAmount)}</div>
+                                  <div className="font-bold text-green-600 dark:text-green-400 font-mono">
+                                    {formatCurrency(sellingRate)}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className="pt-2 border-t">
+                        <Label htmlFor="margin">Target Margin (%) - Applied to all shipments</Label>
+                        <Input
+                          id="margin"
+                          type="number"
+                          value={targetMarginPercent}
+                          onChange={(e) => setTargetMarginPercent(parseFloat(e.target.value) || 0)}
+                          className="text-right w-32 mt-1"
+                        />
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    // Single shipment: show aggregate totals
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="total-cost">Total Cost (from Ops)</Label>
+                        <Input
+                          id="total-cost"
+                          type="number"
+                          value={totalCost}
+                          onChange={(e) => setTotalCost(parseFloat(e.target.value) || 0)}
+                          className="text-right font-mono"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="margin">Target Margin (%)</Label>
+                        <Input
+                          id="margin"
+                          type="number"
+                          value={targetMarginPercent}
+                          onChange={(e) => setTargetMarginPercent(parseFloat(e.target.value) || 0)}
+                          className="text-right"
+                        />
+                      </div>
+                      <div>
+                        <Label>Selling Rate</Label>
+                        <div className="h-10 flex items-center justify-end px-3 bg-green-100 dark:bg-green-900/30 rounded-md font-mono font-bold text-green-700 dark:text-green-400">
+                          {formatCurrency(totalSellingRate)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
                   {/* Summary and Add Item - Always visible at top */}
                   <div className="sticky top-0 bg-background z-10 pb-2 space-y-3">
-                    {/* Totals Display */}
-                    <div className="grid grid-cols-4 gap-3">
-                      <div className="p-3 bg-muted/50 rounded-lg">
-                        <span className="text-xs text-muted-foreground block">Total Cost</span>
-                        <span className="text-lg font-bold font-mono">
-                          {formatCurrency(totalBreakdownCost)}
-                        </span>
+                    {/* Totals Display - Only show aggregate totals for single shipment */}
+                    {hasMultipleShipments ? (
+                      // Multi-shipment: show per-shipment breakdown info instead of aggregate
+                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Package className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium text-blue-700 dark:text-blue-300">
+                            {allShipments.length} Shipments
+                          </span>
+                        </div>
+                        <p className="text-sm text-blue-600 dark:text-blue-400 mb-3">
+                          Rate components below are grouped by shipment. Each shipment will have its own total in the quotation output.
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {allShipments.map((shipment, idx) => {
+                            const shipmentCost = operationalCosts?.find(
+                              c => c.shipment_detail_id === shipment.shipment_detail_id
+                            )
+                            const costAmount = shipmentCost?.amount || 0
+                            const sellingRate = Math.round(costAmount * (1 + 15 / 100))
+                            return (
+                              <div key={idx} className="p-2 bg-white dark:bg-gray-800 rounded border text-xs">
+                                <div className="font-medium truncate">
+                                  {shipment.shipment_label || `Shipment ${idx + 1}`}
+                                </div>
+                                <div className="text-muted-foreground">
+                                  {shipment.origin_city || '-'} → {shipment.destination_city || '-'}
+                                </div>
+                                <div className="text-green-600 dark:text-green-400 font-mono mt-1">
+                                  {formatCurrency(sellingRate)}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                      <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <span className="text-xs text-muted-foreground block">Margin (Rp)</span>
-                        <span className={`text-lg font-bold font-mono ${totalMarginRp >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600'}`}>
-                          {formatCurrency(totalMarginRp)}
-                        </span>
+                    ) : (
+                      // Single shipment: show aggregate totals
+                      <div className="grid grid-cols-4 gap-3">
+                        <div className="p-3 bg-muted/50 rounded-lg">
+                          <span className="text-xs text-muted-foreground block">Total Cost</span>
+                          <span className="text-lg font-bold font-mono">
+                            {formatCurrency(totalBreakdownCost)}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                          <span className="text-xs text-muted-foreground block">Margin (Rp)</span>
+                          <span className={`text-lg font-bold font-mono ${totalMarginRp >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600'}`}>
+                            {formatCurrency(totalMarginRp)}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                          <span className="text-xs text-muted-foreground block">Margin (%)</span>
+                          <span className={`text-lg font-bold font-mono ${totalMarginPercent >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600'}`}>
+                            {totalMarginPercent.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                          <span className="text-xs text-muted-foreground block">Total Selling</span>
+                          <span className="text-lg font-bold font-mono text-green-700 dark:text-green-400">
+                            {formatCurrency(totalSellingRate)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <span className="text-xs text-muted-foreground block">Margin (%)</span>
-                        <span className={`text-lg font-bold font-mono ${totalMarginPercent >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600'}`}>
-                          {totalMarginPercent.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                        <span className="text-xs text-muted-foreground block">Total Selling</span>
-                        <span className="text-lg font-bold font-mono text-green-700 dark:text-green-400">
-                          {formatCurrency(totalSellingRate)}
-                        </span>
-                      </div>
-                    </div>
+                    )}
 
                     {/* Add Item Button */}
                     <div className="flex items-center justify-between">
@@ -1789,16 +1882,55 @@ export function CustomerQuotationDialog({
                 <div className="space-y-2">
                   <div className="font-medium">Route</div>
                   <div className="text-muted-foreground">
-                    {originCity || '-'} → {destinationCity || '-'}
+                    {hasMultipleShipments ? (
+                      <span>{allShipments.length} shipments (see below)</span>
+                    ) : (
+                      <span>{originCity || '-'} → {destinationCity || '-'}</span>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="font-medium">Rate</div>
-                  <div className="text-2xl font-bold text-primary">
-                    {formatCurrency(totalSellingRate)}
-                  </div>
+                  {hasMultipleShipments ? (
+                    <div className="text-sm text-muted-foreground">
+                      Per-shipment rates (see below)
+                    </div>
+                  ) : (
+                    <div className="text-2xl font-bold text-primary">
+                      {formatCurrency(totalSellingRate)}
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Multi-shipment preview */}
+              {hasMultipleShipments && (
+                <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <div className="font-medium text-sm text-blue-700 dark:text-blue-300">
+                    Shipment Rates
+                  </div>
+                  {allShipments.map((shipment, idx) => {
+                    const shipmentCost = operationalCosts?.find(
+                      c => c.shipment_detail_id === shipment.shipment_detail_id
+                    )
+                    const costAmount = shipmentCost?.amount || 0
+                    const sellingRate = Math.round(costAmount * (1 + targetMarginPercent / 100))
+                    return (
+                      <div key={idx} className="flex items-center justify-between text-sm p-2 bg-white dark:bg-gray-800 rounded">
+                        <div>
+                          <span className="font-medium">{shipment.shipment_label || `Shipment ${idx + 1}`}</span>
+                          <span className="text-muted-foreground ml-2">
+                            ({shipment.origin_city || '-'} → {shipment.destination_city || '-'})
+                          </span>
+                        </div>
+                        <span className="font-bold text-green-600 dark:text-green-400 font-mono">
+                          {formatCurrency(sellingRate)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
 
               <Separator />
 
