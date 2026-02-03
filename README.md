@@ -437,6 +437,7 @@ npm run lint
 
 ### Latest Changes (v1.6.0)
 - **Multi-Shipment Cost Sync Fix**: When quotation is sent/rejected/accepted, ALL operational costs in `operational_cost_ids` array are now updated (not just single `operational_cost_id`)
+- **Bidirectional Cost-Quotation Link Fix**: When quotation is created, ALL costs in `operational_cost_ids` now have their `customer_quotation_id` updated (not just single cost)
 - **Margin Validation Enhancement**:
   - No hardcoded default margin - user must explicitly set target margin
   - Input shows placeholder instead of default value

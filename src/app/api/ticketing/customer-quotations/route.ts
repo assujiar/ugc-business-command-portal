@@ -486,7 +486,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Update ticket_rate_quotes with bidirectional link (backup in case trigger doesn't fire)
-    if (operational_cost_id) {
+    // FIX: Update ALL costs in operational_cost_ids array, not just single operational_cost_id
+    if (operational_cost_ids.length > 0) {
+      // Update all costs in the array
+      const { error: linkError, count: linkedCount } = await (supabase as any)
+        .from('ticket_rate_quotes')
+        .update({ customer_quotation_id: quotation_id })
+        .in('id', operational_cost_ids)
+        .is('customer_quotation_id', null) // Only if not already linked
+
+      if (linkError) {
+        console.error('[CustomerQuotations POST] Error linking ticket_rate_quotes to quotation:', linkError)
+        // Continue even if link fails - quotation is created
+      } else {
+        console.log('[CustomerQuotations POST] Linked ticket_rate_quotes to quotation:', {
+          quotation_id,
+          cost_ids: operational_cost_ids,
+          linked_count: linkedCount
+        })
+      }
+    } else if (operational_cost_id) {
+      // Fallback for single cost (backward compatibility)
       const { error: linkError } = await (supabase as any)
         .from('ticket_rate_quotes')
         .update({ customer_quotation_id: quotation_id })
