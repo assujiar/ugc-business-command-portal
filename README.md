@@ -171,7 +171,7 @@ ugc-business-command-portal/
 │       ├── database.ts        # Supabase generated types
 │       └── shipment.ts        # Shipment type definitions
 ├── supabase/
-│   └── migrations/            # 130+ SQL migrations
+│   └── migrations/            # 135+ SQL migrations
 │       ├── 001-034: Core CRM tables
 │       ├── 035-060: Ticketing tables
 │       ├── 061-090: Quotation system
@@ -179,7 +179,10 @@ ugc-business-command-portal/
 │       ├── 129_multi_shipment_cost_support.sql
 │       ├── 130_fix_multi_shipment_cost_revision.sql
 │       ├── 131_fix_multi_shipment_cost_sync.sql
-│       └── 132_fix_is_current_per_shipment.sql
+│       ├── 132_fix_is_current_per_shipment.sql
+│       ├── 133_fix_activity_column_names.sql
+│       ├── 134_fix_v_ticket_not_assigned.sql
+│       └── 135_fix_accept_opportunity_id_type_regression.sql
 └── public/
     └── logo/                  # Brand assets
 ```
@@ -387,7 +390,7 @@ SMTP_FROM=noreply@ugc.co.id
 
 3. **Run Database Migrations**
 
-In Supabase SQL Editor, run migrations in order (001-132).
+In Supabase SQL Editor, run migrations in order (001-135).
 
 4. **Start Development Server**
 
@@ -436,7 +439,28 @@ npm run lint
 
 ## Version History
 
-### Latest Changes (v1.6.0)
+### Latest Changes (v1.6.2)
+- **Accept/Reject Quotation Fix (Migration 135)**: Fixed "Invalid input syntax for type uuid" error when accepting/rejecting quotations
+  - Root cause: Migration 134 accidentally regressed migration 118's fix by declaring `v_derived_opportunity_id` and `v_effective_opportunity_id` as UUID instead of TEXT
+  - `customer_quotations.opportunity_id` is TEXT type (stores values like "OPP20260129..."), not UUID
+  - Fixed by restoring TEXT type declarations in `rpc_customer_quotation_mark_accepted`
+
+### v1.6.1
+- **Activity Timeline Fix (Migration 133)**: Fixed quotation activity not appearing in timeline
+  - Activities table uses `related_opportunity_id` (not `opportunity_id`), `owner_user_id` (not `performed_by`)
+  - Added required fields: `due_date`, `status`
+- **v_ticket NULL Fix (Migration 134)**: Fixed "v_ticket is not assigned yet" error on resend quotation
+  - Added `v_return_ticket_status` variable to safely handle cases where ticket is NULL
+- **Redundant Sections Removed for Multi-Shipment**: When quotation has multiple shipments, redundant aggregate sections are hidden since per-shipment data is shown
+  - Email: DETAIL CARGO section only shows for single shipment
+  - Validation page: SERVICE DETAILS and CARGO DETAILS sections only show for single shipment
+  - Public PDF: SERVICE DETAILS and CARGO DETAILS sections only show for single shipment
+  - Internal PDF: Service/Incoterm in Details card and CARGO section only show for single shipment
+- **Security Fix**: Removed `cost_amount` from public-facing APIs (validation page, public PDF)
+  - Customer should only see `selling_rate`, never internal cost
+- **Per-Shipment Display Enhancement**: Added service type, weight, volume, incoterm display per shipment in all outputs
+
+### v1.6.0
 - **Multi-Shipment Cost Sync Fix**: When quotation is sent/rejected/accepted, ALL operational costs in `operational_cost_ids` array are now updated (not just single `operational_cost_id`)
 - **Bidirectional Cost-Quotation Link Fix**: When quotation is created, ALL costs in `operational_cost_ids` now have their `customer_quotation_id` updated (not just single cost)
 - **is_current Per Shipment Fix**: Changed unique constraint from per-ticket to per-shipment
@@ -556,15 +580,21 @@ interface ShipmentData {
   origin_country: string
   destination_city: string
   destination_country: string
-  cost_amount: number
-  selling_rate: number
+  cost_amount: number        // INTERNAL ONLY - never expose to customer
+  selling_rate: number       // Customer-facing price
   cost_currency: string
   margin_percent: number
   cargo_description?: string
   fleet_type?: string
   fleet_quantity?: number
+  service_type_code?: string // e.g., 'DOM', 'EXI', 'DTD'
+  weight_total_kg?: number
+  volume_total_cbm?: number
+  incoterm?: string          // e.g., 'FOB', 'CIF', 'EXW'
 }
 ```
+
+**Security Note**: `cost_amount` should NEVER be exposed to customer-facing APIs or documents. Only `selling_rate` is shown to customers.
 
 ### Item Grouping by Shipment
 
@@ -596,6 +626,31 @@ const groupItemsByShipment = (items: any[], shipments: any[]): Map<number, any[]
   return itemsByShipment
 }
 ```
+
+### Opportunity ID Type Issue (v1.6.2)
+
+The `customer_quotations.opportunity_id` column is TEXT type, not UUID. This is because the `opportunities` table uses a TEXT primary key with a custom format like "OPP20260129608534".
+
+**Common Error:**
+```
+Invalid input syntax for type uuid: 'OPP20260129608534'
+```
+
+**Root Cause:** Variable declared as UUID when it should be TEXT:
+```sql
+-- Wrong (causes error)
+v_effective_opportunity_id UUID := NULL;
+v_derived_opportunity_id UUID := NULL;
+
+-- Correct
+v_effective_opportunity_id TEXT := NULL;
+v_derived_opportunity_id TEXT := NULL;
+```
+
+**Affected Functions:**
+- `rpc_customer_quotation_mark_accepted` - Fixed in Migration 135
+- `rpc_customer_quotation_mark_rejected` - Correct (uses TEXT)
+- `rpc_customer_quotation_mark_sent` - Correct (uses TEXT)
 
 ---
 
