@@ -178,7 +178,8 @@ ugc-business-command-portal/
 │       ├── 091-128: Enhancements
 │       ├── 129_multi_shipment_cost_support.sql
 │       ├── 130_fix_multi_shipment_cost_revision.sql
-│       └── 131_fix_multi_shipment_cost_sync.sql
+│       ├── 131_fix_multi_shipment_cost_sync.sql
+│       └── 132_fix_is_current_per_shipment.sql
 └── public/
     └── logo/                  # Brand assets
 ```
@@ -386,7 +387,7 @@ SMTP_FROM=noreply@ugc.co.id
 
 3. **Run Database Migrations**
 
-In Supabase SQL Editor, run migrations in order (001-130).
+In Supabase SQL Editor, run migrations in order (001-132).
 
 4. **Start Development Server**
 
@@ -438,6 +439,10 @@ npm run lint
 ### Latest Changes (v1.6.0)
 - **Multi-Shipment Cost Sync Fix**: When quotation is sent/rejected/accepted, ALL operational costs in `operational_cost_ids` array are now updated (not just single `operational_cost_id`)
 - **Bidirectional Cost-Quotation Link Fix**: When quotation is created, ALL costs in `operational_cost_ids` now have their `customer_quotation_id` updated (not just single cost)
+- **is_current Per Shipment Fix**: Changed unique constraint from per-ticket to per-shipment
+  - Each shipment in a ticket can now have its own current cost (`is_current = TRUE`)
+  - Updated triggers to only supersede costs for the same shipment
+  - Enables proper multi-shipment cost submission without conflicts
 - **Margin Validation Enhancement**:
   - No hardcoded default margin - user must explicitly set target margin
   - Input shows placeholder instead of default value
@@ -505,6 +510,31 @@ When a quotation with multiple shipments is sent/rejected/accepted, ALL operatio
 | Send | `sent_to_customer` | All → `sent_to_customer` |
 | Reject | `revise_requested` | All → `revise_requested` |
 | Accept | `accepted` | All → `accepted` |
+
+### is_current Per Shipment (v1.6.0)
+
+The `is_current` flag on `ticket_rate_quotes` now works per shipment instead of per ticket:
+
+**Old behavior (broken):**
+- Unique constraint: `(ticket_id) WHERE is_current = TRUE`
+- Only ONE cost per ticket could be current
+- Multi-shipment batch insert would cause constraint violations
+
+**New behavior (fixed):**
+- Unique constraint: `(ticket_id, shipment_detail_id) WHERE is_current = TRUE`
+- Each shipment can have ONE current cost
+- Multi-shipment batch insert works correctly
+
+**Data Model:**
+```
+1 ticket_id → N shipment_detail_ids → each has 1 is_current cost
+```
+
+**Flow:**
+1. Ops submits costs for Shipment 1 and Shipment 2 in batch
+2. Both costs get `is_current = TRUE` (no conflict because different shipment_detail_id)
+3. When creating quotation, system gets ALL costs with `is_current = TRUE`
+4. On rejection, new costs supersede only their respective shipment's previous cost
 
 ### Margin Validation (v1.6.0)
 
