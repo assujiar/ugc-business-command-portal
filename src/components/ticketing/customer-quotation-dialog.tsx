@@ -1667,7 +1667,9 @@ export function CustomerQuotationDialog({
                               c => c.shipment_detail_id === shipment.shipment_detail_id
                             )
                             const costAmount = shipmentCost?.amount || 0
-                            const sellingRate = Math.round(costAmount * (1 + 15 / 100))
+                            // FIX: Use user's targetMarginPercent instead of hardcoded 15%
+                            const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
+                            const sellingRate = Math.round(costAmount * (1 + marginValue / 100))
                             return (
                               <div key={idx} className="p-2 bg-white dark:bg-gray-800 rounded border text-xs">
                                 <div className="font-medium truncate">
@@ -1676,6 +1678,7 @@ export function CustomerQuotationDialog({
                                 <div className="text-muted-foreground">
                                   {shipment.origin_city || '-'} → {shipment.destination_city || '-'}
                                 </div>
+                                <div className="text-xs text-muted-foreground">Cost: {formatCurrency(costAmount)}</div>
                                 <div className="text-green-600 dark:text-green-400 font-mono mt-1">
                                   {formatCurrency(sellingRate)}
                                 </div>
