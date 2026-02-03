@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessTicketing } from '@/lib/permissions'
 import { sendEmail, isEmailServiceConfigured } from '@/lib/email'
+import { getServiceTypeDisplayLabel } from '@/lib/constants'
 import type { UserRole } from '@/types/database'
 import { randomUUID } from 'crypto'
 
@@ -110,7 +111,14 @@ const generateWhatsAppText = (quotation: any, profile: ProfileData, validationUr
     shipmentDetailsSection = `\n*${shipments.length} SHIPMENT:*\n` + shipments.map((s: any, idx: number) => {
       const route = `${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`
       const rate = s.selling_rate ? formatCurrency(s.selling_rate, s.cost_currency || quotation.currency) : '-'
-      return `${idx + 1}. ${route}\n   Rate: *${rate}*`
+      // Build details line (service type, weight, volume)
+      const serviceLabel = s.service_type_code ? getServiceTypeDisplayLabel(s.service_type_code) : null
+      const detailParts: string[] = []
+      if (serviceLabel) detailParts.push(serviceLabel)
+      if (s.weight_total_kg) detailParts.push(`${s.weight_total_kg.toLocaleString()} kg`)
+      if (s.volume_total_cbm) detailParts.push(`${s.volume_total_cbm.toLocaleString()} cbm`)
+      const detailsLine = detailParts.length > 0 ? `\n   _${detailParts.join(' • ')}_` : ''
+      return `${idx + 1}. ${route}${detailsLine}\n   Rate: *${rate}*`
     }).join('\n') + '\n'
   }
 
@@ -215,6 +223,15 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
       const shipmentSellingRate = s.selling_rate || 0
       const shipmentCurrency = s.cost_currency || quotation.currency
 
+      // Build shipment details line (service type, weight, volume)
+      const serviceTypeLabel = s.service_type_code ? getServiceTypeDisplayLabel(s.service_type_code) : null
+      const shipmentDetailParts: string[] = []
+      if (serviceTypeLabel) shipmentDetailParts.push(serviceTypeLabel)
+      if (s.weight_total_kg) shipmentDetailParts.push(`${s.weight_total_kg.toLocaleString()} kg`)
+      if (s.volume_total_cbm) shipmentDetailParts.push(`${s.volume_total_cbm.toLocaleString()} cbm`)
+      if (s.incoterm) shipmentDetailParts.push(s.incoterm)
+      const shipmentDetailsLine = shipmentDetailParts.length > 0 ? shipmentDetailParts.join(' • ') : null
+
       let itemsHtml = ''
       if (isBreakdown && shipmentItems.length > 0) {
         const itemRows = shipmentItems.map((item: any, index: number) => `
@@ -244,6 +261,7 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
                   <td>
                     <p style="margin: 0; color: #ff4600; font-size: 12px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; text-transform: uppercase; letter-spacing: 1px;">SHIPMENT ${idx + 1}</p>
                     <p style="margin: 4px 0 0; color: #78350f; font-size: 14px; font-family: 'Segoe UI', Arial, sans-serif;">${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}</p>
+                    ${shipmentDetailsLine ? `<p style="margin: 4px 0 0; color: #ff4600; font-size: 12px; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif;">${shipmentDetailsLine}</p>` : ''}
                     ${s.cargo_description ? `<p style="margin: 4px 0 0; color: #92400e; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">${s.cargo_description}</p>` : ''}
                   </td>
                 </tr>
@@ -716,7 +734,14 @@ const generateEmailPlainText = (quotation: any, profile: ProfileData, validation
     shipments.forEach((s: any, idx: number) => {
       const rate = s.selling_rate ? formatCurrency(s.selling_rate, s.cost_currency || quotation.currency) : '-'
       shipmentDetails += `\n${idx + 1}. ${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`
-      if (s.cargo_description) shipmentDetails += ` (${s.cargo_description})`
+      // Add service type, weight, volume
+      const serviceLabel = s.service_type_code ? getServiceTypeDisplayLabel(s.service_type_code) : null
+      const detailParts: string[] = []
+      if (serviceLabel) detailParts.push(serviceLabel)
+      if (s.weight_total_kg) detailParts.push(`${s.weight_total_kg.toLocaleString()} kg`)
+      if (s.volume_total_cbm) detailParts.push(`${s.volume_total_cbm.toLocaleString()} cbm`)
+      if (detailParts.length > 0) shipmentDetails += `\n   ${detailParts.join(' • ')}`
+      if (s.cargo_description) shipmentDetails += `\n   Cargo: ${s.cargo_description}`
       shipmentDetails += `\n   Rate: ${rate}`
     })
   }

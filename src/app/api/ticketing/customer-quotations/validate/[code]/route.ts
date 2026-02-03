@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getServiceTypeDisplayLabel } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -126,6 +127,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 weight: s.weight_total_kg,
                 volume: s.volume_total_cbm,
                 route: `${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`,
+                // Service type per shipment
+                service_type: s.service_type_code ? getServiceTypeDisplayLabel(s.service_type_code) : null,
+                incoterm: s.incoterm || null,
                 // Multi-shipment cost support
                 cost_amount: s.cost_amount || null,
                 selling_rate: s.selling_rate || null,

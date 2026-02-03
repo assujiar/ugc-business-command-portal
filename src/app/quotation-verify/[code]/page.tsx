@@ -15,6 +15,9 @@ interface ShipmentData {
   weight: number | null
   volume: number | null
   route: string
+  // Service type per shipment
+  service_type: string | null
+  incoterm: string | null
   // Multi-shipment cost support
   cost_amount: number | null
   selling_rate: number | null
@@ -368,21 +371,26 @@ export default function QuotationVerifyPage() {
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <p className="text-sm font-medium text-gray-900">{shipment.route}</p>
+                              {/* Service type, weight, volume per shipment */}
+                              {(shipment.service_type || shipment.weight || shipment.volume || shipment.incoterm) && (
+                                <p className="text-xs font-semibold text-[#ff4600] mt-1">
+                                  {[
+                                    shipment.service_type,
+                                    shipment.weight && `${shipment.weight.toLocaleString()} kg`,
+                                    shipment.volume && `${shipment.volume.toLocaleString()} cbm`,
+                                    shipment.incoterm,
+                                  ].filter(Boolean).join(' • ')}
+                                </p>
+                              )}
                               {shipment.cargo_description && (
                                 <p className="text-xs text-gray-500 mt-1">{shipment.cargo_description}</p>
                               )}
                               <div className="flex flex-wrap gap-2 mt-1 text-xs text-gray-400">
-                                {shipment.weight && <span>{shipment.weight} kg</span>}
-                                {shipment.weight && shipment.volume && <span>|</span>}
-                                {shipment.volume && <span>{shipment.volume} cbm</span>}
                                 {shipment.fleet_type && (
-                                  <>
-                                    <span>|</span>
-                                    <span className="text-[#ff4600]">
-                                      {shipment.fleet_type}
-                                      {shipment.fleet_quantity && shipment.fleet_quantity > 1 && ` × ${shipment.fleet_quantity}`}
-                                    </span>
-                                  </>
+                                  <span className="text-[#ff4600]">
+                                    Fleet: {shipment.fleet_type}
+                                    {shipment.fleet_quantity && shipment.fleet_quantity > 1 && ` × ${shipment.fleet_quantity}`}
+                                  </span>
                                 )}
                               </div>
                             </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccessTicketing } from '@/lib/permissions'
+import { getServiceTypeDisplayLabel } from '@/lib/constants'
 import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -147,6 +148,15 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         `
       }
 
+      // Build shipment details line (service type, weight, volume)
+      const serviceTypeLabel = s.service_type_code ? getServiceTypeDisplayLabel(s.service_type_code) : null
+      const shipmentDetailParts: string[] = []
+      if (serviceTypeLabel) shipmentDetailParts.push(serviceTypeLabel)
+      if (s.weight_total_kg) shipmentDetailParts.push(`${s.weight_total_kg.toLocaleString()} kg`)
+      if (s.volume_total_cbm) shipmentDetailParts.push(`${s.volume_total_cbm.toLocaleString()} cbm`)
+      if (s.incoterm) shipmentDetailParts.push(s.incoterm)
+      const shipmentDetailsLine = shipmentDetailParts.length > 0 ? shipmentDetailParts.join(' • ') : null
+
       return `
         <div class="shipment-section" style="margin-bottom:${idx < shipments.length - 1 ? '12px' : '0'};padding:8px;background:#fafafa;border-radius:4px;border-left:3px solid #ff4600">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -155,6 +165,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
               <span style="font-size:8px;color:#666;margin-left:8px">${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}</span>
             </div>
           </div>
+          ${shipmentDetailsLine ? `<div style="font-size:7px;color:#ff4600;font-weight:600;margin-bottom:4px">${shipmentDetailsLine}</div>` : ''}
           ${s.cargo_description ? `<div style="font-size:7px;color:#666;margin-bottom:4px">${s.cargo_description}</div>` : ''}
           ${s.fleet_type ? `<div style="font-size:7px;color:#666;margin-bottom:4px">Fleet: ${s.fleet_type}${s.fleet_quantity > 1 ? ' × ' + s.fleet_quantity : ''}</div>` : ''}
           ${shipmentRateContent}

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getServiceTypeDisplayLabel } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -296,6 +297,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ${shipments.map((s: any, idx: number) => {
         const shipmentItems = itemsByShipment?.get(idx) || []
         const shipmentSellingRate = s.selling_rate || 0
+        // Build shipment details line (service type, weight, volume)
+        const serviceTypeLabel = s.service_type_code ? getServiceTypeDisplayLabel(s.service_type_code) : null
+        const shipmentDetailParts: string[] = []
+        if (serviceTypeLabel) shipmentDetailParts.push(serviceTypeLabel)
+        if (s.weight_total_kg) shipmentDetailParts.push(`${s.weight_total_kg.toLocaleString()} kg`)
+        if (s.volume_total_cbm) shipmentDetailParts.push(`${s.volume_total_cbm.toLocaleString()} cbm`)
+        if (s.incoterm) shipmentDetailParts.push(s.incoterm)
+        const shipmentDetailsLine = shipmentDetailParts.length > 0 ? shipmentDetailParts.join(' • ') : null
         return `
         <div style="margin-bottom:${idx < shipments.length - 1 ? '12px' : '0'};padding:10px;background:#f9fafb;border-radius:6px;border-left:3px solid #ff4600">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -304,6 +313,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               <span style="font-size:9pt;color:#666;margin-left:10px">${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}</span>
             </div>
           </div>
+          ${shipmentDetailsLine ? `<div style="font-size:8pt;color:#ff4600;font-weight:600;margin-bottom:6px">${shipmentDetailsLine}</div>` : ''}
           ${s.cargo_description ? `<div style="font-size:8pt;color:#666;margin-bottom:6px">${s.cargo_description}</div>` : ''}
           ${s.fleet_type ? `<div style="font-size:8pt;color:#666;margin-bottom:6px">Fleet: ${s.fleet_type}${s.fleet_quantity > 1 ? ' × ' + s.fleet_quantity : ''}</div>` : ''}
           ${isBreakdown && shipmentItems.length > 0 ? `
