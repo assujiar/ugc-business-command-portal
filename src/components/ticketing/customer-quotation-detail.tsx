@@ -802,6 +802,32 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
   }
   const hasMultipleShipments = shipments.length > 1
 
+  // Helper function to group items by shipment prefix
+  const groupItemsByShipment = (itemsList: any[], shipmentsList: any[]): Map<number, { items: any[], subtotal: number }> => {
+    const itemsByShipment = new Map<number, { items: any[], subtotal: number }>()
+    shipmentsList.forEach((_, idx) => itemsByShipment.set(idx, { items: [], subtotal: 0 }))
+
+    itemsList.forEach((item: any) => {
+      const componentName = item.component_name || ''
+      const shipmentMatch = componentName.match(/^Shipment\s*(\d+)\s*:\s*/i)
+      if (shipmentMatch) {
+        const shipmentIndex = parseInt(shipmentMatch[1]) - 1
+        if (itemsByShipment.has(shipmentIndex)) {
+          const cleanedItem = {
+            ...item,
+            component_name: componentName.replace(/^Shipment\s*\d+\s*:\s*/i, '')
+          }
+          const group = itemsByShipment.get(shipmentIndex)!
+          group.items.push(cleanedItem)
+          group.subtotal += item.selling_rate || 0
+        }
+      }
+    })
+    return itemsByShipment
+  }
+
+  const itemsByShipment = hasMultipleShipments ? groupItemsByShipment(items, shipments) : null
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1060,21 +1086,77 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 <Separator />
                 <div>
                   <p className="font-medium mb-3">Rate Breakdown</p>
-                  <div className="space-y-2">
-                    {items.map((item: any) => (
-                      <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div>
-                          <p className="font-medium">{item.component_name || item.component_type}</p>
-                          {item.description && (
-                            <p className="text-sm text-muted-foreground">{item.description}</p>
-                          )}
+                  {hasMultipleShipments && itemsByShipment ? (
+                    // Multi-shipment: group items by shipment section
+                    <div className="space-y-4">
+                      {shipments.map((shipment: any, idx: number) => {
+                        const group = itemsByShipment.get(idx)
+                        if (!group || group.items.length === 0) return null
+                        return (
+                          <div key={idx} className="border rounded-lg overflow-hidden">
+                            {/* Shipment Header */}
+                            <div className="bg-blue-50 dark:bg-blue-900/30 px-4 py-3 border-b border-blue-200 dark:border-blue-800">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Package className="h-4 w-4 text-blue-600" />
+                                  <span className="font-semibold text-blue-700 dark:text-blue-300">
+                                    Shipment {idx + 1}
+                                  </span>
+                                </div>
+                                <span className="text-sm text-blue-600 dark:text-blue-400">
+                                  {shipment.origin_city || '-'} → {shipment.destination_city || '-'}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Shipment Items */}
+                            <div className="divide-y">
+                              {group.items.map((item: any, itemIdx: number) => (
+                                <div key={item.id || itemIdx} className="flex items-center justify-between p-3 bg-white dark:bg-gray-900">
+                                  <div>
+                                    <p className="font-medium">{item.component_name || item.component_type}</p>
+                                    {item.description && (
+                                      <p className="text-sm text-muted-foreground">{item.description}</p>
+                                    )}
+                                  </div>
+                                  <p className="font-mono font-medium">
+                                    {formatCurrency(item.selling_rate, quotation.currency)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                            {/* Shipment Subtotal */}
+                            <div className="bg-green-50 dark:bg-green-900/30 px-4 py-3 border-t border-green-200 dark:border-green-800">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-green-700 dark:text-green-300">
+                                  Subtotal Shipment {idx + 1}
+                                </span>
+                                <span className="font-bold font-mono text-green-700 dark:text-green-400">
+                                  {formatCurrency(group.subtotal, quotation.currency)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    // Single shipment: show flat list
+                    <div className="space-y-2">
+                      {items.map((item: any) => (
+                        <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">{item.component_name || item.component_type}</p>
+                            {item.description && (
+                              <p className="text-sm text-muted-foreground">{item.description}</p>
+                            )}
+                          </div>
+                          <p className="font-mono font-medium">
+                            {formatCurrency(item.selling_rate, quotation.currency)}
+                          </p>
                         </div>
-                        <p className="font-mono font-medium">
-                          {formatCurrency(item.selling_rate, quotation.currency)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </>
             )}

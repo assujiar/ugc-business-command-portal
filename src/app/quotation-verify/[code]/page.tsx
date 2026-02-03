@@ -519,7 +519,84 @@ export default function QuotationVerifyPage() {
               </div>
             )}
 
-            {/* Rate Breakdown - Multi-shipment: items are already shown per shipment above, no aggregate total */}
+            {/* Rate Breakdown - Multi-shipment: grouped by shipment section */}
+            {data.items && data.items.length > 0 && data.shipments && data.shipments.length > 1 && (() => {
+              // Group items by shipment prefix
+              const itemsByShipment = new Map<number, { items: typeof data.items, subtotal: number }>()
+              data.shipments!.forEach((_, idx) => itemsByShipment.set(idx, { items: [], subtotal: 0 }))
+
+              data.items!.forEach((item) => {
+                const shipmentMatch = item.name.match(/^Shipment\s*(\d+)\s*:\s*/i)
+                if (shipmentMatch) {
+                  const shipmentIndex = parseInt(shipmentMatch[1]) - 1
+                  if (itemsByShipment.has(shipmentIndex)) {
+                    const group = itemsByShipment.get(shipmentIndex)!
+                    const cleanedItem = {
+                      ...item,
+                      name: item.name.replace(/^Shipment\s*\d+\s*:\s*/i, '')
+                    }
+                    group.items!.push(cleanedItem)
+                    // Parse amount string to number for subtotal (remove currency and format)
+                    const amountNum = parseFloat(item.amount.replace(/[^0-9.-]/g, '')) || 0
+                    group.subtotal += amountNum
+                  }
+                }
+              })
+
+              return (
+                <div className="px-6 pb-6">
+                  <h3 className="font-semibold text-[#ff4600] mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
+                    <FileText className="h-4 w-4" />
+                    Rate Breakdown by Shipment
+                  </h3>
+                  <div className="space-y-4">
+                    {data.shipments!.map((shipment, idx) => {
+                      const group = itemsByShipment.get(idx)
+                      if (!group || !group.items || group.items.length === 0) return null
+                      return (
+                        <div key={idx} className="overflow-hidden rounded-xl border border-gray-200">
+                          {/* Shipment Header */}
+                          <div className="bg-blue-50 px-4 py-3 border-b border-blue-200 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="flex-shrink-0 bg-[#ff4600] text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              <span className="font-semibold text-blue-700">Shipment {idx + 1}</span>
+                            </div>
+                            <span className="text-sm text-blue-600">{shipment.route}</span>
+                          </div>
+                          {/* Items Table */}
+                          <table className="w-full">
+                            <tbody>
+                              {group.items.map((item, itemIdx) => (
+                                <tr key={itemIdx} className="border-t border-gray-100 hover:bg-gray-50">
+                                  <td className="py-3 px-4 text-gray-900">
+                                    {item.name}
+                                    {item.quantity && item.unit && (
+                                      <span className="text-gray-500 text-sm ml-2">
+                                        ({item.quantity} {item.unit})
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-medium text-gray-900">{item.amount}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          {/* Shipment Subtotal */}
+                          <div className="bg-green-50 px-4 py-3 border-t border-green-200 flex items-center justify-between">
+                            <span className="font-semibold text-green-700">Subtotal Shipment {idx + 1}</span>
+                            <span className="font-bold text-green-700">
+                              {shipment.selling_rate_formatted || new Intl.NumberFormat('id-ID', { style: 'currency', currency: data.currency, minimumFractionDigits: 0 }).format(group.subtotal)}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Terms */}
             {(data.terms_includes?.length || data.terms_excludes?.length) && (
