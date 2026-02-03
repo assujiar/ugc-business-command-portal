@@ -3037,13 +3037,47 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
           pic_email: ticket.sender_email || undefined,
           pic_phone: ticket.sender_phone || undefined,
         } : undefined}
-        operationalCost={costs.length > 0 ? {
-          id: costs[0]?.id,  // Link to latest operational cost (array sorted by created_at desc)
-          amount: costs[0]?.amount || 0,
-          currency: costs[0]?.currency || 'IDR',
-          rate_structure: costs[0]?.rate_structure || 'bundling',
-          items: costs[0]?.items || [],
-        } : undefined}
+        // Filter to only submitted costs (exclude rejected/revise_requested costs)
+        operationalCost={(() => {
+          const submittedCosts = costs.filter(c => c.status === 'submitted')
+          if (submittedCosts.length === 0) return undefined
+          // For single cost, use the latest submitted
+          const latestCost = submittedCosts[0]
+          return {
+            id: latestCost?.id,
+            amount: latestCost?.amount || 0,
+            currency: latestCost?.currency || 'IDR',
+            rate_structure: latestCost?.rate_structure || 'bundling',
+            items: latestCost?.items || [],
+          }
+        })()}
+        // Multi-shipment support: Pass all submitted costs, deduplicated by shipment_detail_id (latest per shipment)
+        operationalCosts={(() => {
+          const submittedCosts = costs.filter(c => c.status === 'submitted')
+          if (submittedCosts.length === 0 || shipments.length <= 1) return undefined
+
+          // Deduplicate: for each shipment_detail_id, keep only the latest cost
+          const costsByShipment = new Map<string | null, typeof submittedCosts[0]>()
+
+          // Costs are already sorted by created_at DESC, so first occurrence is latest
+          for (const cost of submittedCosts) {
+            const key = cost.shipment_detail_id || '__no_shipment__'
+            if (!costsByShipment.has(key)) {
+              costsByShipment.set(key, cost)
+            }
+          }
+
+          // Convert map to array and format for dialog
+          return Array.from(costsByShipment.values()).map(c => ({
+            id: c.id,
+            shipment_detail_id: c.shipment_detail_id || null,
+            shipment_label: c.shipment_label || null,
+            amount: c.amount || 0,
+            currency: c.currency || 'IDR',
+            rate_structure: c.rate_structure || 'bundling',
+            items: c.items || [],
+          }))
+        })()}
         onSuccess={() => {
           setQuotationDialogOpen(false)
           fetchData()
