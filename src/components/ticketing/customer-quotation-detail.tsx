@@ -788,7 +788,18 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
 
   const ticket = quotation.ticket
   const items = quotation.items || []
-  const shipments = quotation.shipments || []
+
+  // Parse shipments - may be JSON string from database
+  let shipments: any[] = []
+  if (quotation.shipments) {
+    try {
+      shipments = typeof quotation.shipments === 'string'
+        ? JSON.parse(quotation.shipments)
+        : Array.isArray(quotation.shipments) ? quotation.shipments : []
+    } catch {
+      shipments = []
+    }
+  }
   const hasMultipleShipments = shipments.length > 1
 
   return (
