@@ -272,6 +272,16 @@ record_response_exchange(p_ticket_id, p_responder_user_id, p_response_type)
 6. Customer receives quotation with all shipments listed
 7. Online verification shows shipment details
 
+### Cost Revision Flow (After Quotation Rejection)
+1. Customer rejects quotation → Cost status changes to `revise_requested`
+2. Ops receives notification to revise cost
+3. Ops opens ticket, clicks "Submit Costs (N Shipments)"
+4. Dialog shows shipments - previously rejected costs are NOT shown as "Cost Submitted"
+5. Ops enters revised costs for shipments that need revision
+6. Submit creates NEW costs with status `submitted`
+7. Sales creates new quotation → Only LATEST `submitted` costs per shipment are used
+8. Old rejected costs are excluded automatically
+
 ### Lead Triage (Marketing)
 1. New lead arrives in Lead Inbox
 2. Marketing reviews and marks "In Review"
@@ -377,7 +387,13 @@ npm run lint
 
 ## Version History
 
-### Latest Changes (v1.5.0)
+### Latest Changes (v1.5.1)
+- **Cost Revision Fix for Multi-Shipment**: When a quotation is rejected and ops submits a revised cost, only the latest submitted cost per shipment is used
+- **Deduplication Logic**: `fn_resolve_all_shipment_costs` now uses `DISTINCT ON (shipment_detail_id)` to return only the most recent submitted cost per shipment
+- **Status Filtering**: Customer quotation dialog now properly filters for `status === 'submitted'` costs, excluding rejected costs
+- **Database Migration 130**: Updates cost resolution to handle revision scenarios correctly
+
+### v1.5.0
 - **Multi-Shipment Cost Support**: Submit costs for all shipments in one dialog
 - **Batch Cost API**: `/api/ticketing/operational-costs/batch`
 - **Customer Quotation Multi-Cost**: Link multiple operational costs to one quotation
