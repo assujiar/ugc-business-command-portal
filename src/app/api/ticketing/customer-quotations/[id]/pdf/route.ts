@@ -361,8 +361,8 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
         <div class="box">
           <h3>Details</h3>
           <div class="row"><span class="l">Reference</span><span class="v">${quotation.ticket?.ticket_code || '-'}</span></div>
-          <div class="row"><span class="l">Service</span><span class="v">${quotation.service_type || '-'}</span></div>
-          <div class="row"><span class="l">Incoterm</span><span class="v">${quotation.incoterm || '-'}</span></div>
+          ${!hasMultipleShipments ? `<div class="row"><span class="l">Service</span><span class="v">${quotation.service_type || '-'}</span></div>` : ''}
+          ${!hasMultipleShipments ? `<div class="row"><span class="l">Incoterm</span><span class="v">${quotation.incoterm || '-'}</span></div>` : ''}
           <div class="row"><span class="l">Prepared</span><span class="v">${profile.name}</span></div>
         </div>
       </div>
@@ -381,7 +381,8 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
       </div>
       ` : ''}
 
-      ${(quotation.cargo_weight || quotation.cargo_volume || quotation.commodity || quotation.estimated_leadtime) ? `
+      ${!hasMultipleShipments && (quotation.cargo_weight || quotation.cargo_volume || quotation.commodity || quotation.estimated_leadtime) ? `
+      <!-- Cargo section - Only show for single shipment (multi-shipment shows cargo per shipment) -->
       <div class="keep">
         <div class="sec">Cargo</div>
         <div class="cargo">

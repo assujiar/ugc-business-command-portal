@@ -480,8 +480,8 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
                   </table>
                   ` : ''}
 
-                  <!-- Cargo Details -->
-                  ${(quotation.commodity || quotation.cargo_weight || quotation.cargo_volume) ? `
+                  <!-- Cargo Details - Only show for single shipment (multi-shipment shows cargo per shipment above) -->
+                  ${!hasMultipleShipments && (quotation.commodity || quotation.cargo_weight || quotation.cargo_volume) ? `
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f8fafc" style="border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 24px;">
                     <tr>
                       <td style="padding: 20px;">
@@ -751,9 +751,9 @@ const generateEmailPlainText = (quotation: any, profile: ProfileData, validation
     ? `\nTOTAL PENAWARAN: ${formatCurrency(quotation.total_selling_rate, quotation.currency)}`
     : ''
 
-  // Build cargo details
+  // Build cargo details - only for single shipment (multi-shipment shows cargo per shipment)
   let cargoDetails = ''
-  if (quotation.cargo_description || quotation.fleet_type || quotation.cargo_weight) {
+  if (!hasMultipleShipments && (quotation.cargo_description || quotation.fleet_type || quotation.cargo_weight)) {
     cargoDetails = '\n\nDETAIL CARGO:'
     if (quotation.commodity) cargoDetails += `\n- Commodity: ${quotation.commodity}`
     if (quotation.cargo_description) cargoDetails += `\n- Deskripsi: ${quotation.cargo_description}`

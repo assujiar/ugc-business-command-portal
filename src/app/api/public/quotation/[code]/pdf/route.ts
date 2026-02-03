@@ -259,7 +259,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       </div>
     </div>
 
-    <!-- Service Details -->
+    ${!hasMultipleShipments ? `
+    <!-- Service Details - Only show for single shipment (multi-shipment shows per shipment) -->
     <div class="section">
       <div class="section-title">Service Details</div>
       <div class="info-grid">
@@ -274,9 +275,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         </div>
       </div>
     </div>
+    ` : ''}
 
-    ${(quotation.cargo_weight || quotation.cargo_volume || quotation.estimated_cargo_value) ? `
-    <!-- Cargo Details -->
+    ${!hasMultipleShipments && (quotation.cargo_weight || quotation.cargo_volume || quotation.estimated_cargo_value) ? `
+    <!-- Cargo Details - Only show for single shipment (multi-shipment shows cargo per shipment) -->
     <div class="section">
       <div class="section-title">Cargo Details</div>
       <div class="cargo-grid">

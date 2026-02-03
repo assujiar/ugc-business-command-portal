@@ -329,8 +329,8 @@ export default function QuotationVerifyPage() {
                 </div>
               </div>
 
-              {/* Service Details */}
-              {(data.service_type || data.incoterm) && (
+              {/* Service Details - Only show for single shipment (multi-shipment shows per shipment) */}
+              {(!data.shipments || data.shipments.length <= 1) && (data.service_type || data.incoterm) && (
                 <div className="space-y-3">
                   <h3 className="font-semibold text-[#ff4600] flex items-center gap-2 text-sm uppercase tracking-wide">
                     <Package className="h-4 w-4" />
@@ -435,8 +435,8 @@ export default function QuotationVerifyPage() {
               )}
             </div>
 
-            {/* Cargo Details Section */}
-            {(data.commodity || data.cargo_description || data.cargo_weight || data.cargo_volume || data.cargo_value) && (
+            {/* Cargo Details Section - Only show for single shipment (multi-shipment shows cargo per shipment) */}
+            {(!data.shipments || data.shipments.length <= 1) && (data.commodity || data.cargo_description || data.cargo_weight || data.cargo_volume || data.cargo_value) && (
               <div className="px-6 pb-6">
                 <h3 className="font-semibold text-[#ff4600] mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
                   <Box className="h-4 w-4" />
