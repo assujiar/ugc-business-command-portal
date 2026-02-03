@@ -507,16 +507,15 @@ export function CustomerQuotationDialog({
       )
 
       if (allBreakdownItems.length > 0) {
-        // Has breakdown items from one or more costs
-        const defaultMargin = 15
+        // Has breakdown items from one or more costs - use user's targetMarginPercent
         const mappedItems: QuotationItem[] = allBreakdownItems.map((item, index) => ({
           id: `item-${Date.now()}-${index}`,
           component_type: item.component_type,
           component_name: item.component_name || getRateComponentLabel(item.component_type),
           description: item.description || '',
           cost_amount: item.cost_amount,
-          target_margin_percent: defaultMargin,
-          selling_rate: Math.round(item.cost_amount * (1 + defaultMargin / 100)),
+          target_margin_percent: targetMarginPercent,
+          selling_rate: Math.round(item.cost_amount * (1 + targetMarginPercent / 100)),
           quantity: item.quantity || null,
           unit: item.unit || null,
         }))
@@ -532,17 +531,16 @@ export function CustomerQuotationDialog({
         setRateStructure(operationalCost.rate_structure)
       }
 
-      // If breakdown with items, populate items with margin calculation
+      // If breakdown with items, populate items with margin calculation - use user's targetMarginPercent
       if (operationalCost.rate_structure === 'breakdown' && operationalCost.items && operationalCost.items.length > 0) {
-        const defaultMargin = 15 // Default margin percentage
         const mappedItems: QuotationItem[] = operationalCost.items.map((item, index) => ({
           id: `item-${Date.now()}-${index}`,
           component_type: item.component_type,
           component_name: item.component_name || getRateComponentLabel(item.component_type),
           description: item.description || '',
           cost_amount: item.cost_amount,
-          target_margin_percent: defaultMargin,
-          selling_rate: Math.round(item.cost_amount * (1 + defaultMargin / 100)),
+          target_margin_percent: targetMarginPercent,
+          selling_rate: Math.round(item.cost_amount * (1 + targetMarginPercent / 100)),
           quantity: item.quantity || null,
           unit: item.unit || null,
         }))
@@ -764,16 +762,20 @@ export function CustomerQuotationDialog({
             item.component_name?.startsWith(`${shipmentLabel}:`)
           )
 
-          // Sum of items selling_rate (from breakdown) or fall back to cost * margin
+          // Sum of items selling_rate (from breakdown) or fall back to cost * user's margin
           const itemsSellingRate = shipmentItems.reduce((sum, item) => sum + (item.selling_rate || 0), 0)
           const itemsCostAmount = shipmentItems.reduce((sum, item) => sum + (item.cost_amount || 0), 0)
 
-          // Use items total if available, otherwise use operational cost
-          const defaultMargin = 15
+          // Use items total if available, otherwise use operational cost with user's targetMarginPercent
           const costAmount = itemsCostAmount > 0 ? itemsCostAmount : (shipmentCost?.amount || 0)
           const sellingRate = itemsSellingRate > 0
             ? Math.round(itemsSellingRate)
-            : Math.round(costAmount * (1 + defaultMargin / 100))
+            : Math.round(costAmount * (1 + targetMarginPercent / 100))
+
+          // Calculate actual margin from items or use user's targetMarginPercent
+          const actualMargin = costAmount > 0 && sellingRate > 0
+            ? Math.round(((sellingRate - costAmount) / costAmount) * 100 * 100) / 100
+            : targetMarginPercent
 
           return {
             shipment_detail_id: s.shipment_detail_id || null,
@@ -798,7 +800,7 @@ export function CustomerQuotationDialog({
             cost_amount: costAmount,
             cost_currency: shipmentCost?.currency || currency,
             selling_rate: sellingRate,
-            margin_percent: defaultMargin,
+            margin_percent: actualMargin,
           }
         }),
         shipment_count: allShipments.length,
