@@ -525,14 +525,15 @@ export function CustomerQuotationDialog({
 
       if (allBreakdownItems.length > 0) {
         // Has breakdown items from one or more costs - use user's targetMarginPercent
+        const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
         const mappedItems: QuotationItem[] = allBreakdownItems.map((item, index) => ({
           id: `item-${Date.now()}-${index}`,
           component_type: item.component_type,
           component_name: item.component_name || getRateComponentLabel(item.component_type),
           description: item.description || '',
           cost_amount: item.cost_amount,
-          target_margin_percent: targetMarginPercent,
-          selling_rate: Math.round(item.cost_amount * (1 + targetMarginPercent / 100)),
+          target_margin_percent: marginValue,
+          selling_rate: Math.round(item.cost_amount * (1 + marginValue / 100)),
           quantity: item.quantity || null,
           unit: item.unit || null,
         }))
@@ -550,14 +551,15 @@ export function CustomerQuotationDialog({
 
       // If breakdown with items, populate items with margin calculation - use user's targetMarginPercent
       if (operationalCost.rate_structure === 'breakdown' && operationalCost.items && operationalCost.items.length > 0) {
+        const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
         const mappedItems: QuotationItem[] = operationalCost.items.map((item, index) => ({
           id: `item-${Date.now()}-${index}`,
           component_type: item.component_type,
           component_name: item.component_name || getRateComponentLabel(item.component_type),
           description: item.description || '',
           cost_amount: item.cost_amount,
-          target_margin_percent: targetMarginPercent,
-          selling_rate: Math.round(item.cost_amount * (1 + targetMarginPercent / 100)),
+          target_margin_percent: marginValue,
+          selling_rate: Math.round(item.cost_amount * (1 + marginValue / 100)),
           quantity: item.quantity || null,
           unit: item.unit || null,
         }))
