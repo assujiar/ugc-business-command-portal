@@ -172,6 +172,25 @@ interface CustomerQuotationDialogProps {
       sort_order?: number
     }>
   }
+  // Multi-shipment operational costs (one cost per shipment)
+  operationalCosts?: Array<{
+    id: string
+    shipment_detail_id: string | null
+    shipment_label: string | null
+    amount: number
+    currency: string
+    rate_structure?: 'bundling' | 'breakdown'
+    items?: Array<{
+      id: string
+      component_type: string
+      component_name?: string
+      description?: string
+      cost_amount: number
+      quantity?: number | null
+      unit?: string | null
+      sort_order?: number
+    }>
+  }>
   onSuccess?: () => void
   onCreated?: () => void
 }
@@ -243,6 +262,7 @@ export function CustomerQuotationDialog({
   lead,
   opportunity,
   operationalCost,
+  operationalCosts,
   onSuccess,
   onCreated,
 }: CustomerQuotationDialogProps) {
@@ -465,8 +485,46 @@ export function CustomerQuotationDialog({
 
     // ============================================
     // 3. OPERATIONAL COST (ALWAYS apply if available)
+    // Supports both single operationalCost and multi-shipment operationalCosts
     // ============================================
-    if (operationalCost) {
+    if (operationalCosts && operationalCosts.length > 0) {
+      // Multi-shipment costs: calculate total from all costs
+      const totalAmount = operationalCosts.reduce((sum, cost) => sum + cost.amount, 0)
+      setTotalCost(totalAmount)
+      setCurrency(operationalCosts[0]?.currency || 'IDR')
+
+      // For multi-shipment, use bundling by default (each shipment has its own cost)
+      setRateStructure('bundling')
+
+      // If all costs have breakdown items, combine them
+      const allBreakdownItems = operationalCosts.flatMap((cost, costIdx) =>
+        (cost.items || []).map((item, itemIdx) => ({
+          ...item,
+          component_name: cost.shipment_label
+            ? `${cost.shipment_label}: ${item.component_name || getRateComponentLabel(item.component_type)}`
+            : item.component_name || getRateComponentLabel(item.component_type),
+        }))
+      )
+
+      if (allBreakdownItems.length > 0) {
+        // Has breakdown items from one or more costs
+        const defaultMargin = 15
+        const mappedItems: QuotationItem[] = allBreakdownItems.map((item, index) => ({
+          id: `item-${Date.now()}-${index}`,
+          component_type: item.component_type,
+          component_name: item.component_name || getRateComponentLabel(item.component_type),
+          description: item.description || '',
+          cost_amount: item.cost_amount,
+          target_margin_percent: defaultMargin,
+          selling_rate: item.cost_amount * (1 + defaultMargin / 100),
+          quantity: item.quantity || null,
+          unit: item.unit || null,
+        }))
+        setItems(mappedItems)
+        setRateStructure('breakdown')
+      }
+    } else if (operationalCost) {
+      // Single operational cost (backward compatibility)
       setCurrency(operationalCost.currency || 'IDR')
 
       // Set rate structure from operational cost
@@ -631,11 +689,16 @@ export function CustomerQuotationDialog({
 
     setSaving(true)
     try {
+      // Get operational cost IDs (single or multiple)
+      const costIds = operationalCosts?.map(c => c.id).filter(Boolean) || []
+      const singleCostId = operationalCost?.id || (costIds.length > 0 ? costIds[0] : null)
+
       const payload = {
         ticket_id: ticketId || null,
         lead_id: lead?.lead_id || null,
         opportunity_id: opportunity?.opportunity_id || null,
-        operational_cost_id: operationalCost?.id || null,
+        operational_cost_id: singleCostId, // For backward compatibility
+        operational_cost_ids: costIds.length > 0 ? costIds : (singleCostId ? [singleCostId] : []), // Multi-cost support
         source_type: sourceType,
         customer_name: customerName,
         customer_company: customerCompany || null,
@@ -688,26 +751,42 @@ export function CustomerQuotationDialog({
             unit: item.unit,
             sort_order: index,
           })) : [],
-        // Multi-shipment support: include all shipments
-        shipments: allShipments.map((s, idx) => ({
-          shipment_detail_id: s.shipment_detail_id || null,
-          shipment_order: s.shipment_order || idx + 1,
-          shipment_label: s.shipment_label || `Shipment ${idx + 1}`,
-          service_type_code: s.service_type_code || null,
-          fleet_type: s.fleet_type || null,
-          fleet_quantity: s.fleet_quantity || 1,
-          incoterm: s.incoterm || null,
-          cargo_category: s.cargo_category || null,
-          cargo_description: s.cargo_description || null,
-          weight_total_kg: s.weight_total_kg || null,
-          volume_total_cbm: s.volume_total_cbm || null,
-          origin_address: s.origin_address || null,
-          origin_city: s.origin_city || null,
-          origin_country: s.origin_country || null,
-          destination_address: s.destination_address || null,
-          destination_city: s.destination_city || null,
-          destination_country: s.destination_country || null,
-        })),
+        // Multi-shipment support: include all shipments with their costs
+        shipments: allShipments.map((s, idx) => {
+          // Find cost for this shipment from operationalCosts
+          const shipmentCost = operationalCosts?.find(
+            c => c.shipment_detail_id === s.shipment_detail_id
+          )
+          const defaultMargin = 15
+          const costAmount = shipmentCost?.amount || 0
+          const sellingRate = costAmount * (1 + defaultMargin / 100)
+
+          return {
+            shipment_detail_id: s.shipment_detail_id || null,
+            shipment_order: s.shipment_order || idx + 1,
+            shipment_label: s.shipment_label || `Shipment ${idx + 1}`,
+            service_type_code: s.service_type_code || null,
+            fleet_type: s.fleet_type || null,
+            fleet_quantity: s.fleet_quantity || 1,
+            incoterm: s.incoterm || null,
+            cargo_category: s.cargo_category || null,
+            cargo_description: s.cargo_description || null,
+            weight_total_kg: s.weight_total_kg || null,
+            volume_total_cbm: s.volume_total_cbm || null,
+            origin_address: s.origin_address || null,
+            origin_city: s.origin_city || null,
+            origin_country: s.origin_country || null,
+            destination_address: s.destination_address || null,
+            destination_city: s.destination_city || null,
+            destination_country: s.destination_country || null,
+            // Cost info per shipment
+            operational_cost_id: shipmentCost?.id || null,
+            cost_amount: costAmount,
+            cost_currency: shipmentCost?.currency || currency,
+            selling_rate: sellingRate,
+            margin_percent: defaultMargin,
+          }
+        }),
         shipment_count: allShipments.length,
       }
 

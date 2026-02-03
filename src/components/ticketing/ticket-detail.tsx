@@ -75,6 +75,7 @@ import {
   isOps,
 } from '@/lib/permissions'
 import { CustomerQuotationDialog } from '@/components/ticketing/customer-quotation-dialog'
+import { MultiShipmentCostDialog } from '@/components/ticketing/multi-shipment-cost-dialog'
 import { RATE_COMPONENTS_BY_CATEGORY, getRateComponentLabel } from '@/lib/constants/rate-components'
 import { SelectGroup, SelectLabel } from '@/components/ui/select'
 import type { Database } from '@/types/database'
@@ -294,7 +295,10 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [costs, setCosts] = useState<any[]>([])
 
-  // Cost dialog state
+  // Multi-shipment cost dialog state
+  const [multiShipmentCostDialogOpen, setMultiShipmentCostDialogOpen] = useState(false)
+
+  // Cost dialog state (single shipment - legacy)
   const [costDialogOpen, setCostDialogOpen] = useState(false)
   const [costAmount, setCostAmount] = useState('')
   const [costCurrency, setCostCurrency] = useState('IDR')
@@ -2021,11 +2025,22 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                   {/* Assignee/Ops Actions */}
                   {(isAssignee || isOpsOrAdmin) && ticket.ticket_type === 'RFQ' && !isCreator && (
                     <>
-                      {/* Submit Cost Button - always available until ticket is closed */}
-                      <Dialog open={costDialogOpen} onOpenChange={setCostDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button className="w-full bg-green-600 hover:bg-green-700">
-                            <DollarSign className="mr-2 h-4 w-4" />
+                      {/* Submit Cost Button - Multi-shipment vs Single-shipment */}
+                      {shipments.length > 1 ? (
+                        // Multi-shipment: Use dedicated dialog for batch cost submission
+                        <Button
+                          className="w-full bg-green-600 hover:bg-green-700"
+                          onClick={() => setMultiShipmentCostDialogOpen(true)}
+                        >
+                          <DollarSign className="mr-2 h-4 w-4" />
+                          Submit Costs ({shipments.length} Shipments)
+                        </Button>
+                      ) : (
+                        // Single shipment: Use original dialog
+                        <Dialog open={costDialogOpen} onOpenChange={setCostDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button className="w-full bg-green-600 hover:bg-green-700">
+                              <DollarSign className="mr-2 h-4 w-4" />
                               Submit Cost
                             </Button>
                           </DialogTrigger>
@@ -2360,6 +2375,27 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                             </DialogFooter>
                           </DialogContent>
                         </Dialog>
+                      )}
+
+                      {/* Multi-Shipment Cost Dialog */}
+                      <MultiShipmentCostDialog
+                        open={multiShipmentCostDialogOpen}
+                        onOpenChange={setMultiShipmentCostDialogOpen}
+                        ticketId={ticket.id}
+                        ticketCode={ticket.ticket_code}
+                        shipments={shipments}
+                        existingCosts={costs.map(c => ({
+                          id: c.id,
+                          shipment_detail_id: c.shipment_detail_id,
+                          shipment_label: c.shipment_label,
+                          amount: c.amount,
+                          status: c.status
+                        }))}
+                        onSuccess={() => {
+                          // Refresh costs after submission
+                          fetchData()
+                        }}
+                      />
                     </>
                   )}
                 </div>

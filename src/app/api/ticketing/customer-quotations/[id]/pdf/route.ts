@@ -284,13 +284,17 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
               <div class="city">${s.destination_city || 'Destination'}</div>
               <div class="ctry">${s.destination_country || ''}${s.destination_port ? ' • ' + s.destination_port : ''}</div>
             </div>
-            ${s.cargo_description || s.weight_total_kg || s.volume_total_cbm ? `
-              <div style="margin-left:auto;font-size:6px;color:#666;text-align:right">
+            <div style="margin-left:auto;text-align:right">
+              ${s.selling_rate ? `
+                <div style="font-size:9px;font-weight:700;color:#ff4600">${formatCurrency(s.selling_rate, s.cost_currency || quotation.currency)}</div>
+              ` : ''}
+              <div style="font-size:6px;color:#666">
                 ${s.cargo_description ? `<div>${s.cargo_description}</div>` : ''}
                 ${s.weight_total_kg ? `<span>${s.weight_total_kg} kg</span>` : ''}
                 ${s.volume_total_cbm ? `<span> | ${s.volume_total_cbm} cbm</span>` : ''}
+                ${s.fleet_type ? `<span> | ${s.fleet_type}${s.fleet_quantity > 1 ? ' x' + s.fleet_quantity : ''}</span>` : ''}
               </div>
-            ` : ''}
+            </div>
           </div>
         `).join('')}
       </div>

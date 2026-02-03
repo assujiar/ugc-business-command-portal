@@ -129,6 +129,9 @@ export async function POST(request: NextRequest) {
     let lead_id = body.lead_id || null
     let opportunity_id = body.opportunity_id || null
     let operational_cost_id = body.operational_cost_id || null
+    const operational_cost_ids: string[] = Array.isArray(body.operational_cost_ids)
+      ? body.operational_cost_ids.filter(Boolean)
+      : (operational_cost_id ? [operational_cost_id] : [])
 
     // If ticket_id is provided, inherit lead_id and opportunity_id from ticket if not already set
     if (ticket_id && (!lead_id || !opportunity_id)) {
@@ -378,6 +381,7 @@ export async function POST(request: NextRequest) {
         source_type,
         sequence_number,
         operational_cost_id,
+        operational_cost_ids, // Multi-shipment cost support
         source_rate_quote_id: operational_cost_id, // Bidirectional link to ticket_rate_quotes
         quotation_number,
         customer_name,
