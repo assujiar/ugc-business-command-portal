@@ -788,6 +788,8 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
 
   const ticket = quotation.ticket
   const items = quotation.items || []
+  const shipments = quotation.shipments || []
+  const hasMultipleShipments = shipments.length > 1
 
   return (
     <div className="space-y-6">
@@ -980,34 +982,66 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
             <CardTitle>Quotation Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Total Amount */}
-            <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Selling Rate</p>
-                <p className="text-3xl font-bold text-green-700 dark:text-green-400">
-                  {formatCurrency(quotation.total_selling_rate, quotation.currency)}
-                </p>
+            {/* Total Amount - Show per-shipment for multi-shipment quotations */}
+            {hasMultipleShipments ? (
+              // Multi-shipment: show per-shipment rates instead of aggregate
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <Package className="h-5 w-5 text-blue-600" />
+                  <span className="font-semibold text-blue-700 dark:text-blue-300">
+                    {shipments.length} Shipments
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {shipments.map((shipment: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border">
+                      <div>
+                        <p className="font-medium">
+                          {shipment.shipment_label || `Shipment ${idx + 1}`}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {shipment.origin_city || '-'} → {shipment.destination_city || '-'}
+                        </p>
+                      </div>
+                      <p className="text-lg font-bold text-green-600 dark:text-green-400 font-mono">
+                        {formatCurrency(shipment.selling_rate || 0, shipment.cost_currency || quotation.currency)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <DollarSign className="h-8 w-8 text-green-600" />
-            </div>
+            ) : (
+              // Single shipment: show aggregate total
+              <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Selling Rate</p>
+                  <p className="text-3xl font-bold text-green-700 dark:text-green-400">
+                    {formatCurrency(quotation.total_selling_rate, quotation.currency)}
+                  </p>
+                </div>
+                <DollarSign className="h-8 w-8 text-green-600" />
+              </div>
+            )}
 
-            {/* Cost & Margin */}
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">Total Cost</p>
-                <p className="text-lg font-semibold">
-                  {formatCurrency(quotation.total_cost, quotation.currency)}
-                </p>
+            {/* Cost & Margin - Only show for single shipment */}
+            {!hasMultipleShipments && (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">Total Cost</p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(quotation.total_cost, quotation.currency)}
+                  </p>
+                </div>
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">Target Margin</p>
+                  <p className="text-lg font-semibold">{quotation.target_margin_percent || 0}%</p>
+                </div>
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">Rate Structure</p>
+                  <p className="text-lg font-semibold capitalize">{quotation.rate_structure}</p>
+                </div>
               </div>
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">Target Margin</p>
-                <p className="text-lg font-semibold">{quotation.target_margin_percent || 0}%</p>
-              </div>
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">Rate Structure</p>
-                <p className="text-lg font-semibold capitalize">{quotation.rate_structure}</p>
-              </div>
-            </div>
+            )}
 
             {/* Breakdown Items */}
             {items.length > 0 && (
