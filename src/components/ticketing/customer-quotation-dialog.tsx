@@ -683,9 +683,12 @@ export function CustomerQuotationDialog({
       return
     }
 
-    // Validate margin is entered
-    const effectiveMargin = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
-    if (targetMarginPercent === '' || targetMarginPercent === 0) {
+    // Validate margin is entered (only for lumpsum mode - breakdown mode uses per-item margins)
+    // In breakdown mode, use totalMarginPercent calculated from items
+    const effectiveMargin = rateStructure === 'breakdown'
+      ? totalMarginPercent
+      : (typeof targetMarginPercent === 'number' ? targetMarginPercent : 0)
+    if (rateStructure === 'bundling' && (targetMarginPercent === '' || targetMarginPercent === 0)) {
       toast({
         title: 'Validation Error',
         description: 'Target margin harus diisi',
