@@ -757,9 +757,23 @@ export function CustomerQuotationDialog({
           const shipmentCost = operationalCosts?.find(
             c => c.shipment_detail_id === s.shipment_detail_id
           )
+
+          // Calculate selling_rate from items that belong to this shipment
+          const shipmentLabel = s.shipment_label || `Shipment ${idx + 1}`
+          const shipmentItems = items.filter(item =>
+            item.component_name?.startsWith(`${shipmentLabel}:`)
+          )
+
+          // Sum of items selling_rate (from breakdown) or fall back to cost * margin
+          const itemsSellingRate = shipmentItems.reduce((sum, item) => sum + (item.selling_rate || 0), 0)
+          const itemsCostAmount = shipmentItems.reduce((sum, item) => sum + (item.cost_amount || 0), 0)
+
+          // Use items total if available, otherwise use operational cost
           const defaultMargin = 15
-          const costAmount = shipmentCost?.amount || 0
-          const sellingRate = Math.round(costAmount * (1 + defaultMargin / 100))
+          const costAmount = itemsCostAmount > 0 ? itemsCostAmount : (shipmentCost?.amount || 0)
+          const sellingRate = itemsSellingRate > 0
+            ? Math.round(itemsSellingRate)
+            : Math.round(costAmount * (1 + defaultMargin / 100))
 
           return {
             shipment_detail_id: s.shipment_detail_id || null,
