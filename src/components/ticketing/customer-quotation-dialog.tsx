@@ -601,13 +601,14 @@ export function CustomerQuotationDialog({
 
   // Add item to breakdown
   const addItem = () => {
+    const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
     const newItem: QuotationItem = {
       id: `item-${Date.now()}`,
       component_type: '',
       component_name: '',
       description: '',
       cost_amount: 0,
-      target_margin_percent: targetMarginPercent,
+      target_margin_percent: marginValue,
       selling_rate: 0,
       quantity: null,
       unit: null,
@@ -765,7 +766,7 @@ export function CustomerQuotationDialog({
         cargo_value_currency: cargoValueCurrency,
         rate_structure: rateStructure,
         total_cost: rateStructure === 'breakdown' ? totalBreakdownCost : totalCost,
-        target_margin_percent: rateStructure === 'breakdown' ? totalMarginPercent : targetMarginPercent,
+        target_margin_percent: rateStructure === 'breakdown' ? totalMarginPercent : effectiveMargin,
         total_selling_rate: totalSellingRate,
         currency,
         scope_of_work: scopeOfWork || null,
@@ -1554,7 +1555,8 @@ export function CustomerQuotationDialog({
                             c => c.shipment_detail_id === shipment.shipment_detail_id
                           )
                           const costAmount = shipmentCost?.amount || 0
-                          const sellingRate = Math.round(costAmount * (1 + targetMarginPercent / 100))
+                          const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
+                          const sellingRate = Math.round(costAmount * (1 + marginValue / 100))
                           return (
                             <div key={idx} className="p-3 bg-white dark:bg-gray-800 rounded-lg border">
                               <div className="flex items-center justify-between">
@@ -2015,7 +2017,8 @@ export function CustomerQuotationDialog({
                       c => c.shipment_detail_id === shipment.shipment_detail_id
                     )
                     const costAmount = shipmentCost?.amount || 0
-                    const sellingRate = Math.round(costAmount * (1 + targetMarginPercent / 100))
+                    const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
+                    const sellingRate = Math.round(costAmount * (1 + marginValue / 100))
                     return (
                       <div key={idx} className="flex items-center justify-between text-sm p-2 bg-white dark:bg-gray-800 rounded">
                         <div>
@@ -2089,7 +2092,7 @@ export function CustomerQuotationDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={() => handleSave()} disabled={saving}>
             {saving ? (
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
             ) : (
