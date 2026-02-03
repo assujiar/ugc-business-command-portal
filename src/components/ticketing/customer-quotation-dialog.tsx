@@ -21,6 +21,7 @@ import {
   CheckSquare,
   RefreshCw,
   ExternalLink,
+  AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +36,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Select,
   SelectContent,
@@ -340,9 +351,14 @@ export function CustomerQuotationDialog({
   // Rate structure
   const [rateStructure, setRateStructure] = useState<'bundling' | 'breakdown'>('bundling')
   const [totalCost, setTotalCost] = useState(0)
-  const [targetMarginPercent, setTargetMarginPercent] = useState(15)
+  const [targetMarginPercent, setTargetMarginPercent] = useState<number | ''>('' as any)
   const [currency, setCurrency] = useState('IDR')
   const [items, setItems] = useState<QuotationItem[]>([])
+
+  // Low margin warning
+  const [showLowMarginWarning, setShowLowMarginWarning] = useState(false)
+  const [lowMarginConfirmed, setLowMarginConfirmed] = useState(false)
+  const MIN_MARGIN_THRESHOLD = 15
 
   // Terms
   const [scopeOfWork, setScopeOfWork] = useState('')
@@ -364,8 +380,9 @@ export function CustomerQuotationDialog({
 
   // Calculate selling rate based on cost and margin (with rounding to avoid floating point issues)
   const totalSellingRate = useMemo(() => {
+    const margin = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
     if (rateStructure === 'bundling') {
-      return Math.round(totalCost * (1 + targetMarginPercent / 100))
+      return Math.round(totalCost * (1 + margin / 100))
     } else {
       return Math.round(items.reduce((sum, item) => sum + item.selling_rate, 0))
     }
@@ -387,7 +404,7 @@ export function CustomerQuotationDialog({
   // Calculate total margin percentage for breakdown mode
   const totalMarginPercent = useMemo(() => {
     if (rateStructure === 'bundling') {
-      return targetMarginPercent
+      return typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
     }
     if (totalBreakdownCost <= 0) return 0
     return ((totalSellingRate - totalBreakdownCost) / totalBreakdownCost) * 100
@@ -653,11 +670,22 @@ export function CustomerQuotationDialog({
   }
 
   // Save quotation
-  const handleSave = async () => {
+  const handleSave = async (forceCreate = false) => {
     if (!customerName) {
       toast({
         title: 'Validation Error',
         description: 'Customer name is required',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Validate margin is entered
+    const effectiveMargin = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
+    if (targetMarginPercent === '' || targetMarginPercent === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Target margin harus diisi',
         variant: 'destructive',
       })
       return
@@ -683,6 +711,13 @@ export function CustomerQuotationDialog({
         })
         return
       }
+    }
+
+    // Check for low margin and show warning if not confirmed
+    const isLowMargin = effectiveMargin < MIN_MARGIN_THRESHOLD
+    if (isLowMargin && !lowMarginConfirmed && !forceCreate) {
+      setShowLowMarginWarning(true)
+      return
     }
 
     setSaving(true)
@@ -766,16 +801,16 @@ export function CustomerQuotationDialog({
           const itemsSellingRate = shipmentItems.reduce((sum, item) => sum + (item.selling_rate || 0), 0)
           const itemsCostAmount = shipmentItems.reduce((sum, item) => sum + (item.cost_amount || 0), 0)
 
-          // Use items total if available, otherwise use operational cost with user's targetMarginPercent
+          // Use items total if available, otherwise use operational cost with user's margin
           const costAmount = itemsCostAmount > 0 ? itemsCostAmount : (shipmentCost?.amount || 0)
           const sellingRate = itemsSellingRate > 0
             ? Math.round(itemsSellingRate)
-            : Math.round(costAmount * (1 + targetMarginPercent / 100))
+            : Math.round(costAmount * (1 + effectiveMargin / 100))
 
-          // Calculate actual margin from items or use user's targetMarginPercent
+          // Calculate actual margin from items or use user's margin
           const actualMargin = costAmount > 0 && sellingRate > 0
             ? Math.round(((sellingRate - costAmount) / costAmount) * 100 * 100) / 100
-            : targetMarginPercent
+            : effectiveMargin
 
           return {
             shipment_detail_id: s.shipment_detail_id || null,
@@ -804,6 +839,7 @@ export function CustomerQuotationDialog({
           }
         }),
         shipment_count: allShipments.length,
+        is_low_margin: isLowMargin,
       }
 
       const response = await fetch('/api/ticketing/customer-quotations', {
@@ -815,9 +851,33 @@ export function CustomerQuotationDialog({
       const result = await response.json()
 
       if (result.success && result.data) {
+        // Send low margin notification email if applicable
+        if (isLowMargin) {
+          try {
+            await fetch('/api/ticketing/customer-quotations/low-margin-notification', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                quotation_id: result.data.id,
+                quotation_number: result.data.quotation_number,
+                customer_name: customerName,
+                customer_company: customerCompany,
+                margin_percent: effectiveMargin,
+                total_cost: rateStructure === 'breakdown' ? totalBreakdownCost : totalCost,
+                total_selling_rate: totalSellingRate,
+                currency: currency,
+                created_by: result.data.created_by_name || 'Unknown',
+              }),
+            })
+          } catch (emailError) {
+            console.error('Failed to send low margin notification:', emailError)
+            // Don't block quotation creation if email fails
+          }
+        }
+
         toast({
           title: 'Success',
-          description: `Quotation ${result.data.quotation_number} created successfully`,
+          description: `Quotation ${result.data.quotation_number} created successfully${isLowMargin ? ' (Low margin notification sent to Sales Manager)' : ''}`,
         })
         // Close dialog and redirect to detail page
         onOpenChange(false)
@@ -999,6 +1059,7 @@ export function CustomerQuotationDialog({
   ]
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
@@ -1519,10 +1580,21 @@ export function CustomerQuotationDialog({
                         <Input
                           id="margin"
                           type="number"
+                          placeholder="Enter margin %"
                           value={targetMarginPercent}
-                          onChange={(e) => setTargetMarginPercent(parseFloat(e.target.value) || 0)}
-                          className="text-right w-32 mt-1"
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setTargetMarginPercent(val === '' ? '' : parseFloat(val) || 0)
+                            setLowMarginConfirmed(false) // Reset confirmation when margin changes
+                          }}
+                          className={`text-right w-32 mt-1 ${typeof targetMarginPercent === 'number' && targetMarginPercent < MIN_MARGIN_THRESHOLD ? 'border-yellow-500' : ''}`}
                         />
+                        {typeof targetMarginPercent === 'number' && targetMarginPercent < MIN_MARGIN_THRESHOLD && (
+                          <p className="text-xs text-yellow-600 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            Margin dibawah standar minimum ({MIN_MARGIN_THRESHOLD}%)
+                          </p>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -1543,10 +1615,21 @@ export function CustomerQuotationDialog({
                         <Input
                           id="margin"
                           type="number"
+                          placeholder="Enter margin %"
                           value={targetMarginPercent}
-                          onChange={(e) => setTargetMarginPercent(parseFloat(e.target.value) || 0)}
-                          className="text-right"
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setTargetMarginPercent(val === '' ? '' : parseFloat(val) || 0)
+                            setLowMarginConfirmed(false)
+                          }}
+                          className={`text-right ${typeof targetMarginPercent === 'number' && targetMarginPercent < MIN_MARGIN_THRESHOLD ? 'border-yellow-500' : ''}`}
                         />
+                        {typeof targetMarginPercent === 'number' && targetMarginPercent < MIN_MARGIN_THRESHOLD && (
+                          <p className="text-xs text-yellow-600 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            Margin dibawah {MIN_MARGIN_THRESHOLD}%
+                          </p>
+                        )}
                       </div>
                       <div>
                         <Label>Selling Rate</Label>
@@ -2015,5 +2098,45 @@ export function CustomerQuotationDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Low Margin Warning Dialog */}
+    <AlertDialog open={showLowMarginWarning} onOpenChange={setShowLowMarginWarning}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2 text-yellow-600">
+            <AlertTriangle className="h-5 w-5" />
+            Margin Dibawah Standar
+          </AlertDialogTitle>
+          <AlertDialogDescription className="space-y-3">
+            <p>
+              Margin yang Anda masukkan (<strong>{typeof targetMarginPercent === 'number' ? targetMarginPercent : 0}%</strong>)
+              dibawah standar minimum perusahaan (<strong>{MIN_MARGIN_THRESHOLD}%</strong>).
+            </p>
+            <p>
+              Silakan diskusikan dengan Sales Manager Anda sebelum melanjutkan.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Jika Anda tetap melanjutkan, notifikasi akan dikirim ke Sales Manager mengenai quotation dengan margin dibawah standar ini.
+            </p>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setShowLowMarginWarning(false)}>
+            Kembali & Ubah Margin
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              setShowLowMarginWarning(false)
+              setLowMarginConfirmed(true)
+              handleSave(true) // Force create with low margin
+            }}
+            className="bg-yellow-600 hover:bg-yellow-700"
+          >
+            Lanjutkan dengan Margin Rendah
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
