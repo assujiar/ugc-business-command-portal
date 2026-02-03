@@ -268,10 +268,21 @@ export default function QuotationVerifyPage() {
                     {getQuotationStatusConfig(data.status).label}
                   </span>
                 </div>
-                <div className="text-center sm:text-right">
-                  <p className="text-white/80 text-sm font-medium">Total Amount</p>
-                  <p className="text-3xl font-bold text-white">{data.total_amount}</p>
-                </div>
+                {/* Only show aggregate total for single shipment */}
+                {(!data.shipments || data.shipments.length <= 1) && (
+                  <div className="text-center sm:text-right">
+                    <p className="text-white/80 text-sm font-medium">Total Amount</p>
+                    <p className="text-3xl font-bold text-white">{data.total_amount}</p>
+                  </div>
+                )}
+                {/* For multi-shipment, show shipment count indicator */}
+                {data.shipments && data.shipments.length > 1 && (
+                  <div className="text-center sm:text-right">
+                    <p className="text-white/80 text-sm font-medium">Multiple Shipments</p>
+                    <p className="text-2xl font-bold text-white">{data.shipments.length} Shipments</p>
+                    <p className="text-white/70 text-xs mt-1">See rates below</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -469,8 +480,8 @@ export default function QuotationVerifyPage() {
               </div>
             )}
 
-            {/* Rate Breakdown */}
-            {data.items && data.items.length > 0 && (
+            {/* Rate Breakdown - Single shipment with breakdown */}
+            {data.items && data.items.length > 0 && (!data.shipments || data.shipments.length <= 1) && (
               <div className="px-6 pb-6">
                 <h3 className="font-semibold text-[#ff4600] mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
                   <FileText className="h-4 w-4" />
@@ -507,6 +518,8 @@ export default function QuotationVerifyPage() {
                 </div>
               </div>
             )}
+
+            {/* Rate Breakdown - Multi-shipment: items are already shown per shipment above, no aggregate total */}
 
             {/* Terms */}
             {(data.terms_includes?.length || data.terms_excludes?.length) && (

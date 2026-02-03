@@ -48,6 +48,41 @@ const UGC_INFO = {
   web: 'www.utamaglobalindocargo.com',
 }
 
+// Helper to group items by shipment label prefix
+const groupItemsByShipment = (items: any[], shipments: any[]): Map<number, any[]> => {
+  const itemsByShipment = new Map<number, any[]>()
+
+  // Initialize with empty arrays for each shipment
+  shipments.forEach((_, idx) => {
+    itemsByShipment.set(idx, [])
+  })
+
+  items.forEach((item: any) => {
+    const componentName = item.component_name || ''
+    // Check if item has shipment prefix like "Shipment 1: " or "Shipment 2: "
+    const shipmentMatch = componentName.match(/^Shipment\s*(\d+)\s*:\s*/i)
+    if (shipmentMatch) {
+      const shipmentIndex = parseInt(shipmentMatch[1]) - 1
+      if (itemsByShipment.has(shipmentIndex)) {
+        // Remove the prefix from component_name for display
+        const cleanedItem = {
+          ...item,
+          component_name: componentName.replace(/^Shipment\s*\d+\s*:\s*/i, '')
+        }
+        itemsByShipment.get(shipmentIndex)!.push(cleanedItem)
+      }
+    } else {
+      // Item without shipment prefix goes to first shipment (or general items)
+      if (!itemsByShipment.has(-1)) {
+        itemsByShipment.set(-1, [])
+      }
+      itemsByShipment.get(-1)!.push(item)
+    }
+  })
+
+  return itemsByShipment
+}
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   draft: { label: 'DRAFT', color: '#6b7280', bg: '#f3f4f6' },
   sent: { label: 'ACTIVE', color: '#059669', bg: '#d1fae5' },
@@ -99,6 +134,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (quotation.destination_country && quotation.destination_country !== 'Indonesia') routeParts.push(quotation.destination_country)
     const destStr = routeParts.join(', ')
     const routeDisplay = originStr && destStr ? `${originStr} → ${destStr}` : originStr || destStr || '-'
+
+    // Parse multi-shipment data from JSONB field
+    let shipments: any[] = []
+    if (quotation.shipments) {
+      try {
+        shipments = typeof quotation.shipments === 'string'
+          ? JSON.parse(quotation.shipments)
+          : quotation.shipments
+      } catch {
+        shipments = []
+      }
+    }
+    const hasMultipleShipments = Array.isArray(shipments) && shipments.length > 1
+    const items = quotation.items || []
+    const isBreakdown = quotation.rate_structure === 'breakdown'
+
+    // Group items by shipment for multi-shipment breakdown
+    const itemsByShipment = hasMultipleShipments && isBreakdown
+      ? groupItemsByShipment(items, shipments)
+      : null
 
     // Prepare terms
     const includeTerms = quotation.terms_includes || []
@@ -235,8 +290,49 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     <!-- Rate Section -->
     <div class="section">
-      <div class="section-title">Rate ${quotation.rate_structure === 'breakdown' ? 'Breakdown' : 'Summary'}</div>
-      ${quotation.rate_structure === 'breakdown' && quotation.items?.length > 0 ? `
+      <div class="section-title">${hasMultipleShipments ? `Shipments & Rates (${shipments.length} shipments)` : (isBreakdown ? 'Rate Breakdown' : 'Rate Summary')}</div>
+      ${hasMultipleShipments ? `
+      <!-- Multi-shipment: Display each shipment with its own rate section -->
+      ${shipments.map((s: any, idx: number) => {
+        const shipmentItems = itemsByShipment?.get(idx) || []
+        const shipmentSellingRate = s.selling_rate || 0
+        return `
+        <div style="margin-bottom:${idx < shipments.length - 1 ? '12px' : '0'};padding:10px;background:#f9fafb;border-radius:6px;border-left:3px solid #ff4600">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div>
+              <span style="font-size:10pt;font-weight:700;color:#ff4600">SHIPMENT ${idx + 1}</span>
+              <span style="font-size:9pt;color:#666;margin-left:10px">${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}</span>
+            </div>
+          </div>
+          ${s.cargo_description ? `<div style="font-size:8pt;color:#666;margin-bottom:6px">${s.cargo_description}</div>` : ''}
+          ${s.fleet_type ? `<div style="font-size:8pt;color:#666;margin-bottom:6px">Fleet: ${s.fleet_type}${s.fleet_quantity > 1 ? ' × ' + s.fleet_quantity : ''}</div>` : ''}
+          ${isBreakdown && shipmentItems.length > 0 ? `
+          <table style="margin-bottom:6px">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th class="text-right">Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${shipmentItems.map((item: any) => `
+              <tr>
+                <td>${item.component_name || item.component_type}${item.quantity && item.unit ? ` (${item.quantity} ${item.unit})` : ''}</td>
+                <td class="text-right">${formatCurrency(item.selling_rate, s.cost_currency || quotation.currency)}</td>
+              </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          ` : ''}
+          <div style="background:#ff4600;color:white;padding:6px 10px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+            <span style="font-size:8pt;font-weight:600;text-transform:uppercase">Subtotal Shipment ${idx + 1}</span>
+            <span style="font-size:12pt;font-weight:700">${formatCurrency(shipmentSellingRate, s.cost_currency || quotation.currency)}</span>
+          </div>
+        </div>
+        `
+      }).join('')}
+      ` : isBreakdown && items.length > 0 ? `
+      <!-- Single shipment breakdown -->
       <table>
         <thead>
           <tr>
@@ -245,7 +341,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           </tr>
         </thead>
         <tbody>
-          ${quotation.items.map((item: any) => `
+          ${items.map((item: any) => `
           <tr>
             <td>${item.component_name || item.component_type}${item.quantity && item.unit ? ` (${item.quantity} ${item.unit})` : ''}</td>
             <td class="text-right">${formatCurrency(item.selling_rate, quotation.currency)}</td>
@@ -258,6 +354,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         </tbody>
       </table>
       ` : `
+      <!-- Single shipment bundling -->
       <table>
         <tbody>
           <tr class="total-row">

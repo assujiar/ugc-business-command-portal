@@ -104,10 +104,23 @@ const generateWhatsAppText = (quotation: any, profile: ProfileData, validationUr
     ? `*${companyName}*\nU.p ${customerName}`
     : `Yth. ${customerName}`
 
-  // Build route section for message
-  const routeSection = hasMultipleShipments
-    ? `Rute (${shipments.length} shipment):\n${routeInfo}\n`
-    : (routeInfo ? `Rute: ${routeInfo}\n` : '')
+  // Build shipment details section for multi-shipment (with per-shipment rates)
+  let shipmentDetailsSection = ''
+  if (hasMultipleShipments) {
+    shipmentDetailsSection = `\n*${shipments.length} SHIPMENT:*\n` + shipments.map((s: any, idx: number) => {
+      const route = `${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`
+      const rate = s.selling_rate ? formatCurrency(s.selling_rate, s.cost_currency || quotation.currency) : '-'
+      return `${idx + 1}. ${route}\n   Rate: *${rate}*`
+    }).join('\n') + '\n'
+  }
+
+  // Build route section for message (only for single shipment)
+  const routeSection = !hasMultipleShipments && routeInfo ? `Rute: ${routeInfo}\n` : ''
+
+  // Build total section (only for single shipment)
+  const totalSection = !hasMultipleShipments
+    ? `*Total: ${formatCurrency(quotation.total_selling_rate, quotation.currency)}*`
+    : ''
 
   // Build message with clean formatting
   let text = `${greeting},
@@ -119,8 +132,7 @@ Terima kasih atas kepercayaan Anda kepada *${UGC_INFO.shortName}*.
 Berikut penawaran harga kami:
 
 *QUOTATION ${quotation.quotation_number}*
-${routeSection}${quotation.service_type ? `Layanan: ${quotation.service_type}\n` : ''}${cargoSummary ? `Cargo: ${cargoSummary}\n` : ''}
-*Total: ${formatCurrency(quotation.total_selling_rate, quotation.currency)}*
+${routeSection}${quotation.service_type ? `Layanan: ${quotation.service_type}\n` : ''}${cargoSummary ? `Cargo: ${cargoSummary}\n` : ''}${shipmentDetailsSection}${totalSection}
 Berlaku s/d ${formatDate(quotation.valid_until)}
 
 Lihat detail quotation:
@@ -168,17 +180,100 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
   // QR Code URL (using free QR code API)
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(validationUrl)}&bgcolor=ffffff&color=ff4600`
 
-  // Build items table for breakdown
-  let itemsTable = ''
-  if (quotation.rate_structure === 'breakdown' && quotation.items?.length > 0) {
-    const itemRows = quotation.items.map((item: any, index: number) => `
+  // Helper to group items by shipment label prefix
+  const groupItemsByShipment = (items: any[], shipmentList: any[]): Map<number, any[]> => {
+    const itemsByShipment = new Map<number, any[]>()
+    shipmentList.forEach((_, idx) => itemsByShipment.set(idx, []))
+    items.forEach((item: any) => {
+      const componentName = item.component_name || ''
+      const shipmentMatch = componentName.match(/^Shipment\s*(\d+)\s*:\s*/i)
+      if (shipmentMatch) {
+        const shipmentIndex = parseInt(shipmentMatch[1]) - 1
+        if (itemsByShipment.has(shipmentIndex)) {
+          const cleanedItem = {
+            ...item,
+            component_name: componentName.replace(/^Shipment\s*\d+\s*:\s*/i, '')
+          }
+          itemsByShipment.get(shipmentIndex)!.push(cleanedItem)
+        }
+      }
+    })
+    return itemsByShipment
+  }
+
+  // Build rate section for email
+  let rateSection = ''
+  const isBreakdown = quotation.rate_structure === 'breakdown'
+  const items = quotation.items || []
+
+  if (hasMultipleShipments) {
+    // Multi-shipment: Display each shipment with its own rate section (no aggregate total)
+    const itemsByShipment = isBreakdown ? groupItemsByShipment(items, shipments) : null
+
+    rateSection = shipments.map((s: any, idx: number) => {
+      const shipmentItems = itemsByShipment?.get(idx) || []
+      const shipmentSellingRate = s.selling_rate || 0
+      const shipmentCurrency = s.cost_currency || quotation.currency
+
+      let itemsHtml = ''
+      if (isBreakdown && shipmentItems.length > 0) {
+        const itemRows = shipmentItems.map((item: any, index: number) => `
+          <tr${index % 2 === 0 ? '' : ' bgcolor="#fafafa"'}>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #f0f0f0; color: #374151; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">${item.component_name || item.component_type}${item.quantity && item.unit ? ` <span style="color: #9ca3af; font-size: 11px;">(${item.quantity} ${item.unit})</span>` : ''}</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #f0f0f0; text-align: right; font-weight: 600; color: #1f2937; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;">${formatCurrency(item.selling_rate, shipmentCurrency)}</td>
+          </tr>
+        `).join('')
+
+        itemsHtml = `
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; margin-bottom: 8px;">
+            <tr bgcolor="#f8fafc">
+              <th style="padding: 10px 14px; text-align: left; color: #475569; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-family: 'Segoe UI', Arial, sans-serif;">Deskripsi</th>
+              <th style="padding: 10px 14px; text-align: right; color: #475569; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-family: 'Segoe UI', Arial, sans-serif;">Rate</th>
+            </tr>
+            ${itemRows}
+          </table>
+        `
+      }
+
+      return `
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: ${idx < shipments.length - 1 ? '16px' : '0'}; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); padding: 14px 16px; border-left: 4px solid #ff4600;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td>
+                    <p style="margin: 0; color: #ff4600; font-size: 12px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; text-transform: uppercase; letter-spacing: 1px;">SHIPMENT ${idx + 1}</p>
+                    <p style="margin: 4px 0 0; color: #78350f; font-size: 14px; font-family: 'Segoe UI', Arial, sans-serif;">${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}</p>
+                    ${s.cargo_description ? `<p style="margin: 4px 0 0; color: #92400e; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif;">${s.cargo_description}</p>` : ''}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          ${itemsHtml ? `<tr><td style="padding: 12px;">${itemsHtml}</td></tr>` : ''}
+          <tr>
+            <td bgcolor="#ff4600" style="padding: 12px 16px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="color: rgba(255,255,255,0.85); font-size: 11px; font-weight: 600; text-transform: uppercase; font-family: 'Segoe UI', Arial, sans-serif;">Subtotal Shipment ${idx + 1}</td>
+                  <td align="right" style="color: #ffffff; font-size: 18px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">${formatCurrency(shipmentSellingRate, shipmentCurrency)}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      `
+    }).join('')
+  } else if (isBreakdown && items.length > 0) {
+    // Single shipment with breakdown - show items table with total
+    const itemRows = items.map((item: any, index: number) => `
       <tr${index % 2 === 0 ? '' : ' bgcolor="#fafafa"'}>
         <td style="padding: 14px 18px; border-bottom: 1px solid #f0f0f0; color: #374151; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;">${item.component_name || item.component_type}${item.quantity && item.unit ? ` <span style="color: #9ca3af; font-size: 12px;">(${item.quantity} ${item.unit})</span>` : ''}</td>
         <td style="padding: 14px 18px; border-bottom: 1px solid #f0f0f0; text-align: right; font-weight: 600; color: #1f2937; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;">${formatCurrency(item.selling_rate, quotation.currency)}</td>
       </tr>
     `).join('')
 
-    itemsTable = `
+    rateSection = `
       <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
         <tr bgcolor="#ff4600">
           <th style="padding: 16px 18px; text-align: left; color: white; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; font-family: 'Segoe UI', Arial, sans-serif;">Deskripsi</th>
@@ -192,6 +287,9 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
       </table>
     `
   }
+
+  // Legacy itemsTable variable for backward compatibility (used in single shipment breakdown)
+  const itemsTable = !hasMultipleShipments ? rateSection : ''
 
   return `
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -382,11 +480,15 @@ const generateEmailHTML = (quotation: any, profile: ProfileData, validationUrl: 
                   ` : ''}
 
                   <!-- Rate Section -->
-                  ${itemsTable ? `
+                  ${hasMultipleShipments ? `
+                    <!-- Multi-shipment: Display per-shipment rates (no aggregate total) -->
+                    <p style="margin: 0 0 14px; color: #334155; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; font-family: 'Segoe UI', Arial, sans-serif;">Detail Shipment & Biaya (${shipments.length} Shipment)</p>
+                    ${rateSection}
+                  ` : itemsTable ? `
                     <p style="margin: 0 0 14px; color: #334155; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; font-family: 'Segoe UI', Arial, sans-serif;">Rincian Biaya</p>
                     ${itemsTable}
                   ` : `
-                    <!-- Total Amount Card - Premium Look -->
+                    <!-- Total Amount Card - Premium Look (Single shipment bundling) -->
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
                       <tr>
                         <td bgcolor="#fff7ed" style="border: 2px solid #ff4600; border-radius: 16px; padding: 30px; text-align: center;">
@@ -607,15 +709,22 @@ const generateEmailPlainText = (quotation: any, profile: ProfileData, validation
     routeInfo = ` dari ${quotation.origin_city} ke ${quotation.destination_city}`
   }
 
-  // Build shipment routes section for multi-shipment
-  let shipmentRoutes = ''
+  // Build shipment details section for multi-shipment (with per-shipment rates)
+  let shipmentDetails = ''
   if (hasMultipleShipments) {
-    shipmentRoutes = '\n\nRUTE PENGIRIMAN:'
+    shipmentDetails = `\n\nDETAIL ${shipments.length} SHIPMENT:`
     shipments.forEach((s: any, idx: number) => {
-      shipmentRoutes += `\n${idx + 1}. ${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`
-      if (s.cargo_description) shipmentRoutes += ` (${s.cargo_description})`
+      const rate = s.selling_rate ? formatCurrency(s.selling_rate, s.cost_currency || quotation.currency) : '-'
+      shipmentDetails += `\n${idx + 1}. ${s.origin_city || 'Origin'} → ${s.destination_city || 'Destination'}`
+      if (s.cargo_description) shipmentDetails += ` (${s.cargo_description})`
+      shipmentDetails += `\n   Rate: ${rate}`
     })
   }
+
+  // Build total section (only for single shipment)
+  const totalSection = !hasMultipleShipments
+    ? `\nTOTAL PENAWARAN: ${formatCurrency(quotation.total_selling_rate, quotation.currency)}`
+    : ''
 
   // Build cargo details
   let cargoDetails = ''
@@ -643,9 +752,7 @@ Terima kasih atas kepercayaan Anda kepada ${UGC_INFO.shortName}. Dengan senang h
 
 No. Quotation: ${quotation.quotation_number}
 Tanggal: ${formatDate(quotation.created_at)}
-${quotation.ticket?.ticket_code ? `Reference: ${quotation.ticket.ticket_code}` : ''}
-${shipmentRoutes}
-TOTAL PENAWARAN: ${formatCurrency(quotation.total_selling_rate, quotation.currency)}
+${quotation.ticket?.ticket_code ? `Reference: ${quotation.ticket.ticket_code}` : ''}${shipmentDetails}${totalSection}
 ${cargoDetails}
 
 Validitas: Penawaran ini berlaku selama ${quotation.validity_days} hari sejak tanggal penerbitan (hingga ${formatDate(quotation.valid_until)}).
