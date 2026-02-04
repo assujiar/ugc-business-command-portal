@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" fill="none">
+  <defs>
+    <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF4600" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#FF9F1C" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#FF4600" stop-opacity="0.8"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <radialGradient id="pulseGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FF4600" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#FF4600" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- World map outline (simplified) -->
+  <g stroke="#FF4600" stroke-width="0.5" fill="none" opacity="0.3">
+    <!-- North America -->
+    <path d="M150,180 Q180,150 220,140 Q280,130 320,150 Q350,170 340,200 Q330,240 300,260 Q270,280 240,270 Q200,260 170,240 Q150,220 150,180"/>
+    <!-- South America -->
+    <path d="M280,320 Q300,300 310,320 Q330,370 320,420 Q300,470 280,480 Q260,470 260,430 Q250,380 270,340 Q275,325 280,320"/>
+    <!-- Europe -->
+    <path d="M520,160 Q560,140 600,150 Q640,160 660,180 Q650,200 620,210 Q580,220 540,210 Q510,195 520,160"/>
+    <!-- Africa -->
+    <path d="M540,240 Q580,230 620,250 Q650,290 640,350 Q620,410 580,440 Q540,450 510,420 Q490,380 500,330 Q510,280 540,240"/>
+    <!-- Asia -->
+    <path d="M680,130 Q750,100 850,110 Q950,130 1000,180 Q1020,230 980,280 Q920,320 850,310 Q780,300 720,260 Q680,220 680,170 Q680,150 680,130"/>
+    <!-- Australia -->
+    <path d="M920,380 Q970,360 1010,380 Q1040,410 1030,450 Q1000,480 960,480 Q920,470 910,440 Q900,410 920,380"/>
+  </g>
+
+  <!-- Grid lines -->
+  <g stroke="#FF4600" stroke-width="0.3" opacity="0.15">
+    <!-- Horizontal -->
+    <line x1="0" y1="100" x2="1200" y2="100"/>
+    <line x1="0" y1="200" x2="1200" y2="200"/>
+    <line x1="0" y1="300" x2="1200" y2="300"/>
+    <line x1="0" y1="400" x2="1200" y2="400"/>
+    <line x1="0" y1="500" x2="1200" y2="500"/>
+    <!-- Vertical -->
+    <line x1="200" y1="0" x2="200" y2="600"/>
+    <line x1="400" y1="0" x2="400" y2="600"/>
+    <line x1="600" y1="0" x2="600" y2="600"/>
+    <line x1="800" y1="0" x2="800" y2="600"/>
+    <line x1="1000" y1="0" x2="1000" y2="600"/>
+  </g>
+
+  <!-- Routes from Jakarta (approx 850, 330) -->
+  <g stroke="url(#routeGradient)" stroke-width="2" fill="none" filter="url(#glow)">
+    <!-- Jakarta to Los Angeles -->
+    <path d="M850,330 Q600,150 250,200" stroke-dasharray="8,4" opacity="0.7"/>
+    <!-- Jakarta to Sao Paulo -->
+    <path d="M850,330 Q600,380 290,400" stroke-dasharray="8,4" opacity="0.7"/>
+    <!-- Jakarta to Amsterdam -->
+    <path d="M850,330 Q750,200 560,170" stroke-dasharray="8,4" opacity="0.7"/>
+    <!-- Jakarta to Lagos -->
+    <path d="M850,330 Q700,300 540,340" stroke-dasharray="8,4" opacity="0.7"/>
+    <!-- Jakarta to Sydney -->
+    <path d="M850,330 Q900,380 960,430" stroke-dasharray="8,4" opacity="0.7"/>
+  </g>
+
+  <!-- Destination markers -->
+  <g fill="#FF4600" opacity="0.8">
+    <circle cx="250" cy="200" r="4"/> <!-- Los Angeles -->
+    <circle cx="290" cy="400" r="4"/> <!-- Sao Paulo -->
+    <circle cx="560" cy="170" r="4"/> <!-- Amsterdam -->
+    <circle cx="540" cy="340" r="4"/> <!-- Lagos -->
+    <circle cx="960" cy="430" r="4"/> <!-- Sydney -->
+  </g>
+
+  <!-- Jakarta marker with pulse -->
+  <g transform="translate(850, 330)">
+    <circle r="20" fill="url(#pulseGradient)" opacity="0.3">
+      <animate attributeName="r" values="8;25;8" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="6" fill="#FF4600"/>
+    <circle r="3" fill="#FFF"/>
+  </g>
+</svg>
