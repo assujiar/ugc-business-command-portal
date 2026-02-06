@@ -17,7 +17,7 @@ export type LeadTriageStatus = 'New' | 'In Review' | 'Qualified' | 'Nurture' | '
 export type LeadSource = 'Webform (SEM)' | 'Webform (Organic)' | 'Instagram' | 'TikTok' | 'Facebook' | 'Event' | 'Referral' | 'Outbound' | 'Lainnya'
 export type OpportunityStage = 'Prospecting' | 'Discovery' | 'Quote Sent' | 'Negotiation' | 'Closed Won' | 'Closed Lost' | 'On Hold'
 export type ActivityStatus = 'Planned' | 'Done' | 'Cancelled' | 'Completed'
-export type ActivityTypeV2 = 'Call' | 'Email' | 'Meeting' | 'Site Visit' | 'WhatsApp' | 'Task' | 'Proposal' | 'Contract Review' | 'Online Meeting' | 'Phone Call' | 'Texting'
+export type ActivityTypeV2 = 'Call' | 'Email' | 'Meeting' | 'Site Visit' | 'WhatsApp' | 'Task' | 'Note' | 'Follow Up' | 'Proposal' | 'Contract Review' | 'Online Meeting' | 'Phone Call' | 'Texting'
 export type CadenceEnrollmentStatus = 'Active' | 'Paused' | 'Completed' | 'Stopped'
 export type ProspectingTargetStatus = 'new' | 'researching' | 'outreach_planned' | 'contacted' | 'meeting_scheduled' | 'converted' | 'dropped'
 
@@ -1178,6 +1178,8 @@ export interface Ticket {
   created_by: string
   assigned_to: string | null
   rfq_data: RFQData | null
+  shipments_data: Record<string, unknown>[] | null
+  shipment_count: number
   created_at: string
   updated_at: string
   first_response_at: string | null

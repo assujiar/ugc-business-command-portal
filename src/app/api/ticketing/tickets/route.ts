@@ -237,15 +237,15 @@ export async function POST(request: NextRequest) {
 
     const targetRole = departmentRoleMap[department]
     if (targetRole && rpcResult.ticket_id) {
-      // Find the department manager/ops user
-      const { data: deptManager } = await (supabase as any)
+      // Find the department manager/ops user (use limit(1) instead of single() to avoid error when no match)
+      const { data: deptManagers } = await (supabase as any)
         .from('profiles')
         .select('user_id, name')
         .eq('role', targetRole)
         .eq('is_active', true)
         .limit(1)
-        .single()
 
+      const deptManager = deptManagers?.[0]
       if (deptManager) {
         // Assign ticket to department manager/ops
         await (supabase as any)

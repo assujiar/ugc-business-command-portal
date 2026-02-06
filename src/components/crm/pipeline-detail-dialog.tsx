@@ -653,7 +653,7 @@ export function PipelineDetailDialog({
           customer_email: data.pic_email,
           customer_phone: data.pic_phone,
           customer_address: [data.address, data.city].filter(Boolean).join(', '),
-          // Shipment details from linked lead
+          // Shipment details from first shipment (backward compatibility)
           service_type: shipmentDetails?.service_type_code,
           department: shipmentDetails?.department,
           fleet_type: shipmentDetails?.fleet_type,
@@ -674,6 +674,8 @@ export function PipelineDetailDialog({
           destination_city: shipmentDetails?.destination_city,
           destination_country: shipmentDetails?.destination_country,
           scope_of_work: shipmentDetails?.scope_of_work,
+          // All shipments for multi-shipment support
+          shipments: allShipments.length > 0 ? allShipments : undefined,
         }),
       })
 

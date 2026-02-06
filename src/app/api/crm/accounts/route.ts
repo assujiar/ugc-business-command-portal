@@ -64,13 +64,23 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
+    // Allowlist fields to prevent injection of sensitive columns
+    const allowedFields = [
+      'company_name', 'industry', 'pic_name', 'pic_email', 'pic_phone',
+      'address', 'city', 'province', 'postal_code', 'country', 'phone',
+      'domain', 'npwp', 'notes', 'account_status',
+    ]
+    const insertData: Record<string, unknown> = {
+      owner_user_id: body.owner_user_id || user.id,
+      created_by: user.id,
+    }
+    for (const key of allowedFields) {
+      if (body[key] !== undefined) insertData[key] = body[key]
+    }
+
     const { data, error } = await (supabase as any)
       .from('accounts' as any as any)
-      .insert({
-        ...body,
-        owner_user_id: body.owner_user_id || user.id,
-        created_by: user.id,
-      })
+      .insert(insertData)
       .select()
       .single()
 

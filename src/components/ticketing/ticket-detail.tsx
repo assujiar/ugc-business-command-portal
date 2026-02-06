@@ -499,10 +499,10 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       }
 
       // Fallback: If no shipments from lead, use ticket.shipments_data (for standalone tickets)
-      if (!loadedShipmentsFromLead && (ticket as any).shipments_data && Array.isArray((ticket as any).shipments_data) && (ticket as any).shipments_data.length > 0) {
-        setShipments((ticket as any).shipments_data)
+      if (!loadedShipmentsFromLead && ticket.shipments_data && Array.isArray(ticket.shipments_data) && ticket.shipments_data.length > 0) {
+        setShipments(ticket.shipments_data as ShipmentDetail[])
         if (!costShipmentId) {
-          setCostShipmentId((ticket as any).shipments_data[0].shipment_detail_id || '')
+          setCostShipmentId((ticket.shipments_data[0] as any).shipment_detail_id || '')
         }
       }
 
