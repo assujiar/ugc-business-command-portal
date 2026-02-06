@@ -25,6 +25,12 @@
 -- - accepted_at / rejected_at columns now exist (fixes column not found)
 -- - opportunity_id variables are TEXT, not UUID (fixes uuid parse error)
 -- - v_return_ticket_status safe variable (fixes v_ticket not assigned)
+-- - pipeline_updates: uses correct columns (approach_method, old_stage, new_stage)
+-- - quotation_rejection_reasons: correct table name (not customer_quotation_)
+-- - opportunities: uses estimated_value (not expected_value), closed_at (not close_date)
+-- - accounts: uses account_status column (not status)
+-- - tickets: removed non-existent closed_by column
+-- - pending_response_from: uses 'assignee' (not 'ops' which is not in enum)
 -- ============================================
 
 
@@ -209,8 +215,8 @@ BEGIN
             UPDATE public.opportunities
             SET
                 stage = v_new_opp_stage,
-                expected_value = COALESCE(v_quotation.total_selling_rate, expected_value),
-                close_date = CURRENT_DATE,
+                estimated_value = COALESCE(v_quotation.total_selling_rate, estimated_value),
+                closed_at = NOW(),
                 updated_at = NOW()
             WHERE opportunity_id = v_effective_opportunity_id;
 
@@ -241,18 +247,19 @@ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM public.pipeline_updates pu
                 WHERE pu.opportunity_id = v_effective_opportunity_id
-                AND pu.update_type = 'stage_change'
+                AND pu.old_stage = v_old_opp_stage
+                AND pu.new_stage = v_new_opp_stage
                 AND pu.created_at > NOW() - INTERVAL '1 minute'
             ) THEN
                 INSERT INTO public.pipeline_updates (
-                    opportunity_id, update_type, old_value, new_value, updated_by, notes, created_at
+                    opportunity_id, notes, approach_method, old_stage, new_stage, updated_by, updated_at
                 ) VALUES (
                     v_effective_opportunity_id,
-                    'stage_change',
-                    v_old_opp_stage::TEXT,
-                    v_new_opp_stage::TEXT,
-                    v_actor_id,
                     '[' || v_correlation_id || '] Deal closed won - quotation ' || v_quotation.quotation_number || ' accepted',
+                    'Email'::approach_method,
+                    v_old_opp_stage,
+                    v_new_opp_stage,
+                    v_actor_id,
                     NOW()
                 );
                 v_pipeline_updates_inserted := TRUE;
@@ -296,10 +303,10 @@ BEGIN
             IF v_opportunity.account_id IS NOT NULL THEN
                 UPDATE public.accounts
                 SET
-                    status = 'active_account'::account_status,
+                    account_status = 'active_account'::account_status,
                     updated_at = NOW()
                 WHERE account_id = v_opportunity.account_id
-                AND status != 'active_account';
+                AND account_status != 'active_account';
             END IF;
         END IF;
     END IF;
@@ -319,7 +326,6 @@ BEGIN
                 status = 'closed'::ticket_status,
                 close_outcome = 'won',
                 closed_at = NOW(),
-                closed_by = v_actor_id,
                 updated_at = NOW()
             WHERE id = v_quotation.ticket_id
             RETURNING * INTO v_ticket;
@@ -590,7 +596,7 @@ BEGIN
     RETURNING * INTO v_quotation;
 
     -- Insert rejection reason record
-    INSERT INTO public.customer_quotation_rejection_reasons (
+    INSERT INTO public.quotation_rejection_reasons (
         quotation_id,
         reason_type,
         competitor_name,
@@ -679,18 +685,19 @@ BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM public.pipeline_updates pu
                 WHERE pu.opportunity_id = v_effective_opportunity_id
-                AND pu.update_type = 'stage_change'
+                AND pu.old_stage = v_old_opp_stage
+                AND pu.new_stage = COALESCE(v_new_opp_stage, v_old_opp_stage)
                 AND pu.created_at > NOW() - INTERVAL '1 minute'
             ) THEN
                 INSERT INTO public.pipeline_updates (
-                    opportunity_id, update_type, old_value, new_value, updated_by, notes, created_at
+                    opportunity_id, notes, approach_method, old_stage, new_stage, updated_by, updated_at
                 ) VALUES (
                     v_effective_opportunity_id,
-                    'stage_change',
-                    v_old_opp_stage::TEXT,
-                    COALESCE(v_new_opp_stage::TEXT, v_old_opp_stage::TEXT),
-                    v_actor_id,
                     '[' || v_correlation_id || '] Quotation ' || v_quotation.quotation_number || ' rejected by customer',
+                    'Email'::approach_method,
+                    v_old_opp_stage,
+                    COALESCE(v_new_opp_stage, v_old_opp_stage),
+                    v_actor_id,
                     NOW()
                 );
                 v_pipeline_updates_inserted := TRUE;
@@ -755,7 +762,7 @@ BEGIN
             UPDATE public.tickets t_upd
             SET
                 status = 'need_adjustment'::ticket_status,
-                pending_response_from = 'ops',
+                pending_response_from = 'assignee',
                 updated_at = NOW()
             WHERE t_upd.id = v_quotation.ticket_id
             RETURNING * INTO v_ticket;
@@ -897,7 +904,13 @@ GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_rejected(UUID, quot
 -- 1. Added accepted_at TIMESTAMPTZ column to customer_quotations
 -- 2. Added rejected_at TIMESTAMPTZ column to customer_quotations
 -- 3. Backfilled existing accepted/rejected quotations with timestamps
--- 4. Recreated mark_accepted with all fixes (TEXT opp_id, safe ticket status)
--- 5. Recreated mark_rejected with all fixes (TEXT opp_id, safe ticket status)
+-- 4. Recreated mark_accepted with all fixes:
+--    - TEXT opp_id, safe ticket status, correct pipeline_updates columns,
+--    - correct opportunities columns (estimated_value, closed_at),
+--    - correct accounts column (account_status), removed closed_by
+-- 5. Recreated mark_rejected with all fixes:
+--    - TEXT opp_id, safe ticket status, correct pipeline_updates columns,
+--    - correct table name (quotation_rejection_reasons),
+--    - correct pending_response_from enum value ('assignee')
 -- 6. Added partial indexes on accepted_at and rejected_at
 -- ============================================
