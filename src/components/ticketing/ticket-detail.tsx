@@ -480,19 +480,29 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         }
       }
 
+      let loadedShipmentsFromLead = false
       if (leadIdToFetch) {
         const leadRes = await fetch(`/api/crm/leads/${leadIdToFetch}`)
         const leadResult = await leadRes.json()
         if (leadResult.data) {
           setLeadData(leadResult.data)
           // Store shipments array for multi-shipment display
-          if (leadResult.data.shipments && Array.isArray(leadResult.data.shipments)) {
+          if (leadResult.data.shipments && Array.isArray(leadResult.data.shipments) && leadResult.data.shipments.length > 0) {
             setShipments(leadResult.data.shipments)
+            loadedShipmentsFromLead = true
             // Set default cost shipment to first shipment
-            if (leadResult.data.shipments.length > 0 && !costShipmentId) {
+            if (!costShipmentId) {
               setCostShipmentId(leadResult.data.shipments[0].shipment_detail_id || '')
             }
           }
+        }
+      }
+
+      // Fallback: If no shipments from lead, use ticket.shipments_data (for standalone tickets)
+      if (!loadedShipmentsFromLead && (ticket as any).shipments_data && Array.isArray((ticket as any).shipments_data) && (ticket as any).shipments_data.length > 0) {
+        setShipments((ticket as any).shipments_data)
+        if (!costShipmentId) {
+          setCostShipmentId((ticket as any).shipments_data[0].shipment_detail_id || '')
         }
       }
 

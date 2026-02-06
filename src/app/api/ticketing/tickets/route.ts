@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
       account_id,
       contact_id,
       rfq_data,
+      shipments,
       sender_name,
       sender_email,
       sender_phone,
@@ -195,7 +196,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: rpcResult.error || 'Failed to create ticket' }, { status: 400 })
     }
 
-    // Update sender info and CRM references if provided
+    // Update sender info, CRM references, and shipments data if provided
     if (rpcResult.ticket_id) {
       const updateData: any = {}
 
@@ -208,6 +209,12 @@ export async function POST(request: NextRequest) {
       // CRM references (link ticket to lead/opportunity)
       if (lead_id) updateData.lead_id = lead_id
       if (opportunity_id) updateData.opportunity_id = opportunity_id
+
+      // Multi-shipment data (full array of shipments for RFQ tickets)
+      if (shipments && Array.isArray(shipments) && shipments.length > 0) {
+        updateData.shipments_data = shipments
+        updateData.shipment_count = shipments.length
+      }
 
       if (Object.keys(updateData).length > 0) {
         await (supabase as any)
