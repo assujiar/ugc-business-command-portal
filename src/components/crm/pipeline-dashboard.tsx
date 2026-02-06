@@ -471,6 +471,11 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
         }),
       })
 
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}))
+        throw new Error(errBody.error || `Server error (${response.status})`)
+      }
+
       const result = await response.json()
 
       if (result.success) {

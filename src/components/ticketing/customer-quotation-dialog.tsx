@@ -410,6 +410,32 @@ export function CustomerQuotationDialog({
     return ((totalSellingRate - totalBreakdownCost) / totalBreakdownCost) * 100
   }, [rateStructure, targetMarginPercent, totalBreakdownCost, totalSellingRate])
 
+  // Reset critical state when dialog closes to prevent stale data on reopen
+  useEffect(() => {
+    if (!open) {
+      setSelectedShipmentIndex(0)
+      setLowMarginConfirmed(false)
+      setShowLowMarginWarning(false)
+      setQuotationId(null)
+      setQuotationNumber(null)
+      setPdfUrl(null)
+      setSaving(false)
+      setGenerating(false)
+      setRateStructure('bundling')
+      setTargetMarginPercent('' as any)
+      setCurrency('IDR')
+      setTotalCost(0)
+      setItems([])
+      setScopeOfWork('')
+      setTermsNotes('')
+      setCustomInclude('')
+      setCustomExclude('')
+      setValidityDays(14)
+      setTermsIncludes([])
+      setTermsExcludes([])
+    }
+  }, [open])
+
   // Initialize from all available data sources
   useEffect(() => {
     if (!open) return

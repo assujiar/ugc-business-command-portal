@@ -1694,9 +1694,14 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
       <Dialog open={showRejectModal} onOpenChange={(open) => {
         setShowRejectModal(open)
         if (!open) {
-          // Clear errors when closing
+          // Clear all form state when closing
           setRejectFieldErrors({})
           setRejectModalError(null)
+          setRejectReason('')
+          setRejectCompetitorName('')
+          setRejectCompetitorAmount('')
+          setRejectCustomerBudget('')
+          setRejectNotes('')
         }
       }}>
         <DialogContent className="sm:max-w-[500px]">

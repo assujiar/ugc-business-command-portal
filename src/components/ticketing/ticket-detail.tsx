@@ -2363,6 +2363,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                             <DialogFooter>
                               <Button variant="outline" onClick={() => {
                                 setCostDialogOpen(false)
+                                setCostAmount('')
+                                setCostTerms('')
                                 setCostRateStructure('bundling')
                                 setCostItems([])
                               }}>

@@ -114,13 +114,12 @@ export async function PATCH(
     const body = await request.json()
 
     // Allowlist fields to prevent injection of sensitive columns
+    // NOTE: DB columns are contact_name/email/phone (NOT pic_name/email/phone which are view aliases)
     const allowedFields = [
-      'company_name', 'pic_name', 'pic_email', 'pic_phone',
-      'industry', 'source', 'potential_revenue', 'notes',
-      'triage_status', 'disqualify_reason', 'priority',
+      'company_name', 'contact_name', 'contact_email', 'contact_phone',
+      'industry', 'source', 'source_detail', 'potential_revenue', 'notes',
+      'triage_status', 'disqualified_reason', 'priority',
       'marketing_owner_user_id', 'sales_owner_user_id',
-      'address', 'city', 'province', 'postal_code', 'country',
-      'domain', 'npwp', 'phone',
     ]
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),

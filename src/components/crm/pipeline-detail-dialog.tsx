@@ -396,6 +396,7 @@ export function PipelineDetailDialog({
       setLinkedTickets([])
       setShipmentDetails(null)
       setAllShipments([])
+      setShowCreateOptions(false)
     }
   }, [open, opportunityId])
 
@@ -678,6 +679,11 @@ export function PipelineDetailDialog({
           shipments: allShipments.length > 0 ? allShipments : undefined,
         }),
       })
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}))
+        throw new Error(errBody.error || `Server error (${response.status})`)
+      }
 
       const result = await response.json()
 
