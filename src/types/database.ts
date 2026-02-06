@@ -1126,6 +1126,7 @@ export type TicketCloseOutcome = 'won' | 'lost'
 export type QuoteStatus = 'draft' | 'submitted' | 'sent' | 'sent_to_customer' | 'accepted' | 'rejected' | 'won' | 'revise_requested'
 export type TicketEventType = 'created' | 'assigned' | 'reassigned' | 'status_changed' | 'priority_changed' | 'comment_added' | 'attachment_added' | 'quote_created' | 'quote_sent' | 'quote_sent_to_customer' | 'resolved' | 'closed' | 'reopened' | 'customer_quotation_created' | 'customer_quotation_sent' | 'customer_quotation_accepted' | 'customer_quotation_rejected' | 'request_adjustment' | 'cost_sent'
 export type CustomerQuotationStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired' | 'revoked'
+export type QuotationRejectionReasonType = 'tarif_tidak_masuk' | 'kompetitor_lebih_murah' | 'budget_customer_tidak_cukup' | 'service_tidak_sesuai' | 'waktu_tidak_sesuai' | 'other'
 export type TicketingDepartment = 'MKT' | 'SAL' | 'DOM' | 'EXI' | 'DTD' | 'TRF'
 export type ResponseOwner = 'creator' | 'assignee'
 
@@ -1454,4 +1455,108 @@ export interface TicketSLADetails {
     }
   } | null
   exchanges: TicketResponseExchange[]
+}
+
+// Customer Quotation
+export interface CustomerQuotation {
+  id: string
+  ticket_id: string
+  operational_cost_id: string | null
+  quotation_number: string
+  // Customer
+  customer_name: string
+  customer_company: string | null
+  customer_email: string | null
+  customer_phone: string | null
+  customer_address: string | null
+  // Service details
+  service_type: string | null
+  service_type_code: string | null
+  fleet_type: string | null
+  fleet_quantity: number | null
+  incoterm: string | null
+  commodity: string | null
+  cargo_description: string | null
+  cargo_weight: number | null
+  cargo_weight_unit: string | null
+  cargo_volume: number | null
+  cargo_volume_unit: string | null
+  cargo_quantity: number | null
+  cargo_quantity_unit: string | null
+  // Origin & Destination
+  origin_address: string | null
+  origin_city: string | null
+  origin_country: string | null
+  origin_port: string | null
+  destination_address: string | null
+  destination_city: string | null
+  destination_country: string | null
+  destination_port: string | null
+  // Rate
+  rate_structure: 'bundling' | 'breakdown'
+  total_cost: number | null
+  target_margin_percent: number | null
+  total_selling_rate: number | null
+  currency: string
+  // Terms
+  terms_includes: Json
+  terms_excludes: Json
+  terms_notes: string | null
+  validity_days: number
+  valid_until: string | null
+  // Status & Timestamps
+  status: CustomerQuotationStatus
+  sent_via: string | null
+  sent_at: string | null
+  sent_to: string | null
+  accepted_at: string | null
+  rejected_at: string | null
+  rejection_reason: string | null
+  // Multi-shipment
+  shipments: Json | null
+  shipment_count: number | null
+  operational_cost_ids: string[] | null
+  // Tracking
+  lead_id: string | null
+  opportunity_id: string | null
+  sequence_number: number | null
+  source_type: string | null
+  source_rate_quote_id: string | null
+  validation_code: string
+  pdf_url: string | null
+  pdf_generated_at: string | null
+  // Metadata
+  created_by: string
+  created_at: string
+  updated_at: string
+  // Relations (when joined)
+  ticket?: {
+    id: string
+    ticket_code: string
+    subject: string
+  } | null
+  creator?: {
+    user_id: string
+    name: string
+    email: string
+  }
+  items?: CustomerQuotationItem[]
+}
+
+// Customer Quotation Item (breakdown mode)
+export interface CustomerQuotationItem {
+  id: string
+  quotation_id: string
+  component_type: string
+  component_name: string
+  description: string | null
+  cost_amount: number | null
+  target_margin_percent: number | null
+  selling_rate: number
+  unit_price: number | null
+  quantity: number | null
+  unit: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
 }

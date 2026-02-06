@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.6.2 | Last Updated: 2026-02-03
+> Version: 1.6.3 | Last Updated: 2026-02-06
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -129,13 +129,14 @@ ugc-business-command-portal/
 │   └── types/                        # TypeScript definitions
 │
 ├── supabase/
-│   └── migrations/                   # 135+ SQL migrations
+│   └── migrations/                   # 136 SQL migrations
 │       ├── 001-034                   # Core CRM tables
 │       ├── 035-060                   # Ticketing system
 │       ├── 061-090                   # Quotation system
 │       ├── 091-128                   # Enhancements
 │       ├── 129-132                   # Multi-shipment support
-│       └── 133-135                   # Bug fixes
+│       ├── 133-135                   # Bug fixes
+│       └── 136                       # Schema fix: accepted_at/rejected_at
 │
 └── public/
     └── logo/                         # Brand assets
@@ -483,10 +484,12 @@ interface CustomerQuotation {
   shipments: ShipmentData[]      // JSONB array
   operational_cost_ids: string[] // Array of linked costs
 
-  // Status
+  // Status & Timestamps
   status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired'
   sent_via: 'email' | 'whatsapp' | 'manual'
   sent_at: Date
+  accepted_at: Date | null    // Set when accepted (Migration 136)
+  rejected_at: Date | null    // Set when rejected (Migration 136)
 
   // Terms
   terms_includes: string[]
@@ -641,24 +644,30 @@ ACTION:
 
 -- rpc_customer_quotation_mark_accepted
 ACTION:
-  1. UPDATE quotation.status = 'accepted'
-  2. UPDATE opportunity.stage = 'Closed Won'
-  3. UPDATE ticket.status = 'closed'
-  4. UPDATE ALL costs.status = 'accepted'
-  5. UPDATE account.status = 'active_account'
-  6. INSERT stage_history
-  7. INSERT pipeline_updates
-  8. INSERT activity
+  1. UPDATE quotation.status = 'accepted', accepted_at = NOW()
+  2. UPDATE opportunity.stage = 'Closed Won', estimated_value, closed_at
+  3. UPDATE ticket.status = 'closed' (close_outcome = 'won')
+  4. UPDATE ALL costs.status = 'accepted' (single + multi-shipment)
+  5. UPDATE account.account_status = 'active_account'
+  6. UPDATE lead.quotation_status = 'accepted'
+  7. INSERT opportunity_stage_history (old_stage, new_stage, changed_by)
+  8. INSERT pipeline_updates (approach_method='Email', old_stage, new_stage)
+  9. INSERT activity (activity_type_v2='Email')
+  10. UPDATE ticket_sla_tracking.resolution_at
+  11. INSERT ticket_events (status_changed + closed)
 
 -- rpc_customer_quotation_mark_rejected
 ACTION:
-  1. UPDATE quotation.status = 'rejected'
-  2. UPDATE opportunity.stage = 'Negotiation'
-  3. UPDATE ticket.status = 'need_adjustment'
-  4. UPDATE ALL costs.status = 'revise_requested'
-  5. INSERT rejection_reason record
-  6. INSERT ticket_event (request_adjustment)
-  7. INSERT activity
+  1. UPDATE quotation.status = 'rejected', rejected_at = NOW()
+  2. INSERT quotation_rejection_reasons (with competitor/budget data)
+  3. UPDATE opportunity.stage = 'Negotiation'
+  4. UPDATE ticket.status = 'need_adjustment', pending_response_from = 'assignee'
+  5. UPDATE ALL costs.status = 'revise_requested' (single + multi-shipment)
+  6. UPDATE lead.quotation_status = 'rejected'
+  7. INSERT opportunity_stage_history (old_stage, new_stage, changed_by)
+  8. INSERT pipeline_updates (approach_method='Email', old_stage, new_stage)
+  9. INSERT ticket_events (status_changed + request_adjustment)
+  10. INSERT activity (activity_type_v2='Email')
 ```
 
 #### 4. Cost Supersession
@@ -829,7 +838,7 @@ cp .env.example .env.local
 # Edit .env.local with your values
 
 # 3. Run migrations (in Supabase SQL Editor)
-# Execute migrations 001-135 in order
+# Execute migrations 001-136 in order
 
 # 4. Start development
 npm run dev
@@ -848,11 +857,32 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.6.2 (Current)
-- **Accept/Reject Fix (Migration 135)**: Fixed "Invalid input syntax for type uuid" and "column does not exist" errors
-  - Root cause 1: Migration 134 regressed opportunity_id type from TEXT to UUID
-  - Root cause 2: Migration 134 used non-existent columns (accepted_at, rejected_at)
-  - customer_quotations table only has: status, sent_at, updated_at, rejection_reason
+### v1.6.3 (Current)
+- **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error
+  - Added `accepted_at TIMESTAMPTZ` column to `customer_quotations` table
+  - Added `rejected_at TIMESTAMPTZ` column to `customer_quotations` table
+  - Backfilled existing accepted/rejected quotations with timestamps from `updated_at`
+  - Recreated `rpc_customer_quotation_mark_accepted` with all accumulated fixes
+  - Recreated `rpc_customer_quotation_mark_rejected` with all accumulated fixes
+  - Added partial indexes for query performance
+  - Consolidated fixes: TEXT opportunity_id type, safe v_return_ticket_status
+- **Column/Table Mismatch Fixes (Migration 136 audit)**: Corrected 8 schema mismatches in RPC functions
+  - `pipeline_updates` INSERT: fixed columns from `update_type/old_value/new_value` to `approach_method/old_stage/new_stage`
+  - `pipeline_updates` NOT EXISTS check: fixed from `update_type` to `old_stage/new_stage`
+  - `quotation_rejection_reasons`: fixed table name from `customer_quotation_rejection_reasons`
+  - `opportunities` UPDATE: fixed `expected_value` → `estimated_value`, `close_date` → `closed_at`
+  - `accounts` UPDATE: fixed column `status` → `account_status`
+  - `tickets` UPDATE: removed non-existent `closed_by` column
+  - `pending_response_from`: fixed enum value from `'ops'` → `'assignee'` (valid response_owner)
+  - Added `service_role` GRANT for both RPC functions (required by adminClient API calls)
+- **TypeScript Types**: Added `CustomerQuotation`, `CustomerQuotationItem` interfaces, `QuotationRejectionReasonType` enum
+- **UI Updates**: Added accepted_at/rejected_at display in quotation detail and "Response" column in dashboard
+
+### v1.6.2
+- **Accept/Reject Fix (Migration 135)**: Attempted fix for "column does not exist" errors
+  - Removed references to accepted_at/rejected_at from RPC functions
+  - Fixed opportunity_id type regression (TEXT not UUID)
+  - Superseded by v1.6.3 which adds the missing columns instead
 
 ### v1.6.1
 - **Activity Timeline Fix (Migration 133)**: Fixed quotation activity not appearing in timeline
@@ -889,18 +919,20 @@ v_derived_opportunity_id TEXT := NULL;
 v_effective_opportunity_id UUID := NULL;
 ```
 
-### Customer Quotations Columns
+### Customer Quotations Timestamp Columns
 
-The `customer_quotations` table does NOT have `accepted_at` or `rejected_at` columns:
+The `customer_quotations` table status-related columns:
 
-| Column | Exists | Added In |
-|--------|--------|----------|
-| status | Yes | Migration 050 |
-| sent_at | Yes | Migration 050 |
-| updated_at | Yes | Migration 050 |
-| rejection_reason | Yes | Migration 061 |
-| accepted_at | **NO** | - |
-| rejected_at | **NO** | - |
+| Column | Type | Added In | Description |
+|--------|------|----------|-------------|
+| status | ENUM | Migration 050 | draft, sent, accepted, rejected, expired |
+| sent_at | TIMESTAMPTZ | Migration 050 | When quotation was sent to customer |
+| updated_at | TIMESTAMPTZ | Migration 050 | Last modification timestamp |
+| rejection_reason | TEXT | Migration 061 | Rejection reason type |
+| accepted_at | TIMESTAMPTZ | **Migration 136** | When quotation was accepted |
+| rejected_at | TIMESTAMPTZ | **Migration 136** | When quotation was rejected |
+
+**History**: `accepted_at` and `rejected_at` were planned in the original BLUEPRINT but omitted from migration 050. Migration 131 introduced RPC references to these columns (causing errors). Migration 136 adds them properly with backfill.
 
 ### Multi-Shipment Data Structure
 

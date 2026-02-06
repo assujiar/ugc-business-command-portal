@@ -1403,6 +1403,24 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                   </div>
                 </div>
               )}
+              {quotation.status === 'accepted' && quotation.accepted_at && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Accepted At</p>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span className="text-green-700 font-medium">{formatDateTime(quotation.accepted_at)}</span>
+                  </div>
+                </div>
+              )}
+              {quotation.status === 'rejected' && quotation.rejected_at && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Rejected At</p>
+                  <div className="flex items-center gap-2">
+                    <XCircle className="h-4 w-4 text-destructive" />
+                    <span className="text-destructive font-medium">{formatDateTime(quotation.rejected_at)}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Created By */}
