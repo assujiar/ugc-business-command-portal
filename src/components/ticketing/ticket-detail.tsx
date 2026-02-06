@@ -500,7 +500,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
 
       // Fallback: If no shipments from lead, use ticket.shipments_data (for standalone tickets)
       if (!loadedShipmentsFromLead && ticket.shipments_data && Array.isArray(ticket.shipments_data) && ticket.shipments_data.length > 0) {
-        setShipments(ticket.shipments_data as ShipmentDetail[])
+        setShipments(ticket.shipments_data as unknown as ShipmentDetail[])
         if (!costShipmentId) {
           setCostShipmentId((ticket.shipments_data[0] as any).shipment_detail_id || '')
         }
