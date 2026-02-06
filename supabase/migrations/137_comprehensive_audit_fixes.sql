@@ -530,8 +530,8 @@ COMMENT ON FUNCTION public.fn_check_quotation_authorization IS
 COMMENT ON COLUMN public.leads.customer_id IS
 'DEPRECATED (C1): Use account_id instead. customer_id duplicates account_id and can cause desync. Will be removed in future migration.';
 
--- C4: Ticket+Lead atomic linkage documentation
-COMMENT ON FUNCTION public.trigger_propagate_lead_on_ticket_insert IS
+-- C4: Ticket+Lead atomic linkage documentation (function behind trigger_propagate_lead_on_ticket_insert)
+COMMENT ON FUNCTION public.propagate_lead_id_on_ticket_insert IS
 'C4 docs: Atomically links ticket→lead→opportunity when ticket is created with lead_id. Already handles C4 concern - no additional fix needed.';
 
 -- M1: leads.status is obsolete
