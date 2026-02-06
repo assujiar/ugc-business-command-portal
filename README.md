@@ -645,28 +645,29 @@ ACTION:
 -- rpc_customer_quotation_mark_accepted
 ACTION:
   1. UPDATE quotation.status = 'accepted', accepted_at = NOW()
-  2. UPDATE opportunity.stage = 'Closed Won'
+  2. UPDATE opportunity.stage = 'Closed Won', estimated_value, closed_at
   3. UPDATE ticket.status = 'closed' (close_outcome = 'won')
   4. UPDATE ALL costs.status = 'accepted' (single + multi-shipment)
-  5. UPDATE account.status = 'active_account'
+  5. UPDATE account.account_status = 'active_account'
   6. UPDATE lead.quotation_status = 'accepted'
-  7. INSERT stage_history
-  8. INSERT pipeline_updates
-  9. INSERT activity
+  7. INSERT opportunity_stage_history (old_stage, new_stage, changed_by)
+  8. INSERT pipeline_updates (approach_method='Email', old_stage, new_stage)
+  9. INSERT activity (activity_type_v2='Email')
   10. UPDATE ticket_sla_tracking.resolution_at
+  11. INSERT ticket_events (status_changed + closed)
 
 -- rpc_customer_quotation_mark_rejected
 ACTION:
   1. UPDATE quotation.status = 'rejected', rejected_at = NOW()
-  2. INSERT rejection_reason record (with competitor/budget data)
+  2. INSERT quotation_rejection_reasons (with competitor/budget data)
   3. UPDATE opportunity.stage = 'Negotiation'
-  4. UPDATE ticket.status = 'need_adjustment'
+  4. UPDATE ticket.status = 'need_adjustment', pending_response_from = 'assignee'
   5. UPDATE ALL costs.status = 'revise_requested' (single + multi-shipment)
   6. UPDATE lead.quotation_status = 'rejected'
-  7. INSERT stage_history
-  8. INSERT pipeline_updates
-  9. INSERT ticket_event (status_changed + request_adjustment)
-  10. INSERT activity
+  7. INSERT opportunity_stage_history (old_stage, new_stage, changed_by)
+  8. INSERT pipeline_updates (approach_method='Email', old_stage, new_stage)
+  9. INSERT ticket_events (status_changed + request_adjustment)
+  10. INSERT activity (activity_type_v2='Email')
 ```
 
 #### 4. Cost Supersession
@@ -865,6 +866,17 @@ npx tsc --noEmit # TypeScript check
   - Recreated `rpc_customer_quotation_mark_rejected` with all accumulated fixes
   - Added partial indexes for query performance
   - Consolidated fixes: TEXT opportunity_id type, safe v_return_ticket_status
+- **Column/Table Mismatch Fixes (Migration 136 audit)**: Corrected 8 schema mismatches in RPC functions
+  - `pipeline_updates` INSERT: fixed columns from `update_type/old_value/new_value` to `approach_method/old_stage/new_stage`
+  - `pipeline_updates` NOT EXISTS check: fixed from `update_type` to `old_stage/new_stage`
+  - `quotation_rejection_reasons`: fixed table name from `customer_quotation_rejection_reasons`
+  - `opportunities` UPDATE: fixed `expected_value` → `estimated_value`, `close_date` → `closed_at`
+  - `accounts` UPDATE: fixed column `status` → `account_status`
+  - `tickets` UPDATE: removed non-existent `closed_by` column
+  - `pending_response_from`: fixed enum value from `'ops'` → `'assignee'` (valid response_owner)
+  - Added `service_role` GRANT for both RPC functions (required by adminClient API calls)
+- **TypeScript Types**: Added `CustomerQuotation`, `CustomerQuotationItem` interfaces, `QuotationRejectionReasonType` enum
+- **UI Updates**: Added accepted_at/rejected_at display in quotation detail and "Response" column in dashboard
 
 ### v1.6.2
 - **Accept/Reject Fix (Migration 135)**: Attempted fix for "column does not exist" errors
