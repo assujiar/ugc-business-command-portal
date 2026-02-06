@@ -238,6 +238,7 @@ export async function GET(
       next_step_due_date: opportunity.next_step_due_date,
       close_reason: opportunity.outcome, // Column is "outcome" not "close_reason"
       lost_reason: opportunity.lost_reason,
+      competitor: opportunity.competitor,
       competitor_price: opportunity.competitor_price,
       customer_budget: opportunity.customer_budget,
       closed_at: opportunity.closed_at,

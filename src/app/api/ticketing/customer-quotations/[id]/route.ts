@@ -124,6 +124,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       rate_data,
       terms_data,
       items,
+      shipments: shipmentsData,
+      shipment_count,
       status,
       pdf_url,
       sent_via,
@@ -187,6 +189,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (terms_data.validity_days !== undefined) {
         updates.validity_days = terms_data.validity_days
         updates.valid_until = new Date(Date.now() + terms_data.validity_days * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      }
+    }
+
+    // Shipments data (multi-shipment support)
+    if (shipmentsData !== undefined) {
+      updates.shipments = shipmentsData
+      if (shipment_count !== undefined) {
+        updates.shipment_count = shipment_count
+      } else if (Array.isArray(shipmentsData)) {
+        updates.shipment_count = shipmentsData.length
       }
     }
 

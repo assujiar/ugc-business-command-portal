@@ -1541,7 +1541,24 @@ export function CustomerQuotationDialog({
                   <Button
                     variant={rateStructure === 'breakdown' ? 'default' : 'outline'}
                     size="sm"
-                    onClick={() => setRateStructure('breakdown')}
+                    onClick={() => {
+                      setRateStructure('breakdown')
+                      // When switching from bundling to breakdown with no items, seed a default item with the bundling total cost
+                      if (rateStructure === 'bundling' && items.length === 0 && totalCost > 0) {
+                        const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 15
+                        setItems([{
+                          id: `item-${Date.now()}`,
+                          component_type: 'all_in',
+                          component_name: 'All-In Rate',
+                          description: '',
+                          cost_amount: totalCost,
+                          target_margin_percent: marginValue,
+                          selling_rate: Math.round(totalCost * (1 + marginValue / 100)),
+                          quantity: null,
+                          unit: null,
+                        }])
+                      }
+                    }}
                   >
                     Breakdown
                   </Button>

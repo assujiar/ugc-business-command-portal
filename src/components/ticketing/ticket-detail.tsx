@@ -850,12 +850,15 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     const days = Math.floor(seconds / 86400)
     const hours = Math.floor((seconds % 86400) / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = Math.floor(seconds % 60)
 
     let result = ''
     if (days > 0) result += `${days}d `
     if (hours > 0 || days > 0) result += `${hours}h `
-    result += `${minutes}m`
-    return result.trim()
+    if (minutes > 0 || hours > 0 || days > 0) result += `${minutes}m`
+    // Show seconds when total time is under 1 minute
+    if (days === 0 && hours === 0 && minutes === 0) result += `${secs}s`
+    return result.trim() || '0s'
   }
 
   // Get first response time from exchanges or metrics
@@ -2520,6 +2523,14 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                       item.badge_type === 'lost' ? 'border-red-400 text-red-500 bg-red-500/10' :
                                       item.badge_type === 'assigned' ? 'border-cyan-400 text-cyan-500 bg-cyan-500/10' :
                                       item.badge_type === 'priority' ? 'border-pink-400 text-pink-500 bg-pink-500/10' :
+                                      item.badge_type === 'quotation' ? 'border-indigo-400 text-indigo-500 bg-indigo-500/10' :
+                                      item.badge_type === 'quotation_sent' ? 'border-violet-400 text-violet-500 bg-violet-500/10' :
+                                      item.badge_type === 'accepted' ? 'border-emerald-400 text-emerald-500 bg-emerald-500/10' :
+                                      item.badge_type === 'rejected' ? 'border-red-400 text-red-500 bg-red-500/10' :
+                                      item.badge_type === 'created' ? 'border-gray-400 text-gray-500 bg-gray-500/10' :
+                                      item.badge_type === 'resolved' ? 'border-teal-400 text-teal-500 bg-teal-500/10' :
+                                      item.badge_type === 'closed' ? 'border-slate-400 text-slate-500 bg-slate-500/10' :
+                                      item.badge_type === 'reopened' ? 'border-amber-400 text-amber-500 bg-amber-500/10' :
                                       ''
                                     }`}
                                   >

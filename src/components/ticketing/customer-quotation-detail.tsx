@@ -343,20 +343,28 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
         // Check if pipeline was updated automatically
         // sync_result is available in both result.data.sync_result and result.sync_result
         const syncResult = result.data?.sync_result || result.sync_result || {}
-        const pipelineUpdated = syncResult.pipeline_updates_created === true || syncResult.new_stage === 'Quote Sent'
+        const pipelineUpdated = syncResult.pipeline_updates_created === true
+        const stageChanged = syncResult.old_stage !== syncResult.new_stage
         const opportunityId = syncResult.opportunity_id || quotation?.opportunity_id
+        const isSubsequentQuotation = (syncResult.quotation_sequence || 1) > 1
 
-        if (pipelineUpdated) {
+        if (pipelineUpdated || stageChanged) {
           toast({
             title: 'WhatsApp Text Copied',
-            description: 'Text copied to clipboard. Pipeline moved to Quote Sent.',
+            description: `Text copied to clipboard. Pipeline moved to ${syncResult.new_stage || 'Quote Sent'}.`,
+          })
+        } else if (isSubsequentQuotation) {
+          // 2nd+ quotation: skip pipeline dialog, pipeline auto-updated by RPC
+          toast({
+            title: 'WhatsApp Text Copied',
+            description: `Text copied to clipboard. ${syncResult.sequence_label || ''} quotation sent. Stage: ${syncResult.new_stage || 'unchanged'}.`,
           })
         } else {
           toast({
             title: 'WhatsApp Text Copied',
             description: 'Text copied to clipboard. Quotation sent successfully.',
           })
-          // Show confirmation dialog to update pipeline if opportunity exists
+          // Show confirmation dialog only for 1st quotation when RPC didn't auto-update
           if (opportunityId) {
             setPendingOpportunityId(opportunityId)
             setShowPipelineUpdateDialog(true)
@@ -414,25 +422,33 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
         // Check if pipeline was updated automatically
         // sync_result is available in both result.data.sync_result and result.sync_result
         const syncResult = result.data?.sync_result || result.sync_result || {}
-        const pipelineUpdated = syncResult.pipeline_updates_created === true || syncResult.new_stage === 'Quote Sent'
+        const pipelineUpdated = syncResult.pipeline_updates_created === true
+        const stageChanged = syncResult.old_stage !== syncResult.new_stage
         const opportunityId = syncResult.opportunity_id || quotation?.opportunity_id
+        const isSubsequentQuotation = (syncResult.quotation_sequence || 1) > 1
 
         if (isResend) {
           toast({
             title: 'Email Resent Successfully',
             description: `Quotation has been resent to ${result.data.recipient_email}`,
           })
-        } else if (pipelineUpdated) {
+        } else if (pipelineUpdated || stageChanged) {
           toast({
             title: 'Email Sent Successfully',
-            description: `Quotation sent to ${result.data.recipient_email}. Pipeline moved to Quote Sent.`,
+            description: `Quotation sent to ${result.data.recipient_email}. Pipeline moved to ${syncResult.new_stage || 'Quote Sent'}.`,
+          })
+        } else if (isSubsequentQuotation) {
+          // 2nd+ quotation: skip pipeline dialog, pipeline auto-updated by RPC
+          toast({
+            title: 'Email Sent Successfully',
+            description: `${syncResult.sequence_label || ''} quotation sent to ${result.data.recipient_email}. Stage: ${syncResult.new_stage || 'unchanged'}.`,
           })
         } else {
           toast({
             title: 'Email Sent Successfully',
             description: `Quotation sent to ${result.data.recipient_email}.`,
           })
-          // Show confirmation dialog to update pipeline if opportunity exists (first send only)
+          // Show confirmation dialog only for 1st quotation when RPC didn't auto-update
           if (opportunityId) {
             setPendingOpportunityId(opportunityId)
             setShowPipelineUpdateDialog(true)
@@ -1083,8 +1099,9 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Total Amount - Show per-shipment for multi-shipment quotations */}
-            {hasMultipleShipments && itemsByShipment ? (
-              // Multi-shipment: show per-shipment rates calculated from items
+            {hasMultipleShipments ? (
+              // Multi-shipment: show per-shipment rates
+              // For breakdown: use itemsByShipment. For bundling: use shipment-level cost/selling data
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2 mb-3">
                   <Package className="h-5 w-5 text-blue-600" />
@@ -1094,12 +1111,13 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 </div>
                 <div className="space-y-2">
                   {shipments.map((shipment: any, idx: number) => {
-                    const group = itemsByShipment.get(idx)
-                    const calculatedTotal = group ? group.subtotal : 0
-                    const calculatedCost = group ? group.totalCost : 0
+                    const group = itemsByShipment?.get(idx)
+                    // Use items data if available (breakdown), otherwise use shipment-level data (bundling)
+                    const calculatedTotal = (group && group.subtotal > 0) ? group.subtotal : (shipment.selling_rate || 0)
+                    const calculatedCost = (group && group.totalCost > 0) ? group.totalCost : (shipment.cost_amount || 0)
                     const marginPercent = calculatedCost > 0
                       ? Math.round(((calculatedTotal - calculatedCost) / calculatedCost) * 100 * 100) / 100
-                      : 0
+                      : (shipment.margin_percent || 0)
                     return (
                       <div key={idx} className="p-3 bg-white dark:bg-gray-800 rounded-lg border">
                         <div className="flex items-center justify-between">
@@ -1362,8 +1380,8 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
               </>
             )}
 
-            {/* Route */}
-            {(quotation.origin_city || quotation.destination_city) && (
+            {/* Route - supports multi-shipment */}
+            {(quotation.origin_city || quotation.destination_city || (hasMultipleShipments && shipments.length > 0)) && (
               <>
                 <Separator />
                 <div>
@@ -1371,34 +1389,74 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                     <Truck className="h-4 w-4" />
                     Route
                   </p>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="p-3 border rounded-lg">
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <MapPin className="h-3 w-3 text-green-600" />
-                        Origin
-                      </p>
-                      <p className="font-medium">{quotation.origin_city || '—'}</p>
-                      {quotation.origin_country && (
-                        <p className="text-sm text-muted-foreground">{quotation.origin_country}</p>
-                      )}
-                      {quotation.origin_port && (
-                        <p className="text-sm text-muted-foreground">Port: {quotation.origin_port}</p>
-                      )}
+                  {hasMultipleShipments ? (
+                    <div className="space-y-3">
+                      {shipments.map((shipment: any, idx: number) => (
+                        <div key={idx} className="p-3 border rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Package className="h-4 w-4 text-blue-600" />
+                            <span className="font-medium text-blue-700 dark:text-blue-300">
+                              {shipment.shipment_label || `Shipment ${idx + 1}`}
+                            </span>
+                            {shipment.service_type_code && (
+                              <Badge variant="outline" className="text-xs">{shipment.service_type_code}</Badge>
+                            )}
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="p-2 bg-muted/50 rounded">
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <MapPin className="h-3 w-3 text-green-600" />
+                                Origin
+                              </p>
+                              <p className="font-medium text-sm">{shipment.origin_city || '—'}</p>
+                              {shipment.origin_country && (
+                                <p className="text-xs text-muted-foreground">{shipment.origin_country}</p>
+                              )}
+                            </div>
+                            <div className="p-2 bg-muted/50 rounded">
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <MapPin className="h-3 w-3 text-red-600" />
+                                Destination
+                              </p>
+                              <p className="font-medium text-sm">{shipment.destination_city || '—'}</p>
+                              {shipment.destination_country && (
+                                <p className="text-xs text-muted-foreground">{shipment.destination_country}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="p-3 border rounded-lg">
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <MapPin className="h-3 w-3 text-red-600" />
-                        Destination
-                      </p>
-                      <p className="font-medium">{quotation.destination_city || '—'}</p>
-                      {quotation.destination_country && (
-                        <p className="text-sm text-muted-foreground">{quotation.destination_country}</p>
-                      )}
-                      {quotation.destination_port && (
-                        <p className="text-sm text-muted-foreground">Port: {quotation.destination_port}</p>
-                      )}
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="p-3 border rounded-lg">
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <MapPin className="h-3 w-3 text-green-600" />
+                          Origin
+                        </p>
+                        <p className="font-medium">{quotation.origin_city || '—'}</p>
+                        {quotation.origin_country && (
+                          <p className="text-sm text-muted-foreground">{quotation.origin_country}</p>
+                        )}
+                        {quotation.origin_port && (
+                          <p className="text-sm text-muted-foreground">Port: {quotation.origin_port}</p>
+                        )}
+                      </div>
+                      <div className="p-3 border rounded-lg">
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <MapPin className="h-3 w-3 text-red-600" />
+                          Destination
+                        </p>
+                        <p className="font-medium">{quotation.destination_city || '—'}</p>
+                        {quotation.destination_country && (
+                          <p className="text-sm text-muted-foreground">{quotation.destination_country}</p>
+                        )}
+                        {quotation.destination_port && (
+                          <p className="text-sm text-muted-foreground">Port: {quotation.destination_port}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </>
             )}

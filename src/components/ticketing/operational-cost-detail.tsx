@@ -305,6 +305,29 @@ export function OperationalCostDetail({ costId, profile }: OperationalCostDetail
               <DollarSign className="h-8 w-8 text-muted-foreground" />
             </div>
 
+            {/* Shipment Details (if linked to a specific shipment) */}
+            {cost.shipment_label && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Linked Shipment</p>
+                  <div className="p-3 border rounded-lg bg-blue-50 dark:bg-blue-900/20">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-blue-600" />
+                      <span className="font-medium text-blue-700 dark:text-blue-300">
+                        {cost.shipment_label}
+                      </span>
+                    </div>
+                    {cost.shipment_detail_id && (
+                      <p className="text-xs text-muted-foreground mt-1 font-mono">
+                        ID: {cost.shipment_detail_id}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
             <Separator />
 
             {/* Validity */}
