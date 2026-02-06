@@ -372,19 +372,20 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
                 <TableHead>Sent Via</TableHead>
                 <TableHead>Valid Until</TableHead>
                 <TableHead>Created</TableHead>
+                <TableHead>Response</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : quotations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     <FileText className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                     <p className="text-muted-foreground">No customer quotations found</p>
                   </TableCell>
@@ -459,6 +460,15 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {formatDate(quotation.created_at)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {quotation.status === 'accepted' && quotation.accepted_at ? (
+                        <span className="text-green-700">{formatDate(quotation.accepted_at)}</span>
+                      ) : quotation.status === 'rejected' && quotation.rejected_at ? (
+                        <span className="text-destructive">{formatDate(quotation.rejected_at)}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" className="h-8 w-8">
