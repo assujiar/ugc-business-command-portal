@@ -104,6 +104,7 @@ interface PipelineDetailData {
   next_step_due_date: string | null
   close_reason: string | null
   lost_reason: LostReason | null
+  competitor: string | null
   competitor_price: number | null
   customer_budget: number | null
   closed_at: string | null
@@ -1351,18 +1352,26 @@ export function PipelineDetailDialog({
                           {data.lost_reason?.replace(/_/g, ' ') || '-'}
                         </p>
                       </div>
-                      {data.competitor_price && (
+                      {data.competitor && (
                         <div>
-                          <p className="text-xs text-red-600">Competitor Price</p>
-                          <p className="font-medium text-red-800">
+                          <p className="text-xs text-red-600 dark:text-red-500">Competitor</p>
+                          <p className="font-medium text-red-800 dark:text-red-300">
+                            {data.competitor}
+                          </p>
+                        </div>
+                      )}
+                      {data.competitor_price != null && data.competitor_price > 0 && (
+                        <div>
+                          <p className="text-xs text-red-600 dark:text-red-500">Competitor Price</p>
+                          <p className="font-medium text-red-800 dark:text-red-300">
                             {formatCurrency(data.competitor_price)}
                           </p>
                         </div>
                       )}
-                      {data.customer_budget && (
+                      {data.customer_budget != null && data.customer_budget > 0 && (
                         <div>
-                          <p className="text-xs text-red-600">Customer Budget</p>
-                          <p className="font-medium text-red-800">
+                          <p className="text-xs text-red-600 dark:text-red-500">Customer Budget</p>
+                          <p className="font-medium text-red-800 dark:text-red-300">
                             {formatCurrency(data.customer_budget)}
                           </p>
                         </div>

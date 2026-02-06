@@ -153,6 +153,9 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
   const [customInclude, setCustomInclude] = useState('')
   const [customExclude, setCustomExclude] = useState('')
 
+  // Multi-shipment data (read from quotation, preserved on save)
+  const [shipments, setShipments] = useState<any[]>([])
+
   // Templates
   const [includeTemplates, setIncludeTemplates] = useState<TermTemplate[]>([])
   const [excludeTemplates, setExcludeTemplates] = useState<TermTemplate[]>([])
@@ -253,6 +256,18 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
               quantity: item.quantity || null,
               unit: item.unit || null,
             })))
+          }
+
+          // Load multi-shipment data (preserve on save to prevent data loss)
+          if (q.shipments) {
+            try {
+              const parsed = typeof q.shipments === 'string'
+                ? JSON.parse(q.shipments)
+                : Array.isArray(q.shipments) ? q.shipments : []
+              setShipments(parsed)
+            } catch {
+              setShipments([])
+            }
           }
         } else {
           toast({
@@ -413,6 +428,9 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
             unit: item.unit,
             sort_order: index,
           })) : [],
+        // Preserve multi-shipment data (prevent data loss on edit)
+        shipments: shipments.length > 0 ? shipments : undefined,
+        shipment_count: shipments.length > 0 ? shipments.length : undefined,
       }
 
       const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}`, {
