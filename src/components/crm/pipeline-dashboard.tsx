@@ -294,13 +294,13 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
 
     // Validate for Closed Lost
     if (newStage === 'Closed Lost' && !lostReason) {
-      alert('Alasan lost wajib diisi')
+      toast({ title: 'Validasi', description: 'Alasan lost wajib diisi', variant: 'destructive' })
       return
     }
 
     // Validate for On Hold - reason is required
     if (newStage === 'On Hold' && (!notes || notes.trim() === '')) {
-      alert('Alasan on hold wajib diisi di field Notes')
+      toast({ title: 'Validasi', description: 'Alasan on hold wajib diisi di field Notes', variant: 'destructive' })
       return
     }
 
@@ -308,14 +308,14 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     const lostReasonConfig = LOST_REASONS.find(r => r.value === lostReason)
     if (newStage === 'Closed Lost' && lostReasonConfig?.requiresPrice) {
       if (!competitorPrice && !customerBudget) {
-        alert('Harga kompetitor atau budget customer wajib diisi untuk alasan ini')
+        toast({ title: 'Validasi', description: 'Harga kompetitor atau budget customer wajib diisi untuk alasan ini', variant: 'destructive' })
         return
       }
     }
 
     // Validate evidence for Site Visit
     if (approachMethod === 'Site Visit' && !evidenceFile) {
-      alert('Bukti foto wajib diupload untuk Site Visit')
+      toast({ title: 'Validasi', description: 'Bukti foto wajib diupload untuk Site Visit', variant: 'destructive' })
       return
     }
 
@@ -355,12 +355,12 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
         setUpdateDialog({ open: false, opportunity: null })
         resetForm()
       } else {
-        const error = await response.json()
-        alert(error.error || 'Gagal update pipeline')
+        const errData = await response.json()
+        toast({ title: 'Error', description: errData.error || 'Gagal update pipeline', variant: 'destructive' })
       }
     } catch (error) {
       console.error('Error updating pipeline:', error)
-      alert('Terjadi kesalahan')
+      toast({ title: 'Error', description: 'Terjadi kesalahan', variant: 'destructive' })
     } finally {
       setIsLoading(null)
     }
@@ -471,6 +471,11 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
         }),
       })
 
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}))
+        throw new Error(errBody.error || `Server error (${response.status})`)
+      }
+
       const result = await response.json()
 
       if (result.success) {
@@ -578,7 +583,7 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
     if (file) {
       // Validate that it's an image
       if (!file.type.startsWith('image/')) {
-        alert('Hanya file gambar yang diizinkan untuk Site Visit')
+        toast({ title: 'Validasi', description: 'Hanya file gambar yang diizinkan untuk Site Visit', variant: 'destructive' })
         return
       }
       setEvidenceFile(file)

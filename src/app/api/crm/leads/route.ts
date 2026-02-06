@@ -220,10 +220,17 @@ export async function POST(request: NextRequest) {
               console.error('Error updating lead with account/opportunity:', updateError)
             } else {
               console.log('Lead updated with account_id and opportunity_id')
-              // Update leadResult for response
               leadResult.account_id = accountId
               leadResult.opportunity_id = newOpportunity.opportunity_id
             }
+
+            // Link shipment_details to the new opportunity
+            // (fix: was missing - shipments were invisible on pipeline detail page)
+            await (adminClient as any)
+              .from('shipment_details')
+              .update({ opportunity_id: newOpportunity.opportunity_id })
+              .eq('lead_id', leadResult.lead_id)
+              .is('opportunity_id', null)
           }
         }
       } catch (autoCreateError) {

@@ -593,6 +593,42 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
     }
   }
 
+  // Revoke accepted quotation (atomic - reopens opportunity + ticket)
+  const handleRevokeAcceptance = async () => {
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/ticketing/customer-quotations/${quotationId}/revoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Revoked by user' }),
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: 'Quotation Revoked',
+          description: 'Acceptance revoked. Pipeline reopened to Negotiation.',
+        })
+        fetchQuotation()
+      } else {
+        const correlationMsg = result.correlation_id ? ` (ID: ${result.correlation_id})` : ''
+        toast({
+          title: 'Error',
+          description: `${result.error || 'Failed to revoke quotation'}${correlationMsg}`,
+          variant: 'destructive',
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to revoke quotation',
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   // Reject quotation with reason (atomic - updates quotation + opportunity + ticket)
   const handleRejectWithReason = async () => {
     // Clear previous errors
@@ -979,6 +1015,32 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 Mark Rejected
               </Button>
             </>
+          )}
+          {quotation.status === QUOTATION_STATUS.ACCEPTED && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={actionLoading}>
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Revoke Acceptance
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Revoke Quotation Acceptance</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will revoke the acceptance of this quotation. The pipeline will reopen
+                    to Negotiation, the ticket will be reopened, and the account status may revert.
+                    This action should only be used if the acceptance was made in error.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleRevokeAcceptance} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Revoke
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
           {quotation.status === QUOTATION_STATUS.REJECTED && (
             <AlertDialog>
@@ -1632,9 +1694,14 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
       <Dialog open={showRejectModal} onOpenChange={(open) => {
         setShowRejectModal(open)
         if (!open) {
-          // Clear errors when closing
+          // Clear all form state when closing
           setRejectFieldErrors({})
           setRejectModalError(null)
+          setRejectReason('')
+          setRejectCompetitorName('')
+          setRejectCompetitorAmount('')
+          setRejectCustomerBudget('')
+          setRejectNotes('')
         }
       }}>
         <DialogContent className="sm:max-w-[500px]">

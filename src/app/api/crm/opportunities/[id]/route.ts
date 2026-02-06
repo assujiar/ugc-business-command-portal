@@ -97,10 +97,15 @@ export async function PATCH(
       (body.stage === 'Closed Won' || body.stage === 'Closed Lost') &&
       currentOpp?.stage !== body.stage
 
-    // Build update data
-    const updateData: Record<string, unknown> = {
-      ...body,
-      updated_at: new Date().toISOString(),
+    // Build update data - allowlist fields to prevent unauthorized overwrites
+    const allowedFields = [
+      'stage', 'estimated_value', 'next_step', 'next_step_due_date',
+      'description', 'lost_reason', 'outcome', 'probability', 'currency',
+      'competitor', 'competitor_price', 'customer_budget', 'name',
+    ]
+    const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    for (const key of allowedFields) {
+      if (body[key] !== undefined) updateData[key] = body[key]
     }
 
     // If stage is being updated, auto-set next_step_due_date, probability, and next_step

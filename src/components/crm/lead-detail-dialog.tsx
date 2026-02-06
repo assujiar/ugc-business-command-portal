@@ -273,32 +273,44 @@ export function LeadDetailDialog({
   const handleCreateTicket = () => {
     if (!lead) return
 
-    // Store shipment data in sessionStorage for ticket form to read
-    if (lead.shipment_details) {
+    // Get all shipments - prefer shipments array over single shipment_details
+    const allShipments = lead.shipments && lead.shipments.length > 0
+      ? lead.shipments
+      : lead.shipment_details
+        ? [lead.shipment_details]
+        : []
+
+    // Store multi-shipment data in sessionStorage for ticket form to read
+    if (allShipments.length > 0) {
+      // Multi-shipment support: store full array
+      sessionStorage.setItem('prefill_ticket_shipments', JSON.stringify(allShipments))
+
+      // Backward compatibility: also store first shipment as single
+      const first = allShipments[0]
       sessionStorage.setItem('prefill_ticket_shipment', JSON.stringify({
-        service_type_code: lead.shipment_details.service_type_code,
-        department: lead.shipment_details.department,
-        fleet_type: lead.shipment_details.fleet_type,
-        fleet_quantity: lead.shipment_details.fleet_quantity,
-        incoterm: lead.shipment_details.incoterm,
-        cargo_category: lead.shipment_details.cargo_category,
-        cargo_description: lead.shipment_details.cargo_description,
-        origin_address: lead.shipment_details.origin_address,
-        origin_city: lead.shipment_details.origin_city,
-        origin_country: lead.shipment_details.origin_country,
-        destination_address: lead.shipment_details.destination_address,
-        destination_city: lead.shipment_details.destination_city,
-        destination_country: lead.shipment_details.destination_country,
-        quantity: lead.shipment_details.quantity,
-        unit_of_measure: lead.shipment_details.unit_of_measure,
-        weight_per_unit_kg: lead.shipment_details.weight_per_unit_kg,
-        weight_total_kg: lead.shipment_details.weight_total_kg,
-        length_cm: lead.shipment_details.length_cm,
-        width_cm: lead.shipment_details.width_cm,
-        height_cm: lead.shipment_details.height_cm,
-        volume_total_cbm: lead.shipment_details.volume_total_cbm,
-        scope_of_work: lead.shipment_details.scope_of_work,
-        additional_services: lead.shipment_details.additional_services,
+        service_type_code: first.service_type_code,
+        department: first.department,
+        fleet_type: first.fleet_type,
+        fleet_quantity: first.fleet_quantity,
+        incoterm: first.incoterm,
+        cargo_category: first.cargo_category,
+        cargo_description: first.cargo_description,
+        origin_address: first.origin_address,
+        origin_city: first.origin_city,
+        origin_country: first.origin_country,
+        destination_address: first.destination_address,
+        destination_city: first.destination_city,
+        destination_country: first.destination_country,
+        quantity: first.quantity,
+        unit_of_measure: first.unit_of_measure,
+        weight_per_unit_kg: first.weight_per_unit_kg,
+        weight_total_kg: first.weight_total_kg,
+        length_cm: first.length_cm,
+        width_cm: first.width_cm,
+        height_cm: first.height_cm,
+        volume_total_cbm: first.volume_total_cbm,
+        scope_of_work: first.scope_of_work,
+        additional_services: first.additional_services,
       }))
     }
 
@@ -339,27 +351,29 @@ export function LeadDetailDialog({
           customer_company: lead.company_name,
           customer_email: lead.contact_email,
           customer_phone: lead.contact_phone,
-          // Shipment details if available
-          service_type: lead.shipment_details?.service_type_code,
-          department: lead.shipment_details?.department,
-          fleet_type: lead.shipment_details?.fleet_type,
-          fleet_quantity: lead.shipment_details?.fleet_quantity,
-          incoterm: lead.shipment_details?.incoterm,
-          commodity: lead.shipment_details?.cargo_category,
-          cargo_description: lead.shipment_details?.cargo_description,
-          cargo_weight: lead.shipment_details?.weight_total_kg,
+          // Shipment details from first shipment (backward compatibility)
+          service_type: (lead.shipments?.[0] || lead.shipment_details)?.service_type_code,
+          department: (lead.shipments?.[0] || lead.shipment_details)?.department,
+          fleet_type: (lead.shipments?.[0] || lead.shipment_details)?.fleet_type,
+          fleet_quantity: (lead.shipments?.[0] || lead.shipment_details)?.fleet_quantity,
+          incoterm: (lead.shipments?.[0] || lead.shipment_details)?.incoterm,
+          commodity: (lead.shipments?.[0] || lead.shipment_details)?.cargo_category,
+          cargo_description: (lead.shipments?.[0] || lead.shipment_details)?.cargo_description,
+          cargo_weight: (lead.shipments?.[0] || lead.shipment_details)?.weight_total_kg,
           cargo_weight_unit: 'kg',
-          cargo_volume: lead.shipment_details?.volume_total_cbm,
+          cargo_volume: (lead.shipments?.[0] || lead.shipment_details)?.volume_total_cbm,
           cargo_volume_unit: 'cbm',
-          cargo_quantity: lead.shipment_details?.quantity,
-          cargo_quantity_unit: lead.shipment_details?.unit_of_measure,
-          origin_address: lead.shipment_details?.origin_address,
-          origin_city: lead.shipment_details?.origin_city,
-          origin_country: lead.shipment_details?.origin_country,
-          destination_address: lead.shipment_details?.destination_address,
-          destination_city: lead.shipment_details?.destination_city,
-          destination_country: lead.shipment_details?.destination_country,
-          scope_of_work: lead.shipment_details?.scope_of_work,
+          cargo_quantity: (lead.shipments?.[0] || lead.shipment_details)?.quantity,
+          cargo_quantity_unit: (lead.shipments?.[0] || lead.shipment_details)?.unit_of_measure,
+          origin_address: (lead.shipments?.[0] || lead.shipment_details)?.origin_address,
+          origin_city: (lead.shipments?.[0] || lead.shipment_details)?.origin_city,
+          origin_country: (lead.shipments?.[0] || lead.shipment_details)?.origin_country,
+          destination_address: (lead.shipments?.[0] || lead.shipment_details)?.destination_address,
+          destination_city: (lead.shipments?.[0] || lead.shipment_details)?.destination_city,
+          destination_country: (lead.shipments?.[0] || lead.shipment_details)?.destination_country,
+          scope_of_work: (lead.shipments?.[0] || lead.shipment_details)?.scope_of_work,
+          // All shipments for multi-shipment support
+          shipments: lead.shipments?.length > 0 ? lead.shipments : undefined,
         }),
       })
 
