@@ -373,7 +373,7 @@ export function LeadDetailDialog({
           destination_country: (lead.shipments?.[0] || lead.shipment_details)?.destination_country,
           scope_of_work: (lead.shipments?.[0] || lead.shipment_details)?.scope_of_work,
           // All shipments for multi-shipment support
-          shipments: lead.shipments?.length > 0 ? lead.shipments : undefined,
+          shipments: (lead.shipments?.length ?? 0) > 0 ? lead.shipments : undefined,
         }),
       })
 
