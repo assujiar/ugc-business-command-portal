@@ -113,18 +113,25 @@ export async function PATCH(
 
     const body = await request.json()
 
-    // Prevent updating certain fields unless admin/manager
-    const restrictedFields = ['created_by', 'created_at', 'lead_id']
-    for (const field of restrictedFields) {
-      delete body[field]
+    // Allowlist fields to prevent injection of sensitive columns
+    const allowedFields = [
+      'company_name', 'pic_name', 'pic_email', 'pic_phone',
+      'industry', 'source', 'potential_revenue', 'notes',
+      'triage_status', 'disqualify_reason', 'priority',
+      'marketing_owner_user_id', 'sales_owner_user_id',
+      'address', 'city', 'province', 'postal_code', 'country',
+      'domain', 'npwp', 'phone',
+    ]
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+    for (const key of allowedFields) {
+      if (body[key] !== undefined) updateData[key] = body[key]
     }
 
     const { data, error } = await (supabase as any)
       .from('leads')
-      .update({
-        ...body,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('lead_id', id)
       .select()
       .single()

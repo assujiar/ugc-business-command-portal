@@ -105,14 +105,24 @@ export async function POST(request: NextRequest) {
       originalCreatorId = user.id
     }
 
+    // Allowlist fields to prevent injection of sensitive columns
+    const allowedFields = [
+      'name', 'account_id', 'source_lead_id', 'stage', 'estimated_value',
+      'currency', 'description', 'next_step', 'next_step_due_date',
+      'probability', 'competitor', 'competitor_price', 'customer_budget',
+    ]
+    const insertData: Record<string, unknown> = {
+      owner_user_id: body.owner_user_id || user.id,
+      created_by: user.id,
+      original_creator_id: originalCreatorId,
+    }
+    for (const key of allowedFields) {
+      if (body[key] !== undefined) insertData[key] = body[key]
+    }
+
     const { data, error } = await (supabase as any)
       .from('opportunities' as any as any)
-      .insert({
-        ...body,
-        owner_user_id: body.owner_user_id || user.id,
-        created_by: user.id,
-        original_creator_id: originalCreatorId,
-      })
+      .insert(insertData)
       .select()
       .single()
 
