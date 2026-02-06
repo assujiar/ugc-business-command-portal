@@ -43,7 +43,7 @@ export type LostReason =
   | 'lokasi_tidak_terjangkau'
   | 'lainnya'
 
-export type ApproachMethod = 'Site Visit' | 'Online Meeting' | 'Phone Call' | 'Texting' | 'Email' | 'WhatsApp'
+export type ApproachMethod = 'Call' | 'Email' | 'Meeting' | 'Site Visit' | 'WhatsApp' | 'Proposal' | 'Contract Review' | 'Online Meeting' | 'Phone Call' | 'Texting'
 
 // Pipeline Step Status for timeline
 export type PipelineStepStatus = 'done' | 'upcoming' | 'overdue'
