@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
         }
       })
 
-    // 4. Pivot daily summaries for chart data
+    // 4. Pivot daily summaries for chart data (include likes, comments, shares)
     const dateMap = new Map<string, any>()
     for (const row of (dailySummaries || [])) {
       const date = row.summary_date
@@ -120,13 +120,174 @@ export async function GET(request: NextRequest) {
       entry[`${p}_followers`] = row.followers_count || 0
       entry[`${p}_engagement`] = row.avg_engagement_rate || 0
       entry[`${p}_views`] = row.views_gained || 0
+      entry[`${p}_likes`] = row.likes_gained || 0
+      entry[`${p}_comments`] = row.comments_gained || 0
+      entry[`${p}_shares`] = row.shares_gained || 0
+      entry[`${p}_reach`] = row.avg_reach || 0
+      entry[`${p}_impressions`] = row.avg_impressions || 0
+      entry[`${p}_followers_gained`] = row.followers_gained || 0
     }
 
     const dailyChartData = Array.from(dateMap.values()).sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     )
 
-    // 5. Deduplicate snapshots (one per platform)
+    // 5. Compute weekly comparison (this week vs last week)
+    const now = new Date()
+    const dayOfWeek = now.getDay() // 0=Sun
+    const thisWeekStart = new Date(now)
+    thisWeekStart.setDate(now.getDate() - dayOfWeek)
+    thisWeekStart.setHours(0, 0, 0, 0)
+    const lastWeekStart = new Date(thisWeekStart)
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7)
+    const lastWeekEnd = new Date(thisWeekStart)
+    lastWeekEnd.setDate(lastWeekEnd.getDate() - 1)
+
+    const thisWeekStr = thisWeekStart.toISOString().split('T')[0]
+    const lastWeekStartStr = lastWeekStart.toISOString().split('T')[0]
+    const lastWeekEndStr = lastWeekEnd.toISOString().split('T')[0]
+
+    const weeklyComparison = VALID_PLATFORMS
+      .filter(p => !platform || p === platform)
+      .map(p => {
+        const allData = (dailySummaries || []).filter((d: any) => d.platform === p)
+        const thisWeek = allData.filter((d: any) => d.summary_date >= thisWeekStr)
+        const lastWeek = allData.filter(
+          (d: any) => d.summary_date >= lastWeekStartStr && d.summary_date <= lastWeekEndStr
+        )
+
+        const sumField = (arr: any[], field: string) =>
+          arr.reduce((sum: number, d: any) => sum + (d[field] || 0), 0)
+        const avgField = (arr: any[], field: string) =>
+          arr.length > 0 ? arr.reduce((sum: number, d: any) => sum + (d[field] || 0), 0) / arr.length : 0
+
+        const tw = {
+          views: sumField(thisWeek, 'views_gained'),
+          likes: sumField(thisWeek, 'likes_gained'),
+          comments: sumField(thisWeek, 'comments_gained'),
+          shares: sumField(thisWeek, 'shares_gained'),
+          followers_gained: sumField(thisWeek, 'followers_gained'),
+          engagement: avgField(thisWeek, 'avg_engagement_rate'),
+          reach: sumField(thisWeek, 'avg_reach'),
+          impressions: sumField(thisWeek, 'avg_impressions'),
+        }
+        const lw = {
+          views: sumField(lastWeek, 'views_gained'),
+          likes: sumField(lastWeek, 'likes_gained'),
+          comments: sumField(lastWeek, 'comments_gained'),
+          shares: sumField(lastWeek, 'shares_gained'),
+          followers_gained: sumField(lastWeek, 'followers_gained'),
+          engagement: avgField(lastWeek, 'avg_engagement_rate'),
+          reach: sumField(lastWeek, 'avg_reach'),
+          impressions: sumField(lastWeek, 'avg_impressions'),
+        }
+
+        const pctChange = (curr: number, prev: number) =>
+          prev === 0 ? (curr > 0 ? 100 : 0) : Math.round(((curr - prev) / prev) * 100)
+
+        return {
+          platform: p,
+          this_week: tw,
+          last_week: lw,
+          changes: {
+            views: pctChange(tw.views, lw.views),
+            likes: pctChange(tw.likes, lw.likes),
+            comments: pctChange(tw.comments, lw.comments),
+            shares: pctChange(tw.shares, lw.shares),
+            followers_gained: pctChange(tw.followers_gained, lw.followers_gained),
+            engagement: pctChange(tw.engagement, lw.engagement),
+            reach: pctChange(tw.reach, lw.reach),
+            impressions: pctChange(tw.impressions, lw.impressions),
+          },
+        }
+      })
+
+    // 6. Compute weekly aggregated chart data (group daily into weeks)
+    const weeklyChartData: any[] = []
+    const sortedDaily = Array.from(dateMap.values()).sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    )
+
+    // Group into weeks
+    const weekBuckets = new Map<string, any[]>()
+    for (const day of sortedDaily) {
+      const d = new Date(day.date)
+      const weekStart = new Date(d)
+      weekStart.setDate(d.getDate() - d.getDay())
+      const weekKey = weekStart.toISOString().split('T')[0]
+      if (!weekBuckets.has(weekKey)) weekBuckets.set(weekKey, [])
+      weekBuckets.get(weekKey)!.push(day)
+    }
+
+    for (const [weekKey, days] of Array.from(weekBuckets.entries())) {
+      const weekEnd = new Date(weekKey)
+      weekEnd.setDate(weekEnd.getDate() + 6)
+      const entry: any = {
+        week: weekKey,
+        week_label: `${new Date(weekKey).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${weekEnd.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`,
+      }
+
+      const activePlats = VALID_PLATFORMS.filter(p => !platform || p === platform)
+      for (const p of activePlats) {
+        entry[`${p}_views`] = days.reduce((s: number, d: any) => s + (d[`${p}_views`] || 0), 0)
+        entry[`${p}_likes`] = days.reduce((s: number, d: any) => s + (d[`${p}_likes`] || 0), 0)
+        entry[`${p}_comments`] = days.reduce((s: number, d: any) => s + (d[`${p}_comments`] || 0), 0)
+        entry[`${p}_shares`] = days.reduce((s: number, d: any) => s + (d[`${p}_shares`] || 0), 0)
+        entry[`${p}_followers_gained`] = days.reduce((s: number, d: any) => s + (d[`${p}_followers_gained`] || 0), 0)
+        entry[`${p}_engagement`] = days.length > 0
+          ? days.reduce((s: number, d: any) => s + (d[`${p}_engagement`] || 0), 0) / days.length
+          : 0
+      }
+
+      // Aggregated totals across all platforms
+      entry.total_views = activePlats.reduce((s, p) => s + (entry[`${p}_views`] || 0), 0)
+      entry.total_likes = activePlats.reduce((s, p) => s + (entry[`${p}_likes`] || 0), 0)
+      entry.total_comments = activePlats.reduce((s, p) => s + (entry[`${p}_comments`] || 0), 0)
+      entry.total_shares = activePlats.reduce((s, p) => s + (entry[`${p}_shares`] || 0), 0)
+      entry.total_engagement = entry.total_views > 0
+        ? ((entry.total_likes + entry.total_comments + entry.total_shares) / entry.total_views) * 100
+        : 0
+
+      weeklyChartData.push(entry)
+    }
+
+    // 7. Compute cross-platform comparison for bar chart
+    const crossPlatformData = VALID_PLATFORMS
+      .filter(p => !platform || p === platform)
+      .map(p => {
+        const s = platformSummaries.find((ps: any) => ps.platform === p)
+        const snap = (snapshots || []).find((sn: any) => sn.platform === p)
+        return {
+          platform: p,
+          followers: snap?.followers_count || 0,
+          views: s?.views_gained || 0,
+          likes: s?.likes_gained || 0,
+          comments: s?.comments_gained || 0,
+          shares: s?.shares_gained || 0,
+          engagement_rate: s?.avg_engagement_rate || 0,
+          reach: snap?.reach || 0,
+          impressions: snap?.impressions || 0,
+        }
+      })
+
+    // 8. Compute totals across all platforms
+    const totalMetrics = {
+      total_followers: platformSummaries.reduce((s: number, p: any) => s + (p.followers_count || 0), 0),
+      total_followers_gained: platformSummaries.reduce((s: number, p: any) => s + (p.followers_gained || 0), 0),
+      total_views: platformSummaries.reduce((s: number, p: any) => s + (p.views_gained || 0), 0),
+      total_likes: platformSummaries.reduce((s: number, p: any) => s + (p.likes_gained || 0), 0),
+      total_comments: platformSummaries.reduce((s: number, p: any) => s + (p.comments_gained || 0), 0),
+      total_shares: platformSummaries.reduce((s: number, p: any) => s + (p.shares_gained || 0), 0),
+      total_interactions: 0,
+      avg_engagement_rate: 0,
+    }
+    totalMetrics.total_interactions = totalMetrics.total_likes + totalMetrics.total_comments + totalMetrics.total_shares
+    const ratesWithData = platformSummaries.filter((p: any) => p.avg_engagement_rate > 0)
+    totalMetrics.avg_engagement_rate = ratesWithData.length > 0
+      ? ratesWithData.reduce((s: number, p: any) => s + p.avg_engagement_rate, 0) / ratesWithData.length
+      : 0
+
+    // 9. Deduplicate snapshots (one per platform)
     const seenPlatforms = new Set<string>()
     const latestSnapshots = (snapshots || []).filter((s: any) => {
       if (seenPlatforms.has(s.platform)) return false
@@ -160,6 +321,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       summaries: platformSummaries,
       daily_data: dailyChartData,
+      weekly_data: weeklyChartData,
+      weekly_comparison: weeklyComparison,
+      cross_platform: crossPlatformData,
+      total_metrics: totalMetrics,
       latest_snapshots: latestSnapshots,
       last_fetch_time: lastFetchTime,
       period_days: days,

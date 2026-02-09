@@ -41,6 +41,7 @@ import {
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { ContentPerformanceTable } from './content-performance-table'
+import { AnalyticsEnhancements } from './analytics-enhancements'
 
 // Platform definitions
 const PLATFORMS = [
@@ -154,6 +155,14 @@ export function DigitalPerformanceDashboard() {
   const [dailyData, setDailyData] = useState<DailyData[]>([])
   const [latestSnapshots, setLatestSnapshots] = useState<LatestSnapshot[]>([])
   const [lastFetchTime, setLastFetchTime] = useState<string | null>(null)
+  const [weeklyData, setWeeklyData] = useState<any[]>([])
+  const [weeklyComparison, setWeeklyComparison] = useState<any[]>([])
+  const [crossPlatformData, setCrossPlatformData] = useState<any[]>([])
+  const [totalMetrics, setTotalMetrics] = useState<any>({
+    total_followers: 0, total_followers_gained: 0, total_views: 0,
+    total_likes: 0, total_comments: 0, total_shares: 0,
+    total_interactions: 0, avg_engagement_rate: 0,
+  })
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -174,6 +183,14 @@ export function DigitalPerformanceDashboard() {
       setDailyData(data.daily_data || [])
       setLatestSnapshots(data.latest_snapshots || [])
       setLastFetchTime(data.last_fetch_time || null)
+      setWeeklyData(data.weekly_data || [])
+      setWeeklyComparison(data.weekly_comparison || [])
+      setCrossPlatformData(data.cross_platform || [])
+      setTotalMetrics(data.total_metrics || {
+        total_followers: 0, total_followers_gained: 0, total_views: 0,
+        total_likes: 0, total_comments: 0, total_shares: 0,
+        total_interactions: 0, avg_engagement_rate: 0,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan')
     } finally {
@@ -336,7 +353,20 @@ export function DigitalPerformanceDashboard() {
         </div>
       )}
 
-      {/* Charts Section */}
+      {/* Analytics Enhancements: KPIs, Weekly Comparison, Health Scores, etc. */}
+      {!loading && (
+        <AnalyticsEnhancements
+          weeklyComparison={weeklyComparison}
+          weeklyChartData={weeklyData}
+          crossPlatformData={crossPlatformData}
+          totalMetrics={totalMetrics}
+          dailyData={dailyData}
+          selectedPlatform={selectedPlatform}
+          period={period}
+        />
+      )}
+
+      {/* Daily Charts Section */}
       {!loading && dailyData.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2">
           {/* Followers Trend Chart */}
