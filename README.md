@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.7.2 | Last Updated: 2026-02-09
+> Version: 1.7.3 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -959,7 +959,14 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.7.2 (Current)
+### v1.7.3 (Current)
+- **Fix Rejection Trigger-RPC Interference (Migration 151)**: Fixed `ticket_events_created=0` despite `success=true` — rejection events never appearing in ticket activity
+  - **Root Cause**: AFTER UPDATE trigger `trg_quotation_status_sync` on `customer_quotations` fires when status changes to 'rejected', calling `sync_quotation_to_all` → `sync_quotation_to_ticket`. This trigger and the RPC (`rpc_customer_quotation_mark_rejected`) **compete** to do the same work (update ticket, create events, update opportunity). The trigger's `EXCEPTION WHEN OTHERS` creates a savepoint — if any sub-function fails, ALL trigger operations roll back, corrupting the state that the RPC depends on.
+  - **Fix Part 1**: Updated `trigger_sync_quotation_on_status_change` to skip when called from RPC context (`app.in_quotation_rpc` GUC flag) or `service_role` JWT (all API routes use adminClient). The trigger now only fires for direct user updates (e.g., Supabase dashboard).
+  - **Fix Part 2**: Redefined `rpc_customer_quotation_mark_rejected` to set `app.in_quotation_rpc='true'` before the quotation UPDATE, preventing trigger interference. Also saves `ticket_id` before UPDATE RETURNING for robustness, broadens `previous_rejected_count` to check by ticket_id + lead_id, and adds comprehensive RAISE NOTICE debugging.
+  - **Impact**: Rejection events now reliably appear in ticket activity timeline.
+
+### v1.7.2
 - **Fix Mark Sent Opportunity Fallback (Migration 150)**: Fixed pipeline not updating stage when sending revised quotation after rejection
   - **Root Cause**: `rpc_customer_quotation_mark_sent` relies entirely on `fn_resolve_or_create_opportunity` to return the opportunity_id. If the resolve function returns no rows or NULL opportunity_id without an error code, `v_effective_opportunity_id` stays NULL — skipping the entire opportunity section (stage transitions, pipeline_updates, activities) even when the quotation already has an opportunity_id.
   - **Contrast**: `rpc_customer_quotation_mark_rejected` correctly starts with `v_effective_opportunity_id := v_quotation.opportunity_id` and derives from lead/ticket if null.
