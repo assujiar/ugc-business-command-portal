@@ -35,6 +35,30 @@ function verifyAuth(request: NextRequest): boolean {
 // See the implementation guide for details.
 // =====================================================
 
+interface ContentItem {
+  content_id: string
+  content_type: string // 'post' | 'video' | 'reel' | 'short' | 'carousel' | 'story' | 'article'
+  title?: string
+  caption?: string
+  url?: string
+  thumbnail_url?: string
+  published_at?: string
+  hashtags?: string[]
+  views_count: number
+  likes_count: number
+  comments_count: number
+  shares_count: number
+  saves_count: number
+  reach: number
+  impressions: number
+  engagement_rate: number
+  click_count?: number
+  video_duration_seconds?: number
+  avg_watch_time_seconds?: number
+  watch_through_rate?: number
+  extra_metrics?: Record<string, any>
+}
+
 interface PlatformData {
   followers_count: number
   followers_gained: number
@@ -52,6 +76,8 @@ interface PlatformData {
   top_posts: Array<Record<string, any>>
   audience_demographics: Record<string, any>
   raw_api_response: Record<string, any>
+  // Content-level data for individual posts/videos
+  content_items?: ContentItem[]
 }
 
 async function fetchTikTokData(config: any): Promise<PlatformData | null> {
@@ -177,6 +203,76 @@ const FETCH_FUNCTIONS: Record<string, (config: any) => Promise<PlatformData | nu
   linkedin: fetchLinkedInData,
 }
 
+// Save individual content items (posts/videos/reels) to the database
+async function saveContentItems(
+  adminClient: any,
+  platform: string,
+  items: ContentItem[]
+) {
+  const today = new Date().toISOString().split('T')[0]
+
+  for (const item of items) {
+    try {
+      // Upsert content (update metrics if already exists)
+      const { data: upserted, error: upsertError } = await adminClient
+        .from('marketing_social_media_content')
+        .upsert({
+          platform,
+          content_id: item.content_id,
+          content_type: item.content_type,
+          title: item.title || null,
+          caption: item.caption || null,
+          url: item.url || null,
+          thumbnail_url: item.thumbnail_url || null,
+          published_at: item.published_at || null,
+          hashtags: item.hashtags || [],
+          views_count: item.views_count || 0,
+          likes_count: item.likes_count || 0,
+          comments_count: item.comments_count || 0,
+          shares_count: item.shares_count || 0,
+          saves_count: item.saves_count || 0,
+          reach: item.reach || 0,
+          impressions: item.impressions || 0,
+          engagement_rate: item.engagement_rate || 0,
+          click_count: item.click_count || 0,
+          video_duration_seconds: item.video_duration_seconds || null,
+          avg_watch_time_seconds: item.avg_watch_time_seconds || null,
+          watch_through_rate: item.watch_through_rate || null,
+          extra_metrics: item.extra_metrics || {},
+          last_fetched_at: new Date().toISOString(),
+          fetch_date: today,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'platform,content_id',
+        })
+        .select('id')
+        .single()
+
+      if (upsertError) {
+        console.error(`Content upsert error for ${platform}/${item.content_id}:`, upsertError)
+        continue
+      }
+
+      // Record history snapshot for tracking metric changes over time
+      if (upserted?.id) {
+        await adminClient
+          .from('marketing_social_media_content_history')
+          .insert({
+            content_id_ref: upserted.id,
+            views_count: item.views_count || 0,
+            likes_count: item.likes_count || 0,
+            comments_count: item.comments_count || 0,
+            shares_count: item.shares_count || 0,
+            saves_count: item.saves_count || 0,
+            engagement_rate: item.engagement_rate || 0,
+          })
+      }
+    } catch (err) {
+      console.error(`Content save error for ${platform}/${item.content_id}:`, err)
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   // Verify authentication
   if (!verifyAuth(request)) {
@@ -282,6 +378,10 @@ export async function POST(request: NextRequest) {
           console.error(`Insert error for ${config.platform}:`, insertError)
           results.push({ platform: config.platform, status: 'error', error: insertError.message })
         } else {
+          // Save content-level data if available
+          if (data.content_items && data.content_items.length > 0) {
+            await saveContentItems(adminClient, config.platform, data.content_items)
+          }
           results.push({ platform: config.platform, status: 'success' })
         }
       } catch (error) {

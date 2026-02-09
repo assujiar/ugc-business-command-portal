@@ -40,6 +40,7 @@ import {
   Legend,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { ContentPerformanceTable } from './content-performance-table'
 
 // Platform definitions
 const PLATFORMS = [
@@ -572,6 +573,12 @@ export function DigitalPerformanceDashboard() {
           </div>
         </div>
       )}
+
+      {/* Content-Level Performance */}
+      <ContentPerformanceTable
+        selectedPlatform={selectedPlatform}
+        period={period}
+      />
 
       {/* Empty state when no data */}
       {!loading && latestSnapshots.length === 0 && !error && (
