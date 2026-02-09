@@ -6,11 +6,13 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSessionAndProfile } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import AccountsClient from './accounts-client'
 import { AnalyticsFilter } from '@/components/crm/analytics-filter'
 import { Skeleton } from '@/components/ui/skeleton'
-import { isAdmin } from '@/lib/permissions'
+import { isAdmin, canAccessPipeline } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 interface AccountEnriched {
@@ -53,6 +55,16 @@ interface PageProps {
 export default async function AccountsPage({ searchParams }: PageProps) {
   const supabase = await createClient()
   const adminClient = createAdminClient()
+  const { profile } = await getSessionAndProfile()
+
+  if (!profile) {
+    redirect('/login')
+  }
+
+  // Check if user has access to accounts (same as pipeline access)
+  if (!canAccessPipeline(profile.role)) {
+    redirect('/overview-crm')
+  }
 
   // Get filter params
   const params = await searchParams
@@ -60,20 +72,8 @@ export default async function AccountsPage({ searchParams }: PageProps) {
   const endDate = typeof params.endDate === 'string' ? params.endDate : null
   const salespersonId = typeof params.salespersonId === 'string' ? params.salespersonId : null
 
-  // Get user role
-  const { data: { user } } = await supabase.auth.getUser()
-  let userRole: UserRole | null = null
-  let userId: string | null = null
-
-  if (user) {
-    userId = user.id
-    const { data: profile } = await (supabase as any)
-      .from('profiles')
-      .select('role')
-      .eq('user_id', user.id)
-      .single() as { data: { role: UserRole } | null }
-    userRole = profile?.role ?? null
-  }
+  const userRole = profile.role
+  const userId = profile.user_id
 
   // Fetch sales profiles for filter dropdown (only salesperson role)
   const { data: salesProfiles } = await (adminClient as any)

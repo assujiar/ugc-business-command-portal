@@ -3,7 +3,9 @@
 // SOURCE: PDF Section 5, Page 17
 // =====================================================
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getSessionAndProfile } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { canAccessLeadManagement } from '@/lib/permissions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -29,6 +31,15 @@ interface NurtureLead {
 
 export default async function NurtureLeadsPage() {
   const supabase = await createClient()
+  const { profile } = await getSessionAndProfile()
+
+  if (!profile) {
+    redirect('/login')
+  }
+
+  if (!canAccessLeadManagement(profile.role)) {
+    redirect('/overview-crm')
+  }
 
   const { data: leads } = await supabase
     .from('v_nurture_leads')

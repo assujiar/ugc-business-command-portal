@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.7.5 | Last Updated: 2026-02-09
+> Version: 1.8.0 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -241,33 +241,52 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 
 ### Role Hierarchy
 
-| Role | Code | Department | Access Level |
-|------|------|------------|--------------|
-| Director | `director` | Executive | Full access to all modules |
+| Role | DB Value | Department | Access Level |
+|------|----------|------------|--------------|
+| Director | `Director` | Executive | Full access to all modules |
 | Super Admin | `super admin` | IT | Full access + system config |
-| Marketing Manager | `marketing_manager` | Marketing | Lead inbox, reports, triage |
-| Sales Manager | `sales_manager` | Sales | Sales inbox, pipeline, quotations |
-| Salesperson | `salesperson` | Sales | My leads, pipeline, quotations |
-| EXIM Ops | `exim_ops` | Operations | Export/Import tickets, costs |
-| Domestics Ops | `domestics_ops` | Operations | Domestic tickets, costs |
-| Import DTD Ops | `import_dtd_ops` | Operations | DTD tickets, costs |
-| Traffic & Warehouse | `traffic_warehouse` | Operations | Limited ticket access |
-| Finance | `finance` | Finance | View quotations, costs |
+| Marketing Manager | `Marketing Manager` | Marketing | Lead inbox, reports, triage |
+| MACX | `MACX` | Marketing | Same as Marketing Manager (all marketing dept data) |
+| Marcomm | `Marcomm` | Marketing | Own leads only |
+| DGO | `DGO` | Marketing | Own leads only |
+| VSDO | `VSDO` | Marketing | Own leads only |
+| Sales Manager | `sales manager` | Sales | All sales team data |
+| Sales Support | `sales support` | Sales | All sales team data (view), own data (edit) |
+| Salesperson | `salesperson` | Sales | Own leads, pipeline, quotations |
+| EXIM Ops | `EXIM Ops` | Operations | Export/Import tickets, costs |
+| Domestics Ops | `domestics Ops` | Operations | Domestic tickets, costs |
+| Import DTD Ops | `Import DTD Ops` | Operations | DTD tickets, costs |
+| Traffic & Warehouse | `traffic & warehous` | Operations | Limited ticket access |
+| Finance | `finance` | Finance | No module access (blocked) |
 
 ### Permission Matrix
 
-| Action | Director | Admin | Mkt Mgr | Sales Mgr | Sales | Ops | Finance |
-|--------|----------|-------|---------|-----------|-------|-----|---------|
-| View Lead Inbox | ✓ | ✓ | ✓ | - | - | - | - |
-| Triage Leads | ✓ | ✓ | ✓ | - | - | - | - |
-| Claim Leads | ✓ | ✓ | - | ✓ | ✓ | - | - |
-| View Pipeline | ✓ | ✓ | - | ✓ | ✓ | - | - |
-| Create Tickets | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - |
-| Submit Costs | ✓ | ✓ | - | - | - | ✓ | - |
-| Create Quotations | ✓ | ✓ | - | ✓ | ✓ | - | - |
-| Send Quotations | ✓ | ✓ | - | ✓ | ✓ | - | - |
-| Accept/Reject Quotations | ✓ | ✓ | - | ✓ | ✓ | - | - |
-| View Reports | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
+| Action | Director | Admin | Mkt Mgr/MACX | Sales Mgr | Sales Support | Salesperson | Marcomm/DGO/VSDO | Ops | Finance |
+|--------|----------|-------|-------------|-----------|---------------|-------------|-------------------|-----|---------|
+| View Lead Inbox | ✓ | ✓ | ✓ | - | - | - | ✓ | - | - |
+| Triage Leads | ✓ | ✓ | ✓ | - | - | - | ✓ | - | - |
+| Handover Leads | ✓ | ✓ | ✓ | - | - | - | ✓ | - | - |
+| Claim Leads | ✓ | ✓ | - | ✓ | ✓ | ✓ | - | - | - |
+| View Pipeline | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | - |
+| Update Pipeline | ✓ | ✓ | - | - | - | ✓ (own) | - | - | - |
+| View Accounts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | - |
+| Create Tickets | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - |
+| Submit Op Costs | ✓ | ✓ | - | - | - | - | - | ✓ | - |
+| Create Quotations | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | - |
+| View Reports | ✓ | ✓ | ✓ | ✓ | ✓ | - | - | ✓ | - |
+
+### Dashboard Data Scoping by Role
+
+| Role | CRM Dashboard Data | Ticketing Analytics Scope |
+|------|--------------------|--------------------------|
+| Director / super admin | All data (no filter) | All departments |
+| Sales Manager | All sales data | Sales department |
+| Sales Support | All sales data | Sales department |
+| Salesperson | Own data only | Own tickets only |
+| Marketing Manager / MACX | Marketing-created leads | Marketing department |
+| Marcomm / DGO / VSDO | Own leads only | Own tickets only |
+| Ops roles | Own data only (CRM hidden in sidebar) | Own department |
+| Finance | No access | No access |
 
 ---
 
@@ -1006,7 +1025,22 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.7.5 (Current)
+### v1.8.0 (Current)
+- **Comprehensive Dashboard RBAC Audit & Fix**: Audited all 17+ dashboard pages and 40+ API routes for role-based data access issues
+  - **CRM Dashboard**: Fixed Ops/finance roles seeing ALL data (no filter applied). Now restricts to own data only.
+  - **Accounts Page**: Added `canAccessPipeline()` access control. Previously any authenticated user could access `/accounts` directly.
+  - **Account Detail Page**: Added `canAccessPipeline()` authorization check.
+  - **Pipeline Page**: Fixed `sales support` role filtering — now sees all sales pipelines (consistent with `canViewPipeline()` permissions), not just own data.
+  - **Nurture/Disqualified Leads**: Added `canAccessLeadManagement()` redirect for unauthorized roles.
+- **API Route Permission Hardening**: Added missing role/ownership checks to 4 critical API endpoints:
+  - `POST /api/crm/leads/claim`: Added `canClaimLeads()` check (prevents non-sales users from claiming)
+  - `POST /api/crm/leads/[id]/triage`: Added `canTriageLeads()` check (prevents non-marketing users from triaging)
+  - `POST /api/crm/leads/[id]/handover`: Added `canTriageLeads()` check (prevents unauthorized handover)
+  - `POST /api/crm/pipeline/update`: Added `canUpdatePipeline()` ownership check (prevents unauthorized pipeline modifications)
+- **Sidebar Enhancement**: Added Performance page link to Ticketing module navigation
+- **README Updated**: Comprehensive RBAC matrix with all 15 roles, dashboard data scoping table, updated permission matrix
+
+### v1.7.5
 - **Multi-Shipment Quotation Dialog Enhancement**: All 6 tabs now fully accommodate multi-shipment quotations
   - **Route tab**: Added shipment selector — users can now switch between shipments to view/edit route details (origin/destination city, country, port, address) per shipment
   - **Preview tab**: Enhanced to show per-shipment service type, route, cargo category, weight/volume, fleet/incoterm, cost, and margin — previously only showed route and selling rate
