@@ -144,7 +144,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     })
 
     if (rpcError) {
-      console.error('Error rejecting quotation:', rpcError, 'correlation_id:', correlationId)
+      console.error('[CustomerQuotation REJECT] RPC error:', JSON.stringify({ error: rpcError.message, details: rpcError.details, hint: rpcError.hint, code: rpcError.code }), 'correlation_id:', correlationId)
       return NextResponse.json({
         success: false,
         error: rpcError.message,
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                          result?.error_code === 'QUOTATION_NOT_FOUND' ? 404 :
                          result?.error_code === 'INVALID_STATUS_TRANSITION' ? 409 :
                          result?.error_code?.startsWith('CONFLICT_') ? 409 : 400
-      console.error('Quotation rejection failed:', result, 'correlation_id:', correlationId)
+      console.error('[CustomerQuotation REJECT] RPC returned failure:', JSON.stringify({ error: result?.error, error_code: result?.error_code }), 'correlation_id:', correlationId)
       return NextResponse.json({
         success: false,
         error: result?.error || 'Failed to reject quotation',
@@ -171,7 +171,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }, { status: statusCode })
     }
 
-    console.log('Quotation rejected successfully:', result, 'correlation_id:', correlationId)
+    console.log('[CustomerQuotation REJECT] Success:', JSON.stringify({
+      correlation_id: correlationId,
+      quotation_id: result.quotation_id,
+      quotation_number: result.quotation_number,
+      rejection_reason: result.rejection_reason,
+      ticket_id: result.ticket_id,
+      ticket_status: result.ticket_status,
+      ticket_events_created: result.ticket_events_created,
+      ticket_comment_created: result.ticket_comment_created,
+      opportunity_id: result.opportunity_id,
+      old_stage: result.old_stage,
+      new_stage: result.new_stage,
+      sequence_label: result.sequence_label,
+    }))
 
     // Build message with sequence info if available
     const sequenceLabel = result.sequence_label || ''
@@ -205,7 +218,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       correlation_id: correlationId
     })
   } catch (err) {
-    console.error('Unexpected error:', err, 'correlation_id:', correlationId)
+    console.error('[CustomerQuotation REJECT] Unexpected error:', err instanceof Error ? err.message : err, 'correlation_id:', correlationId)
     return NextResponse.json({
       success: false,
       error: 'Internal server error',
