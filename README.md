@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.7.1 | Last Updated: 2026-02-09
+> Version: 1.7.2 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -959,7 +959,14 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.7.1 (Current)
+### v1.7.2 (Current)
+- **Fix Mark Sent Opportunity Fallback (Migration 150)**: Fixed pipeline not updating stage when sending revised quotation after rejection
+  - **Root Cause**: `rpc_customer_quotation_mark_sent` relies entirely on `fn_resolve_or_create_opportunity` to return the opportunity_id. If the resolve function returns no rows or NULL opportunity_id without an error code, `v_effective_opportunity_id` stays NULL — skipping the entire opportunity section (stage transitions, pipeline_updates, activities) even when the quotation already has an opportunity_id.
+  - **Contrast**: `rpc_customer_quotation_mark_rejected` correctly starts with `v_effective_opportunity_id := v_quotation.opportunity_id` and derives from lead/ticket if null.
+  - **Fix**: Added fallback after the resolve call: if `v_effective_opportunity_id` is still NULL but `v_quotation.opportunity_id` is NOT NULL, use the quotation's own opportunity_id.
+  - **Impact**: Pipeline now correctly transitions Quote Sent → Negotiation when sending a revised quotation after rejection.
+
+### v1.7.1
 - **Fix Quotation Rejection/Sent Activity Timeline (Migration 149)**: Fixed rejection events not appearing in ticket activity
   - **Root Cause**: `rpc_customer_quotation_mark_rejected` and `rpc_customer_quotation_mark_sent` INSERT into `opportunity_stage_history` with only `old_stage`/`new_stage` columns, but `to_stage` is NOT NULL (migration 004). When called via `adminClient` (service_role), the `log_stage_change()` trigger **skips** (`auth.uid()` = NULL, by design in migration 023), so the RPC's manual INSERT runs and **fails**. The `EXCEPTION WHEN OTHERS` handler rolls back the **entire transaction** — including `ticket_events` and `ticket_comments` — and returns `{success: false}`.
   - **Why mark_sent appeared to work**: Stage changes only on FIRST send (Prospecting/Discovery → Quote Sent). Resends and already-at-Quote-Sent cases skip the INSERT. Rejection ALWAYS changes stage (→ Negotiation) on first reject.
