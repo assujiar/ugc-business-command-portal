@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.7.4 | Last Updated: 2026-02-09
+> Version: 1.7.5 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -110,6 +110,9 @@ ugc-business-command-portal/
 │   │   ├── crm/                      # CRM-specific components
 │   │   ├── ticketing/                # Ticketing components
 │   │   ├── shared/                   # Shared components
+│   │   │   ├── searchable-select.tsx # Searchable dropdown (for large option lists)
+│   │   │   ├── country-select.tsx    # Country dropdown with search
+│   │   │   └── multi-shipment-form.tsx # Multi-shipment input form
 │   │   ├── providers/                # Context providers
 │   │   └── ui/                       # shadcn/ui components
 │   │
@@ -129,7 +132,7 @@ ugc-business-command-portal/
 │   └── types/                        # TypeScript definitions
 │
 ├── supabase/
-│   └── migrations/                   # 143 SQL migrations
+│   └── migrations/                   # 153 SQL migrations
 │       ├── 001-034                   # Core CRM tables
 │       ├── 035-060                   # Ticketing system
 │       ├── 061-090                   # Quotation system
@@ -137,7 +140,10 @@ ugc-business-command-portal/
 │       ├── 129-132                   # Multi-shipment support
 │       ├── 133-136                   # Bug fixes & schema fixes
 │       ├── 137-142                   # Audit fixes, RPC regressions, activity/stage fixes
-│       └── 143                       # Fix rejection logging & mirror trigger
+│       ├── 143-145                   # Fix rejection logging, sent pipeline, RLS recursion
+│       ├── 146-149                   # Fix mark_won/lost, account lifecycle, stage history
+│       ├── 150-152                   # Fix mark_sent fallback, trigger interference, ambiguous opp
+│       └── 153                       # Countries reference table
 │
 └── public/
     └── logo/                         # Brand assets
@@ -609,6 +615,47 @@ Shipment 2: Sea Freight .................. IDR 18,000,000
 Shipment 2: THC Origin ................... IDR 2,800,000
 ```
 
+### Creation Paths (All Verified End-to-End)
+
+#### Customer Quotation Creation Paths (4)
+
+| # | Source | Entry Point | Route | Key Fields |
+|---|--------|-------------|-------|------------|
+| 1 | Ticket | Ticket detail → Create Quotation | POST `/api/ticketing/customer-quotations` | ticket_id, source_type='ticket' |
+| 2 | Lead | Lead detail dialog → Create Quotation | POST `/api/ticketing/customer-quotations` | lead_id, source_type='lead', direct_quotation=true |
+| 3 | Opportunity | Pipeline detail dialog → Create Quotation | POST `/api/ticketing/customer-quotations` | opportunity_id, lead_id, source_type='opportunity', direct_quotation=true |
+| 4 | Standalone | Quotation dashboard → New Quotation | POST `/api/ticketing/customer-quotations` | source_type='standalone', direct_quotation=true |
+
+#### Ticket Creation Paths (5)
+
+| # | Source | Entry Point | Route |
+|---|--------|-------------|-------|
+| 1 | Standalone | Sidebar → Tickets → New | `/tickets/new` |
+| 2 | Lead | Lead detail → Create Ticket | `/tickets/new?from=lead&lead_id=...` |
+| 3 | Opportunity | Pipeline detail → Create Ticket | `/tickets/new?from=opportunity&opportunity_id=...` |
+| 4 | Account | Account detail → Tickets tab → Create Ticket | `/tickets/new?from=account&account_id=...` |
+| 5 | Dashboard | Ticket dashboard → New Ticket | `/tickets/new` |
+
+#### Opportunity Creation Paths (2)
+
+| # | Source | Entry Point | Route |
+|---|--------|-------------|-------|
+| 1 | Lead | Lead detail → Convert to Opportunity | POST `/api/crm/leads/[id]/create-opportunity` |
+| 2 | Account | Account detail → Create Opportunity | POST `/api/crm/opportunities/create` |
+
+### Quotation Dialog Tabs (Multi-Shipment Support)
+
+The `CustomerQuotationDialog` has 6 tabs, all supporting multi-shipment:
+
+| Tab | Multi-Shipment | Description |
+|-----|---------------|-------------|
+| Customer | N/A (shared) | Customer info applies to all shipments |
+| Service | Shipment selector | Per-shipment service type, fleet/incoterm, cargo details |
+| Route | Shipment selector | Per-shipment origin/destination with city, country, port, address |
+| Rate | Per-shipment display | Bundling: per-shipment rate cards. Breakdown: grouped items |
+| Terms | N/A (shared) | Scope of work, includes/excludes apply to entire quotation |
+| Preview | Per-shipment details | Full summary with service, route, cargo, and rate per shipment |
+
 ### Quotation Outputs
 
 | Output | Format | Access | Shows Per-Shipment |
@@ -940,7 +987,7 @@ cp .env.example .env.local
 # Edit .env.local with your values
 
 # 3. Run migrations (in Supabase SQL Editor)
-# Execute migrations 001-143 in order
+# Execute migrations 001-153 in order
 
 # 4. Start development
 npm run dev
@@ -959,7 +1006,22 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.7.4 (Current)
+### v1.7.5 (Current)
+- **Multi-Shipment Quotation Dialog Enhancement**: All 6 tabs now fully accommodate multi-shipment quotations
+  - **Route tab**: Added shipment selector — users can now switch between shipments to view/edit route details (origin/destination city, country, port, address) per shipment
+  - **Preview tab**: Enhanced to show per-shipment service type, route, cargo category, weight/volume, fleet/incoterm, cost, and margin — previously only showed route and selling rate
+  - **Service tab**: Already had shipment selector (unchanged)
+  - **Rate tab**: Already displayed per-shipment breakdown (unchanged)
+- **Searchable Select Component**: Created `SearchableSelect` for large dropdown lists, applied to:
+  - Rate Component Type (186+ items), Service Type (19 items), Fleet Type (15 items), Incoterm (11 items), Unit of Measure (15 items)
+  - Applied across 6 files: customer-quotation-dialog, customer-quotation-edit-form, multi-shipment-form, multi-shipment-cost-dialog, ticket-detail
+- **Creation Path Verification**: Verified all 11 creation paths end-to-end (4 quotation + 5 ticket + 2 opportunity)
+  - Fixed `direct_quotation: true` missing in lead-detail-dialog and pipeline-dashboard quotation creation
+  - Added "Create Ticket" button to account-detail Tickets tab header
+- **Countries Reference Table (Migration 153)**: Added `countries` table with 250 countries + ISO codes, `CountrySelect` component
+- **Timeline Deduplication**: Fixed duplicate entries in ticket activity timeline
+
+### v1.7.4
 - **Fix AMBIGUOUS_OPPORTUNITY + Mark Sent Trigger Interference (Migration 152)**: Fixed quotation send failing with "Multiple opportunities found" when account has multiple active opportunities
   - **Root Cause 1**: `fn_resolve_or_create_opportunity` calls `fn_repair_orphan_opportunity` when quotation's opportunity_id is orphaned. The repair function returns `AMBIGUOUS_OPPORTUNITY` error when ticket/lead/account point to different opportunities. The resolve function hard-fails on this error (when `p_allow_autocreate=FALSE`), never reaching Steps 2-6 which handle multiple opportunities gracefully.
   - **Fix 1**: Updated `fn_resolve_or_create_opportunity` to continue to Steps 2-6 when repair fails with AMBIGUOUS, instead of returning error immediately. Step 3 uses `LIMIT 1 ORDER BY updated_at DESC` which handles multiple opportunities per account.
@@ -1170,6 +1232,33 @@ The `opportunity_stage_history` table has **two pairs of stage columns** for his
 - **Dedup pattern**: RPCs use `NOT EXISTS (...changed_at > NOW() - INTERVAL '1 minute')` to prevent duplicates when both trigger and manual INSERT would run.
 
 **When writing new code**: Always insert using ALL 4 columns for explicitness. The auto-fill trigger is a safety net, not a design pattern.
+
+### Searchable Select Component
+
+The `SearchableSelect` component replaces standard `Select` dropdowns where the number of options is large (>10 items). It uses a Popover with text search filtering.
+
+**Usage locations**:
+- **Rate Component Type**: 186+ items across 5+ categories (Freight, Port, Customs, etc.)
+- **Service Type**: 19 service types across 4 scopes (Domestics, Export, Import, DTD)
+- **Fleet Type**: 15 fleet types (Blindvan, CDD, Fuso, Tronton, etc.)
+- **Incoterm**: 11 trade terms (FOB, CIF, EXW, etc.)
+- **Unit of Measure**: 15 units (kg, cbm, TEU, etc.)
+
+**Props**: `options` (flat list) or `groups` (categorized list), `value`, `onValueChange`, `searchPlaceholder`, `popoverWidth`
+
+### Countries Reference Table (Migration 153)
+
+The `countries` table provides a reference list of 250 countries with ISO codes, used by the `CountrySelect` component.
+
+```sql
+CREATE TABLE countries (
+  id SERIAL PRIMARY KEY,
+  code VARCHAR(3) NOT NULL UNIQUE,    -- ISO 3166-1 alpha-2/3
+  name VARCHAR(100) NOT NULL,
+  region VARCHAR(50),
+  is_active BOOLEAN DEFAULT TRUE
+);
+```
 
 ### Multi-Shipment Data Structure
 

@@ -1410,6 +1410,38 @@ export function CustomerQuotationDialog({
           {/* Route Section */}
           {activeSection === 'route' && (
             <div className="space-y-4">
+              {/* Multi-Shipment Selector */}
+              {hasMultipleShipments && (
+                <div className="p-3 border rounded-lg bg-blue-50 dark:bg-blue-900/20 mb-4">
+                  <Label className="text-blue-700 dark:text-blue-300 text-sm font-medium">
+                    Viewing route for shipment {selectedShipmentIndex + 1} of {allShipments.length}
+                  </Label>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">
+                    Select a shipment to view/edit its route details.
+                  </p>
+                  <Select
+                    value={String(selectedShipmentIndex)}
+                    onValueChange={(val) => setSelectedShipmentIndex(parseInt(val))}
+                  >
+                    <SelectTrigger className="bg-white dark:bg-gray-900">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allShipments.map((shipment, idx) => (
+                        <SelectItem key={idx} value={String(idx)}>
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-3 w-3" />
+                            {shipment.shipment_label || `Shipment ${idx + 1}`}
+                            <span className="text-xs text-muted-foreground">
+                              ({shipment.origin_city || '-'} → {shipment.destination_city || '-'})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-6">
                 {/* Origin */}
                 <div className="space-y-4">
@@ -1994,43 +2026,44 @@ export function CustomerQuotationDialog({
                     {customerPhone && <>{customerPhone}<br /></>}
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="font-medium">Service</div>
-                  <div className="text-muted-foreground">
-                    {serviceType || '-'}<br />
-                    {incoterm && <>Incoterm: {incoterm}<br /></>}
-                    {fleetType && <>{fleetType} x {fleetQuantity}</>}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="font-medium">Route</div>
-                  <div className="text-muted-foreground">
-                    {hasMultipleShipments ? (
-                      <span>{allShipments.length} shipments (see below)</span>
-                    ) : (
-                      <span>{originCity || '-'} → {destinationCity || '-'}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="font-medium">Rate</div>
-                  {hasMultipleShipments ? (
-                    <div className="text-sm text-muted-foreground">
-                      Per-shipment rates (see below)
+                {hasMultipleShipments ? (
+                  <div className="space-y-2">
+                    <div className="font-medium">Shipments</div>
+                    <div className="text-muted-foreground">
+                      {allShipments.length} shipments (details below)
                     </div>
-                  ) : (
-                    <div className="text-2xl font-bold text-primary">
-                      {formatCurrency(totalSellingRate)}
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <div className="font-medium">Service</div>
+                      <div className="text-muted-foreground">
+                        {serviceType || '-'}<br />
+                        {incoterm && <>Incoterm: {incoterm}<br /></>}
+                        {fleetType && <>{fleetType} x {fleetQuantity}</>}
+                      </div>
                     </div>
-                  )}
-                </div>
+                    <div className="space-y-2">
+                      <div className="font-medium">Route</div>
+                      <div className="text-muted-foreground">
+                        {originCity || '-'} → {destinationCity || '-'}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="font-medium">Rate</div>
+                      <div className="text-2xl font-bold text-primary">
+                        {formatCurrency(totalSellingRate)}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {/* Multi-shipment preview */}
+              {/* Multi-shipment preview with full details */}
               {hasMultipleShipments && (
                 <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <div className="font-medium text-sm text-blue-700 dark:text-blue-300">
-                    Shipment Rates
+                  <div className="font-medium text-sm text-blue-700 dark:text-blue-300 mb-2">
+                    Shipment Details & Rates
                   </div>
                   {allShipments.map((shipment, idx) => {
                     const shipmentCost = operationalCosts?.find(
@@ -2038,21 +2071,60 @@ export function CustomerQuotationDialog({
                     )
                     const costAmount = shipmentCost?.amount || 0
                     const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
-                    const sellingRate = Math.round(costAmount * (1 + marginValue / 100))
+
+                    // Check breakdown items for this shipment
+                    const shipmentLabel = shipment.shipment_label || `Shipment ${idx + 1}`
+                    const shipmentItems = items.filter(item =>
+                      item.component_name?.startsWith(`${shipmentLabel}:`)
+                    )
+                    const itemsSellingRate = shipmentItems.reduce((sum, item) => sum + (item.selling_rate || 0), 0)
+                    const sellingRate = itemsSellingRate > 0
+                      ? Math.round(itemsSellingRate)
+                      : Math.round(costAmount * (1 + marginValue / 100))
+
+                    // Derive service display label
+                    const shipmentServiceType = shipment.service_type_code
+                      ? getServiceTypeDisplayLabel(shipment.service_type_code)
+                      : '-'
+
                     return (
-                      <div key={idx} className="flex items-center justify-between text-sm p-2 bg-white dark:bg-gray-800 rounded">
-                        <div>
-                          <span className="font-medium">{shipment.shipment_label || `Shipment ${idx + 1}`}</span>
-                          <span className="text-muted-foreground ml-2">
-                            ({shipment.origin_city || '-'} → {shipment.destination_city || '-'})
+                      <div key={idx} className="p-3 bg-white dark:bg-gray-800 rounded border text-sm space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">
+                            {shipmentLabel}
+                          </span>
+                          <span className="font-bold text-green-600 dark:text-green-400 font-mono">
+                            {formatCurrency(sellingRate)}
                           </span>
                         </div>
-                        <span className="font-bold text-green-600 dark:text-green-400 font-mono">
-                          {formatCurrency(sellingRate)}
-                        </span>
+                        <div className="text-xs text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-0.5 mt-1">
+                          <span>Service: {shipmentServiceType}</span>
+                          <span>Route: {shipment.origin_city || '-'} → {shipment.destination_city || '-'}</span>
+                          {shipment.fleet_type && <span>Fleet: {shipment.fleet_type} x {shipment.fleet_quantity || 1}</span>}
+                          {shipment.incoterm && <span>Incoterm: {shipment.incoterm}</span>}
+                          {shipment.cargo_category && <span>Cargo: {shipment.cargo_category}</span>}
+                          {(shipment.weight_total_kg || shipment.volume_total_cbm) && (
+                            <span>
+                              {shipment.weight_total_kg ? `${shipment.weight_total_kg} kg` : ''}
+                              {shipment.weight_total_kg && shipment.volume_total_cbm ? ' / ' : ''}
+                              {shipment.volume_total_cbm ? `${shipment.volume_total_cbm} cbm` : ''}
+                            </span>
+                          )}
+                        </div>
+                        {costAmount > 0 && (
+                          <div className="text-xs text-muted-foreground">
+                            Cost: {formatCurrency(costAmount)} | Margin: {marginValue}%
+                          </div>
+                        )}
                       </div>
                     )
                   })}
+                  <div className="pt-2 border-t border-blue-200 dark:border-blue-700 flex items-center justify-between">
+                    <span className="font-medium text-sm text-blue-700 dark:text-blue-300">Total</span>
+                    <span className="font-bold text-lg text-primary font-mono">
+                      {formatCurrency(totalSellingRate)}
+                    </span>
+                  </div>
                 </div>
               )}
 
