@@ -443,6 +443,7 @@ export function PipelineDashboard({ opportunities, currentUserId, userRole, canU
           opportunity_id: opp.opportunity_id,
           lead_id: opp.lead_id,
           source_type: 'opportunity',
+          direct_quotation: true, // Skip cost validation - quotation from pipeline without ops cost
           customer_name: opp.account_name || opp.name || '',
           customer_company: opp.account_name,
           // Shipment details from first shipment (backward compatibility)
