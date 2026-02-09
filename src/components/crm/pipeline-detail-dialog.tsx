@@ -690,6 +690,7 @@ export function PipelineDetailDialog({
           opportunity_id: data.opportunity_id,
           lead_id: data.lead_id,
           source_type: 'opportunity',
+          direct_quotation: true, // Skip cost validation - quotation from pipeline without ops cost
           customer_name: data.pic_name || data.company_name || '',
           customer_company: data.company_name,
           customer_email: data.pic_email,

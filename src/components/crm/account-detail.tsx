@@ -25,6 +25,7 @@ import {
   Activity,
   Users,
   DollarSign,
+  Plus,
 } from 'lucide-react'
 import type { UserRole, AccountStatus, OpportunityStage } from '@/types/database'
 import { format } from 'date-fns'
@@ -498,9 +499,28 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
         {/* Tickets Tab */}
         <TabsContent value="tickets">
           <Card>
-            <CardHeader>
-              <CardTitle>Tickets ({tickets.length})</CardTitle>
-              <CardDescription>Support tickets for this account</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Tickets ({tickets.length})</CardTitle>
+                <CardDescription>Support tickets for this account</CardDescription>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const params = new URLSearchParams({
+                    from: 'account',
+                    account_id: account.account_id,
+                    company_name: account.company_name,
+                    contact_name: account.pic_name || '',
+                    contact_email: account.pic_email || '',
+                    contact_phone: account.pic_phone || '',
+                  })
+                  router.push(`/tickets/new?${params.toString()}`)
+                }}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Create Ticket
+              </Button>
             </CardHeader>
             <CardContent>
               {tickets.length > 0 ? (

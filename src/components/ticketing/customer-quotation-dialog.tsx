@@ -757,6 +757,7 @@ export function CustomerQuotationDialog({
       // Get operational cost IDs (single or multiple)
       const costIds = operationalCosts?.map(c => c.id).filter(Boolean) || []
       const singleCostId = operationalCost?.id || (costIds.length > 0 ? costIds[0] : null)
+      const hasOperationalCost = singleCostId || costIds.length > 0
 
       const payload = {
         ticket_id: ticketId || null,
@@ -764,6 +765,7 @@ export function CustomerQuotationDialog({
         opportunity_id: opportunity?.opportunity_id || null,
         operational_cost_id: singleCostId, // For backward compatibility
         operational_cost_ids: costIds.length > 0 ? costIds : (singleCostId ? [singleCostId] : []), // Multi-cost support
+        direct_quotation: !hasOperationalCost, // Skip cost validation when no ops cost linked
         source_type: sourceType,
         customer_name: customerName,
         customer_company: customerCompany || null,

@@ -1787,58 +1787,54 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                         </Button>
                       )}
 
-                      {/* Create Customer Quotation - available after ops sends cost */}
-                      {costs.length > 0 && (
-                        <Button
-                          onClick={() => setQuotationDialogOpen(true)}
-                          className="w-full bg-blue-600 hover:bg-blue-700"
-                        >
-                          <FileText className="mr-2 h-4 w-4" />
-                          Create Customer Quotation
-                        </Button>
-                      )}
+                      {/* Create Customer Quotation - available always (direct or from ops cost) */}
+                      <Button
+                        onClick={() => setQuotationDialogOpen(true)}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                      >
+                        <FileText className="mr-2 h-4 w-4" />
+                        Create Customer Quotation
+                      </Button>
 
                       {/* Sent to Customer - checks if quotation exists first */}
-                      {costs.length > 0 && (
-                        <Button
-                          onClick={async () => {
-                            // Check if customer quotation exists
-                            if (customerQuotations.length === 0) {
-                              // No quotation - prompt to create one
-                              toast({
-                                title: 'Quotation Required',
-                                description: 'Please create a customer quotation first before sending to customer.',
-                                variant: 'destructive',
-                              })
-                              setQuotationDialogOpen(true)
-                              return
+                      <Button
+                        onClick={async () => {
+                          // Check if customer quotation exists
+                          if (customerQuotations.length === 0) {
+                            // No quotation - prompt to create one
+                            toast({
+                              title: 'Quotation Required',
+                              description: 'Please create a customer quotation first before sending to customer.',
+                              variant: 'destructive',
+                            })
+                            setQuotationDialogOpen(true)
+                            return
+                          }
+                          // Has quotation - execute the action
+                          const result = await executeAction('quote_sent_to_customer')
+                          if (result) {
+                            // Refresh quotation status
+                            const quotationsRes = await fetch(`/api/ticketing/customer-quotations?ticket_id=${ticket.id}`)
+                            const quotationsData = await quotationsRes.json()
+                            if (quotationsData.success) {
+                              setCustomerQuotations(quotationsData.data || [])
                             }
-                            // Has quotation - execute the action
-                            const result = await executeAction('quote_sent_to_customer')
-                            if (result) {
-                              // Refresh quotation status
-                              const quotationsRes = await fetch(`/api/ticketing/customer-quotations?ticket_id=${ticket.id}`)
-                              const quotationsData = await quotationsRes.json()
-                              if (quotationsData.success) {
-                                setCustomerQuotations(quotationsData.data || [])
-                              }
-                            }
-                          }}
-                          disabled={actionLoading === 'quote_sent_to_customer'}
-                          className="w-full"
-                          variant="outline"
-                        >
-                          {actionLoading === 'quote_sent_to_customer' ? (
-                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Forward className="mr-2 h-4 w-4" />
-                          )}
-                          {customerQuotations.length > 0 ? 'Mark Sent to Customer' : 'Sent to Customer (Create Quotation First)'}
-                        </Button>
-                      )}
+                          }
+                        }}
+                        disabled={actionLoading === 'quote_sent_to_customer'}
+                        className="w-full"
+                        variant="outline"
+                      >
+                        {actionLoading === 'quote_sent_to_customer' ? (
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Forward className="mr-2 h-4 w-4" />
+                        )}
+                        {customerQuotations.length > 0 ? 'Mark Sent to Customer' : 'Sent to Customer (Create Quotation First)'}
+                      </Button>
 
-                      {/* Won/Lost Buttons - available after ops sends cost */}
-                      {costs.length > 0 && (
+                      {/* Won/Lost Buttons */}
+                      {(costs.length > 0 || customerQuotations.length > 0) && (
                         <div className="grid grid-cols-2 gap-2">
                           <Button
                             onClick={() => executeAction('mark_won')}
@@ -2921,7 +2917,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                     <FileText className="h-4 w-4" />
                     Customer Quotations ({customerQuotations.length})
                   </div>
-                  {isCreator && !isClosed && costs.length > 0 && (
+                  {isCreator && !isClosed && (
                     <Button size="sm" variant="outline" onClick={() => setQuotationDialogOpen(true)}>
                       <Plus className="h-3 w-3 mr-1" /> New
                     </Button>

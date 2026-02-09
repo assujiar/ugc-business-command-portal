@@ -347,6 +347,7 @@ export function LeadDetailDialog({
         body: JSON.stringify({
           lead_id: lead.lead_id,
           source_type: 'lead',
+          direct_quotation: true, // Skip cost validation - quotation from lead without ops cost
           customer_name: lead.contact_name || lead.company_name,
           customer_company: lead.company_name,
           customer_email: lead.contact_email,
