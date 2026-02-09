@@ -919,6 +919,80 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     extra_data?: any
   }
 
+  // Deduplicate timeline items - collapse redundant entries from batch operations and mirror trigger
+  const deduplicateTimelineItems = (items: TimelineItem[]): TimelineItem[] => {
+    const WINDOW_MS = 5000 // 5-second window for grouping related entries
+    const removedIds = new Set<string>()
+
+    const sorted = [...items].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+
+    // Precompute timestamps
+    const tsMap = new Map<string, number>()
+    sorted.forEach(item => tsMap.set(item.id, new Date(item.created_at).getTime()))
+    const ts = (item: TimelineItem) => tsMap.get(item.id)!
+    const nearBy = (a: TimelineItem, b: TimelineItem) => Math.abs(ts(a) - ts(b)) <= WINDOW_MS
+
+    // Quotation lifecycle events that suppress mirror-trigger auto-comments
+    const LIFECYCLE_BADGES = new Set([
+      'rejected', 'quotation_sent', 'quotation', 'accepted', 'sent_to_customer',
+    ])
+
+    sorted.forEach((item) => {
+      if (removedIds.has(item.id)) return
+
+      // Rule 1: Rejection hides request_adjustment events within window
+      if (item.badge_type === 'rejected') {
+        sorted.forEach((other) => {
+          if (other.id !== item.id && !removedIds.has(other.id) && nearBy(item, other)) {
+            if (other.extra_data?.event_type === 'request_adjustment') {
+              removedIds.add(other.id)
+            }
+          }
+        })
+      }
+
+      // Rule 2: Lifecycle events hide auto-comments from same actor within window
+      if (LIFECYCLE_BADGES.has(item.badge_type)) {
+        sorted.forEach((other) => {
+          if (other.id !== item.id && !removedIds.has(other.id) && nearBy(item, other)) {
+            if (other.type === 'comment' && other.user_id === item.user_id) {
+              removedIds.add(other.id)
+            }
+          }
+        })
+      }
+
+      // Rule 3: "Cost Created" batch event hidden when individual cost items exist nearby
+      if (item.badge_label === 'Cost Created' && item.extra_data?.event_type === 'quote_created') {
+        const hasCosts = sorted.some((other) =>
+          other.type === 'cost' && !removedIds.has(other.id) && nearBy(item, other)
+        )
+        if (hasCosts) removedIds.add(item.id)
+      }
+    })
+
+    // Rule 4: Same badge_type + same user within window → keep longer content
+    // Skip cost items (different costs can legitimately exist at same time)
+    for (let i = 0; i < sorted.length; i++) {
+      if (removedIds.has(sorted[i].id) || sorted[i].type === 'cost') continue
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (removedIds.has(sorted[j].id) || sorted[j].type === 'cost') continue
+        if (ts(sorted[j]) - ts(sorted[i]) > WINDOW_MS) break
+        if (sorted[i].badge_type === sorted[j].badge_type && sorted[i].user_id === sorted[j].user_id) {
+          if ((sorted[j].content?.length || 0) > (sorted[i].content?.length || 0)) {
+            removedIds.add(sorted[i].id)
+          } else {
+            removedIds.add(sorted[j].id)
+          }
+        }
+      }
+    }
+
+    return items.filter((item) => !removedIds.has(item.id))
+  }
+
   const buildUnifiedTimeline = (): TimelineItem[] => {
     const items: TimelineItem[] = []
 
@@ -1111,10 +1185,13 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       })
     })
 
-    // Sort by created_at descending (newest first)
-    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    // Deduplicate redundant entries (batch costs, rejection triple-events, mirror trigger auto-comments)
+    const dedupedItems = deduplicateTimelineItems(items)
 
-    return items
+    // Sort by created_at descending (newest first)
+    dedupedItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+    return dedupedItems
   }
 
   // Get user initials

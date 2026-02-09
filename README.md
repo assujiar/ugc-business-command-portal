@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.7.3 | Last Updated: 2026-02-09
+> Version: 1.7.4 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -959,7 +959,15 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.7.3 (Current)
+### v1.7.4 (Current)
+- **Fix AMBIGUOUS_OPPORTUNITY + Mark Sent Trigger Interference (Migration 152)**: Fixed quotation send failing with "Multiple opportunities found" when account has multiple active opportunities
+  - **Root Cause 1**: `fn_resolve_or_create_opportunity` calls `fn_repair_orphan_opportunity` when quotation's opportunity_id is orphaned. The repair function returns `AMBIGUOUS_OPPORTUNITY` error when ticket/lead/account point to different opportunities. The resolve function hard-fails on this error (when `p_allow_autocreate=FALSE`), never reaching Steps 2-6 which handle multiple opportunities gracefully.
+  - **Fix 1**: Updated `fn_resolve_or_create_opportunity` to continue to Steps 2-6 when repair fails with AMBIGUOUS, instead of returning error immediately. Step 3 uses `LIMIT 1 ORDER BY updated_at DESC` which handles multiple opportunities per account.
+  - **Root Cause 2**: `mark_sent` has same trigger interference as `mark_rejected` — `trg_quotation_status_sync` fires AFTER UPDATE and competes with the RPC.
+  - **Fix 2**: Added GUC flag (`app.in_quotation_rpc`) before quotation UPDATE in mark_sent, same as migration 151. Also saves `ticket_id` before UPDATE RETURNING for robustness.
+  - **Fix 3**: mark_sent no longer hard-fails on fn_resolve errors — logs warning and uses fallback to quotation.opportunity_id.
+
+### v1.7.3
 - **Fix Rejection Trigger-RPC Interference (Migration 151)**: Fixed `ticket_events_created=0` despite `success=true` — rejection events never appearing in ticket activity
   - **Root Cause**: AFTER UPDATE trigger `trg_quotation_status_sync` on `customer_quotations` fires when status changes to 'rejected', calling `sync_quotation_to_all` → `sync_quotation_to_ticket`. This trigger and the RPC (`rpc_customer_quotation_mark_rejected`) **compete** to do the same work (update ticket, create events, update opportunity). The trigger's `EXCEPTION WHEN OTHERS` creates a savepoint — if any sub-function fails, ALL trigger operations roll back, corrupting the state that the RPC depends on.
   - **Fix Part 1**: Updated `trigger_sync_quotation_on_status_change` to skip when called from RPC context (`app.in_quotation_rpc` GUC flag) or `service_role` JWT (all API routes use adminClient). The trigger now only fires for direct user updates (e.g., Supabase dashboard).
