@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.6.6 | Last Updated: 2026-02-09
+> Version: 1.6.7 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -866,12 +866,13 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.6.6 (Current)
-- **Fix Mark Won/Lost Type Mismatch (Migration 146)**: Fixed 400 error when closing tickets as won or lost
-  - **Root Cause**: `v_old_stage` declared as `TEXT` but `opportunity_stage_history.old_stage` column is `opportunity_stage` ENUM — PostgreSQL rejects the implicit cast
-  - **Fix**: Changed `v_old_stage` to `opportunity_stage` type in both `rpc_ticket_mark_won` and `rpc_ticket_mark_lost`
-  - **Fix**: Cast `'Closed Won'`/`'Closed Lost'` literals to `::opportunity_stage` explicitly
-  - **Fix**: Added `SET search_path = public, pg_temp` for security
+### v1.6.7 (Current)
+- **Fix Mark Won/Lost Stage History (Migration 147)**: Fixed `to_stage` NOT NULL violation when closing tickets
+  - **Root Cause**: `opportunity_stage_history` has 4 stage columns: `from_stage`/`to_stage` (original, NOT NULL) + `old_stage`/`new_stage` (added migration 023). The manual INSERT in RPCs only filled `old_stage`/`new_stage`, leaving `to_stage` NULL
+  - **Previous Error (Migration 146)**: Fixed type mismatch (`v_old_stage TEXT` → `opportunity_stage`), which unmasked the `to_stage` NOT NULL error
+  - **Fix**: Removed redundant manual INSERT from both `rpc_ticket_mark_won` and `rpc_ticket_mark_lost`. The `log_stage_change()` trigger on the `opportunities` table already creates the history entry with all 4 columns when stage is updated
+
+### v1.6.6
 - **Hotfix: RLS Infinite Recursion (Migration 145)**: Fixed 42P17 error that broke ALL ticket, quotation, and operational cost access
   - **Root Cause**: Migration 144's `tickets_select_policy` used `EXISTS (SELECT FROM customer_quotations)`, but `customer_quotations_select` RLS queries `tickets` — creating circular dependency
   - **Fix**: Created `is_quotation_creator_for_ticket(UUID, UUID)` SECURITY DEFINER helper that bypasses RLS on `customer_quotations`
@@ -917,6 +918,7 @@ npx tsc --noEmit # TypeScript check
   - Migration 144: Fix sent pipeline stage & ticket visibility (broadened rejected count, mirror trigger dedup, tickets RLS)
   - Migration 145: Hotfix RLS infinite recursion — SECURITY DEFINER helper `is_quotation_creator_for_ticket()` for tickets/events/comments policies
   - Migration 146: Fix mark_won/mark_lost type mismatch — `v_old_stage TEXT` → `opportunity_stage`, explicit casts
+  - Migration 147: Fix mark_won/mark_lost to_stage NOT NULL — removed redundant manual INSERT, trigger handles it
 
 ### v1.6.3
 - **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error
