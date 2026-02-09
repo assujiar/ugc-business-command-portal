@@ -5809,26 +5809,3 @@ TABEL
 | vault        | secrets                            | 6                | nonce                                    | bytea                       | YES         | vault._crypto_aead_det_noncegen()                                                                          |                                                                                                                                                                               |
 | vault        | secrets                            | 7                | created_at                               | timestamp with time zone    | NO          | CURRENT_TIMESTAMP                                                                                          |                                                                                                                                                                               |
 | vault        | secrets                            | 8                | updated_at                               | timestamp with time zone    | NO          | CURRENT_TIMESTAMP                                                                                          |                                                                                                                                                                               |
-
-PENDING MIGRATIONS (not yet deployed)
-=====================================
-
-Migration 151: Fix Rejection Trigger-RPC Interference
------------------------------------------------------
-File: supabase/migrations/151_fix_rejection_trigger_interference.sql
-
-Functions modified (body only, signatures unchanged):
-1. trigger_sync_quotation_on_status_change() → RETURNS trigger
-   - Added GUC flag check: skips when app.in_quotation_rpc = 'true' (set by RPCs)
-   - Added service_role check: skips when request.jwt.claim.role = 'service_role' (adminClient)
-   - Only runs sync_quotation_to_all for direct user updates (e.g., Supabase dashboard)
-
-2. rpc_customer_quotation_mark_rejected(UUID, quotation_rejection_reason_type, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, UUID, TEXT) → RETURNS jsonb
-   - Sets app.in_quotation_rpc='true' before quotation UPDATE (prevents trigger interference)
-   - Saves ticket_id before UPDATE RETURNING (v_saved_ticket_id) for robustness
-   - Broadened previous_rejected_count to check by ticket_id + lead_id in addition to opportunity_id
-   - Enhanced RAISE NOTICE debugging at every critical step
-
-Root cause fixed: trg_quotation_status_sync AFTER UPDATE trigger was competing with mark_rejected RPC
-to do the same work (ticket update, events, opportunity sync). The trigger's sync_quotation_to_all has
-EXCEPTION WHEN OTHERS that could roll back ticket changes, causing ticket_events_created=0 despite success=true.
