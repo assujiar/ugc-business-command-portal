@@ -44,10 +44,10 @@ import {
   CARGO_CATEGORIES,
   UNITS_OF_MEASURE,
   ADDITIONAL_SERVICES,
-  COUNTRIES,
   getServicesByScope,
   type ServiceScope,
 } from '@/lib/constants'
+import { CountrySelect } from '@/components/shared/country-select'
 import { ShipmentDetail, createEmptyShipment, formatShipmentRoute } from '@/types/shipment'
 import { cn } from '@/lib/utils'
 import { FormSection, SERVICE_CATEGORY_STYLES, FormSectionIcons } from '@/components/ui/form-section'
@@ -501,22 +501,11 @@ function ShipmentCard({
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs">Country</Label>
-                      <Select
+                      <CountrySelect
                         value={shipment.origin_country || 'Indonesia'}
                         onValueChange={(value) => onUpdate({ origin_country: value })}
                         disabled={readOnly}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COUNTRIES.map((country) => (
-                            <SelectItem key={country} value={country}>
-                              {country}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      />
                     </div>
                   </div>
 
@@ -543,22 +532,11 @@ function ShipmentCard({
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs">Country</Label>
-                      <Select
+                      <CountrySelect
                         value={shipment.destination_country || 'Indonesia'}
                         onValueChange={(value) => onUpdate({ destination_country: value })}
                         disabled={readOnly}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COUNTRIES.map((country) => (
-                            <SelectItem key={country} value={country}>
-                              {country}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      />
                     </div>
                   </div>
                 </div>
