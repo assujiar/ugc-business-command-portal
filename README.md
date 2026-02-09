@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.6.3 | Last Updated: 2026-02-06
+> Version: 1.6.4 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -129,14 +129,15 @@ ugc-business-command-portal/
 │   └── types/                        # TypeScript definitions
 │
 ├── supabase/
-│   └── migrations/                   # 136 SQL migrations
+│   └── migrations/                   # 143 SQL migrations
 │       ├── 001-034                   # Core CRM tables
 │       ├── 035-060                   # Ticketing system
 │       ├── 061-090                   # Quotation system
 │       ├── 091-128                   # Enhancements
 │       ├── 129-132                   # Multi-shipment support
-│       ├── 133-135                   # Bug fixes
-│       └── 136                       # Schema fix: accepted_at/rejected_at
+│       ├── 133-136                   # Bug fixes & schema fixes
+│       ├── 137-142                   # Audit fixes, RPC regressions, activity/stage fixes
+│       └── 143                       # Fix rejection logging & mirror trigger
 │
 └── public/
     └── logo/                         # Brand assets
@@ -666,8 +667,9 @@ ACTION:
   6. UPDATE lead.quotation_status = 'rejected'
   7. INSERT opportunity_stage_history (old_stage, new_stage, changed_by)
   8. INSERT pipeline_updates (approach_method='Email', old_stage, new_stage)
-  9. INSERT ticket_events (status_changed + request_adjustment)
-  10. INSERT activity (activity_type_v2='Email')
+  9. INSERT ticket_events (customer_quotation_rejected + request_adjustment)
+  10. INSERT ticket_comments (is_internal=FALSE, visible to all users) [Migration 143]
+  11. INSERT activity (activity_type_v2='Email')
 ```
 
 #### 4. Cost Supersession
@@ -838,7 +840,7 @@ cp .env.example .env.local
 # Edit .env.local with your values
 
 # 3. Run migrations (in Supabase SQL Editor)
-# Execute migrations 001-136 in order
+# Execute migrations 001-143 in order
 
 # 4. Start development
 npm run dev
@@ -857,7 +859,29 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.6.3 (Current)
+### v1.6.4 (Current)
+- **Fix Rejection Logging (Migration 143)**: Fixed quotation rejection not appearing in ticket activity
+  - **Root Cause 1**: `source_event_id` column was BIGINT but `ticket_events.id` is UUID — mirror trigger silently failed on every event
+  - **Root Cause 2**: Rejection comment used `is_internal=TRUE` — RLS hides internal comments from non-ops/non-admin users (e.g., sales)
+  - **Root Cause 3**: Missing `quotation_number` in rejection event `new_value` JSONB — auto-comments were incomplete
+  - **Fix**: Corrected `source_event_id` to UUID, mirror trigger now works properly
+  - **Fix**: Rejection comment now `is_internal=FALSE` — visible to all users with ticket access
+  - **Fix**: Event `new_value` now includes `quotation_id`, `quotation_number`, `competitor_name`, `competitor_amount`, `customer_budget`
+  - **Fix**: Updated RLS policies — quotation creators can now see ticket events/comments for linked tickets
+  - **Fix**: Comment now created even when ticket is closed/resolved (previously skipped in ELSE branch)
+  - **Fix**: Mirror trigger skips auto-comment for events with direct RPC comments (avoids duplicates)
+  - **Fix**: Added `SET search_path` to mirror trigger function for security
+  - **Performance**: Added composite index `(ticket_id, created_by)` on `customer_quotations` for RLS subquery
+  - **Observability**: RPC now returns `ticket_events_created` and `ticket_comment_created` in response
+  - **Logging**: Improved structured logging in reject API route with `[CustomerQuotation REJECT]` prefix
+- **Migrations 137-142** (accumulated fixes from prior sessions):
+  - Migration 137: Comprehensive audit fixes (RPC comments, function signatures)
+  - Migration 138: Fix RPC regressions and grants
+  - Migration 139-140: Deep audit fixes
+  - Migration 141: Fix migration 140 compile errors
+  - Migration 142: Fix quotation activity & stage transition (Quote Sent → Negotiation on 2nd+ quotation after rejection)
+
+### v1.6.3
 - **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error
   - Added `accepted_at TIMESTAMPTZ` column to `customer_quotations` table
   - Added `rejected_at TIMESTAMPTZ` column to `customer_quotations` table
@@ -933,6 +957,20 @@ The `customer_quotations` table status-related columns:
 | rejected_at | TIMESTAMPTZ | **Migration 136** | When quotation was rejected |
 
 **History**: `accepted_at` and `rejected_at` were planned in the original BLUEPRINT but omitted from migration 050. Migration 131 introduced RPC references to these columns (causing errors). Migration 136 adds them properly with backfill.
+
+### Ticket Activity Visibility (RLS)
+
+Ticket events and comments are protected by Row Level Security. Visibility rules:
+
+| User Type | Ticket Events | Non-Internal Comments | Internal Comments |
+|-----------|--------------|----------------------|-------------------|
+| Director / Super Admin | All | All | All |
+| Ops (EXIM, Domestics, DTD, Traffic) | All | All | All |
+| Ticket Creator | Their tickets | Their tickets | Hidden |
+| Ticket Assignee | Their tickets | Their tickets | Hidden |
+| Quotation Creator (Migration 143) | Linked tickets | Linked tickets | Hidden |
+
+**Important**: The rejection RPC creates comments with `is_internal = FALSE` so they are visible to sales users. The mirror trigger's auto-comments use `is_internal = TRUE` (ops/admin only). To avoid duplicates, the mirror trigger skips auto-comment creation for events that already have direct RPC comments (`customer_quotation_rejected`, `customer_quotation_sent`), but still creates `ticket_responses` for SLA tracking.
 
 ### Multi-Shipment Data Structure
 
