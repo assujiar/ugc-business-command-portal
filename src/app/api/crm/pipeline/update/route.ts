@@ -272,51 +272,13 @@ export async function POST(request: NextRequest) {
       console.error('Error creating activity:', activityError)
     }
 
-    // 5. Update account status based on pipeline outcome
-    if (opportunity.account_id) {
-      let newAccountStatus: string | null = null
-
-      if (newStage === 'Closed Won') {
-        // Pipeline won - account becomes new_account
-        newAccountStatus = 'new_account'
-
-        const { error: accountUpdateError } = await (adminClient as any)
-          .from('accounts')
-          .update({
-            account_status: newAccountStatus,
-            first_transaction_date: updateTime.toISOString(),
-            last_transaction_date: updateTime.toISOString(),
-            updated_at: updateTime.toISOString(),
-          })
-          .eq('account_id', opportunity.account_id)
-
-        if (accountUpdateError) {
-          console.error('Error updating account status:', accountUpdateError)
-        }
-      } else if (newStage === 'Closed Lost') {
-        // Pipeline lost - only mark as failed_account if currently calon_account
-        // Don't downgrade existing customers (new_account, active_account) to failed
-        const currentAccountStatus = opportunity.accounts?.account_status
-
-        if (currentAccountStatus === 'calon_account') {
-          newAccountStatus = 'failed_account'
-
-          const { error: accountUpdateError } = await (adminClient as any)
-            .from('accounts')
-            .update({
-              account_status: newAccountStatus,
-              updated_at: updateTime.toISOString(),
-            })
-            .eq('account_id', opportunity.account_id)
-
-          if (accountUpdateError) {
-            console.error('Error updating account status:', accountUpdateError)
-          }
-        }
-        // If account is already new_account, active_account, or churned_account,
-        // don't change status - this is a lost opportunity on an existing customer
-      }
-    }
+    // 5. Account status is handled by the database trigger
+    // trigger_sync_quotation_on_opportunity_close fires on opportunity stage change
+    // and calls sync_opportunity_to_account which handles:
+    // - Closed Won: calon/failed → new_account (with transaction dates)
+    // - Closed Won: existing accounts → update last_transaction_date only
+    // - Closed Lost: calon → failed (only if no existing Closed Won opportunities)
+    // No direct account_status update needed here to avoid double-update conflicts.
 
     // 6. Create stage history record
     // Note: The table originally has from_stage/to_stage columns.

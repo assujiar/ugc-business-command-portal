@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.6.7 | Last Updated: 2026-02-09
+> Version: 1.7.0 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -353,6 +353,88 @@ Note: Closed Won/Lost are terminal states - no transitions allowed
 - **Quotation Rejected**: ANY non-terminal stage (except Negotiation) → Negotiation
 - **Quotation Accepted**: → Closed Won
 - `v_previous_rejected_count` is calculated across `ticket_id`, `opportunity_id`, and `lead_id` (fallback) to handle cases where quotations resolve to different opportunities
+
+### Account Status Lifecycle (Migration 148)
+
+#### Status Enum
+
+| Status | Description | Triggered By |
+|--------|-------------|--------------|
+| `calon_account` | Prospect/candidate | Lead claim, lead creation, or retry from failed |
+| `new_account` | First deal completed | Opportunity won (from calon/failed/passive/lost) |
+| `failed_account` | All opportunities lost | Last opportunity closed lost (only if no deals and no open opps) |
+| `active_account` | Mature customer | 3+ months since first_transaction_date |
+| `passive_account` | Idle customer | 1+ month since last_transaction_date |
+| `lost_account` | Churned customer | 3+ months since last_transaction_date |
+
+#### Transition Diagram
+
+```
+OPPORTUNITY-BASED (event-driven, stored immediately):
+
+  Lead Claimed / Created
+        │
+        ▼
+  ┌─────────────┐     Opp WON     ┌─────────────┐
+  │calon_account│ ──────────────→  │ new_account  │
+  └─────────────┘                  └─────────────┘
+        │                                │
+        │ ALL opps LOST                  │ Opp WON (reactivation)
+        │ (no deals, no open opps)       │
+        ▼                                │
+  ┌──────────────┐                       │
+  │failed_account│ ───── Opp WON ────────┘
+  └──────────────┘
+        │
+        │ New Opp Created (auto-trigger)
+        ▼
+  ┌─────────────┐
+  │calon_account│  (retry cycle)
+  └─────────────┘
+
+AGING-BASED (time-driven, computed on API read + cron):
+
+  ┌─────────────┐  3mo since first_tx  ┌───────────────┐
+  │ new_account  │ ──────────────────→  │active_account │
+  └─────────────┘                       └───────────────┘
+        │                                      │
+        │  1mo idle                             │  1mo idle
+        ▼                                      ▼
+  ┌────────────────┐                    ┌────────────────┐
+  │passive_account │                    │passive_account │
+  └────────────────┘                    └────────────────┘
+        │                                      │
+        │  3mo idle                             │  3mo idle
+        ▼                                      ▼
+  ┌──────────────┐                      ┌──────────────┐
+  │ lost_account │                      │ lost_account │
+  └──────────────┘                      └──────────────┘
+        │                                      │
+        │  Opp WON (reactivation)              │  Opp WON
+        ▼                                      ▼
+  ┌─────────────┐                       ┌─────────────┐
+  │ new_account  │                      │ new_account  │
+  └─────────────┘                       └─────────────┘
+```
+
+#### Implementation Details
+
+**Opportunity-Based Transitions** (handled by `sync_opportunity_to_account` + triggers):
+- **WON**: `calon/failed/passive/lost` → `new_account` (sets transaction dates)
+- **WON** (new/active): Only updates `last_transaction_date` (no status change)
+- **LOST**: `calon` → `failed` **ONLY IF**: (1) no Closed Won opps exist, (2) no open opps remain
+- **New Opportunity Created**: `failed` → `calon` (via `trg_reset_failed_on_new_opportunity` trigger)
+
+**Aging-Based Transitions** (computed by `fn_compute_effective_account_status`):
+- Priority: `lost` (3mo idle) > `passive` (1mo idle) > `active` (3mo mature)
+- Applied on API read via `applyAccountAging()` TypeScript utility
+- Periodically persisted via `fn_bulk_update_account_aging()` (cron-callable)
+- View `v_accounts_with_status` includes `calculated_status` column
+
+**Guard Conditions for LOST → FAILED**:
+1. Account has NO opportunities with stage = 'Closed Won' (no deals)
+2. Account has NO opportunities with stage NOT IN ('Closed Won', 'Closed Lost') (no open opps)
+3. Account status is currently `calon_account`
 
 ---
 
@@ -866,7 +948,20 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.6.7 (Current)
+### v1.7.0 (Current)
+- **Account Status Lifecycle Logic (Migration 148)**: Comprehensive account status transitions based on opportunity outcomes and transaction aging
+  - **New Function**: `fn_compute_effective_account_status()` — computes aging-based status (lost > passive > active priority)
+  - **Updated**: `sync_opportunity_to_account()` — added "has deal" and "has open opportunities" guards for LOST→FAILED transition
+  - **Updated**: WON path now reactivates `passive/lost` accounts back to `new_account`
+  - **New Trigger**: `trg_reset_failed_on_new_opportunity` — auto-resets `failed_account` → `calon_account` when new opportunity is created
+  - **Fixed**: `v_accounts_with_status` view CASE evaluation order (was: active > lost > passive, now: lost > passive > active)
+  - **New**: `fn_bulk_update_account_aging()` — cron-callable function for batch aging updates
+  - **New**: `src/lib/account-status.ts` — TypeScript aging utility applied on API response
+  - **Fixed**: Pipeline update API removed direct account_status update (delegated to trigger to avoid double-update)
+  - **Fixed**: Lead claim route now explicitly sets `account_status: 'calon_account'`
+  - **Removed**: Duplicate trigger `trg_sync_account_on_opportunity_create` (superseded)
+
+### v1.6.7
 - **Fix Mark Won/Lost Stage History (Migration 147)**: Fixed `to_stage` NOT NULL violation when closing tickets
   - **Root Cause**: `opportunity_stage_history` has 4 stage columns: `from_stage`/`to_stage` (original, NOT NULL) + `old_stage`/`new_stage` (added migration 023). The manual INSERT in RPCs only filled `old_stage`/`new_stage`, leaving `to_stage` NULL
   - **Previous Error (Migration 146)**: Fixed type mismatch (`v_old_stage TEXT` → `opportunity_stage`), which unmasked the `to_stage` NOT NULL error
@@ -919,6 +1014,7 @@ npx tsc --noEmit # TypeScript check
   - Migration 145: Hotfix RLS infinite recursion — SECURITY DEFINER helper `is_quotation_creator_for_ticket()` for tickets/events/comments policies
   - Migration 146: Fix mark_won/mark_lost type mismatch — `v_old_stage TEXT` → `opportunity_stage`, explicit casts
   - Migration 147: Fix mark_won/mark_lost to_stage NOT NULL — removed redundant manual INSERT, trigger handles it
+  - Migration 148: Account status lifecycle — aging function, sync guards, failed→calon trigger, view fix
 
 ### v1.6.3
 - **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error

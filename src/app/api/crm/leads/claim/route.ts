@@ -143,6 +143,7 @@ export async function POST(request: NextRequest) {
         industry: lead.industry,
         owner_user_id: user.id,
         created_by: user.id,
+        account_status: 'calon_account', // Explicitly set initial status
         original_lead_id: lead.lead_id, // Track original lead for marketing visibility
         original_creator_id: lead.created_by, // Track original creator (lead creator) for marketing visibility
       }
