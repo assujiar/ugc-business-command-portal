@@ -503,6 +503,17 @@ export function getAnalyticsScope(
 // Staff roles that should NOT see rankings/leaderboard
 const STAFF_ROLES_NO_RANKINGS: UserRole[] = ['DGO', 'VSDO', 'Marcomm', 'salesperson']
 
+// =====================================================
+// Marketing Panel Permissions
+// =====================================================
+
+// Can user access Marketing Panel module?
+// Admin + all marketing department roles
+export function canAccessMarketingPanel(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isMarketing(role)
+}
+
 // Can user view analytics rankings/leaderboard?
 // - Director, super admin: YES (all roles & departments)
 // - Manager roles, MACX, sales support, Ops: YES (their department)

@@ -28,9 +28,14 @@ import {
   FileText,
   BarChart3,
   PlusCircle,
+  Megaphone,
+  Globe,
+  Search,
+  Mail,
+  FileEdit,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities, canAccessTicketing, canAssignTickets, isOps } from '@/lib/permissions'
+import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities, canAccessTicketing, canAssignTickets, canAccessMarketingPanel, isOps } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -59,6 +64,7 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const [isCrmModuleExpanded, setIsCrmModuleExpanded] = useState(true)
   const [isTicketingModuleExpanded, setIsTicketingModuleExpanded] = useState(false)
+  const [isMarketingPanelExpanded, setIsMarketingPanelExpanded] = useState(false)
 
   // Check if user is ops (hide CRM module for ops users)
   const isOpsUser = isOps(profile.role)
@@ -258,6 +264,100 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
                 >
                   <PlusCircle className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">Create Ticket</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Marketing Panel Module */}
+        {canAccessMarketingPanel(profile.role) && (
+          <div>
+            <button
+              onClick={() => setIsMarketingPanelExpanded(!isMarketingPanelExpanded)}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm transition-colors',
+                'text-foreground hover:bg-accent hover:text-accent-foreground font-medium'
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Megaphone className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">Marketing Panel</span>
+              </div>
+              {isMarketingPanelExpanded ? (
+                <ChevronDown className="h-4 w-4 flex-shrink-0" />
+              ) : (
+                <ChevronRight className="h-4 w-4 flex-shrink-0" />
+              )}
+            </button>
+
+            {/* Marketing Panel Submenu Items */}
+            {isMarketingPanelExpanded && (
+              <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3">
+                <Link
+                  href="/marketing/overview"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/marketing/overview'
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Overview</span>
+                </Link>
+                <Link
+                  href="/marketing/digital-performance"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/marketing/digital-performance'
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <Globe className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Digital Performance</span>
+                </Link>
+                <Link
+                  href="/marketing/seo-sem"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/marketing/seo-sem'
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <Search className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">SEO-SEM Performance</span>
+                </Link>
+                <Link
+                  href="/marketing/email-marketing"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/marketing/email-marketing'
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <Mail className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Email Marketing</span>
+                </Link>
+                <Link
+                  href="/marketing/content-plan"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/marketing/content-plan'
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <FileEdit className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Content Plan</span>
                 </Link>
               </div>
             )}
