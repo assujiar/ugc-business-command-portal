@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.7.0 | Last Updated: 2026-02-09
+> Version: 1.7.1 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -715,10 +715,21 @@ ACTION:
 #### 2. Opportunity Stage History
 ```sql
 -- When opportunity.stage changes
-TRIGGER: trg_opportunity_stage_history
+TRIGGER: trg_log_stage_change (AFTER UPDATE on opportunities)
 ACTION:
   1. INSERT INTO opportunity_stage_history
-  2. Record old_stage, new_stage, changed_by, changed_at
+  2. Record from_stage, to_stage, old_stage, new_stage, changed_by, changed_at
+  NOTE: Only fires when auth.uid() IS NOT NULL (user-client calls).
+        For adminClient calls (RPCs), stage history is inserted manually by the RPC.
+
+TRIGGER: trg_autofill_stage_history (BEFORE INSERT on opportunity_stage_history) [Migration 149]
+ACTION:
+  1. Auto-fill to_stage   ← COALESCE(to_stage, new_stage)
+  2. Auto-fill from_stage ← COALESCE(from_stage, old_stage)
+  3. Auto-fill old_stage  ← COALESCE(old_stage, from_stage)
+  4. Auto-fill new_stage  ← COALESCE(new_stage, to_stage)
+  NOTE: Ensures column pair compatibility. Any INSERT with EITHER
+        (from_stage/to_stage) OR (old_stage/new_stage) will succeed.
 ```
 
 #### 3. Quotation Status Sync (RPC)
@@ -948,7 +959,14 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.7.0 (Current)
+### v1.7.1 (Current)
+- **Fix Quotation Rejection/Sent Activity Timeline (Migration 149)**: Fixed rejection events not appearing in ticket activity
+  - **Root Cause**: `rpc_customer_quotation_mark_rejected` and `rpc_customer_quotation_mark_sent` INSERT into `opportunity_stage_history` with only `old_stage`/`new_stage` columns, but `to_stage` is NOT NULL (migration 004). When called via `adminClient` (service_role), the `log_stage_change()` trigger **skips** (`auth.uid()` = NULL, by design in migration 023), so the RPC's manual INSERT runs and **fails**. The `EXCEPTION WHEN OTHERS` handler rolls back the **entire transaction** — including `ticket_events` and `ticket_comments` — and returns `{success: false}`.
+  - **Why mark_sent appeared to work**: Stage changes only on FIRST send (Prospecting/Discovery → Quote Sent). Resends and already-at-Quote-Sent cases skip the INSERT. Rejection ALWAYS changes stage (→ Negotiation) on first reject.
+  - **Fix**: Added `trg_autofill_stage_history` BEFORE INSERT trigger on `opportunity_stage_history` that auto-fills `to_stage` from `new_stage` (and vice versa). This ensures any INSERT with either column pair succeeds.
+  - **No duplicate risk**: AdminClient calls skip the `log_stage_change()` trigger (auth.uid()=NULL), so only the RPC's manual INSERT runs. User-client calls trigger `log_stage_change()` first, and the RPC's dedup check finds the record and skips.
+
+### v1.7.0
 - **Account Status Lifecycle Logic (Migration 148)**: Comprehensive account status transitions based on opportunity outcomes and transaction aging
   - **New Function**: `fn_compute_effective_account_status()` — computes aging-based status (lost > passive > active priority)
   - **Updated**: `sync_opportunity_to_account()` — added "has deal" and "has open opportunities" guards for LOST→FAILED transition
@@ -1111,6 +1129,25 @@ Ticket events and comments are protected by Row Level Security. Visibility rules
 - To avoid duplicate comments AND duplicate `ticket_responses`, the mirror trigger skips entirely (`RETURN NEW`) for events with direct RPC comments (`customer_quotation_rejected`, `customer_quotation_sent`)
 - SLA tracking for these events is handled by `trigger_auto_record_response` on the direct comment INSERT
 - **Tickets RLS (Migration 144)**: Quotation creators can now see tickets linked to their quotations, ensuring the ticket join in GET `/api/ticketing/customer-quotations` returns data
+
+### Opportunity Stage History Dual-Column Architecture
+
+The `opportunity_stage_history` table has **two pairs of stage columns** for historical reasons:
+
+| Column | Type | Nullable | Added In | Purpose |
+|--------|------|----------|----------|---------|
+| `from_stage` | opportunity_stage | YES | Migration 004 | Legacy: source stage |
+| `to_stage` | opportunity_stage | **NO** | Migration 004 | Legacy: target stage (NOT NULL!) |
+| `old_stage` | opportunity_stage | YES | Migration 023 | New: source stage |
+| `new_stage` | opportunity_stage | **NO** | Migration 023 | New: target stage (NOT NULL!) |
+
+**Key behaviors:**
+- **`log_stage_change()` trigger** (migration 023): Fires on `opportunities` UPDATE, inserts ALL 4 columns. **Skips when `auth.uid()` is NULL** (adminClient/service_role calls).
+- **RPC manual INSERTs** (migrations 143, 144): Only specify `old_stage`/`new_stage` (not `from_stage`/`to_stage`).
+- **`trg_autofill_stage_history`** (migration 149): BEFORE INSERT trigger that auto-fills missing columns between pairs. Ensures any INSERT with either column pair succeeds.
+- **Dedup pattern**: RPCs use `NOT EXISTS (...changed_at > NOW() - INTERVAL '1 minute')` to prevent duplicates when both trigger and manual INSERT would run.
+
+**When writing new code**: Always insert using ALL 4 columns for explicitness. The auto-fill trigger is a safety net, not a design pattern.
 
 ### Multi-Shipment Data Structure
 
