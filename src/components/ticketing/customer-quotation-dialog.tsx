@@ -59,6 +59,7 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { RATE_COMPONENTS, RATE_COMPONENTS_BY_CATEGORY, getRateComponentLabel } from '@/lib/constants/rate-components'
+import { SearchableSelect } from '@/components/shared/searchable-select'
 import {
   SERVICE_TYPES as GLOBAL_SERVICE_TYPES,
   SERVICE_SCOPES,
@@ -1223,53 +1224,32 @@ export function CustomerQuotationDialog({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="service-type">Service Type</Label>
-                  <Select value={serviceType} onValueChange={setServiceType}>
-                    <SelectTrigger id="service-type">
-                      <SelectValue placeholder="Select service type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectLabel>Domestics Service (Domestics Ops Dept)</SelectLabel>
-                        {domesticsServices.map((s) => (
-                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel>Export (Exim Ops Dept)</SelectLabel>
-                        {exportServices.map((s) => (
-                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel>Import (Exim Ops Dept)</SelectLabel>
-                        {importServices.map((s) => (
-                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel>Import DTD (Import DTD Ops Dept)</SelectLabel>
-                        {importDtdServices.map((s) => (
-                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={serviceType}
+                    onValueChange={setServiceType}
+                    placeholder="Select service type"
+                    searchPlaceholder="Search service..."
+                    popoverWidth="w-[360px]"
+                    groups={[
+                      { label: 'Domestics (Domestics Ops)', options: domesticsServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                      { label: 'Export (Exim Ops)', options: exportServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                      { label: 'Import (Exim Ops)', options: importServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                      { label: 'Import DTD (DTD Ops)', options: importDtdServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                    ]}
+                  />
                 </div>
                 {/* Conditional: Fleet Type for Domestics, Incoterm for Export/Import */}
                 {isDomesticService(serviceType) ? (
                   <>
                     <div>
                       <Label htmlFor="fleet-type">Fleet Type</Label>
-                      <Select value={fleetType} onValueChange={setFleetType}>
-                        <SelectTrigger id="fleet-type">
-                          <SelectValue placeholder="Select fleet type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FLEET_TYPES.map((type) => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={fleetType}
+                        onValueChange={setFleetType}
+                        placeholder="Select fleet type"
+                        searchPlaceholder="Search fleet..."
+                        options={FLEET_TYPES.map((type) => ({ value: type, label: type }))}
+                      />
                     </div>
                     <div>
                       <Label htmlFor="fleet-quantity">Quantity</Label>
@@ -1286,16 +1266,13 @@ export function CustomerQuotationDialog({
                   <>
                     <div>
                       <Label htmlFor="incoterm">Incoterm</Label>
-                      <Select value={incoterm} onValueChange={setIncoterm}>
-                        <SelectTrigger id="incoterm">
-                          <SelectValue placeholder="Select incoterm" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {INCOTERMS.map((term) => (
-                            <SelectItem key={term.code} value={term.code}>{term.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={incoterm}
+                        onValueChange={setIncoterm}
+                        placeholder="Select incoterm"
+                        searchPlaceholder="Search incoterm..."
+                        options={INCOTERMS.map((term) => ({ value: term.code, label: term.name }))}
+                      />
                     </div>
                     <div>
                       {/* Empty space for alignment */}
@@ -1801,26 +1778,17 @@ export function CustomerQuotationDialog({
                           <div className="grid grid-cols-4 gap-3">
                             <div className="col-span-2">
                               <Label className="text-xs">Component Type</Label>
-                              <Select
+                              <SearchableSelect
                                 value={item.component_type}
                                 onValueChange={(v) => updateItem(item.id, 'component_type', v)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select component" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => (
-                                    <SelectGroup key={category}>
-                                      <SelectLabel>{category}</SelectLabel>
-                                      {components.map((comp) => (
-                                        <SelectItem key={comp.value} value={comp.value}>
-                                          {comp.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectGroup>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                placeholder="Select component"
+                                searchPlaceholder="Search component..."
+                                popoverWidth="w-[320px]"
+                                groups={Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => ({
+                                  label: category,
+                                  options: components.map((comp) => ({ value: comp.value, label: comp.label })),
+                                }))}
+                              />
                             </div>
                             <div className="col-span-2">
                               <Label className="text-xs">Display Name</Label>

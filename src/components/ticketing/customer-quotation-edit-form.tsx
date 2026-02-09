@@ -41,6 +41,7 @@ import {
   INCOTERMS,
 } from '@/lib/constants'
 import { RATE_COMPONENTS, RATE_COMPONENTS_BY_CATEGORY, getRateComponentLabel } from '@/lib/constants/rate-components'
+import { SearchableSelect } from '@/components/shared/searchable-select'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -638,66 +639,42 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="service-type">Service Type</Label>
-                <Select value={serviceType} onValueChange={setServiceType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select service" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Domestics Service (Domestics Ops Dept)</SelectLabel>
-                      {domesticsServices.map((s) => (
-                        <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Export (Exim Ops Dept)</SelectLabel>
-                      {exportServices.map((s) => (
-                        <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Import (Exim Ops Dept)</SelectLabel>
-                      {importServices.map((s) => (
-                        <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Import DTD (Import DTD Ops Dept)</SelectLabel>
-                      {importDtdServices.map((s) => (
-                        <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={serviceType}
+                  onValueChange={setServiceType}
+                  placeholder="Select service"
+                  searchPlaceholder="Search service..."
+                  popoverWidth="w-[360px]"
+                  groups={[
+                    { label: 'Domestics (Domestics Ops)', options: domesticsServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                    { label: 'Export (Exim Ops)', options: exportServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                    { label: 'Import (Exim Ops)', options: importServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                    { label: 'Import DTD (DTD Ops)', options: importDtdServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                  ]}
+                />
               </div>
               {/* Conditional: Fleet Type for Domestics, Incoterm for Export/Import */}
               {isDomesticService(serviceType) ? (
                 <div>
                   <Label htmlFor="fleet-type">Fleet Type</Label>
-                  <Select value={fleetType} onValueChange={setFleetType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select fleet" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FLEET_TYPES.map((f) => (
-                        <SelectItem key={f} value={f}>{f}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={fleetType}
+                    onValueChange={setFleetType}
+                    placeholder="Select fleet"
+                    searchPlaceholder="Search fleet..."
+                    options={FLEET_TYPES.map((f) => ({ value: f, label: f }))}
+                  />
                 </div>
               ) : isExportImportService(serviceType) ? (
                 <div>
                   <Label htmlFor="incoterm">Incoterm</Label>
-                  <Select value={incoterm} onValueChange={setIncoterm}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select incoterm" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INCOTERMS.map((term) => (
-                        <SelectItem key={term.code} value={term.code}>{term.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={incoterm}
+                    onValueChange={setIncoterm}
+                    placeholder="Select incoterm"
+                    searchPlaceholder="Search incoterm..."
+                    options={INCOTERMS.map((term) => ({ value: term.code, label: term.name }))}
+                  />
                 </div>
               ) : (
                 <div>
@@ -891,29 +868,22 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
                   {items.map((item) => (
                     <div key={item.id} className="flex gap-2 items-start p-3 border rounded-lg">
                       <div className="flex-1 grid grid-cols-4 gap-2">
-                        <Select value={item.component_type} onValueChange={(v) => {
-                          updateItem(item.id, 'component_type', v)
-                          // Auto-fill component name from type
-                          if (!item.component_name) {
-                            updateItem(item.id, 'component_name', getRateComponentLabel(v))
-                          }
-                        }}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Type" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[300px]">
-                            {Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => (
-                              <SelectGroup key={category}>
-                                <SelectLabel className="font-semibold text-xs text-muted-foreground">{category}</SelectLabel>
-                                {components.map((comp) => (
-                                  <SelectItem key={comp.value} value={comp.value}>
-                                    {comp.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableSelect
+                          value={item.component_type}
+                          onValueChange={(v) => {
+                            updateItem(item.id, 'component_type', v)
+                            if (!item.component_name) {
+                              updateItem(item.id, 'component_name', getRateComponentLabel(v))
+                            }
+                          }}
+                          placeholder="Type"
+                          searchPlaceholder="Search component..."
+                          popoverWidth="w-[320px]"
+                          groups={Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => ({
+                            label: category,
+                            options: components.map((comp) => ({ value: comp.value, label: comp.label })),
+                          }))}
+                        />
                         <Input
                           type="number"
                           value={item.cost_amount}
