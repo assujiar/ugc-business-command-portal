@@ -256,8 +256,20 @@ export function AnalyticsEnhancements({
   // 2. Weekly Comparison (This Week vs Last Week)
   // =====================================================
 
+  const EmptyState = ({ icon: Icon, title }: { icon: typeof Activity; title: string }) => (
+    <Card>
+      <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+        <Icon className="h-8 w-8 text-muted-foreground/40 mb-2" />
+        <p className="text-xs text-muted-foreground">{title}</p>
+        <p className="text-[10px] text-muted-foreground/60 mt-1">Data akan tersedia setelah cron job berjalan</p>
+      </CardContent>
+    </Card>
+  )
+
   const WeeklyComparisonSection = () => {
-    if (weeklyComparison.length === 0) return null
+    if (weeklyComparison.length === 0) return (
+      <EmptyState icon={Activity} title="Perbandingan Mingguan" />
+    )
 
     const metrics = [
       { key: 'views', label: 'Views', icon: Eye },
@@ -365,7 +377,9 @@ export function AnalyticsEnhancements({
   // =====================================================
 
   const WeeklyTrendChart = () => {
-    if (weeklyChartData.length < 2) return null
+    if (weeklyChartData.length < 2) return (
+      <EmptyState icon={BarChart3} title="Weekly Performance Trend" />
+    )
 
     return (
       <Card>
@@ -413,7 +427,9 @@ export function AnalyticsEnhancements({
   // =====================================================
 
   const EngagementComposition = () => {
-    if (dailyData.length === 0) return null
+    if (dailyData.length === 0) return (
+      <EmptyState icon={Heart} title="Engagement Composition" />
+    )
 
     // Compute daily totals of likes + comments + shares across selected platforms
     const compositionData = dailyData.slice(-14).map((day: any) => {
@@ -468,7 +484,9 @@ export function AnalyticsEnhancements({
   // =====================================================
 
   const CrossPlatformRadar = () => {
-    if (crossPlatformData.length < 2) return null
+    if (crossPlatformData.length < 2) return (
+      <EmptyState icon={Target} title="Cross-Platform Comparison" />
+    )
 
     // Normalize values to 0-100 for radar
     const maxFollowers = Math.max(...crossPlatformData.map(d => d.followers), 1)
@@ -525,7 +543,9 @@ export function AnalyticsEnhancements({
   // =====================================================
 
   const PlatformHealthScores = () => {
-    if (weeklyComparison.length === 0) return null
+    if (weeklyComparison.length === 0) return (
+      <EmptyState icon={Award} title="Platform Health Score" />
+    )
 
     const scores = weeklyComparison.map(wc => {
       const snap = crossPlatformData.find(d => d.platform === wc.platform)
@@ -600,7 +620,9 @@ export function AnalyticsEnhancements({
   // =====================================================
 
   const GrowthVelocity = () => {
-    if (dailyData.length < 3) return null
+    if (dailyData.length < 3) return (
+      <EmptyState icon={TrendingUp} title="Follower Growth Velocity" />
+    )
 
     const growthData = dailyData.slice(-14).map((day: any) => {
       const entry: any = { date: day.date }
@@ -660,7 +682,9 @@ export function AnalyticsEnhancements({
   // =====================================================
 
   const EngagementBarComparison = () => {
-    if (crossPlatformData.length === 0) return null
+    if (crossPlatformData.length === 0) return (
+      <EmptyState icon={Zap} title="Engagement Per Platform" />
+    )
 
     const barData = crossPlatformData.map(d => ({
       name: PLATFORM_CONFIG[d.platform]?.label || d.platform,
