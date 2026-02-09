@@ -12,12 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/shared/searchable-select'
 import {
   Collapsible,
   CollapsibleContent,
@@ -345,60 +344,35 @@ function ShipmentCard({
 
             {/* Service Type Section */}
             <FormSection variant="service" title="Service Type" icon={Truck} glass>
-              <Select
+              <SearchableSelect
                 value={shipment.service_type_code || ''}
                 onValueChange={(value) => onUpdate({ service_type_code: value })}
                 disabled={readOnly}
-              >
-                <SelectTrigger className="bg-background/80 backdrop-blur-sm">
-                  <SelectValue placeholder="Select service type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SERVICE_SCOPES.map((scopeItem) => {
-                    const categoryStyle = SERVICE_CATEGORY_STYLES[scopeItem.value as keyof typeof SERVICE_CATEGORY_STYLES]
-                    const CategoryIcon = categoryStyle?.icon || Truck
-                    return (
-                      <SelectGroup key={scopeItem.value}>
-                        <SelectLabel className={cn(
-                          'py-2 px-2 -mx-1 rounded',
-                          categoryStyle?.label,
-                          categoryStyle?.bg
-                        )}>
-                          <CategoryIcon className="inline h-3 w-3 mr-1" />
-                          {scopeItem.label}
-                        </SelectLabel>
-                        {getServicesByScope(scopeItem.value).map((service) => (
-                          <SelectItem key={service.code} value={service.code} className="pl-6">
-                            {service.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
+                placeholder="Select service type"
+                searchPlaceholder="Search service..."
+                popoverWidth="w-[320px]"
+                groups={SERVICE_SCOPES.map((scopeItem) => ({
+                  label: scopeItem.label,
+                  options: getServicesByScope(scopeItem.value).map((service) => ({
+                    value: service.code,
+                    label: service.name,
+                  })),
+                }))}
+              />
 
               {/* Fleet Type (Domestics only) */}
               {isDomesticsService && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                   <div className="space-y-2">
                     <Label>Fleet Type</Label>
-                    <Select
+                    <SearchableSelect
                       value={shipment.fleet_type || ''}
                       onValueChange={(value) => onUpdate({ fleet_type: value })}
                       disabled={readOnly}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select fleet" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FLEET_TYPES.map((fleet) => (
-                          <SelectItem key={fleet} value={fleet}>
-                            {fleet}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Select fleet"
+                      searchPlaceholder="Search fleet..."
+                      options={FLEET_TYPES.map((fleet) => ({ value: fleet, label: fleet }))}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Fleet Quantity</Label>
@@ -417,22 +391,14 @@ function ShipmentCard({
               {isEximService && (
                 <div className="space-y-2 pt-2">
                   <Label>Incoterm</Label>
-                  <Select
+                  <SearchableSelect
                     value={shipment.incoterm || ''}
                     onValueChange={(value) => onUpdate({ incoterm: value })}
                     disabled={readOnly}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select incoterm" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INCOTERMS.map((term) => (
-                        <SelectItem key={term.code} value={term.code}>
-                          {term.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select incoterm"
+                    searchPlaceholder="Search incoterm..."
+                    options={INCOTERMS.map((term) => ({ value: term.code, label: term.name }))}
+                  />
                 </div>
               )}
             </FormSection>
@@ -559,22 +525,14 @@ function ShipmentCard({
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs">Unit of Measure</Label>
-                    <Select
+                    <SearchableSelect
                       value={shipment.unit_of_measure || 'Boxes'}
                       onValueChange={(value) => onUpdate({ unit_of_measure: value })}
                       disabled={readOnly}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {UNITS_OF_MEASURE.map((unit) => (
-                          <SelectItem key={unit} value={unit}>
-                            {unit}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Select unit"
+                      searchPlaceholder="Search unit..."
+                      options={UNITS_OF_MEASURE.map((unit) => ({ value: unit, label: unit }))}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs">Weight/Unit (Kg)</Label>

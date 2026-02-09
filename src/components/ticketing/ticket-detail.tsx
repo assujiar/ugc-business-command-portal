@@ -77,6 +77,7 @@ import {
 import { CustomerQuotationDialog } from '@/components/ticketing/customer-quotation-dialog'
 import { MultiShipmentCostDialog } from '@/components/ticketing/multi-shipment-cost-dialog'
 import { RATE_COMPONENTS_BY_CATEGORY, getRateComponentLabel } from '@/lib/constants/rate-components'
+import { SearchableSelect } from '@/components/shared/searchable-select'
 import { SelectGroup, SelectLabel } from '@/components/ui/select'
 import type { Database } from '@/types/database'
 import type {
@@ -2350,26 +2351,17 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                           <div className="grid grid-cols-2 gap-3">
                                             <div>
                                               <Label className="text-xs">Component Type *</Label>
-                                              <Select
+                                              <SearchableSelect
                                                 value={item.component_type}
                                                 onValueChange={(v) => updateCostItem(item.id, 'component_type', v)}
-                                              >
-                                                <SelectTrigger>
-                                                  <SelectValue placeholder="Select component" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  {Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => (
-                                                    <SelectGroup key={category}>
-                                                      <SelectLabel>{category}</SelectLabel>
-                                                      {components.map((comp) => (
-                                                        <SelectItem key={comp.value} value={comp.value}>
-                                                          {comp.label}
-                                                        </SelectItem>
-                                                      ))}
-                                                    </SelectGroup>
-                                                  ))}
-                                                </SelectContent>
-                                              </Select>
+                                                placeholder="Select component"
+                                                searchPlaceholder="Search component..."
+                                                popoverWidth="w-[320px]"
+                                                groups={Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => ({
+                                                  label: category,
+                                                  options: components.map((comp) => ({ value: comp.value, label: comp.label })),
+                                                }))}
+                                              />
                                             </div>
                                             <div>
                                               <Label className="text-xs">Display Name</Label>

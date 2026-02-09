@@ -59,6 +59,7 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { RATE_COMPONENTS, RATE_COMPONENTS_BY_CATEGORY, getRateComponentLabel } from '@/lib/constants/rate-components'
+import { SearchableSelect } from '@/components/shared/searchable-select'
 import {
   SERVICE_TYPES as GLOBAL_SERVICE_TYPES,
   SERVICE_SCOPES,
@@ -1223,53 +1224,32 @@ export function CustomerQuotationDialog({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="service-type">Service Type</Label>
-                  <Select value={serviceType} onValueChange={setServiceType}>
-                    <SelectTrigger id="service-type">
-                      <SelectValue placeholder="Select service type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectLabel>Domestics Service (Domestics Ops Dept)</SelectLabel>
-                        {domesticsServices.map((s) => (
-                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel>Export (Exim Ops Dept)</SelectLabel>
-                        {exportServices.map((s) => (
-                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel>Import (Exim Ops Dept)</SelectLabel>
-                        {importServices.map((s) => (
-                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel>Import DTD (Import DTD Ops Dept)</SelectLabel>
-                        {importDtdServices.map((s) => (
-                          <SelectItem key={s.code} value={`${s.scope} | ${s.name}`}>{s.scope} | {s.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={serviceType}
+                    onValueChange={setServiceType}
+                    placeholder="Select service type"
+                    searchPlaceholder="Search service..."
+                    popoverWidth="w-[360px]"
+                    groups={[
+                      { label: 'Domestics (Domestics Ops)', options: domesticsServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                      { label: 'Export (Exim Ops)', options: exportServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                      { label: 'Import (Exim Ops)', options: importServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                      { label: 'Import DTD (DTD Ops)', options: importDtdServices.map(s => ({ value: `${s.scope} | ${s.name}`, label: `${s.scope} | ${s.name}` })) },
+                    ]}
+                  />
                 </div>
                 {/* Conditional: Fleet Type for Domestics, Incoterm for Export/Import */}
                 {isDomesticService(serviceType) ? (
                   <>
                     <div>
                       <Label htmlFor="fleet-type">Fleet Type</Label>
-                      <Select value={fleetType} onValueChange={setFleetType}>
-                        <SelectTrigger id="fleet-type">
-                          <SelectValue placeholder="Select fleet type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FLEET_TYPES.map((type) => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={fleetType}
+                        onValueChange={setFleetType}
+                        placeholder="Select fleet type"
+                        searchPlaceholder="Search fleet..."
+                        options={FLEET_TYPES.map((type) => ({ value: type, label: type }))}
+                      />
                     </div>
                     <div>
                       <Label htmlFor="fleet-quantity">Quantity</Label>
@@ -1286,16 +1266,13 @@ export function CustomerQuotationDialog({
                   <>
                     <div>
                       <Label htmlFor="incoterm">Incoterm</Label>
-                      <Select value={incoterm} onValueChange={setIncoterm}>
-                        <SelectTrigger id="incoterm">
-                          <SelectValue placeholder="Select incoterm" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {INCOTERMS.map((term) => (
-                            <SelectItem key={term.code} value={term.code}>{term.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={incoterm}
+                        onValueChange={setIncoterm}
+                        placeholder="Select incoterm"
+                        searchPlaceholder="Search incoterm..."
+                        options={INCOTERMS.map((term) => ({ value: term.code, label: term.name }))}
+                      />
                     </div>
                     <div>
                       {/* Empty space for alignment */}
@@ -1433,6 +1410,38 @@ export function CustomerQuotationDialog({
           {/* Route Section */}
           {activeSection === 'route' && (
             <div className="space-y-4">
+              {/* Multi-Shipment Selector */}
+              {hasMultipleShipments && (
+                <div className="p-3 border rounded-lg bg-blue-50 dark:bg-blue-900/20 mb-4">
+                  <Label className="text-blue-700 dark:text-blue-300 text-sm font-medium">
+                    Viewing route for shipment {selectedShipmentIndex + 1} of {allShipments.length}
+                  </Label>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">
+                    Select a shipment to view/edit its route details.
+                  </p>
+                  <Select
+                    value={String(selectedShipmentIndex)}
+                    onValueChange={(val) => setSelectedShipmentIndex(parseInt(val))}
+                  >
+                    <SelectTrigger className="bg-white dark:bg-gray-900">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allShipments.map((shipment, idx) => (
+                        <SelectItem key={idx} value={String(idx)}>
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-3 w-3" />
+                            {shipment.shipment_label || `Shipment ${idx + 1}`}
+                            <span className="text-xs text-muted-foreground">
+                              ({shipment.origin_city || '-'} → {shipment.destination_city || '-'})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-6">
                 {/* Origin */}
                 <div className="space-y-4">
@@ -1801,26 +1810,17 @@ export function CustomerQuotationDialog({
                           <div className="grid grid-cols-4 gap-3">
                             <div className="col-span-2">
                               <Label className="text-xs">Component Type</Label>
-                              <Select
+                              <SearchableSelect
                                 value={item.component_type}
                                 onValueChange={(v) => updateItem(item.id, 'component_type', v)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select component" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => (
-                                    <SelectGroup key={category}>
-                                      <SelectLabel>{category}</SelectLabel>
-                                      {components.map((comp) => (
-                                        <SelectItem key={comp.value} value={comp.value}>
-                                          {comp.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectGroup>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                placeholder="Select component"
+                                searchPlaceholder="Search component..."
+                                popoverWidth="w-[320px]"
+                                groups={Object.entries(RATE_COMPONENTS_BY_CATEGORY).map(([category, components]) => ({
+                                  label: category,
+                                  options: components.map((comp) => ({ value: comp.value, label: comp.label })),
+                                }))}
+                              />
                             </div>
                             <div className="col-span-2">
                               <Label className="text-xs">Display Name</Label>
@@ -2026,43 +2026,44 @@ export function CustomerQuotationDialog({
                     {customerPhone && <>{customerPhone}<br /></>}
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="font-medium">Service</div>
-                  <div className="text-muted-foreground">
-                    {serviceType || '-'}<br />
-                    {incoterm && <>Incoterm: {incoterm}<br /></>}
-                    {fleetType && <>{fleetType} x {fleetQuantity}</>}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="font-medium">Route</div>
-                  <div className="text-muted-foreground">
-                    {hasMultipleShipments ? (
-                      <span>{allShipments.length} shipments (see below)</span>
-                    ) : (
-                      <span>{originCity || '-'} → {destinationCity || '-'}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="font-medium">Rate</div>
-                  {hasMultipleShipments ? (
-                    <div className="text-sm text-muted-foreground">
-                      Per-shipment rates (see below)
+                {hasMultipleShipments ? (
+                  <div className="space-y-2">
+                    <div className="font-medium">Shipments</div>
+                    <div className="text-muted-foreground">
+                      {allShipments.length} shipments (details below)
                     </div>
-                  ) : (
-                    <div className="text-2xl font-bold text-primary">
-                      {formatCurrency(totalSellingRate)}
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <div className="font-medium">Service</div>
+                      <div className="text-muted-foreground">
+                        {serviceType || '-'}<br />
+                        {incoterm && <>Incoterm: {incoterm}<br /></>}
+                        {fleetType && <>{fleetType} x {fleetQuantity}</>}
+                      </div>
                     </div>
-                  )}
-                </div>
+                    <div className="space-y-2">
+                      <div className="font-medium">Route</div>
+                      <div className="text-muted-foreground">
+                        {originCity || '-'} → {destinationCity || '-'}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="font-medium">Rate</div>
+                      <div className="text-2xl font-bold text-primary">
+                        {formatCurrency(totalSellingRate)}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {/* Multi-shipment preview */}
+              {/* Multi-shipment preview with full details */}
               {hasMultipleShipments && (
                 <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <div className="font-medium text-sm text-blue-700 dark:text-blue-300">
-                    Shipment Rates
+                  <div className="font-medium text-sm text-blue-700 dark:text-blue-300 mb-2">
+                    Shipment Details & Rates
                   </div>
                   {allShipments.map((shipment, idx) => {
                     const shipmentCost = operationalCosts?.find(
@@ -2070,21 +2071,60 @@ export function CustomerQuotationDialog({
                     )
                     const costAmount = shipmentCost?.amount || 0
                     const marginValue = typeof targetMarginPercent === 'number' ? targetMarginPercent : 0
-                    const sellingRate = Math.round(costAmount * (1 + marginValue / 100))
+
+                    // Check breakdown items for this shipment
+                    const shipmentLabel = shipment.shipment_label || `Shipment ${idx + 1}`
+                    const shipmentItems = items.filter(item =>
+                      item.component_name?.startsWith(`${shipmentLabel}:`)
+                    )
+                    const itemsSellingRate = shipmentItems.reduce((sum, item) => sum + (item.selling_rate || 0), 0)
+                    const sellingRate = itemsSellingRate > 0
+                      ? Math.round(itemsSellingRate)
+                      : Math.round(costAmount * (1 + marginValue / 100))
+
+                    // Derive service display label
+                    const shipmentServiceType = shipment.service_type_code
+                      ? getServiceTypeDisplayLabel(shipment.service_type_code)
+                      : '-'
+
                     return (
-                      <div key={idx} className="flex items-center justify-between text-sm p-2 bg-white dark:bg-gray-800 rounded">
-                        <div>
-                          <span className="font-medium">{shipment.shipment_label || `Shipment ${idx + 1}`}</span>
-                          <span className="text-muted-foreground ml-2">
-                            ({shipment.origin_city || '-'} → {shipment.destination_city || '-'})
+                      <div key={idx} className="p-3 bg-white dark:bg-gray-800 rounded border text-sm space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">
+                            {shipmentLabel}
+                          </span>
+                          <span className="font-bold text-green-600 dark:text-green-400 font-mono">
+                            {formatCurrency(sellingRate)}
                           </span>
                         </div>
-                        <span className="font-bold text-green-600 dark:text-green-400 font-mono">
-                          {formatCurrency(sellingRate)}
-                        </span>
+                        <div className="text-xs text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-0.5 mt-1">
+                          <span>Service: {shipmentServiceType}</span>
+                          <span>Route: {shipment.origin_city || '-'} → {shipment.destination_city || '-'}</span>
+                          {shipment.fleet_type && <span>Fleet: {shipment.fleet_type} x {shipment.fleet_quantity || 1}</span>}
+                          {shipment.incoterm && <span>Incoterm: {shipment.incoterm}</span>}
+                          {shipment.cargo_category && <span>Cargo: {shipment.cargo_category}</span>}
+                          {(shipment.weight_total_kg || shipment.volume_total_cbm) && (
+                            <span>
+                              {shipment.weight_total_kg ? `${shipment.weight_total_kg} kg` : ''}
+                              {shipment.weight_total_kg && shipment.volume_total_cbm ? ' / ' : ''}
+                              {shipment.volume_total_cbm ? `${shipment.volume_total_cbm} cbm` : ''}
+                            </span>
+                          )}
+                        </div>
+                        {costAmount > 0 && (
+                          <div className="text-xs text-muted-foreground">
+                            Cost: {formatCurrency(costAmount)} | Margin: {marginValue}%
+                          </div>
+                        )}
                       </div>
                     )
                   })}
+                  <div className="pt-2 border-t border-blue-200 dark:border-blue-700 flex items-center justify-between">
+                    <span className="font-medium text-sm text-blue-700 dark:text-blue-300">Total</span>
+                    <span className="font-bold text-lg text-primary font-mono">
+                      {formatCurrency(totalSellingRate)}
+                    </span>
+                  </div>
                 </div>
               )}
 
