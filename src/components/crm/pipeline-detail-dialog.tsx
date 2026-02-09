@@ -325,6 +325,46 @@ function buildTimeline(
     })
   }
 
+  // Add stage transitions from stage_history as fallback
+  // stage_history was previously only used for date calculations, not shown in timeline.
+  // This ensures stage transitions (e.g., Quote Sent → Negotiation) always appear,
+  // even when the corresponding activities record is missing (old data before migration 151).
+  if (data.stage_history && data.stage_history.length > 0) {
+    data.stage_history.forEach(history => {
+      if (!history.old_stage || !history.new_stage || history.old_stage === history.new_stage) return
+
+      // Check if there's already a timeline item covering this transition
+      // (from activities table - e.g., "Quotation Rejected → Stage moved to Negotiation")
+      const transitionTime = new Date(history.changed_at).getTime()
+      const alreadyCovered = items.some(item => {
+        if (item.type !== 'activity') return false
+        const itemTime = new Date(item.date).getTime()
+        // Match if same stage and within 2 minutes of the transition
+        return item.stage === history.new_stage && Math.abs(itemTime - transitionTime) < 120000
+      })
+
+      if (!alreadyCovered) {
+        // Strip correlation ID prefix from notes
+        let cleanNotes = history.notes || ''
+        const correlationMatch = cleanNotes.match(/^\[[\w-]+\]\s*/)
+        if (correlationMatch) {
+          cleanNotes = cleanNotes.substring(correlationMatch[0].length)
+        }
+
+        items.push({
+          id: `stage-history-${history.history_id}`,
+          type: 'stage_change',
+          stage: history.new_stage,
+          date: history.changed_at,
+          status: 'done',
+          title: `${history.old_stage} → ${history.new_stage}`,
+          subtitle: cleanNotes || undefined,
+          actorName: history.changer_name,
+        })
+      }
+    })
+  }
+
   // Add closed stage if applicable
   if (isClosed && data.closed_at) {
     items.push({
