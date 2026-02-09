@@ -294,8 +294,11 @@ export async function POST(request: NextRequest) {
     // ============================================
     // BUG #9 FIX: Resolve latest operational cost
     // Server-side guard to ensure quotation always uses latest submitted cost
+    // Skip when direct_quotation flag is set (user creates quotation without ops cost)
     // ============================================
-    if (ticket_id || lead_id || opportunity_id) {
+    const direct_quotation = body.direct_quotation === true
+
+    if (!direct_quotation && (ticket_id || lead_id || opportunity_id)) {
       console.log('[CustomerQuotations POST] Resolving latest operational cost...')
       const { data: costResult, error: costError } = await (supabase as any).rpc('fn_resolve_latest_operational_cost', {
         p_ticket_id: ticket_id,
