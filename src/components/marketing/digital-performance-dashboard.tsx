@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -41,6 +42,7 @@ import {
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { ContentPerformanceTable } from './content-performance-table'
+import { AnalyticsEnhancements } from './analytics-enhancements'
 
 // Platform definitions
 const PLATFORMS = [
@@ -148,18 +150,35 @@ function getPlatformConfig(platformId: string) {
 export function DigitalPerformanceDashboard() {
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformId>('all')
   const [period, setPeriod] = useState('30')
+  const [dateMode, setDateMode] = useState<'preset' | 'custom'>('preset')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [summaries, setSummaries] = useState<PlatformSummary[]>([])
   const [dailyData, setDailyData] = useState<DailyData[]>([])
   const [latestSnapshots, setLatestSnapshots] = useState<LatestSnapshot[]>([])
   const [lastFetchTime, setLastFetchTime] = useState<string | null>(null)
+  const [weeklyData, setWeeklyData] = useState<any[]>([])
+  const [weeklyComparison, setWeeklyComparison] = useState<any[]>([])
+  const [crossPlatformData, setCrossPlatformData] = useState<any[]>([])
+  const [totalMetrics, setTotalMetrics] = useState<any>({
+    total_followers: 0, total_followers_gained: 0, total_views: 0,
+    total_likes: 0, total_comments: 0, total_shares: 0,
+    total_interactions: 0, avg_engagement_rate: 0,
+  })
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ days: period })
+      const params = new URLSearchParams()
+      if (dateMode === 'custom' && startDate && endDate) {
+        params.set('start_date', startDate)
+        params.set('end_date', endDate)
+      } else {
+        params.set('days', period)
+      }
       if (selectedPlatform !== 'all') {
         params.set('platform', selectedPlatform)
       }
@@ -174,12 +193,20 @@ export function DigitalPerformanceDashboard() {
       setDailyData(data.daily_data || [])
       setLatestSnapshots(data.latest_snapshots || [])
       setLastFetchTime(data.last_fetch_time || null)
+      setWeeklyData(data.weekly_data || [])
+      setWeeklyComparison(data.weekly_comparison || [])
+      setCrossPlatformData(data.cross_platform || [])
+      setTotalMetrics(data.total_metrics || {
+        total_followers: 0, total_followers_gained: 0, total_views: 0,
+        total_likes: 0, total_comments: 0, total_shares: 0,
+        total_interactions: 0, avg_engagement_rate: 0,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan')
     } finally {
       setLoading(false)
     }
-  }, [period, selectedPlatform])
+  }, [period, selectedPlatform, dateMode, startDate, endDate])
 
   useEffect(() => {
     fetchData()
@@ -220,7 +247,7 @@ export function DigitalPerformanceDashboard() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 items-end">
         <Select value={selectedPlatform} onValueChange={(v) => setSelectedPlatform(v as PlatformId)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Platform" />
@@ -234,18 +261,67 @@ export function DigitalPerformanceDashboard() {
           </SelectContent>
         </Select>
 
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Periode" />
-          </SelectTrigger>
-          <SelectContent>
-            {PERIODS.map(p => (
-              <SelectItem key={p.value} value={p.value}>
-                <Calendar className="h-3 w-3 inline mr-1" />{p.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Date Mode Toggle */}
+        <div className="flex rounded-md border overflow-hidden">
+          <button
+            className={cn(
+              'px-3 py-2 text-xs font-medium transition-colors',
+              dateMode === 'preset'
+                ? 'bg-brand text-white'
+                : 'bg-background text-muted-foreground hover:bg-accent'
+            )}
+            onClick={() => setDateMode('preset')}
+          >
+            Preset
+          </button>
+          <button
+            className={cn(
+              'px-3 py-2 text-xs font-medium transition-colors border-l',
+              dateMode === 'custom'
+                ? 'bg-brand text-white'
+                : 'bg-background text-muted-foreground hover:bg-accent'
+            )}
+            onClick={() => setDateMode('custom')}
+          >
+            Custom
+          </button>
+        </div>
+
+        {dateMode === 'preset' ? (
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Periode" />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIODS.map(p => (
+                <SelectItem key={p.value} value={p.value}>
+                  <Calendar className="h-3 w-3 inline mr-1" />{p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground">Dari</label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="h-9 w-[150px] text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground">Sampai</label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="h-9 w-[150px] text-xs"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error state */}
@@ -336,7 +412,20 @@ export function DigitalPerformanceDashboard() {
         </div>
       )}
 
-      {/* Charts Section */}
+      {/* Analytics Enhancements: KPIs, Weekly Comparison, Health Scores, etc. */}
+      {!loading && (
+        <AnalyticsEnhancements
+          weeklyComparison={weeklyComparison}
+          weeklyChartData={weeklyData}
+          crossPlatformData={crossPlatformData}
+          totalMetrics={totalMetrics}
+          dailyData={dailyData}
+          selectedPlatform={selectedPlatform}
+          period={period}
+        />
+      )}
+
+      {/* Daily Charts Section */}
       {!loading && dailyData.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2">
           {/* Followers Trend Chart */}
