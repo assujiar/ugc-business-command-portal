@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { applyAccountAgingToList } from '@/lib/account-status'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -45,7 +46,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data, count })
+    // Apply aging-based status computation (new→active, idle→passive/lost)
+    const accountsWithAging = applyAccountAgingToList(data || [])
+
+    return NextResponse.json({ data: accountsWithAging, count })
   } catch (error) {
     console.error('Error fetching accounts:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { applyAccountAging } from '@/lib/account-status'
 import type { UserRole } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
@@ -37,6 +38,9 @@ export async function GET(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
+
+    // Apply aging-based status computation (new→active, idle→passive/lost)
+    if (data) applyAccountAging(data as Record<string, unknown>)
 
     return NextResponse.json({ data })
   } catch (error) {
