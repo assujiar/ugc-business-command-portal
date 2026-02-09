@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.6.4 | Last Updated: 2026-02-09
+> Version: 1.6.5 | Last Updated: 2026-02-09
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -338,7 +338,7 @@ Prospecting ──→ Discovery ──→ Quote Sent ──→ Negotiation ─�
      │              │              │              │
      │              │              │              └──→ Closed Lost
      │              │              │
-     │              │              └──→ Negotiation (rejection)
+     │              │              └──→ Negotiation (on rejection)
      │              │
      │              └──→ On Hold
      │
@@ -346,6 +346,13 @@ Prospecting ──→ Discovery ──→ Quote Sent ──→ Negotiation ─�
 
 Note: Closed Won/Lost are terminal states - no transitions allowed
 ```
+
+**Automatic Stage Transitions (Migration 144)**:
+- **Quotation Sent (1st time, no rejections)**: Prospecting/Discovery → Quote Sent
+- **Quotation Sent (after previous rejection)**: ANY non-terminal stage → Negotiation (prioritized check)
+- **Quotation Rejected**: ANY non-terminal stage (except Negotiation) → Negotiation
+- **Quotation Accepted**: → Closed Won
+- `v_previous_rejected_count` is calculated across `ticket_id`, `opportunity_id`, and `lead_id` (fallback) to handle cases where quotations resolve to different opportunities
 
 ---
 
@@ -859,7 +866,22 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.6.4 (Current)
+### v1.6.5 (Current)
+- **Fix Sent Pipeline Stage & Ticket Visibility (Migration 144)**: Fixed pipeline not transitioning to Negotiation and ticket_id showing null
+  - **Root Cause 1**: `v_previous_rejected_count` only checked by `opportunity_id` — if Q1 and Q2 resolve to different opportunities, count is 0 and stage stays at Quote Sent
+  - **Root Cause 2**: Stage transition logic checked `Prospecting/Discovery → Quote Sent` BEFORE checking for previous rejections — so even with rejections, a new opportunity goes to Quote Sent
+  - **Root Cause 3**: `tickets_select_policy` RLS did NOT include quotation creators — the GET endpoint's ticket join returned null for users who created quotations but didn't create/get assigned to the ticket
+  - **Root Cause 4**: `mark_sent` comment used `is_internal=TRUE` (same bug as rejection, fixed in 143 but not for sent)
+  - **Root Cause 5**: Mirror trigger created `ticket_responses` entry for events with direct RPC comments, causing duplicate SLA tracking entries
+  - **Fix**: `v_previous_rejected_count` now checks by `ticket_id` AND `opportunity_id` (with `lead_id` as fallback when `ticket_id` is null)
+  - **Fix**: Stage transition reordered — previous rejections → Negotiation regardless of current stage (unless already Negotiation/terminal)
+  - **Fix**: Updated `tickets_select_policy` to include quotation creators (ticket join now returns data)
+  - **Fix**: Sent comment now `is_internal=FALSE` — visible to sales users in activity timeline
+  - **Fix**: Mirror trigger now skips entirely (`RETURN NEW`) for events with direct RPC comments (prevents duplicate ticket_responses)
+  - **Fix**: GET endpoint now accepts both `snake_case` and `camelCase` query params for robustness
+  - **Observability**: Added RAISE NOTICE for pipeline stage transition debugging
+
+### v1.6.4
 - **Fix Rejection Logging (Migration 143)**: Fixed quotation rejection not appearing in ticket activity
   - **Root Cause 1**: `source_event_id` column was BIGINT but `ticket_events.id` is UUID — mirror trigger silently failed on every event
   - **Root Cause 2**: Rejection comment used `is_internal=TRUE` — RLS hides internal comments from non-ops/non-admin users (e.g., sales)
@@ -880,6 +902,8 @@ npx tsc --noEmit # TypeScript check
   - Migration 139-140: Deep audit fixes
   - Migration 141: Fix migration 140 compile errors
   - Migration 142: Fix quotation activity & stage transition (Quote Sent → Negotiation on 2nd+ quotation after rejection)
+  - Migration 143: Fix rejection logging & mirror trigger (source_event_id UUID, is_internal=FALSE, RLS for quotation creators)
+  - Migration 144: Fix sent pipeline stage & ticket visibility (broadened rejected count, mirror trigger dedup, tickets RLS)
 
 ### v1.6.3
 - **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error
@@ -970,7 +994,12 @@ Ticket events and comments are protected by Row Level Security. Visibility rules
 | Ticket Assignee | Their tickets | Their tickets | Hidden |
 | Quotation Creator (Migration 143) | Linked tickets | Linked tickets | Hidden |
 
-**Important**: The rejection RPC creates comments with `is_internal = FALSE` so they are visible to sales users. The mirror trigger's auto-comments use `is_internal = TRUE` (ops/admin only). To avoid duplicates, the mirror trigger skips auto-comment creation for events that already have direct RPC comments (`customer_quotation_rejected`, `customer_quotation_sent`), but still creates `ticket_responses` for SLA tracking.
+**Important (Migration 144)**:
+- Both rejection and sent RPCs create comments with `is_internal = FALSE` — visible to sales users
+- The mirror trigger's auto-comments use `is_internal = TRUE` (ops/admin only)
+- To avoid duplicate comments AND duplicate `ticket_responses`, the mirror trigger skips entirely (`RETURN NEW`) for events with direct RPC comments (`customer_quotation_rejected`, `customer_quotation_sent`)
+- SLA tracking for these events is handled by `trigger_auto_record_response` on the direct comment INSERT
+- **Tickets RLS (Migration 144)**: Quotation creators can now see tickets linked to their quotations, ensuring the ticket join in GET `/api/ticketing/customer-quotations` returns data
 
 ### Multi-Shipment Data Structure
 

@@ -32,10 +32,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Parse query params
-    const ticketId = searchParams.get('ticket_id')
-    const leadId = searchParams.get('lead_id')
-    const opportunityId = searchParams.get('opportunity_id')
+    // Parse query params (accept both snake_case and camelCase for robustness)
+    const ticketId = searchParams.get('ticket_id') || searchParams.get('ticketId')
+    const leadId = searchParams.get('lead_id') || searchParams.get('leadId')
+    const opportunityId = searchParams.get('opportunity_id') || searchParams.get('opportunityId')
     const status = searchParams.get('status')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
