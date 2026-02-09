@@ -194,7 +194,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const adminClient = createAdminClient()
+    // Note: Tables not yet in generated types (migration 154), cast as any
+    const adminClient = createAdminClient() as any
     const today = new Date().toISOString().split('T')[0]
     const results: Array<{ platform: string; status: string; error?: string }> = []
 

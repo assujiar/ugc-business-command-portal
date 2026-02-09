@@ -27,9 +27,9 @@ export async function GET(request: NextRequest) {
       .from('profiles')
       .select('role')
       .eq('user_id', user.id)
-      .single()
+      .single() as { data: { role: string } | null }
 
-    if (!profile || !canAccessMarketingPanel(profile.role)) {
+    if (!profile || !canAccessMarketingPanel(profile.role as any)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -42,7 +42,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid platform' }, { status: 400 })
     }
 
-    const adminClient = createAdminClient()
+    // Note: Tables not yet in generated types (migration 154), cast as any
+    const adminClient = createAdminClient() as any
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)
     const startDateStr = startDate.toISOString().split('T')[0]
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
     const [
       { data: dailySummaries, error: summaryError },
       { data: snapshots, error: snapshotError },
-    ] = await Promise.all([summaryQuery, snapshotQuery])
+    ] = await Promise.all([summaryQuery, snapshotQuery]) as any[]
 
     if (summaryError) {
       console.error('Summary query error:', summaryError)
