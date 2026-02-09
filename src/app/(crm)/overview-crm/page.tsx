@@ -88,7 +88,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   let pipelineUpdatesQuery = (adminClient as any).from('pipeline_updates').select('*')
 
   // Apply role-based filters
-  if (role === 'salesperson') {
+  if (isAdmin(role)) {
+    // Admin/Director see all (no filter)
+  } else if (role === 'salesperson') {
     // Salesperson sees only their own data
     leadsQuery = leadsQuery.or(`sales_owner_user_id.eq.${userId},created_by.eq.${userId}`)
     opportunitiesQuery = opportunitiesQuery.eq('owner_user_id', userId)
@@ -104,8 +106,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   } else if (role === 'Marcomm' || role === 'DGO' || role === 'VSDO') {
     // Individual marketing roles see their own data
     leadsQuery = leadsQuery.or(`marketing_owner_user_id.eq.${userId},created_by.eq.${userId}`)
+  } else {
+    // Ops, finance, and other non-CRM roles: only show data they own/created
+    leadsQuery = leadsQuery.or(`sales_owner_user_id.eq.${userId},created_by.eq.${userId}`)
+    opportunitiesQuery = opportunitiesQuery.eq('owner_user_id', userId)
+    accountsQuery = accountsQuery.eq('owner_user_id', userId)
+    salesPlansQuery = salesPlansQuery.eq('owner_user_id', userId)
+    pipelineUpdatesQuery = pipelineUpdatesQuery.eq('updated_by', userId)
   }
-  // Admin/Director see all (no filter)
 
   // Additional queries for sales performance analytics (only salesperson role for analytics)
   const salesProfilesQuery = (adminClient as any)

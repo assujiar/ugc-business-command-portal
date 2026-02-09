@@ -106,12 +106,9 @@ export default async function PipelinePage({ searchParams }: PageProps) {
         return false
       }
 
-      // Sales Support: Same as salesperson
+      // Sales Support: Can view all sales pipelines (same visibility as sales manager)
       if (profile.role === 'sales support') {
-        if (opp.owner_user_id === profile.user_id) return true
-        if (opp.created_by === profile.user_id) return true
-        if (opp.original_creator_id === profile.user_id) return true
-        if (opp.lead_created_by === profile.user_id) return true
+        if (opp.owner_user_id) return true
         return false
       }
 

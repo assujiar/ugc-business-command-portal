@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { addWatermark, isImageFile, type WatermarkData } from '@/lib/watermark'
+import { canUpdatePipeline, isAdmin } from '@/lib/permissions'
+import type { UserRole } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -58,6 +60,21 @@ export async function POST(request: NextRequest) {
 
     if (oppError || !opportunity) {
       return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
+    }
+
+    // Check if user has permission to update this pipeline
+    const { data: userProfile } = await (adminClient as any)
+      .from('profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!userProfile || !canUpdatePipeline(
+      userProfile.role as UserRole,
+      user.id,
+      { owner_user_id: opportunity.owner_user_id, lead_created_by: null, lead_sales_owner: null }
+    )) {
+      return NextResponse.json({ error: 'You do not have permission to update this pipeline' }, { status: 403 })
     }
 
     // Get lead info separately using source_lead_id (for company name in watermark)

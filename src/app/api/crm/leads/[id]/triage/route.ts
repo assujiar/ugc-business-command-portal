@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { canTriageLeads } from '@/lib/permissions'
+import type { UserRole } from '@/types/database'
 
 // Force dynamic rendering (uses cookies)
 export const dynamic = 'force-dynamic'
@@ -27,6 +29,17 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Check if user has permission to triage leads
+    const { data: profile } = await (adminClient as any)
+      .from('profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!profile || !canTriageLeads(profile.role as UserRole)) {
+      return NextResponse.json({ error: 'You do not have permission to triage leads' }, { status: 403 })
     }
 
     const body = await request.json()

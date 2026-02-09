@@ -6,6 +6,7 @@
 import { getSessionAndProfile } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { canAccessPipeline } from '@/lib/permissions'
 import { AccountDetail } from '@/components/crm/account-detail'
 
 export const metadata = {
@@ -22,6 +23,11 @@ export default async function AccountDetailPage({ params }: AccountDetailPagePro
 
   if (!user || !profile) {
     redirect('/login')
+  }
+
+  // Check if user has access to accounts
+  if (!canAccessPipeline(profile.role)) {
+    redirect('/overview-crm')
   }
 
   const { id } = await params
