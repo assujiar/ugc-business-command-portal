@@ -35,8 +35,12 @@ export async function GET(request: NextRequest) {
 
     // Parse query params
     const { searchParams } = new URL(request.url)
-    const days = Math.min(parseInt(searchParams.get('days') || '30', 10), 365)
     const platform = searchParams.get('platform')
+    const customStartDate = searchParams.get('start_date')
+    const customEndDate = searchParams.get('end_date')
+    const days = customStartDate && customEndDate
+      ? Math.ceil((new Date(customEndDate).getTime() - new Date(customStartDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
+      : Math.min(parseInt(searchParams.get('days') || '30', 10), 365)
 
     if (platform && !VALID_PLATFORMS.includes(platform)) {
       return NextResponse.json({ error: 'Invalid platform' }, { status: 400 })
@@ -44,9 +48,17 @@ export async function GET(request: NextRequest) {
 
     // Note: Tables not yet in generated types (migration 154), cast as any
     const adminClient = createAdminClient() as any
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - days)
-    const startDateStr = startDate.toISOString().split('T')[0]
+    let startDateStr: string
+    let endDateStr: string | null = null
+
+    if (customStartDate && customEndDate) {
+      startDateStr = customStartDate
+      endDateStr = customEndDate
+    } else {
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - days)
+      startDateStr = startDate.toISOString().split('T')[0]
+    }
 
     // 1. Get daily summaries for the period
     let summaryQuery = adminClient
@@ -54,6 +66,10 @@ export async function GET(request: NextRequest) {
       .select('*')
       .gte('summary_date', startDateStr)
       .order('summary_date', { ascending: true })
+
+    if (endDateStr) {
+      summaryQuery = summaryQuery.lte('summary_date', endDateStr)
+    }
 
     if (platform) {
       summaryQuery = summaryQuery.eq('platform', platform)
