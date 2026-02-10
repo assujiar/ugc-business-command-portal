@@ -167,12 +167,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   const filteredLeads = filterBySalesperson(filterByDate(leads || []), 'sales_owner_user_id')
   let filteredOpportunities = filterBySalesperson(filterByDate(opportunities || []))
-  let filteredAccounts = filterBySalesperson(accounts || [])
+  let filteredAccounts = filterBySalesperson(filterByDate(accounts || []))
   const filteredSalesPlans = filterBySalesperson(filterByDate(salesPlans || []))
   const filteredPipelineUpdates = filterByDate(pipelineUpdates || []).filter((u: any) =>
     !salespersonId || u.updated_by === salespersonId
   )
   const filteredActivities = filterBySalesperson(filterByDate(activitiesData || []))
+  const filteredQuotations = filterBySalesperson(filterByDate(quotations || []), 'created_by')
+  const filteredRfqTickets = filterByDate(rfqTickets || [])
 
   // =====================================================
   // Marketing role scoping for opportunities & accounts
@@ -285,7 +287,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       email: p.email,
       role: p.role,
     })),
-    customerQuotations: (quotations || []).map((q: any) => ({
+    customerQuotations: filteredQuotations.map((q: any) => ({
       id: q.id,
       opportunity_id: q.opportunity_id,
       status: q.status,
@@ -345,7 +347,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       owner_user_id: p.owner_user_id,
       created_at: p.created_at,
     })),
-    rfqTickets: (rfqTickets || []).map((t: any) => ({
+    rfqTickets: filteredRfqTickets.map((t: any) => ({
       ticket_id: t.ticket_id,
       service_type: t.rfq_data?.service_type || null,
       cargo_category: t.rfq_data?.cargo_category || null,
