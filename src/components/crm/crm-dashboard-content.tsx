@@ -69,6 +69,7 @@ interface ActivityData {
   owner_user_id: string
   created_at: string
   completed_at: string | null
+  related_opportunity_id?: string | null
 }
 
 interface LeadData {
@@ -139,6 +140,8 @@ export interface DashboardDataProps {
   allOpportunities: OpportunityData[]
   allAccounts: AccountData[]
   allActivities: ActivityData[]
+  allPipelineUpdates: PipelineUpdateData[]
+  allSalesPlans: SalesPlanData[]
 }
 
 // =====================================================
@@ -200,6 +203,50 @@ function formatWeekLabel(year: number, weekNum: number): string {
 function calcGrowth(current: number, previous: number): number | null {
   if (previous === 0) return current > 0 ? 100 : null
   return ((current - previous) / previous) * 100
+}
+
+/**
+ * Compute unified activity count matching the Activities page logic.
+ * Activities page combines 3 sources: sales_plans + pipeline_updates + activities (deduplicated).
+ * Deduplication: remove activities that have a matching pipeline_update on same opportunity within 1 min.
+ */
+function computeUnifiedActivityCount(
+  activities: ActivityData[],
+  pipelineUpdates: PipelineUpdateData[],
+  salesPlans: SalesPlanData[]
+): { total: number; breakdown: Record<string, number> } {
+  // Build dedup keys from pipeline_updates (opportunity_id + timestamp within 1-min window)
+  const puKeys = new Set(
+    pipelineUpdates.map(pu => {
+      const ts = new Date(pu.created_at).getTime()
+      return `${pu.opportunity_id}_${Math.floor(ts / 60000)}`
+    })
+  )
+
+  // Filter out activities that duplicate a pipeline_update
+  const uniqueActivities = activities.filter(act => {
+    if (!act.related_opportunity_id) return true
+    const ts = act.completed_at ? new Date(act.completed_at).getTime() : 0
+    const key = `${act.related_opportunity_id}_${Math.floor(ts / 60000)}`
+    return !puKeys.has(key)
+  })
+
+  const total = salesPlans.length + pipelineUpdates.length + uniqueActivities.length
+
+  // Build breakdown by method/type
+  const breakdown: Record<string, number> = {}
+  pipelineUpdates.forEach(pu => {
+    if (pu.approach_method) breakdown[pu.approach_method] = (breakdown[pu.approach_method] || 0) + 1
+  })
+  uniqueActivities.forEach(act => {
+    breakdown[act.activity_type] = (breakdown[act.activity_type] || 0) + 1
+  })
+  salesPlans.forEach(sp => {
+    const t = sp.plan_type === 'maintenance_existing' ? 'Maintain' : sp.plan_type === 'hunting_new' ? 'Hunting' : 'Winback'
+    breakdown[t] = (breakdown[t] || 0) + 1
+  })
+
+  return { total, breakdown }
 }
 
 // Role helpers
@@ -365,6 +412,13 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       failed: accts.filter(a => a.account_status === 'failed_account').length,
     }
 
+    // Lost reasons breakdown
+    const lostReasons: Record<string, number> = {}
+    lost.forEach(o => {
+      const reason = o.lost_reason || 'Tidak Diketahui'
+      lostReasons[reason] = (lostReasons[reason] || 0) + 1
+    })
+
     // Opportunity by stage (for funnel)
     const oppByStage = {
       prospecting: opps.filter(o => o.stage === 'Prospecting').length,
@@ -384,7 +438,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       acts, actByType, methodCounts, updates,
       leads, leadsBySource,
       plansByType, plansByStatus, huntingPotential, plans,
-      accountsByStatus, oppByStage, acceptedQ,
+      accountsByStatus, oppByStage, acceptedQ, lostReasons,
     }
   }, [data])
 
@@ -402,6 +456,8 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       const activeOpps = userOpps.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
       const userAccts = data.allAccounts.filter(a => a.owner_user_id === uid)
       const userActs = data.allActivities.filter(a => a.owner_user_id === uid)
+      const userPUs = data.allPipelineUpdates.filter(u => u.updated_by === uid)
+      const userPlans = data.allSalesPlans.filter(p => p.owner_user_id === uid)
 
       const pipelineValue = activeOpps.reduce((s, o) => s + o.estimated_value, 0)
       const wonValue = wonOpps.reduce((s, o) => s + o.estimated_value, 0)
@@ -419,8 +475,8 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
         if (o.closed_at && o.created_at) { totalCycleDays += (new Date(o.closed_at).getTime() - new Date(o.created_at).getTime()) / 86400000; cycleCount++ }
       }
 
-      const actBreak: Record<string, number> = {}
-      userActs.forEach(a => { actBreak[a.activity_type] = (actBreak[a.activity_type] || 0) + 1 })
+      // Unified activity count: sales_plans + pipeline_updates + activities (deduplicated)
+      const unified = computeUnifiedActivityCount(userActs, userPUs, userPlans)
 
       return {
         userId: uid, name: user.name,
@@ -428,7 +484,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
         lostCount: lostOpps.length, winRate,
         activeCustomers: activeCust, newCustomers: newCust,
         avgSalesCycle: cycleCount > 0 ? totalCycleDays / cycleCount : 0,
-        activities: userActs.length, actBreakdown: actBreak,
+        activities: unified.total, actBreakdown: unified.breakdown,
         totalPipeline: userOpps.length,
       }
     })
@@ -752,6 +808,10 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                 <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">{calc.won.length}</Badge>
               </div>
               <p className="text-xl font-bold text-emerald-600">{formatCurrency(calc.wonValue)}</p>
+              <p className="text-xs text-emerald-600 mt-1">Est. Value: {formatCurrency(calc.wonValue)}</p>
+              {calc.dealValue > 0 && (
+                <p className="text-xs text-emerald-700 font-medium">Deal Value: {formatCurrency(calc.dealValue)}</p>
+              )}
               <div className="flex gap-2 mt-2 text-xs text-emerald-600">
                 <span>{pct(calc.wonValue, calc.totalValue)} value</span>
                 <span>|</span>
@@ -782,6 +842,47 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* ============ LOST REASON ANALYTICS ============ */}
+      {calc.lost.length > 0 && (
+        <>
+          <SectionDivider title="Lost Pipeline Analysis" icon={<AlertCircle className="h-4 w-4 text-red-500" />} />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                Lost Reasons ({calc.lost.length} pipeline)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {Object.entries(calc.lostReasons)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([reason, count]) => (
+                    <div key={reason} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
+                      onClick={() => openDrill(`Lost: ${reason}`, calc.lost.filter(o => (o.lost_reason || 'Tidak Diketahui') === reason), [
+                        { key: 'name', label: 'Pipeline' },
+                        { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+                        { key: 'closed_at', label: 'Closed', format: (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-' },
+                      ])}>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+                        <span className="text-sm truncate">{reason}</span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-xs text-muted-foreground">{pct(count, calc.lost.length)}</span>
+                        <Badge variant="outline" className="text-xs">{count}</Badge>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              <div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
+                Total lost value: <span className="font-medium text-red-600">{formatCurrency(calc.lostValue)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* ============ WEEKLY ANALYTICS ============ */}
       <SectionDivider title="Weekly Analytics" icon={<BarChart3 className="h-4 w-4 text-indigo-500" />} />
