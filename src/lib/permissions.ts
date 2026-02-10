@@ -527,3 +527,78 @@ export function canViewAnalyticsRankings(role: UserRole | null | undefined): boo
   // Director, super admin, managers, MACX, sales support, Ops can see rankings
   return true
 }
+
+// =====================================================
+// Finance Role Check
+// =====================================================
+
+export function isFinance(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return role === 'finance'
+}
+
+// =====================================================
+// DSO/AR Module Permissions
+// =====================================================
+
+// Can user access DSO/AR module?
+// Sales dept + Finance + Director/SuperAdmin
+export function canAccessDSO(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isSales(role) || isFinance(role)
+}
+
+// =====================================================
+// Performance Page Permissions
+// =====================================================
+
+// Can user access Performance page?
+// All roles except marketing staff (they use Marketing Panel instead)
+export function canAccessPerformancePage(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return true // All roles have access to performance
+}
+
+// =====================================================
+// Post-Login Redirect
+// =====================================================
+
+// Get default redirect path based on user role/department
+// Rules:
+// - Sales dept → /overview-crm
+// - Ops dept → /overview-ticket
+// - Finance → /overview-crm (DSO coming soon, fallback to overview-crm)
+// - Marketing → /marketing/overview
+// - Director/SuperAdmin → /overview-crm (full access, start at CRM)
+export function getDefaultRedirect(role: UserRole | null | undefined): string {
+  if (!role) return '/overview-crm'
+
+  // Director and super admin → CRM overview (they see everything)
+  if (isAdmin(role)) return '/overview-crm'
+
+  // Ops roles → Ticketing overview
+  if (isOps(role)) return '/overview-ticket'
+
+  // Finance → CRM overview (DSO/AR coming soon)
+  if (isFinance(role)) return '/overview-crm'
+
+  // Marketing roles → Marketing overview
+  if (isMarketing(role)) return '/marketing/overview'
+
+  // Sales roles → CRM overview
+  if (isSales(role)) return '/overview-crm'
+
+  // Fallback
+  return '/overview-crm'
+}
+
+// =====================================================
+// CRM Module Access
+// =====================================================
+
+// Can user access CRM module pages?
+// Sales + Marketing + Admin (NOT Ops, NOT Finance)
+export function canAccessCRM(role: UserRole | null | undefined): boolean {
+  if (!role) return false
+  return isAdmin(role) || isSales(role) || isMarketing(role)
+}

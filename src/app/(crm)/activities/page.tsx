@@ -1,7 +1,7 @@
 // =====================================================
 // Activities Page
 // Shows all sales activities with Planned/Completed tabs
-// Data from sales_plans and pipeline_updates
+// Data from sales_plans, pipeline_updates, AND activities table
 // =====================================================
 
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -43,7 +43,7 @@ export default async function ActivitiesPage({ searchParams }: PageProps) {
     .select('user_id, name, email, role')
     .eq('role', 'salesperson')
 
-  // Fetch activities from both sales_plans and pipeline_updates
+  // Fetch activities from sales_plans, pipeline_updates, AND activities table
   // We'll fetch separately and combine for better control
 
   // 1. Fetch from sales_plans (new structure)
@@ -119,6 +119,40 @@ export default async function ActivitiesPage({ searchParams }: PageProps) {
 
   const { data: pipelineUpdates } = await pipelineUpdatesQuery
 
+  // 3. Fetch from activities table (quotation sent/rejected/accepted and manual pipeline updates)
+  // This table stores activities created by RPC functions for quotation lifecycle events
+  let activitiesQuery = (adminClient as any)
+    .from('activities')
+    .select(`
+      activity_id,
+      activity_type,
+      subject,
+      description,
+      status,
+      due_date,
+      completed_at,
+      related_opportunity_id,
+      related_lead_id,
+      related_account_id,
+      owner_user_id,
+      created_by,
+      created_at,
+      profiles:owner_user_id(name),
+      opportunities:related_opportunity_id(
+        name,
+        account_id,
+        accounts(company_name)
+      )
+    `)
+    .order('created_at', { ascending: false })
+
+  // Filter based on role for activities
+  if (profile.role === 'salesperson') {
+    activitiesQuery = activitiesQuery.eq('owner_user_id', profile.user_id)
+  }
+
+  const { data: crmActivities } = await activitiesQuery
+
   // Transform sales_plans to unified format
   const salesPlanActivities = (salesPlans || []).map((sp: any) => ({
     activity_id: sp.plan_id,
@@ -175,8 +209,53 @@ export default async function ActivitiesPage({ searchParams }: PageProps) {
     pic_phone: null,
   }))
 
+  // Transform activities table entries to unified format
+  // These come from RPC functions (quotation sent, rejected, accepted, pipeline update)
+  const crmActivityItems = (crmActivities || []).map((act: any) => ({
+    activity_id: act.activity_id,
+    source_type: 'crm_activity' as const,
+    plan_type: 'pipeline',
+    activity_type: act.activity_type,
+    activity_detail: act.subject || '',
+    notes: act.description,
+    status: (act.status === 'Completed' || act.status === 'Done') ? 'completed' as const : 'planned' as const,
+    scheduled_on: act.due_date,
+    scheduled_time: null,
+    completed_on: act.completed_at,
+    evidence_url: null,
+    evidence_file_name: null,
+    location_lat: null,
+    location_lng: null,
+    location_address: null,
+    owner_user_id: act.owner_user_id,
+    account_id: act.related_account_id,
+    opportunity_id: act.related_opportunity_id,
+    created_at: act.created_at,
+    sales_name: act.profiles?.name || null,
+    account_name: act.opportunities?.accounts?.company_name || null,
+    potential_status: null,
+    pic_name: null,
+    pic_phone: null,
+  }))
+
+  // Deduplicate: pipeline_updates and activities may duplicate for the same event
+  // Use a Set to track opportunity_id + timestamp combinations to remove duplicates
+  const pipelineUpdateKeys = new Set(
+    pipelineActivities.map((pu: any) => {
+      const ts = pu.completed_on ? new Date(pu.completed_on).getTime() : 0
+      return `${pu.opportunity_id}_${Math.floor(ts / 60000)}` // 1-minute window
+    })
+  )
+
+  // Only include CRM activities that don't have a matching pipeline_update within same minute
+  const uniqueCrmActivities = crmActivityItems.filter((act: any) => {
+    const ts = act.completed_on ? new Date(act.completed_on).getTime() : 0
+    const key = `${act.opportunity_id}_${Math.floor(ts / 60000)}`
+    return !pipelineUpdateKeys.has(key)
+  })
+
   // Combine all activities
-  let allActivities = [...salesPlanActivities, ...pipelineActivities]
+  let allActivities = [...salesPlanActivities, ...pipelineActivities, ...uniqueCrmActivities]
 
   // Apply date and salesperson filters
   if (startDate || endDate || salespersonId) {
@@ -211,7 +290,7 @@ export default async function ActivitiesPage({ searchParams }: PageProps) {
       <div>
         <h1 className="text-xl lg:text-2xl font-bold">Activities</h1>
         <p className="text-sm text-muted-foreground">
-          View all sales activities from Sales Plan and Pipeline
+          View all sales activities from Sales Plan, Pipeline, and Quotation Events
         </p>
       </div>
 

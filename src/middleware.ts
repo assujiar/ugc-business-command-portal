@@ -126,6 +126,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // Redirect authenticated users away from login page
+  // Role-based redirect is handled by the login page itself after profile fetch
+  // Middleware uses a simple default since it doesn't have access to the profile table
   if (user && request.nextUrl.pathname.startsWith('/login')) {
     const url = request.nextUrl.clone()
     url.pathname = '/overview-crm'

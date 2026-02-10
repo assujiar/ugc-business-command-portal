@@ -38,7 +38,7 @@ export default function LoginPage() {
     setError('')
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -46,8 +46,37 @@ export default function LoginPage() {
       if (error) {
         setError(error.message)
       } else {
+        // Fetch user profile to determine role-based redirect
+        let redirectPath = '/overview-crm'
+        if (authData?.user) {
+          try {
+            const { data: profile } = await (supabase as any)
+              .from('profiles')
+              .select('role')
+              .eq('user_id', authData.user.id)
+              .single() as { data: { role: string } | null }
+            if (profile?.role) {
+              const role = profile.role
+              // Ops roles → Ticketing overview
+              if (['EXIM Ops', 'domestics Ops', 'Import DTD Ops', 'traffic & warehous'].includes(role)) {
+                redirectPath = '/overview-ticket'
+              }
+              // Marketing roles (non-admin) → Marketing overview
+              else if (['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'].includes(role)) {
+                redirectPath = '/marketing/overview'
+              }
+              // Finance → CRM overview (DSO coming soon)
+              else if (role === 'finance') {
+                redirectPath = '/overview-crm'
+              }
+              // Sales + Admin → CRM overview
+            }
+          } catch {
+            // If profile fetch fails, use default redirect
+          }
+        }
         // Use full page navigation to ensure middleware runs and cookies sync
-        window.location.href = '/overview-crm'
+        window.location.href = redirectPath
       }
     } catch (err) {
       setError('An error occurred during login')

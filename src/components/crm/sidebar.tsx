@@ -1,6 +1,6 @@
 // =====================================================
 // CRM Sidebar Navigation
-// Updated for consolidated lead management
+// Role-based menu visibility
 // Mobile-responsive with off-canvas support
 // =====================================================
 
@@ -10,7 +10,6 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Inbox,
   Users,
   Building2,
   Target,
@@ -33,9 +32,24 @@ import {
   Search,
   Mail,
   FileEdit,
+  DollarSign,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities, canAccessTicketing, canAssignTickets, canAccessMarketingPanel, isOps } from '@/lib/permissions'
+import {
+  canAccessLeadInbox,
+  canAccessSalesInbox,
+  canAccessPipeline,
+  canImportData,
+  canAccessSalesPlan,
+  canAccessActivities,
+  canAccessTicketing,
+  canAccessMarketingPanel,
+  canAccessDSO,
+  canAccessCRM,
+  canAccessPerformancePage,
+  isOps,
+  isFinance,
+} from '@/lib/permissions'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -65,9 +79,16 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
   const [isCrmModuleExpanded, setIsCrmModuleExpanded] = useState(true)
   const [isTicketingModuleExpanded, setIsTicketingModuleExpanded] = useState(false)
   const [isMarketingPanelExpanded, setIsMarketingPanelExpanded] = useState(false)
+  const [isDsoModuleExpanded, setIsDsoModuleExpanded] = useState(false)
 
-  // Check if user is ops (hide CRM module for ops users)
+  // Role checks
   const isOpsUser = isOps(profile.role)
+  const isFinanceUser = isFinance(profile.role)
+  const showCRM = canAccessCRM(profile.role)
+  const showTicketing = canAccessTicketing(profile.role)
+  const showMarketing = canAccessMarketingPanel(profile.role)
+  const showDSO = canAccessDSO(profile.role)
+  const showPerformance = canAccessPerformancePage(profile.role)
 
   const filteredNavigation = navigation.filter((item) => {
     if (item.roles === 'all') return true
@@ -90,13 +111,13 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
   const sidebarContent = (
     <>
       <div className="p-4 border-b flex items-center justify-between">
-        <Link href="/overview-crm" className="flex items-center gap-2" onClick={handleNavClick}>
+        <Link href={isOpsUser ? '/overview-ticket' : isFinanceUser ? '/overview-crm' : '/overview-crm'} className="flex items-center gap-2" onClick={handleNavClick}>
           <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">UGC</span>
           </div>
           <div>
             <h1 className="font-semibold text-sm">Business Command</h1>
-            <p className="text-xs text-muted-foreground">CRM Module</p>
+            <p className="text-xs text-muted-foreground">Portal</p>
           </div>
         </Link>
         {/* Mobile close button */}
@@ -112,8 +133,8 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {/* CRM Module Parent Menu - hidden for Ops users */}
-        {!isOpsUser && (
+        {/* CRM Module Parent Menu - visible for Sales, Marketing, Admin */}
+        {showCRM && (
           <div>
             <button
               onClick={() => setIsCrmModuleExpanded(!isCrmModuleExpanded)}
@@ -161,7 +182,7 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
         )}
 
         {/* Ticketing Module Parent Menu */}
-        {canAccessTicketing(profile.role) && (
+        {showTicketing && (
           <div>
             <button
               onClick={() => setIsTicketingModuleExpanded(!isTicketingModuleExpanded)}
@@ -239,19 +260,22 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
                     <span className="truncate">Customer Quotations</span>
                   </Link>
                 )}
-                <Link
-                  href="/performance"
-                  onClick={handleNavClick}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                    pathname === '/performance'
-                      ? 'bg-brand text-white'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                  )}
-                >
-                  <BarChart3 className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">Performance</span>
-                </Link>
+                {/* Performance - in ticketing context */}
+                {showPerformance && (
+                  <Link
+                    href="/performance"
+                    onClick={handleNavClick}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                      pathname === '/performance'
+                        ? 'bg-brand text-white'
+                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                    )}
+                  >
+                    <BarChart3 className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">Performance</span>
+                  </Link>
+                )}
                 <Link
                   href="/tickets/new"
                   onClick={handleNavClick}
@@ -271,7 +295,7 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
         )}
 
         {/* Marketing Panel Module */}
-        {canAccessMarketingPanel(profile.role) && (
+        {showMarketing && (
           <div>
             <button
               onClick={() => setIsMarketingPanelExpanded(!isMarketingPanelExpanded)}
@@ -359,6 +383,40 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
                   <FileEdit className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">Content Plan</span>
                 </Link>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* DSO/AR Module - Sales + Finance + Admin */}
+        {showDSO && (
+          <div>
+            <button
+              onClick={() => setIsDsoModuleExpanded(!isDsoModuleExpanded)}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm transition-colors',
+                'text-foreground hover:bg-accent hover:text-accent-foreground font-medium'
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <DollarSign className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">DSO/AR Module</span>
+              </div>
+              {isDsoModuleExpanded ? (
+                <ChevronDown className="h-4 w-4 flex-shrink-0" />
+              ) : (
+                <ChevronRight className="h-4 w-4 flex-shrink-0" />
+              )}
+            </button>
+
+            {/* DSO/AR Submenu Items */}
+            {isDsoModuleExpanded && (
+              <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3">
+                <div className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground/50 cursor-default">
+                  <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Overview DSO</span>
+                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">Soon</span>
+                </div>
               </div>
             )}
           </div>
