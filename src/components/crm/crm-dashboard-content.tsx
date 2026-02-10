@@ -472,6 +472,9 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       serviceByStatus[svc][q.status] = (serviceByStatus[svc][q.status] || 0) + 1
     })
 
+    // Unified activity count (matching Activities page: sales_plans + pipeline_updates + activities deduplicated)
+    const unifiedActivity = computeUnifiedActivityCount(acts, updates, plans)
+
     // RFQ analytics
     const rfqByService: Record<string, number> = {}
     const rfqByRoute: Record<string, number> = {}
@@ -570,7 +573,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       plansByType, plansByStatus, huntingPotential, plans,
       accountsByStatus, oppByStage, acceptedQ, lostReasons,
       industryBreakdown, serviceBreakdown, serviceByStatus,
-      rfqByService, rfqByRoute, rfqByCargo,
+      rfqByService, rfqByRoute, rfqByCargo, unifiedActivity,
       mqlTimeCategories, avgMqlTimeHours, totalMqlLeads, mqlConversion,
     }
   }, [data])
@@ -1008,7 +1011,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                         <YAxis type="category" dataKey="reason" width={120} fontSize={11} tick={{ fill: '#6b7280' }} />
                         <Tooltip
                           formatter={(val: number, name: string) => {
-                            if (name === 'count') return [`${val} pipeline (${pct(val, calc.lost.length)})`, 'Count']
+                            if (name === 'Count') return [`${val} pipeline (${pct(val, calc.lost.length)})`, 'Count']
                             return [formatCurrency(val) + ` (${pct(val, calc.lostValue)})`, 'Value']
                           }}
                           labelFormatter={(label: string) => {
@@ -1198,7 +1201,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base lg:text-lg flex items-center gap-2">
-                <Activity className="h-5 w-5" />Activity by Method ({calc.updates.length})
+                <Activity className="h-5 w-5" />Activity by Method ({calc.unifiedActivity.total})
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -1210,8 +1213,12 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                   { method: 'WhatsApp', icon: <MessageSquare className="h-4 w-4 text-green-500" /> },
                   { method: 'Email', icon: <Mail className="h-4 w-4 text-gray-500" /> },
                   { method: 'Texting', icon: <MessageSquare className="h-4 w-4 text-cyan-500" /> },
+                  { method: 'Maintain', icon: <RotateCcw className="h-4 w-4 text-teal-500" /> },
+                  { method: 'Hunting', icon: <Target className="h-4 w-4 text-red-500" /> },
+                  { method: 'Winback', icon: <TrendingUp className="h-4 w-4 text-amber-500" /> },
                 ].map(({ method, icon }) => {
-                  const count = calc.methodCounts[method] || 0
+                  const count = calc.unifiedActivity.breakdown[method] || 0
+                  if (count === 0) return null
                   return (
                     <div key={method} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1 rounded"
                       onClick={() => openDrill(`${method} Activities`, calc.updates.filter(u => u.approach_method === method), [
@@ -1220,7 +1227,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                       ])}>
                       <div className="flex items-center gap-2">{icon}<span className="text-sm">{method}</span></div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{pct(count, calc.updates.length)}</span>
+                        <span className="text-xs text-muted-foreground">{pct(count, calc.unifiedActivity.total)}</span>
                         <Badge variant="outline">{count}</Badge>
                       </div>
                     </div>
