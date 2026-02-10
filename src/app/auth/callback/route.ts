@@ -33,10 +33,38 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
-      return NextResponse.redirect(new URL(next, request.url))
+      // If next param is explicitly set, use it
+      if (requestUrl.searchParams.get('next')) {
+        return NextResponse.redirect(new URL(next, request.url))
+      }
+
+      // Otherwise determine redirect based on user role
+      let redirectPath = '/overview-crm'
+      if (sessionData?.user) {
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('user_id', sessionData.user.id)
+            .single()
+          if (profile?.role) {
+            const role = profile.role as string
+            if (['EXIM Ops', 'domestics Ops', 'Import DTD Ops', 'traffic & warehous'].includes(role)) {
+              redirectPath = '/overview-ticket'
+            } else if (['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'].includes(role)) {
+              redirectPath = '/marketing/overview'
+            } else if (role === 'finance') {
+              redirectPath = '/overview-crm'
+            }
+          }
+        } catch {
+          // If profile fetch fails, use default redirect
+        }
+      }
+      return NextResponse.redirect(new URL(redirectPath, request.url))
     }
   }
 

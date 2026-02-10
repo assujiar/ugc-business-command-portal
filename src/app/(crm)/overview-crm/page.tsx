@@ -32,7 +32,7 @@ import {
   Mail,
   Video,
 } from 'lucide-react'
-import { isAdmin, isMarketing, isSales } from '@/lib/permissions'
+import { isAdmin, isMarketing, isSales, isOps } from '@/lib/permissions'
 import { SalesPerformanceAnalytics, SalespersonPerformanceCard, WeeklyAnalytics } from '@/components/crm/sales-performance-analytics'
 import { AnalyticsFilter, filterByDateAndSalesperson } from '@/components/crm/analytics-filter'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -64,6 +64,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   if (!profile) {
     redirect('/login')
+  }
+
+  // Ops users should go to ticketing overview - CRM is not their domain
+  if (isOps(profile.role)) {
+    redirect('/overview-ticket')
   }
 
   const role = profile.role

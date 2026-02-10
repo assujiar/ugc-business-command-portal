@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.8.0 | Last Updated: 2026-02-09
+> Version: 1.9.0 | Last Updated: 2026-02-10
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -132,7 +132,7 @@ ugc-business-command-portal/
 │   └── types/                        # TypeScript definitions
 │
 ├── supabase/
-│   └── migrations/                   # 153 SQL migrations
+│   └── migrations/                   # 158 SQL migrations
 │       ├── 001-034                   # Core CRM tables
 │       ├── 035-060                   # Ticketing system
 │       ├── 061-090                   # Quotation system
@@ -143,7 +143,9 @@ ugc-business-command-portal/
 │       ├── 143-145                   # Fix rejection logging, sent pipeline, RLS recursion
 │       ├── 146-149                   # Fix mark_won/lost, account lifecycle, stage history
 │       ├── 150-152                   # Fix mark_sent fallback, trigger interference, ambiguous opp
-│       └── 153                       # Countries reference table
+│       ├── 153                       # Countries reference table
+│       ├── 154-157                   # Marketing module (social media, content plan, token refresh)
+│       └── 158                       # Fix accepted quotation pipeline_updates columns
 │
 └── public/
     └── logo/                         # Brand assets
@@ -257,7 +259,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 | Domestics Ops | `domestics Ops` | Operations | Domestic tickets, costs |
 | Import DTD Ops | `Import DTD Ops` | Operations | DTD tickets, costs |
 | Traffic & Warehouse | `traffic & warehous` | Operations | Limited ticket access |
-| Finance | `finance` | Finance | No module access (blocked) |
+| Finance | `finance` | Finance | DSO/AR (coming soon), Performance |
 
 ### Permission Matrix
 
@@ -275,6 +277,26 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 | Create Quotations | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | - |
 | View Reports | ✓ | ✓ | ✓ | ✓ | ✓ | - | - | ✓ | - |
 
+### Module Access by Role (Sidebar Visibility)
+
+| Module | Sales | Marketing | Ops | Finance | Director/Admin |
+|--------|-------|-----------|-----|---------|----------------|
+| CRM | Yes | Yes | No | No | Yes |
+| Ticketing | Yes | Yes | Yes | No | Yes |
+| Marketing Panel | No | Yes | No | No | Yes |
+| DSO/AR | Yes | No | No | Yes | Yes |
+| Performance | Yes | Yes | Yes | Yes | Yes |
+
+### Post-Login Redirect by Role
+
+| Role | Default Redirect |
+|------|-----------------|
+| Sales (salesperson, sales manager, sales support) | `/overview-crm` |
+| Marketing (Marketing Manager, Marcomm, DGO, MACX, VSDO) | `/marketing/overview` |
+| Ops (EXIM Ops, domestics Ops, Import DTD Ops, traffic & warehous) | `/overview-ticket` |
+| Finance | `/overview-crm` (DSO coming soon) |
+| Director / super admin | `/overview-crm` |
+
 ### Dashboard Data Scoping by Role
 
 | Role | CRM Dashboard Data | Ticketing Analytics Scope |
@@ -286,7 +308,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 | Marketing Manager / MACX | Marketing-created leads | Marketing department |
 | Marcomm / DGO / VSDO | Own leads only | Own tickets only |
 | Ops roles | Own data only (CRM hidden in sidebar) | Own department |
-| Finance | No access | No access |
+| Finance | DSO/AR overview (coming soon) | No access |
 
 ---
 
@@ -1025,7 +1047,37 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.8.0 (Current)
+### v1.9.0 (Current)
+- **Fix Pipeline Activity for Quotation Rejection/Acceptance (Migration 158)**: Fixed activities not appearing in pipeline activity when quotation is rejected or accepted
+  - **Root Cause**: `rpc_customer_quotation_mark_accepted` (from migration 133) used wrong column names for `pipeline_updates` INSERT: `update_type`, `old_value`, `new_value`. The actual table has `approach_method`, `old_stage`, `new_stage` (migration 014). This caused the INSERT to fail silently in EXCEPTION block, resulting in ZERO pipeline_updates and activities records.
+  - **Fix**: Redefined `mark_accepted` with correct column names and added GUC flag `app.in_quotation_rpc` to prevent AFTER UPDATE trigger interference.
+  - **Impact**: Pipeline activities now reliably appear for all quotation lifecycle events (sent, rejected, accepted).
+- **Activities Page Enhancement**: Now fetches from 3 data sources instead of 2:
+  - `sales_plans` (manual sales activities)
+  - `pipeline_updates` (stage change records)
+  - `activities` table (quotation lifecycle events created by RPC functions)
+  - Deduplication logic prevents double-counting between pipeline_updates and activities
+- **Timeline Deduplication Enhancement**: Reduced spam in ticket activity timeline
+  - Extended dedup window from 5s to 30s for related events
+  - Rule 5: Lifecycle events (rejected/accepted/sent) absorb status_changed events from same actor
+  - Rule 6: Lifecycle events absorb auto-generated events (assigned, adjustment) from same actor
+  - Rule 7: Consecutive status_changed events from same user within 30s window keep only the latest
+- **Role-Based Post-Login Redirect**: Users now redirect to their department's home page after login
+  - Sales dept → `/overview-crm`
+  - Ops dept → `/overview-ticket`
+  - Marketing dept → `/marketing/overview`
+  - Finance → `/overview-crm` (DSO coming soon)
+  - Director/SuperAdmin → `/overview-crm`
+- **RBAC Menu Access Control**: Sidebar now enforces strict module visibility by role
+  - Sales: CRM, Ticketing, Performance, DSO/AR
+  - Marketing: CRM, Ticketing, Marketing Panel, Performance
+  - Ops: Ticketing, Performance only (CRM hidden)
+  - Finance: DSO/AR, Performance only
+  - Director/SuperAdmin: All modules
+- **DSO/AR Module Placeholder**: Added DSO/AR module section in sidebar with "Coming Soon" indicator
+- **Page-Level Access Guards**: Ops users redirected from `/overview-crm` to `/overview-ticket`
+
+### v1.8.0
 - **Comprehensive Dashboard RBAC Audit & Fix**: Audited all 17+ dashboard pages and 40+ API routes for role-based data access issues
   - **CRM Dashboard**: Fixed Ops/finance roles seeing ALL data (no filter applied). Now restricts to own data only.
   - **Accounts Page**: Added `canAccessPipeline()` access control. Previously any authenticated user could access `/accounts` directly.
