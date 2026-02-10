@@ -62,7 +62,7 @@ export default function LoginPage() {
                 redirectPath = '/overview-ticket'
               }
               // Marketing roles (non-admin) → Marketing overview
-              else if (['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'].includes(role)) {
+              else if (['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'].includes(role)) {
                 redirectPath = '/marketing/overview'
               }
               // Finance → CRM overview (DSO coming soon)

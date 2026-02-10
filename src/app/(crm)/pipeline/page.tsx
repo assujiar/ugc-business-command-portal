@@ -26,7 +26,7 @@ function isSalesRole(role: UserRole): boolean {
 
 // Helper to check if user is individual marketing (can only see own leads)
 function isIndividualMarketingRole(role: UserRole): boolean {
-  return role === 'Marcomm' || role === 'VSDO' || role === 'DGO'
+  return role === 'Marcomm' || role === 'VDCO' || role === 'DGO'
 }
 
 // Helper to check if user is marketing manager/macx (can see all marketing dept leads)
@@ -112,7 +112,7 @@ export default async function PipelinePage({ searchParams }: PageProps) {
         return false
       }
 
-      // Individual Marketing (Marcomm, VSDO, DGO): Only pipelines from leads they created
+      // Individual Marketing (Marcomm, VDCO, DGO): Only pipelines from leads they created
       // Uses original_creator_id which is preserved across retries
       // Also checks lead_marketing_owner and lead_created_by as fallbacks
       if (isIndividualMarketingRole(profile.role)) {
@@ -134,7 +134,7 @@ export default async function PipelinePage({ searchParams }: PageProps) {
 
         // Additional fallback: check original_creator_role directly
         if (opp.original_creator_role) {
-          const marketingRoles: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+          const marketingRoles: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO']
           if (marketingRoles.includes(opp.original_creator_role)) return true
         }
 

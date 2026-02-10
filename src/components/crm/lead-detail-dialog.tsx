@@ -140,7 +140,7 @@ const isMACXRole = (role: UserRole | null): boolean => role === 'MACX'
 const isCreatorMarketingDept = (lead: Lead): boolean => {
   if (lead.creator_is_marketing === true) return true
   if (lead.creator_department && lead.creator_department.toLowerCase().includes('marketing')) return true
-  if (lead.creator_role && ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'].includes(lead.creator_role)) return true
+  if (lead.creator_role && ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'].includes(lead.creator_role)) return true
   return false
 }
 

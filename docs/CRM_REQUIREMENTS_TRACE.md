@@ -167,7 +167,7 @@ Marketing Manager
 Marcomm
 DGO
 MACX
-VSDO
+VDCO
 sales manager
 salesperson
 sales support

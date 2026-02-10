@@ -145,7 +145,7 @@ CREATE POLICY "marketing_analytics_select" ON marketing_social_media_analytics
       WHERE profiles.user_id = auth.uid()
       AND profiles.role IN (
         'Director', 'super admin',
-        'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'
+        'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'
       )
     )
   );
@@ -158,7 +158,7 @@ CREATE POLICY "marketing_daily_summary_select" ON marketing_social_media_daily_s
       WHERE profiles.user_id = auth.uid()
       AND profiles.role IN (
         'Director', 'super admin',
-        'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'
+        'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'
       )
     )
   );

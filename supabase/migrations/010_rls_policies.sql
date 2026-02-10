@@ -43,7 +43,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 CREATE OR REPLACE FUNCTION is_marketing()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN get_user_role() IN ('Director', 'super admin', 'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO');
+  RETURN get_user_role() IN ('Director', 'super admin', 'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 

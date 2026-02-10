@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
             const role = profile.role as string
             if (['EXIM Ops', 'domestics Ops', 'Import DTD Ops', 'traffic & warehous'].includes(role)) {
               redirectPath = '/overview-ticket'
-            } else if (['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'].includes(role)) {
+            } else if (['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'].includes(role)) {
               redirectPath = '/marketing/overview'
             } else if (role === 'finance') {
               redirectPath = '/overview-crm'

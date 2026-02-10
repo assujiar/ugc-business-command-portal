@@ -3,7 +3,7 @@
 // Access Rules based on role:
 // - Salesperson: leads they created OR claimed
 // - Sales Manager: leads created/claimed by sales department
-// - Marketing (Marcomm, VSDO, DGO): leads they created
+// - Marketing (Marcomm, VDCO, DGO): leads they created
 // - Marketing Manager, MACX: leads created by marketing department
 // - Director, Admin: all leads
 // =====================================================
@@ -25,7 +25,7 @@ import type { UserRole } from '@/types/database'
 
 // Helper to check if role is individual marketing (can only see own leads)
 function isIndividualMarketingRole(role: UserRole): boolean {
-  return role === 'Marcomm' || role === 'VSDO' || role === 'DGO'
+  return role === 'Marcomm' || role === 'VDCO' || role === 'DGO'
 }
 
 // Helper to check if role is marketing manager level (can see all marketing dept leads)
@@ -108,7 +108,7 @@ export default async function LeadManagementPage({ searchParams }: PageProps) {
         return false
       }
 
-      // Individual Marketing (Marcomm, VSDO, DGO): leads they created
+      // Individual Marketing (Marcomm, VDCO, DGO): leads they created
       if (isIndividualMarketingRole(profile.role)) {
         if (lead.created_by === profile.user_id) return true
         if (lead.marketing_owner_user_id === profile.user_id) return true

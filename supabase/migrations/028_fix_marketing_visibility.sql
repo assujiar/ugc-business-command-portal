@@ -75,7 +75,7 @@ SELECT
   CASE
     WHEN COALESCE(creator.department, lead_creator.department) IS NOT NULL
          AND LOWER(COALESCE(creator.department, lead_creator.department)) LIKE '%marketing%' THEN TRUE
-    WHEN COALESCE(creator.role, lead_creator.role) IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN TRUE
+    WHEN COALESCE(creator.role, lead_creator.role) IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO') THEN TRUE
     ELSE FALSE
   END AS original_creator_is_marketing,
   (SELECT COUNT(*) FROM pipeline_updates pu WHERE pu.opportunity_id = o.opportunity_id) AS update_count,
@@ -113,7 +113,7 @@ CREATE POLICY opp_select ON opportunities FOR SELECT
       is_original_creator_marketing(original_creator_id)
       OR is_original_creator_marketing((SELECT created_by FROM leads WHERE lead_id = source_lead_id))
     ))
-    -- Marketing staff (Marcomm/DGO/VSDO): See opportunities from leads THEY created
+    -- Marketing staff (Marcomm/DGO/VDCO): See opportunities from leads THEY created
     OR (is_marketing_staff() AND (
       original_creator_id = auth.uid()
       OR (original_creator_id IS NULL AND EXISTS (

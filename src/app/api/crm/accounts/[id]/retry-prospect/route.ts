@@ -66,7 +66,7 @@ export async function POST(
     let marketingOriginalCreatorId = account.original_creator_id
 
     // Marketing roles for checking if creator is from marketing
-    const marketingRoles = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+    const marketingRoles = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO']
 
     // If no original_creator_id on account, look up from leads
     if (!marketingOriginalCreatorId) {

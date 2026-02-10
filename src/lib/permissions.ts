@@ -46,7 +46,7 @@ export function isMarketingManagerOrMACX(role: UserRole | null | undefined): boo
 }
 
 // Marketing roles for department check (excluding admin roles)
-const MARKETING_DEPARTMENT_ROLES: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+const MARKETING_DEPARTMENT_ROLES: UserRole[] = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO']
 
 // Check if a creator is in marketing department (by role or department field)
 export function isCreatorInMarketingDepartment(
@@ -189,7 +189,7 @@ export function canMACXAccessLead(
 // Pipeline View Access Rules:
 // - Salesperson: Pipeline from leads they created or claimed
 // - Sales Manager: Pipeline from leads created/claimed by sales department users
-// - Marketing (Marcomm, VSDO, DGO): Pipeline from leads they created
+// - Marketing (Marcomm, VDCO, DGO): Pipeline from leads they created
 // - Marketing Manager, MACX: Pipeline from leads created by marketing department
 // - Director, Admin: All pipelines
 
@@ -237,8 +237,8 @@ export function canViewPipeline(
     return true // Allow viewing but not updating
   }
 
-  // Marketing roles (Marcomm, VSDO, DGO): Can view pipelines from leads they created
-  if (role === 'Marcomm' || role === 'VSDO' || role === 'DGO') {
+  // Marketing roles (Marcomm, VDCO, DGO): Can view pipelines from leads they created
+  if (role === 'Marcomm' || role === 'VDCO' || role === 'DGO') {
     if (pipeline.lead_created_by === userId) return true
     if (pipeline.lead_marketing_owner === userId) return true
     return false
@@ -291,7 +291,7 @@ export function isSalesPipelineUser(role: UserRole | null | undefined): boolean 
 // Check if the user is a marketing role that can view pipelines
 export function isMarketingPipelineViewer(role: UserRole | null | undefined): boolean {
   if (!role) return false
-  return role === 'Marketing Manager' || role === 'Marcomm' || role === 'DGO' || role === 'MACX' || role === 'VSDO'
+  return role === 'Marketing Manager' || role === 'Marcomm' || role === 'DGO' || role === 'MACX' || role === 'VDCO'
 }
 
 // =====================================================
@@ -424,7 +424,7 @@ export function getUserTicketingDepartment(role: UserRole | null | undefined): s
     case 'Marcomm':
     case 'DGO':
     case 'MACX':
-    case 'VSDO':
+    case 'VDCO':
       return 'MKT'
     case 'sales manager':
     case 'salesperson':
@@ -464,7 +464,7 @@ export interface AnalyticsScopeResult {
 // - Ops roles (EXIM Ops, domestics Ops, Import DTD Ops, traffic & warehous): see their department's analytics
 // - Marketing Manager, MACX: see marketing department analytics
 // - Sales Manager, sales support: see sales department analytics
-// - Salesperson, VSDO, DGO, Marcomm: see their own user analytics
+// - Salesperson, VDCO, DGO, Marcomm: see their own user analytics
 export function getAnalyticsScope(
   role: UserRole | null | undefined,
   userId: string
@@ -491,7 +491,7 @@ export function getAnalyticsScope(
     return { scope: 'department', department: 'SAL', userId: null }
   }
 
-  // Salesperson, VSDO, DGO, Marcomm see their own data
+  // Salesperson, VDCO, DGO, Marcomm see their own data
   // (and any other individual contributors)
   return { scope: 'user', department: null, userId }
 }
@@ -501,7 +501,7 @@ export function getAnalyticsScope(
 // =====================================================
 
 // Staff roles that should NOT see rankings/leaderboard
-const STAFF_ROLES_NO_RANKINGS: UserRole[] = ['DGO', 'VSDO', 'Marcomm', 'salesperson']
+const STAFF_ROLES_NO_RANKINGS: UserRole[] = ['DGO', 'VDCO', 'Marcomm', 'salesperson']
 
 // =====================================================
 // Marketing Panel Permissions
@@ -517,7 +517,7 @@ export function canAccessMarketingPanel(role: UserRole | null | undefined): bool
 // Can user view analytics rankings/leaderboard?
 // - Director, super admin: YES (all roles & departments)
 // - Manager roles, MACX, sales support, Ops: YES (their department)
-// - Staff (DGO, VSDO, Marcomm, salesperson): NO
+// - Staff (DGO, VDCO, Marcomm, salesperson): NO
 export function canViewAnalyticsRankings(role: UserRole | null | undefined): boolean {
   if (!role) return false
 

@@ -34,7 +34,7 @@ BEGIN
   END IF;
 
   -- Also check by marketing roles (as fallback)
-  IF user_role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN
+  IF user_role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO') THEN
     RETURN TRUE;
   END IF;
 
@@ -97,7 +97,7 @@ SELECT
   -- Flag to indicate if creator is in marketing department
   CASE
     WHEN pc.department IS NOT NULL AND LOWER(pc.department) LIKE '%marketing%' THEN TRUE
-    WHEN pc.role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN TRUE
+    WHEN pc.role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO') THEN TRUE
     ELSE FALSE
   END AS creator_is_marketing,
   a.company_name AS account_company_name,
@@ -137,7 +137,7 @@ SELECT
   pc.role AS creator_role,
   CASE
     WHEN pc.department IS NOT NULL AND LOWER(pc.department) LIKE '%marketing%' THEN TRUE
-    WHEN pc.role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN TRUE
+    WHEN pc.role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO') THEN TRUE
     ELSE FALSE
   END AS creator_is_marketing
 FROM leads l

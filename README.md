@@ -258,7 +258,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 | MACX | `MACX` | Marketing | Same as Marketing Manager (all marketing dept data) |
 | Marcomm | `Marcomm` | Marketing | Own leads only |
 | DGO | `DGO` | Marketing | Own leads only |
-| VSDO | `VSDO` | Marketing | Own leads only |
+| VDCO | `VDCO` | Marketing | Own leads only |
 | Sales Manager | `sales manager` | Sales | All sales team data |
 | Sales Support | `sales support` | Sales | All sales team data (view), own data (edit) |
 | Salesperson | `salesperson` | Sales | Own leads, pipeline, quotations |
@@ -270,7 +270,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 
 ### Permission Matrix
 
-| Action | Director | Admin | Mkt Mgr/MACX | Sales Mgr | Sales Support | Salesperson | Marcomm/DGO/VSDO | Ops | Finance |
+| Action | Director | Admin | Mkt Mgr/MACX | Sales Mgr | Sales Support | Salesperson | Marcomm/DGO/VDCO | Ops | Finance |
 |--------|----------|-------|-------------|-----------|---------------|-------------|-------------------|-----|---------|
 | View Lead Inbox | ✓ | ✓ | ✓ | - | - | - | ✓ | - | - |
 | Triage Leads | ✓ | ✓ | ✓ | - | - | - | ✓ | - | - |
@@ -299,7 +299,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 | Role | Default Redirect |
 |------|-----------------|
 | Sales (salesperson, sales manager, sales support) | `/overview-crm` |
-| Marketing (Marketing Manager, Marcomm, DGO, MACX, VSDO) | `/marketing/overview` |
+| Marketing (Marketing Manager, Marcomm, DGO, MACX, VDCO) | `/marketing/overview` |
 | Ops (EXIM Ops, domestics Ops, Import DTD Ops, traffic & warehous) | `/overview-ticket` |
 | Finance | `/overview-crm` (DSO coming soon) |
 | Director / super admin | `/overview-crm` |
@@ -313,7 +313,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 | Sales Support | All sales leads | All sales opps/accounts | All sales activities | Sales department |
 | Salesperson | Own leads only | Own opps/accounts only | Own activities only | Own tickets only |
 | Marketing Manager / MACX | All marketing dept leads | Opps/accounts from marketing leads (`original_creator_id` in marketing dept) | Marketing-originated | Marketing department |
-| Marcomm / DGO / VSDO | Own leads only | Opps/accounts from own leads (`original_creator_id = userId`) | Own-originated | Own tickets only |
+| Marcomm / DGO / VDCO | Own leads only | Opps/accounts from own leads (`original_creator_id = userId`) | Own-originated | Own tickets only |
 | Ops roles | N/A (redirected) | N/A | N/A | Own department |
 | Finance | N/A | N/A | N/A | No access |
 
@@ -560,7 +560,7 @@ The CRM Dashboard is the main analytics hub for Sales and Marketing departments.
 Marketing roles see only data originated from their department's leads, using `original_creator_id`:
 
 ```
-DGO/Marcomm/VSDO (individual staff):
+DGO/Marcomm/VDCO (individual staff):
 ├── Leads: created_by = userId OR marketing_owner_user_id = userId
 ├── Opportunities: original_creator_id = userId
 └── Accounts: original_creator_id = userId
@@ -1164,7 +1164,7 @@ npx tsc --noEmit # TypeScript check
   - **Salesperson Performance Table**: Detailed per-person metrics for managers
 - **Marketing Department Dashboard**: Full analytics parity with sales department
   - **Marketing Data Scoping**: Opportunities and accounts now filtered by `original_creator_id` for marketing roles
-    - DGO/Marcomm/VSDO: Only see data from leads they created
+    - DGO/Marcomm/VDCO: Only see data from leads they created
     - Marketing Manager/MACX: See data from all marketing department leads
   - **Lead Status Analysis**: Triage status breakdown (New/In Review/Qualified/Assign to Sales/Nurture/Disqualified)
   - **Lead-to-MQL Time**: Time analysis from lead creation to handover, categorized (<1h to >24h) with average

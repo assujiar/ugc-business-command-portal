@@ -69,7 +69,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     // See all sales department data - no filter needed
   } else if (role === 'Marketing Manager' || role === 'MACX') {
     leadsQuery = leadsQuery.not('marketing_owner_user_id', 'is', null)
-  } else if (role === 'Marcomm' || role === 'DGO' || role === 'VSDO') {
+  } else if (role === 'Marcomm' || role === 'DGO' || role === 'VDCO') {
     leadsQuery = leadsQuery.or(`marketing_owner_user_id.eq.${userId},created_by.eq.${userId}`)
   } else {
     leadsQuery = leadsQuery.or(`sales_owner_user_id.eq.${userId},created_by.eq.${userId}`)
@@ -108,7 +108,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const marketingProfilesQuery = (adminClient as any)
     .from('profiles')
     .select('user_id, name, email, role')
-    .in('role', ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'])
+    .in('role', ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'])
     .eq('is_active', true)
 
   // Execute all queries in parallel
@@ -180,7 +180,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   // Marketing role scoping for opportunities & accounts
   // Based on original_creator_id (the lead creator)
   // =====================================================
-  const marketingDeptRoles = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+  const marketingDeptRoles = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO']
   const isMarketingDept = marketingDeptRoles.includes(role)
 
   if (isMarketingDept) {
@@ -195,7 +195,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         a.original_creator_id && mktUserIds.has(a.original_creator_id)
       )
     } else {
-      // DGO/Marcomm/VSDO: see only opportunities & accounts from leads they created
+      // DGO/Marcomm/VDCO: see only opportunities & accounts from leads they created
       filteredOpportunities = filteredOpportunities.filter((o: any) =>
         o.original_creator_id === userId
       )

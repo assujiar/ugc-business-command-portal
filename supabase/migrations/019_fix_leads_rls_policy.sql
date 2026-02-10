@@ -37,7 +37,7 @@ BEGIN
   END IF;
 
   -- Also check by marketing roles (as fallback)
-  IF user_role_val IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN
+  IF user_role_val IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO') THEN
     RETURN TRUE;
   END IF;
 

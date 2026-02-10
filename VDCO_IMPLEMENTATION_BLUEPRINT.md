@@ -10,7 +10,7 @@
 ## 1. Ringkasan
 
 Modul VDCO memungkinkan user role marketing (Marcomm, MACX, DGO, Marketing Manager) untuk membuat
-request produksi design visual ke tim VSDO. VSDO memproduksi, mengirim hasil design, dan user
+request produksi design visual ke tim VDCO. VDCO memproduksi, mengirim hasil design, dan user
 melakukan review — approve atau minta revisi — hingga design final disetujui.
 
 Seluruh mekanisme dilengkapi time-tracking otomatis untuk mengukur efisiensi produksi.
@@ -29,8 +29,8 @@ Seluruh mekanisme dilengkapi time-tracking otomatis untuk mengukur efisiensi pro
 | Director | Ya | Ya (semua) | Ya |
 | super admin | Ya | Ya (semua) | Ya |
 
-### 2.2 Producer (VSDO)
-| Aksi | VSDO |
+### 2.2 Producer (VDCO)
+| Aksi | VDCO |
 |------|------|
 | Lihat request | Ya (assigned / unassigned) |
 | Accept request | Ya |
@@ -40,7 +40,7 @@ Seluruh mekanisme dilengkapi time-tracking otomatis untuk mengukur efisiensi pro
 
 ### 2.3 Helper Functions (RLS)
 - `fn_is_design_requester()` → Marketing roles (can create requests)
-- `fn_is_design_producer()` → VSDO role (can deliver designs)
+- `fn_is_design_producer()` → VDCO role (can deliver designs)
 - `fn_is_design_approver()` → Director, super admin, Marketing Manager (can approve any)
 
 ---
@@ -57,10 +57,10 @@ draft → submitted → accepted → in_progress → delivered → approved ✓
 | Status | Siapa yang Set | Deskripsi |
 |--------|---------------|-----------|
 | draft | Requester | Brief sedang ditulis, belum dikirim |
-| submitted | Requester | Brief dikirim ke VSDO, menunggu diterima |
-| accepted | VSDO | VSDO sudah terima, mulai kerja |
-| in_progress | VSDO | VSDO sedang mengerjakan |
-| delivered | VSDO | Design sudah dikirim (version baru) |
+| submitted | Requester | Brief dikirim ke VDCO, menunggu diterima |
+| accepted | VDCO | VDCO sudah terima, mulai kerja |
+| in_progress | VDCO | VDCO sedang mengerjakan |
+| delivered | VDCO | Design sudah dikirim (version baru) |
 | revision_requested | Requester | Requester minta revisi dengan feedback |
 | approved | Requester | Design disetujui, selesai |
 | cancelled | Requester | Request dibatalkan |
@@ -104,7 +104,7 @@ priority            TEXT DEFAULT 'medium'    -- low, medium, high, urgent
 deadline            DATE                     -- Deadline request
 status              TEXT DEFAULT 'draft'     -- Status saat ini
 requested_by        UUID FK profiles(user_id) NOT NULL
-assigned_to         UUID FK profiles(user_id) -- VSDO yang di-assign
+assigned_to         UUID FK profiles(user_id) -- VDCO yang di-assign
 campaign_id         UUID FK marketing_content_campaigns(id)  -- Opsional link ke campaign
 
 -- Time tracking (auto-set via status changes)
@@ -121,7 +121,7 @@ created_at          TIMESTAMPTZ DEFAULT NOW()
 updated_at          TIMESTAMPTZ DEFAULT NOW()
 ```
 
-### 4.2 marketing_design_versions (Setiap Delivery dari VSDO)
+### 4.2 marketing_design_versions (Setiap Delivery dari VDCO)
 
 ```sql
 id                  BIGINT GENERATED ALWAYS AS IDENTITY PK
@@ -131,7 +131,7 @@ design_url          TEXT NOT NULL             -- URL hasil design (Google Drive,
 design_url_2        TEXT                      -- URL tambahan
 thumbnail_url       TEXT                      -- Preview thumbnail
 file_format         TEXT                      -- png, pdf, psd, dll
-notes               TEXT                      -- Catatan dari VSDO
+notes               TEXT                      -- Catatan dari VDCO
 delivered_by        UUID FK profiles(user_id) NOT NULL
 delivered_at        TIMESTAMPTZ DEFAULT NOW()
 
@@ -198,7 +198,7 @@ other                   Lainnya
 ### 5.3 Versions (Delivery)
 | Method | Path | Deskripsi |
 |--------|------|-----------|
-| POST | `/api/marketing/design-requests/[id]/versions` | VSDO kirim design baru |
+| POST | `/api/marketing/design-requests/[id]/versions` | VDCO kirim design baru |
 | PATCH | `/api/marketing/design-requests/[id]/versions/[vid]/review` | Requester approve/revisi |
 
 ### 5.4 Comments
@@ -225,7 +225,7 @@ other                   Lainnya
 ### 6.2 Dialogs
 1. **Create Request** — Form pembuatan request (comprehensive)
 2. **Request Detail** — Detail + version gallery + timeline + comments
-3. **Deliver Design** — Form VSDO kirim design (URL + notes)
+3. **Deliver Design** — Form VDCO kirim design (URL + notes)
 4. **Review Design** — Form approve/revision request
 5. **Status Change** — Konfirmasi perubahan status
 

@@ -343,7 +343,7 @@ BEGIN
     WHERE user_id = p_user_id AND is_active = TRUE;
 
     -- Check if user is marketing
-    IF v_user_role NOT IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN
+    IF v_user_role NOT IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO') THEN
         RETURN FALSE;
     END IF;
 
@@ -358,7 +358,7 @@ BEGIN
         RETURN EXISTS (
             SELECT 1 FROM public.profiles
             WHERE user_id = v_original_creator_id
-            AND role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO')
+            AND role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO')
         );
     END IF;
 
