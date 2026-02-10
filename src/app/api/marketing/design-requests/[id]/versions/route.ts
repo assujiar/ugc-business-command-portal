@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 type RouteParams = { params: Promise<{ id: string }> }
 
 /**
- * POST - VSDO delivers a design version
+ * POST - VDCO delivers a design version
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
@@ -19,10 +19,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single() as { data: { role: string } | null }
     if (!profile || !canAccessMarketingPanel(profile.role as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    // Only VSDO/admin can deliver
-    const producerRoles = ['VSDO', 'Director', 'super admin']
+    // Only VDCO/admin can deliver
+    const producerRoles = ['VDCO', 'Director', 'super admin']
     if (!producerRoles.includes(profile.role)) {
-      return NextResponse.json({ error: 'Only VSDO can deliver designs' }, { status: 403 })
+      return NextResponse.json({ error: 'Only VDCO can deliver designs' }, { status: 403 })
     }
 
     const { data: req } = await (supabase as any)

@@ -5,7 +5,7 @@ import { canAccessMarketingPanel } from '@/lib/permissions'
 export const dynamic = 'force-dynamic'
 
 const SUPERVISOR_ROLES = ['Director', 'super admin', 'Marketing Manager', 'MACX']
-const PRODUCER_ROLE = 'VSDO'
+const PRODUCER_ROLE = 'VDCO'
 const REQUESTER_ROLES = ['Director', 'super admin', 'Marketing Manager', 'Marcomm', 'DGO', 'MACX']
 
 export async function GET(request: NextRequest) {
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     // Only non-VDCO marketing roles can create requests
     if (!REQUESTER_ROLES.includes(profile.role)) {
-      return NextResponse.json({ error: 'VSDO tidak bisa membuat design request. Hanya role marketing yang bisa membuat request.' }, { status: 403 })
+      return NextResponse.json({ error: 'VDCO tidak bisa membuat design request. Hanya role marketing yang bisa membuat request.' }, { status: 403 })
     }
 
     const body = await request.json()

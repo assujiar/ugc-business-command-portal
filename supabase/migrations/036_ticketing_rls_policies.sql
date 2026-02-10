@@ -77,7 +77,7 @@ BEGIN
 
     -- Map CRM roles to ticketing departments
     CASE user_role
-        WHEN 'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO' THEN RETURN 'MKT';
+        WHEN 'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO' THEN RETURN 'MKT';
         WHEN 'sales manager', 'salesperson', 'sales support' THEN RETURN 'SAL';
         WHEN 'domestics Ops' THEN RETURN 'DOM';
         WHEN 'EXIM Ops' THEN RETURN 'EXI';

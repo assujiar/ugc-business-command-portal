@@ -28,7 +28,7 @@ BEGIN
   RETURN EXISTS (
     SELECT 1 FROM profiles
     WHERE user_id = auth.uid()
-    AND role = 'VSDO'
+    AND role = 'VDCO'
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;

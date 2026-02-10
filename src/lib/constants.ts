@@ -13,7 +13,7 @@ export const USER_ROLES: UserRole[] = [
   'Marcomm',
   'DGO',
   'MACX',
-  'VSDO',
+  'VDCO',
   'sales manager',
   'salesperson',
   'sales support',
@@ -26,7 +26,7 @@ export const USER_ROLES: UserRole[] = [
 
 // Role groups for permission checks
 export const ADMIN_ROLES: UserRole[] = ['Director', 'super admin']
-export const MARKETING_ROLES: UserRole[] = ['Director', 'super admin', 'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+export const MARKETING_ROLES: UserRole[] = ['Director', 'super admin', 'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO']
 export const SALES_ROLES: UserRole[] = ['Director', 'super admin', 'sales manager', 'salesperson', 'sales support']
 
 // Lead triage statuses - valid statuses only

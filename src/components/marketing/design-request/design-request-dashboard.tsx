@@ -69,7 +69,7 @@ interface Comment {
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   draft: { label: 'Draft', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300', icon: Edit },
   submitted: { label: 'Submitted', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300', icon: Send },
-  accepted: { label: 'Diterima VSDO', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300', icon: CheckCircle2 },
+  accepted: { label: 'Diterima VDCO', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300', icon: CheckCircle2 },
   in_progress: { label: 'Dikerjakan', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300', icon: RefreshCw },
   delivered: { label: 'Design Dikirim', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300', icon: Upload },
   revision_requested: { label: 'Revisi Diminta', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300', icon: RefreshCw },
@@ -99,7 +99,7 @@ const DESIGN_TYPES = [
 ]
 
 const SUPERVISOR_ROLES = ['Director', 'super admin', 'Marketing Manager', 'MACX']
-const PRODUCER_ROLE = 'VSDO'
+const PRODUCER_ROLE = 'VDCO'
 
 const MOOD_OPTIONS = ['professional', 'playful', 'bold', 'minimalist', 'elegant', 'modern', 'retro', 'colorful', 'dark', 'clean']
 const OUTPUT_FORMATS = ['png', 'jpg', 'pdf', 'psd', 'ai', 'svg', 'mp4', 'gif']
@@ -338,7 +338,7 @@ export default function DesignRequestDashboard() {
             <Palette className="h-6 w-6" /> Design Request (VDCO)
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {isProducer ? 'Kelola dan produksi design request dari tim marketing' : 'Request dan tracking produksi visual design oleh VSDO'}
+            {isProducer ? 'Kelola dan produksi design request dari tim marketing' : 'Request dan tracking produksi visual design oleh VDCO'}
           </p>
         </div>
         {!isProducer && (
@@ -512,7 +512,7 @@ export default function DesignRequestDashboard() {
                       <th className="text-left p-3 font-medium hidden md:table-cell">Prioritas</th>
                       <th className="text-left p-3 font-medium hidden md:table-cell">Deadline</th>
                       <th className="text-left p-3 font-medium hidden lg:table-cell">Requester</th>
-                      <th className="text-left p-3 font-medium hidden lg:table-cell">VSDO</th>
+                      <th className="text-left p-3 font-medium hidden lg:table-cell">VDCO</th>
                       <th className="text-left p-3 font-medium hidden lg:table-cell">Versi</th>
                     </tr>
                   </thead>
@@ -617,7 +617,7 @@ export default function DesignRequestDashboard() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Palette className="h-5 w-5" /> {editingId ? 'Edit' : 'Buat'} Design Request</DialogTitle>
-            <DialogDescription>Isi brief selengkap mungkin agar VSDO memahami kebutuhan Anda</DialogDescription>
+            <DialogDescription>Isi brief selengkap mungkin agar VDCO memahami kebutuhan Anda</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             {/* Section 1: Basic Info */}
@@ -767,7 +767,7 @@ export default function DesignRequestDashboard() {
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Batal</Button>
             <Button variant="secondary" onClick={() => handleCreate(false)}>Simpan Draft</Button>
-            <Button onClick={() => handleCreate(true)} className="gap-1"><Send className="h-4 w-4" /> Kirim ke VSDO</Button>
+            <Button onClick={() => handleCreate(true)} className="gap-1"><Send className="h-4 w-4" /> Kirim ke VDCO</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -791,11 +791,11 @@ export default function DesignRequestDashboard() {
                   <StatusBadge status={selectedRequest.status} />
                   <PriorityBadge priority={selectedRequest.priority} />
                   {selectedRequest.revision_count > 0 && <Badge variant="outline" className="text-xs">{selectedRequest.revision_count}x revisi</Badge>}
-                  {selectedRequest.assignee && <Badge variant="secondary" className="text-xs">VSDO: {selectedRequest.assignee.name}</Badge>}
+                  {selectedRequest.assignee && <Badge variant="secondary" className="text-xs">VDCO: {selectedRequest.assignee.name}</Badge>}
                   <div className="flex-1" />
                   {/* Action buttons - role-based */}
-                  {/* Requester actions: submit to VSDO */}
-                  {selectedRequest.status === 'draft' && !isProducer && <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'submitted')}><Send className="h-3 w-3" /> Kirim ke VSDO</Button>}
+                  {/* Requester actions: submit to VDCO */}
+                  {selectedRequest.status === 'draft' && !isProducer && <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'submitted')}><Send className="h-3 w-3" /> Kirim ke VDCO</Button>}
                   {/* VDCO/Supervisor actions: accept, start, deliver */}
                   {selectedRequest.status === 'submitted' && (isProducer || isSupervisor) && <Button size="sm" variant="default" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'accepted')}><CheckCircle2 className="h-3 w-3" /> Terima Request</Button>}
                   {selectedRequest.status === 'accepted' && (isProducer || isSupervisor) && <Button size="sm" variant="default" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'in_progress')}><RefreshCw className="h-3 w-3" /> Mulai Kerjakan</Button>}
@@ -1017,7 +1017,7 @@ export default function DesignRequestDashboard() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {statusTarget === 'submitted' && 'Kirim ke VSDO'}
+              {statusTarget === 'submitted' && 'Kirim ke VDCO'}
               {statusTarget === 'accepted' && 'Terima Request'}
               {statusTarget === 'in_progress' && 'Mulai Kerjakan'}
               {statusTarget === 'cancelled' && 'Batalkan Request'}
@@ -1028,7 +1028,7 @@ export default function DesignRequestDashboard() {
           <div className="grid gap-3">
             {statusTarget === 'submitted' && (
               <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded text-xs text-blue-700 dark:text-blue-300">
-                Request akan dikirim ke tim VSDO. Pastikan brief sudah lengkap.
+                Request akan dikirim ke tim VDCO. Pastikan brief sudah lengkap.
               </div>
             )}
             {statusTarget === 'cancelled' && (

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 type RouteParams = { params: Promise<{ id: string }> }
 
 const SUPERVISOR_ROLES = ['Director', 'super admin', 'Marketing Manager', 'MACX']
-const PRODUCER_ROLE = 'VSDO'
+const PRODUCER_ROLE = 'VDCO'
 
 const VALID_TRANSITIONS: Record<string, { targets: string[]; requesterOnly?: boolean; producerOnly?: boolean }> = {
   draft: { targets: ['submitted', 'cancelled'], requesterOnly: true },
@@ -53,12 +53,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (transition.requesterOnly) {
       // VDCO cannot do requester actions (submit, approve, request revision)
-      if (isProducer) return NextResponse.json({ error: 'VSDO tidak bisa melakukan aksi ini' }, { status: 403 })
+      if (isProducer) return NextResponse.json({ error: 'VDCO tidak bisa melakukan aksi ini' }, { status: 403 })
       if (!isRequester && !isSupervisor) return NextResponse.json({ error: 'Hanya requester yang bisa melakukan aksi ini' }, { status: 403 })
     }
     if (transition.producerOnly) {
       // Only VDCO + supervisor can do producer actions (accept, start, deliver)
-      if (!isProducer && !isSupervisor) return NextResponse.json({ error: 'Hanya VSDO yang bisa melakukan aksi ini' }, { status: 403 })
+      if (!isProducer && !isSupervisor) return NextResponse.json({ error: 'Hanya VDCO yang bisa melakukan aksi ini' }, { status: 403 })
     }
 
     // Revision requires comment
@@ -82,7 +82,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateData.revision_count = (req.revision_count || 0) + 1
     }
     if (targetStatus === 'in_progress' && req.status === 'revision_requested') {
-      // VSDO starts working on revision - no special timestamp needed
+      // VDCO starts working on revision - no special timestamp needed
     }
 
     const { data: updated, error } = await (supabase as any)

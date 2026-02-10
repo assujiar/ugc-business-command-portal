@@ -316,7 +316,7 @@ const canSeeLeaderboard = (role: string) => isAdmin(role as UserRole) || role ==
 const canSeeSalesTable = (role: string) => isAdmin(role as UserRole) || role === 'sales manager' || role === 'sales support'
 const canSeeLeadSource = (role: string) => isAdmin(role as UserRole) || role === 'sales manager' || role === 'sales support'
 const canSeeSalesFilter = (role: string) => isAdmin(role as UserRole) || role === 'sales manager' || role === 'sales support'
-const isMarketingDept = (role: string) => ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'].includes(role)
+const isMarketingDept = (role: string) => ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'].includes(role)
 
 function formatHours(hours: number): string {
   if (hours < 1) return `${Math.round(hours * 60)} menit`

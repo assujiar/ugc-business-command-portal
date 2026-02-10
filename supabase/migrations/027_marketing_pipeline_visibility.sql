@@ -3,7 +3,7 @@
 --
 -- Allows marketing department to view pipelines and accounts
 -- based on original lead creator:
--- - Marcomm/DGO/VSDO: See pipelines from leads THEY created
+-- - Marcomm/DGO/VDCO: See pipelines from leads THEY created
 -- - Marketing Manager/MACX: See ALL pipelines from marketing department leads
 -- =====================================================
 
@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_original_creator ON opportunities(o
 CREATE OR REPLACE FUNCTION is_marketing_staff()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN get_user_role() IN ('Marcomm', 'DGO', 'VSDO');
+  RETURN get_user_role() IN ('Marcomm', 'DGO', 'VDCO');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
@@ -58,7 +58,7 @@ BEGIN
   END IF;
 
   -- Check by marketing role
-  IF creator_role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN
+  IF creator_role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO') THEN
     RETURN TRUE;
   END IF;
 
@@ -79,7 +79,7 @@ CREATE POLICY opp_select ON opportunities FOR SELECT
     OR (is_sales() AND created_by = auth.uid())
     -- Marketing Manager/MACX: See all opportunities from marketing department leads
     OR (is_marketing_manager_or_macx() AND is_original_creator_marketing(original_creator_id))
-    -- Marketing staff (Marcomm/DGO/VSDO): See opportunities from leads THEY created
+    -- Marketing staff (Marcomm/DGO/VDCO): See opportunities from leads THEY created
     OR (is_marketing_staff() AND original_creator_id = auth.uid())
     -- Fallback: Allow if original_creator_id is null (legacy data) and user is marketing
     OR (is_marketing() AND original_creator_id IS NULL)
@@ -145,7 +145,7 @@ SELECT
   creator.department AS original_creator_department,
   CASE
     WHEN creator.department IS NOT NULL AND LOWER(creator.department) LIKE '%marketing%' THEN TRUE
-    WHEN creator.role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN TRUE
+    WHEN creator.role IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO') THEN TRUE
     ELSE FALSE
   END AS original_creator_is_marketing,
   (SELECT COUNT(*) FROM pipeline_updates pu WHERE pu.opportunity_id = o.opportunity_id) AS update_count,
@@ -160,6 +160,6 @@ ORDER BY o.next_step_due_date ASC;
 COMMENT ON VIEW v_pipeline_with_updates IS 'Pipeline/opportunities with update counts and original creator info for marketing visibility';
 
 -- 10. Add comments for functions
-COMMENT ON FUNCTION is_marketing_staff() IS 'Check if user is marketing staff (Marcomm/DGO/VSDO)';
+COMMENT ON FUNCTION is_marketing_staff() IS 'Check if user is marketing staff (Marcomm/DGO/VDCO)';
 COMMENT ON FUNCTION is_marketing_manager_or_macx() IS 'Check if user is Marketing Manager or MACX';
 COMMENT ON FUNCTION is_original_creator_marketing(UUID) IS 'Check if original creator is from marketing department';

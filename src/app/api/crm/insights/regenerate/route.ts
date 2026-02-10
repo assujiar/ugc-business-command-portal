@@ -31,7 +31,7 @@ const UNLIMITED_REGENERATE_ROLES = [
   'MACX',
   'Marcomm',
   'DGO',
-  'VSDO',
+  'VDCO',
 ]
 
 export async function POST(request: NextRequest) {

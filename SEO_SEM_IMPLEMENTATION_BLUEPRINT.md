@@ -40,7 +40,7 @@
 
 **Tujuan SEM**: Meningkatkan leads dari paid search (Google Ads, Meta Ads) dengan cost efficiency yang terukur.
 
-**Target user**: Tim Digital Marketing (role: Director, super admin, Marketing Manager, Marcomm, DGO, MACX, VSDO).
+**Target user**: Tim Digital Marketing (role: Director, super admin, Marketing Manager, Marcomm, DGO, MACX, VDCO).
 
 ---
 

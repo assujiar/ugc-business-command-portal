@@ -689,7 +689,7 @@ LEFT JOIN profiles p ON o.owned_by = p.user_id;
 #### 5.1.2 Lead Inbox (Marketing)
 
 **Route**: `/lead-inbox`
-**Access**: Marketing Manager, Marcomm, DGO, MACX, VSDO, Admin
+**Access**: Marketing Manager, Marcomm, DGO, MACX, VDCO, Admin
 
 **Features**:
 - View new and in-review leads
@@ -1001,7 +1001,7 @@ SLA Tracking:
 │   │ Marcomm         │ │  Salesperson    │ │  Domestics Ops  │          │
 │   │ DGO             │ │  Sales Support  │ │ Import DTD Ops  │          │
 │   │ MACX            │ │                 │ │Traffic/Warehouse│          │
-│   │ VSDO            │ │                 │ │    Finance      │          │
+│   │ VDCO            │ │                 │ │    Finance      │          │
 │   └─────────────────┘ └─────────────────┘ └─────────────────┘          │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
