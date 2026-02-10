@@ -412,6 +412,13 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       failed: accts.filter(a => a.account_status === 'failed_account').length,
     }
 
+    // Lost reasons breakdown
+    const lostReasons: Record<string, number> = {}
+    lost.forEach(o => {
+      const reason = o.lost_reason || 'Tidak Diketahui'
+      lostReasons[reason] = (lostReasons[reason] || 0) + 1
+    })
+
     // Opportunity by stage (for funnel)
     const oppByStage = {
       prospecting: opps.filter(o => o.stage === 'Prospecting').length,
@@ -431,7 +438,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       acts, actByType, methodCounts, updates,
       leads, leadsBySource,
       plansByType, plansByStatus, huntingPotential, plans,
-      accountsByStatus, oppByStage, acceptedQ,
+      accountsByStatus, oppByStage, acceptedQ, lostReasons,
     }
   }, [data])
 
@@ -801,6 +808,10 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                 <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">{calc.won.length}</Badge>
               </div>
               <p className="text-xl font-bold text-emerald-600">{formatCurrency(calc.wonValue)}</p>
+              <p className="text-xs text-emerald-600 mt-1">Est. Value: {formatCurrency(calc.wonValue)}</p>
+              {calc.dealValue > 0 && (
+                <p className="text-xs text-emerald-700 font-medium">Deal Value: {formatCurrency(calc.dealValue)}</p>
+              )}
               <div className="flex gap-2 mt-2 text-xs text-emerald-600">
                 <span>{pct(calc.wonValue, calc.totalValue)} value</span>
                 <span>|</span>
@@ -831,6 +842,47 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* ============ LOST REASON ANALYTICS ============ */}
+      {calc.lost.length > 0 && (
+        <>
+          <SectionDivider title="Lost Pipeline Analysis" icon={<AlertCircle className="h-4 w-4 text-red-500" />} />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                Lost Reasons ({calc.lost.length} pipeline)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {Object.entries(calc.lostReasons)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([reason, count]) => (
+                    <div key={reason} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
+                      onClick={() => openDrill(`Lost: ${reason}`, calc.lost.filter(o => (o.lost_reason || 'Tidak Diketahui') === reason), [
+                        { key: 'name', label: 'Pipeline' },
+                        { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+                        { key: 'closed_at', label: 'Closed', format: (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-' },
+                      ])}>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+                        <span className="text-sm truncate">{reason}</span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-xs text-muted-foreground">{pct(count, calc.lost.length)}</span>
+                        <Badge variant="outline" className="text-xs">{count}</Badge>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              <div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
+                Total lost value: <span className="font-medium text-red-600">{formatCurrency(calc.lostValue)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* ============ WEEKLY ANALYTICS ============ */}
       <SectionDivider title="Weekly Analytics" icon={<BarChart3 className="h-4 w-4 text-indigo-500" />} />
