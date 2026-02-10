@@ -9,6 +9,7 @@ type RouteParams = { params: Promise<{ id: string }> }
 /**
  * PATCH /api/marketing/content-plan/plans/[id]/realize
  * Update realization data: actual metrics + evidence link
+ * Auto-transitions planned→published when evidence URL is provided
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
@@ -68,8 +69,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateData.realized_at = new Date().toISOString()
     }
 
-    // Auto-set status to published if still approved
-    if (plan.status === 'approved' && actual_post_url) {
+    // Auto-set status to published if still planned (with evidence URL)
+    if (plan.status === 'planned' && actual_post_url) {
       updateData.status = 'published'
       updateData.status_changed_at = new Date().toISOString()
       updateData.status_changed_by = user.id

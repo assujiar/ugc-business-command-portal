@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import {
   FileEdit, Plus, ChevronLeft, ChevronRight, Calendar as CalendarIcon,
   List, LayoutGrid, Clock, AlertTriangle, CheckCircle2, Eye, Send,
-  XCircle, Archive, MessageSquare, Hash, Bookmark, FileText, Search,
+  XCircle, MessageSquare, Hash, Bookmark, FileText, Search,
   Trash2, Edit, Link2, BarChart3, ExternalLink, TrendingUp,
   Target, Layers, Activity,
 } from 'lucide-react'
@@ -94,14 +94,14 @@ interface Comment {
 }
 
 interface KPIs {
-  totalPlanned: number; published: number; inReview: number
-  draft: number; approved: number; rejected: number; completionRate: number
+  totalPlanned: number; published: number; draft: number
+  planned: number; overdue: number; completionRate: number
   realized: number; withEvidence: number
 }
 
 interface ChannelKpi {
   platform: string; total: number; published: number; draft: number
-  inReview: number; approved: number; rejected: number
+  planned: number; overdue: number
   realized: number; withEvidence: number; completionRate: number
 }
 
@@ -111,11 +111,9 @@ interface ChannelKpi {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   draft: { label: 'Draft', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300', icon: FileEdit },
-  in_review: { label: 'In Review', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300', icon: Eye },
-  approved: { label: 'Approved', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300', icon: CheckCircle2 },
-  rejected: { label: 'Rejected', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300', icon: XCircle },
+  planned: { label: 'Planned', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300', icon: CalendarIcon },
   published: { label: 'Published', color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300', icon: Send },
-  archived: { label: 'Archived', color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300', icon: Archive },
+  overdue: { label: 'Overdue', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300', icon: AlertTriangle },
 }
 
 const CONTENT_TYPES = ['post', 'video', 'reel', 'story', 'short', 'carousel', 'live', 'article']
@@ -123,8 +121,16 @@ const PRIORITIES = ['low', 'medium', 'high']
 const PLATFORMS = PLATFORM_CONFIGS.map(p => p.id)
 const HASHTAG_CATEGORIES = ['brand', 'product', 'campaign', 'industry', 'trending', 'general']
 
-function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.draft
+/** Compute display status: overdue if not published and past scheduled_date */
+function getDisplayStatus(plan: { status: string; scheduled_date: string }): string {
+  const today = new Date().toISOString().split('T')[0]
+  if (plan.status !== 'published' && plan.scheduled_date < today) return 'overdue'
+  return plan.status
+}
+
+function StatusBadge({ status, scheduledDate }: { status: string; scheduledDate?: string }) {
+  const displayStatus = scheduledDate ? getDisplayStatus({ status, scheduled_date: scheduledDate }) : status
+  const cfg = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.draft
   const Icon = cfg.icon
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}>
@@ -201,17 +207,20 @@ export default function ContentPlanDashboard() {
   const [channelKpis, setChannelKpis] = useState<ChannelKpi[]>([])
   const [contentTypeDist, setContentTypeDist] = useState<Record<string, number>>({})
   const [upcoming, setUpcoming] = useState<ContentPlan[]>([])
-  const [needsAttention, setNeedsAttention] = useState<ContentPlan[]>([])
+  const [overdueItems, setOverdueItems] = useState<ContentPlan[]>([])
   const [needsRealization, setNeedsRealization] = useState<ContentPlan[]>([])
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   // Calendar state
   const [calMonth, setCalMonth] = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1) })
+  const [calSelectedDay, setCalSelectedDay] = useState<string | null>(null)
 
   // Filters
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [filterContentType, setFilterContentType] = useState('all')
+  const [filterOverdue, setFilterOverdue] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   // Dialogs
@@ -227,6 +236,7 @@ export default function ContentPlanDashboard() {
   const [showHashtagDialog, setShowHashtagDialog] = useState(false)
   const [showTemplateDialog, setShowTemplateDialog] = useState(false)
   const [showRealizeDialog, setShowRealizeDialog] = useState(false)
+  const [showCalDayDialog, setShowCalDayDialog] = useState(false)
 
   // Form state
   const [form, setForm] = useState({
@@ -262,7 +272,7 @@ export default function ContentPlanDashboard() {
         setChannelKpis(data.channelKpis || [])
         setContentTypeDist(data.contentTypeDist || {})
         setUpcoming(data.upcoming || [])
-        setNeedsAttention(data.needsAttention || [])
+        setOverdueItems(data.overdueItems || [])
         setNeedsRealization(data.needsRealization || [])
         setRecentActivity(data.recentActivity || [])
       }
@@ -275,7 +285,12 @@ export default function ContentPlanDashboard() {
       const endDate = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).toISOString().split('T')[0]
       let url = `/api/marketing/content-plan/plans?start_date=${startDate}&end_date=${endDate}&limit=200`
       if (filterPlatform !== 'all') url += `&platform=${filterPlatform}`
-      if (filterStatus !== 'all') url += `&status=${filterStatus}`
+      if (filterContentType !== 'all') url += `&content_type=${filterContentType}`
+      if (filterOverdue) {
+        url += `&overdue=true`
+      } else if (filterStatus !== 'all') {
+        url += `&status=${filterStatus}`
+      }
       if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`
       const res = await fetch(url)
       if (res.ok) {
@@ -283,7 +298,7 @@ export default function ContentPlanDashboard() {
         setPlans(data.plans || [])
       }
     } catch (e) { console.error('Error fetching plans:', e) }
-  }, [calMonth, filterPlatform, filterStatus, searchQuery])
+  }, [calMonth, filterPlatform, filterStatus, filterContentType, filterOverdue, searchQuery])
 
   const fetchCampaigns = useCallback(async () => {
     try {
@@ -313,10 +328,27 @@ export default function ContentPlanDashboard() {
   }, [fetchOverview, fetchPlans, fetchCampaigns, fetchHashtags, fetchTemplates])
 
   // ============================================================
+  // Drilldown helper
+  // ============================================================
+
+  const drilldown = (opts: { status?: string; platform?: string; contentType?: string; overdue?: boolean }) => {
+    if (opts.platform) setFilterPlatform(opts.platform)
+    if (opts.contentType) setFilterContentType(opts.contentType)
+    if (opts.overdue) {
+      setFilterOverdue(true)
+      setFilterStatus('all')
+    } else if (opts.status) {
+      setFilterOverdue(false)
+      setFilterStatus(opts.status)
+    }
+    setActiveTab('list')
+  }
+
+  // ============================================================
   // Actions
   // ============================================================
 
-  const handleCreatePlan = async (submitForReview = false) => {
+  const handleCreatePlan = async (saveAsDraft = false) => {
     if (!form.title || !form.platform || !form.scheduled_date) return
     try {
       const body: any = {
@@ -329,10 +361,16 @@ export default function ContentPlanDashboard() {
         campaign_id: form.campaign_id || null,
         assigned_to: form.assigned_to || null,
         scheduled_time: form.scheduled_time || null,
-        submit_for_review: submitForReview,
+        save_as_draft: saveAsDraft,
       }
       const url = editingPlanId ? `/api/marketing/content-plan/plans/${editingPlanId}` : '/api/marketing/content-plan/plans'
       const method = editingPlanId ? 'PATCH' : 'POST'
+
+      // If editing, decide status based on save mode
+      if (editingPlanId) {
+        body.status = saveAsDraft ? 'draft' : 'planned'
+      }
+
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (res.ok) {
         setShowCreateDialog(false)
@@ -545,6 +583,19 @@ export default function ContentPlanDashboard() {
   const nextMonth = () => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1))
   const today = new Date().toISOString().split('T')[0]
 
+  const handleCalDayClick = (day: number) => {
+    const dateStr = `${calMonth.getFullYear()}-${String(calMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    setCalSelectedDay(dateStr)
+    setShowCalDayDialog(true)
+  }
+
+  const calDayPlans = calSelectedDay ? plans.filter(p => p.scheduled_date === calSelectedDay) : []
+
+  // Filtered plans for list tab (apply local overdue filter too)
+  const filteredPlans = filterOverdue
+    ? plans.filter(p => getDisplayStatus(p) === 'overdue')
+    : plans
+
   // ============================================================
   // Render
   // ============================================================
@@ -565,7 +616,7 @@ export default function ContentPlanDashboard() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); if (v !== 'list') { setFilterOverdue(false); setFilterStatus('all'); setFilterPlatform('all'); setFilterContentType('all') } }}>
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview" className="gap-1 text-xs sm:text-sm"><LayoutGrid className="h-3.5 w-3.5" /> Overview</TabsTrigger>
           <TabsTrigger value="channels" className="gap-1 text-xs sm:text-sm"><BarChart3 className="h-3.5 w-3.5" /> Channel</TabsTrigger>
@@ -580,17 +631,18 @@ export default function ContentPlanDashboard() {
       {/* ===== OVERVIEW TAB ===== */}
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          {/* KPI Cards */}
+          {/* KPI Cards — all drillable */}
           {kpis && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
-                { label: 'Total Konten', value: kpis.totalPlanned, icon: Layers, color: 'text-blue-600' },
-                { label: 'Published', value: kpis.published, icon: Send, color: 'text-green-600' },
-                { label: 'In Review', value: kpis.inReview, icon: Eye, color: 'text-yellow-600' },
-                { label: 'Terealisasi', value: kpis.realized, icon: CheckCircle2, color: 'text-emerald-600' },
-                { label: 'Completion', value: `${kpis.completionRate}%`, icon: Target, color: 'text-purple-600' },
+                { label: 'Total Konten', value: kpis.totalPlanned, icon: Layers, color: 'text-blue-600', onClick: () => drilldown({}) },
+                { label: 'Draft', value: kpis.draft, icon: FileEdit, color: 'text-gray-500', onClick: () => drilldown({ status: 'draft' }) },
+                { label: 'Planned', value: kpis.planned, icon: CalendarIcon, color: 'text-blue-600', onClick: () => drilldown({ status: 'planned' }) },
+                { label: 'Published', value: kpis.published, icon: Send, color: 'text-green-600', onClick: () => drilldown({ status: 'published' }) },
+                { label: 'Overdue', value: kpis.overdue, icon: AlertTriangle, color: 'text-red-600', onClick: () => drilldown({ overdue: true }) },
+                { label: 'Completion', value: `${kpis.completionRate}%`, icon: Target, color: 'text-purple-600', onClick: () => drilldown({}) },
               ].map(kpi => (
-                <Card key={kpi.label}>
+                <Card key={kpi.label} className="cursor-pointer hover:shadow-md transition-shadow" onClick={kpi.onClick}>
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
@@ -603,7 +655,7 @@ export default function ContentPlanDashboard() {
             </div>
           )}
 
-          {/* Channel Breakdown Cards */}
+          {/* Channel Breakdown Cards — drillable */}
           {channelKpis.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold mb-2 flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Breakdown per Channel</h3>
@@ -611,7 +663,7 @@ export default function ContentPlanDashboard() {
                 {channelKpis.map(ch => {
                   const cfg = PLATFORM_CONFIG_MAP[ch.platform]
                   return (
-                    <Card key={ch.platform} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setFilterPlatform(ch.platform); setActiveTab('list') }}>
+                    <Card key={ch.platform} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => drilldown({ platform: ch.platform })}>
                       <CardContent className="p-3">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
@@ -621,10 +673,10 @@ export default function ContentPlanDashboard() {
                           <Badge variant="secondary" className="text-[10px]">{ch.total} konten</Badge>
                         </div>
                         <div className="grid grid-cols-4 gap-1 text-center text-[10px] mb-2">
-                          <div><p className="text-muted-foreground">Draft</p><p className="font-bold">{ch.draft}</p></div>
-                          <div><p className="text-muted-foreground">Review</p><p className="font-bold">{ch.inReview}</p></div>
-                          <div><p className="text-muted-foreground">Approved</p><p className="font-bold">{ch.approved}</p></div>
-                          <div><p className="text-muted-foreground">Published</p><p className="font-bold text-green-600">{ch.published}</p></div>
+                          <div className="cursor-pointer hover:bg-muted rounded p-0.5" onClick={(e) => { e.stopPropagation(); drilldown({ platform: ch.platform, status: 'draft' }) }}><p className="text-muted-foreground">Draft</p><p className="font-bold">{ch.draft}</p></div>
+                          <div className="cursor-pointer hover:bg-muted rounded p-0.5" onClick={(e) => { e.stopPropagation(); drilldown({ platform: ch.platform, status: 'planned' }) }}><p className="text-muted-foreground">Planned</p><p className="font-bold">{ch.planned}</p></div>
+                          <div className="cursor-pointer hover:bg-muted rounded p-0.5" onClick={(e) => { e.stopPropagation(); drilldown({ platform: ch.platform, status: 'published' }) }}><p className="text-muted-foreground">Published</p><p className="font-bold text-green-600">{ch.published}</p></div>
+                          <div className="cursor-pointer hover:bg-muted rounded p-0.5" onClick={(e) => { e.stopPropagation(); drilldown({ platform: ch.platform, overdue: true }) }}><p className="text-muted-foreground">Overdue</p><p className="font-bold text-red-600">{ch.overdue}</p></div>
                         </div>
                         <ProgressBar value={ch.published} max={ch.total} color={cfg?.color ? `bg-[${cfg.color}]` : 'bg-green-500'} />
                       </CardContent>
@@ -635,7 +687,7 @@ export default function ContentPlanDashboard() {
             </div>
           )}
 
-          {/* Content Type Distribution */}
+          {/* Content Type Distribution — drillable */}
           {Object.keys(contentTypeDist).length > 0 && (
             <Card>
               <CardHeader className="pb-2">
@@ -644,7 +696,7 @@ export default function ContentPlanDashboard() {
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(contentTypeDist).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
-                    <div key={type} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/30">
+                    <div key={type} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/30 cursor-pointer hover:bg-muted transition-colors" onClick={() => drilldown({ contentType: type })}>
                       <span className="text-sm font-medium capitalize">{type}</span>
                       <Badge variant="secondary" className="text-[10px]">{count}</Badge>
                     </div>
@@ -655,7 +707,7 @@ export default function ContentPlanDashboard() {
           )}
 
           <div className="grid gap-4 lg:grid-cols-2">
-            {/* Upcoming This Week */}
+            {/* Upcoming This Week — drillable items */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium flex items-center gap-2"><Clock className="h-4 w-4" /> Akan Datang Minggu Ini</CardTitle>
@@ -669,36 +721,36 @@ export default function ContentPlanDashboard() {
                       <p className="text-sm font-medium truncate">{p.title}</p>
                       <p className="text-xs text-muted-foreground">{formatDate(p.scheduled_date)} {p.scheduled_time ? `• ${p.scheduled_time.slice(0, 5)}` : ''}</p>
                     </div>
-                    <StatusBadge status={p.status} />
+                    <StatusBadge status={p.status} scheduledDate={p.scheduled_date} />
                   </div>
                 ))}
               </CardContent>
             </Card>
 
-            {/* Needs Attention */}
+            {/* Overdue — drillable items */}
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-500" /> Perlu Perhatian</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2 cursor-pointer hover:text-primary" onClick={() => drilldown({ overdue: true })}>
+                  <AlertTriangle className="h-4 w-4 text-red-500" /> Overdue ({overdueItems.length})
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {needsAttention.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">Semua konten on track</p>}
-                {needsAttention.map(p => (
-                  <div key={p.id} className="flex items-center gap-2 p-2 rounded border border-amber-200 dark:border-amber-800 cursor-pointer hover:bg-muted/50" onClick={() => openDetail(p.id)}>
+                {overdueItems.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">Semua konten on track</p>}
+                {overdueItems.map(p => (
+                  <div key={p.id} className="flex items-center gap-2 p-2 rounded border border-red-200 dark:border-red-800 cursor-pointer hover:bg-muted/50" onClick={() => openDetail(p.id)}>
                     <SocialIconBadge platform={p.platform} size="xs" variant="filled" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{p.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {p.status === 'rejected' ? 'Ditolak - perlu revisi' : `Overdue: ${formatDate(p.scheduled_date)}`}
-                      </p>
+                      <p className="text-xs text-red-600">Jadwal: {formatDate(p.scheduled_date)} — belum published</p>
                     </div>
-                    <StatusBadge status={p.status} />
+                    <StatusBadge status="overdue" />
                   </div>
                 ))}
               </CardContent>
             </Card>
           </div>
 
-          {/* Needs Realization */}
+          {/* Needs Realization — drillable items */}
           {needsRealization.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
@@ -706,13 +758,13 @@ export default function ContentPlanDashboard() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {needsRealization.map(p => (
-                  <div key={p.id} className="flex items-center gap-2 p-2 rounded border border-blue-200 dark:border-blue-800">
+                  <div key={p.id} className="flex items-center gap-2 p-2 rounded border border-blue-200 dark:border-blue-800 cursor-pointer hover:bg-muted/50" onClick={() => openDetail(p.id)}>
                     <SocialIconBadge platform={p.platform} size="xs" variant="filled" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{p.title}</p>
                       <p className="text-xs text-muted-foreground">{p.content_type} • Published {p.published_at ? formatDateTime(p.published_at) : ''}</p>
                     </div>
-                    <Button size="sm" variant="outline" className="text-xs gap-1 shrink-0" onClick={() => { setSelectedPlan(p as ContentPlan); openRealize(p as ContentPlan) }}>
+                    <Button size="sm" variant="outline" className="text-xs gap-1 shrink-0" onClick={(e) => { e.stopPropagation(); openRealize(p as ContentPlan) }}>
                       <TrendingUp className="h-3 w-3" /> Update Realisasi
                     </Button>
                   </div>
@@ -730,7 +782,7 @@ export default function ContentPlanDashboard() {
               {recentActivity.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">Belum ada aktivitas</p>}
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {recentActivity.map(a => (
-                  <div key={a.id} className="flex items-start gap-2 text-xs border-b last:border-0 pb-2">
+                  <div key={a.id} className="flex items-start gap-2 text-xs border-b last:border-0 pb-2 cursor-pointer hover:bg-muted/30 rounded px-1" onClick={() => a.entity_id && openDetail(a.entity_id)}>
                     <div className="flex-1">
                       <span className="font-medium">{a.actor?.name || 'System'}</span>{' '}
                       <span className="text-muted-foreground">
@@ -761,6 +813,7 @@ export default function ContentPlanDashboard() {
           onOpenDetail={openDetail}
           onOpenCreate={openCreate}
           onOpenRealize={openRealize}
+          onDrilldown={drilldown}
         />
       )}
 
@@ -776,18 +829,11 @@ export default function ContentPlanDashboard() {
               <Button variant="outline" size="icon" onClick={nextMonth}><ChevronRight className="h-4 w-4" /></Button>
             </div>
             <div className="flex items-center gap-2">
-              <Select value={filterPlatform} onValueChange={v => { setFilterPlatform(v); }}>
+              <Select value={filterPlatform} onValueChange={v => setFilterPlatform(v)}>
                 <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua Platform</SelectItem>
                   {PLATFORMS.map(p => <SelectItem key={p} value={p}>{PLATFORM_CONFIGS.find(c => c.id === p)?.label || p}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  {Object.entries(STATUS_CONFIG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -808,7 +854,7 @@ export default function ContentPlanDashboard() {
                     <div
                       key={day}
                       className={`min-h-[80px] border rounded p-1 cursor-pointer hover:bg-muted/50 transition-colors ${isToday ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
-                      onClick={() => openCreate(dateStr)}
+                      onClick={() => handleCalDayClick(day)}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className={`text-xs font-medium ${isToday ? 'text-blue-600 font-bold' : ''}`}>{day}</span>
@@ -818,7 +864,12 @@ export default function ContentPlanDashboard() {
                         {dayPlans.slice(0, 3).map(p => (
                           <div
                             key={p.id}
-                            className="flex items-center gap-1 px-1 py-0.5 rounded text-[10px] bg-muted/80 truncate cursor-pointer hover:bg-muted"
+                            className={`flex items-center gap-1 px-1 py-0.5 rounded text-[10px] truncate cursor-pointer hover:bg-muted ${
+                              getDisplayStatus(p) === 'overdue' ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' :
+                              p.status === 'published' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' :
+                              p.status === 'planned' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' :
+                              'bg-muted/80'
+                            }`}
                             onClick={(e) => { e.stopPropagation(); openDetail(p.id) }}
                           >
                             <SocialIconInline platform={p.platform} size={10} />
@@ -837,11 +888,11 @@ export default function ContentPlanDashboard() {
           </Card>
 
           {/* Calendar Legend */}
-          <div className="flex flex-wrap gap-3 justify-center">
-            {PLATFORM_CONFIGS.map(p => (
-              <div key={p.id} className="flex items-center gap-1 text-xs">
-                <SocialIconInline platform={p.id} size={12} />
-                <span className="text-muted-foreground">{p.label}</span>
+          <div className="flex flex-wrap gap-4 justify-center">
+            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+              <div key={key} className="flex items-center gap-1.5 text-xs">
+                <span className={`h-2.5 w-2.5 rounded-full ${cfg.color.split(' ')[0]}`} />
+                <span className="text-muted-foreground">{cfg.label}</span>
               </div>
             ))}
           </div>
@@ -863,14 +914,36 @@ export default function ContentPlanDashboard() {
                 {PLATFORMS.map(p => <SelectItem key={p} value={p}>{PLATFORM_CONFIGS.find(c => c.id === p)?.label || p}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <Select value={filterOverdue ? 'overdue' : filterStatus} onValueChange={v => {
+              if (v === 'overdue') { setFilterOverdue(true); setFilterStatus('all') }
+              else { setFilterOverdue(false); setFilterStatus(v) }
+            }}>
               <SelectTrigger className="w-[130px] h-9 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Status</SelectItem>
                 {Object.entries(STATUS_CONFIG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={filterContentType} onValueChange={setFilterContentType}>
+              <SelectTrigger className="w-[120px] h-9 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Tipe</SelectItem>
+                {CONTENT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
+
+          {/* Active filters indicator */}
+          {(filterPlatform !== 'all' || filterStatus !== 'all' || filterOverdue || filterContentType !== 'all') && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-muted-foreground">Filter aktif:</span>
+              {filterPlatform !== 'all' && <Badge variant="secondary" className="text-[10px]">{PLATFORM_CONFIG_MAP[filterPlatform]?.label || filterPlatform}</Badge>}
+              {filterOverdue && <Badge variant="destructive" className="text-[10px]">Overdue</Badge>}
+              {!filterOverdue && filterStatus !== 'all' && <Badge variant="secondary" className="text-[10px]">{STATUS_CONFIG[filterStatus]?.label || filterStatus}</Badge>}
+              {filterContentType !== 'all' && <Badge variant="secondary" className="text-[10px] capitalize">{filterContentType}</Badge>}
+              <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" onClick={() => { setFilterPlatform('all'); setFilterStatus('all'); setFilterOverdue(false); setFilterContentType('all') }}>Reset</Button>
+            </div>
+          )}
 
           <Card>
             <CardContent className="p-0">
@@ -888,17 +961,17 @@ export default function ContentPlanDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {plans.length === 0 && (
-                      <tr><td colSpan={7} className="text-center text-muted-foreground py-8 text-xs">Tidak ada konten untuk periode ini</td></tr>
+                    {filteredPlans.length === 0 && (
+                      <tr><td colSpan={7} className="text-center text-muted-foreground py-8 text-xs">Tidak ada konten untuk filter ini</td></tr>
                     )}
-                    {plans.map(p => (
+                    {filteredPlans.map(p => (
                       <tr key={p.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => openDetail(p.id)}>
                         <td className="p-3">
                           <div className="flex items-center gap-2">
                             <SocialIconBadge platform={p.platform} size="xs" variant="filled" className="sm:hidden" />
                             <div>
                               <p className="font-medium truncate max-w-[200px]">{p.title}</p>
-                              <p className="text-xs text-muted-foreground">{p.content_type}</p>
+                              <p className="text-xs text-muted-foreground">{p.content_type}{p.campaign ? ` • ${p.campaign.name}` : ''}</p>
                             </div>
                           </div>
                         </td>
@@ -907,7 +980,7 @@ export default function ContentPlanDashboard() {
                           {formatDate(p.scheduled_date)}
                           {p.scheduled_time && <span className="text-muted-foreground ml-1">{p.scheduled_time.slice(0, 5)}</span>}
                         </td>
-                        <td className="p-3"><StatusBadge status={p.status} /></td>
+                        <td className="p-3"><StatusBadge status={p.status} scheduledDate={p.scheduled_date} /></td>
                         <td className="p-3 hidden md:table-cell"><PriorityBadge priority={p.priority} /></td>
                         <td className="p-3 hidden lg:table-cell">
                           {p.realized_at ? (
@@ -921,9 +994,11 @@ export default function ContentPlanDashboard() {
                           )}
                         </td>
                         <td className="p-3">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEdit(p) }}>
-                            <Edit className="h-3.5 w-3.5" />
-                          </Button>
+                          {(p.status === 'draft' || p.status === 'planned') && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEdit(p) }}>
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -944,7 +1019,7 @@ export default function ContentPlanDashboard() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {campaigns.length === 0 && <p className="text-sm text-muted-foreground col-span-full text-center py-8">Belum ada campaign</p>}
             {campaigns.map(c => (
-              <Card key={c.id} className="hover:shadow-md transition-shadow">
+              <Card key={c.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setFilterPlatform('all'); setFilterStatus('all'); setFilterOverdue(false); setActiveTab('list') }}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -981,7 +1056,7 @@ export default function ContentPlanDashboard() {
               <div className="flex flex-wrap gap-2">
                 {hashtags.length === 0 && <p className="text-sm text-muted-foreground py-4 w-full text-center">Belum ada hashtag</p>}
                 {hashtags.map(h => (
-                  <div key={h.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border bg-muted/50 hover:bg-muted transition-colors">
+                  <div key={h.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => { setSearchQuery(`#${h.tag}`); setActiveTab('list') }}>
                     <Hash className="h-3 w-3 text-muted-foreground" />
                     <span className="text-sm">{h.tag}</span>
                     <Badge variant="secondary" className="text-[10px] ml-1">{h.usage_count}x</Badge>
@@ -1003,7 +1078,7 @@ export default function ContentPlanDashboard() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {templates.length === 0 && <p className="text-sm text-muted-foreground col-span-full text-center py-8">Belum ada template</p>}
             {templates.map(t => (
-              <Card key={t.id}>
+              <Card key={t.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => { applyTemplate(t); openCreate() }}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-medium text-sm">{t.name}</h3>
@@ -1056,33 +1131,23 @@ export default function ContentPlanDashboard() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {statusTarget === 'approved' && 'Approve Konten'}
-              {statusTarget === 'rejected' && 'Reject Konten'}
-              {statusTarget === 'in_review' && 'Submit for Review'}
+              {statusTarget === 'planned' && 'Ubah ke Planned'}
               {statusTarget === 'published' && 'Mark as Published'}
-              {statusTarget === 'archived' && 'Archive Konten'}
               {statusTarget === 'draft' && 'Kembali ke Draft'}
             </DialogTitle>
             <DialogDescription>{selectedPlan?.title}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             <div className="grid gap-2">
-              <Label>{statusTarget === 'rejected' ? 'Alasan Penolakan *' : 'Komentar (opsional)'}</Label>
-              <Textarea value={statusComment} onChange={e => setStatusComment(e.target.value)} rows={3} placeholder={statusTarget === 'rejected' ? 'Jelaskan alasan penolakan...' : 'Tambahkan catatan...'} />
+              <Label>Komentar (opsional)</Label>
+              <Textarea value={statusComment} onChange={e => setStatusComment(e.target.value)} rows={3} placeholder="Tambahkan catatan..." />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowStatusDialog(false)}>Batal</Button>
-            <Button
-              onClick={handleStatusChange}
-              disabled={statusTarget === 'rejected' && !statusComment.trim()}
-              variant={statusTarget === 'rejected' ? 'destructive' : 'default'}
-            >
-              {statusTarget === 'approved' && 'Approve'}
-              {statusTarget === 'rejected' && 'Reject'}
-              {statusTarget === 'in_review' && 'Submit'}
-              {statusTarget === 'published' && 'Confirm'}
-              {statusTarget === 'archived' && 'Archive'}
+            <Button onClick={handleStatusChange}>
+              {statusTarget === 'planned' && 'Set Planned'}
+              {statusTarget === 'published' && 'Confirm Published'}
               {statusTarget === 'draft' && 'Kembali ke Draft'}
             </Button>
           </DialogFooter>
@@ -1094,13 +1159,13 @@ export default function ContentPlanDashboard() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-blue-600" /> Update Realisasi Konten
+              <TrendingUp className="h-5 w-5 text-blue-600" /> Update Realisasi & Publish
             </DialogTitle>
             <DialogDescription>{selectedPlan?.title} • {selectedPlan?.platform}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
-              Masukkan link bukti posting dan metrik aktual dari platform. Data ini akan dibandingkan dengan target yang sudah ditentukan.
+              Masukkan link bukti posting dan metrik aktual. Jika konten masih berstatus Planned, akan otomatis berubah ke Published saat evidence URL diisi.
             </div>
             <div className="grid gap-2">
               <Label>Link Bukti Posting (Evidence URL) *</Label>
@@ -1164,6 +1229,44 @@ export default function ContentPlanDashboard() {
             <Button variant="outline" onClick={() => setShowRealizeDialog(false)}>Batal</Button>
             <Button onClick={handleRealize} disabled={!realizeForm.actual_post_url} className="gap-1">
               <CheckCircle2 className="h-4 w-4" /> Simpan Realisasi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== CALENDAR DAY DIALOG ===== */}
+      <Dialog open={showCalDayDialog} onOpenChange={setShowCalDayDialog}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5" />
+              {calSelectedDay && formatDate(calSelectedDay)}
+            </DialogTitle>
+            <DialogDescription>{calDayPlans.length} konten dijadwalkan</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {calDayPlans.length === 0 && (
+              <p className="text-sm text-muted-foreground py-4 text-center">Belum ada konten untuk tanggal ini</p>
+            )}
+            {calDayPlans.map(p => (
+              <div key={p.id} className="flex items-center gap-2 p-2.5 rounded border cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => { setShowCalDayDialog(false); openDetail(p.id) }}>
+                <SocialIconBadge platform={p.platform} size="xs" variant="filled" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{p.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {p.content_type}
+                    {p.scheduled_time && ` • ${p.scheduled_time.slice(0, 5)}`}
+                    {p.campaign && ` • ${p.campaign.name}`}
+                  </p>
+                </div>
+                <StatusBadge status={p.status} scheduledDate={p.scheduled_date} />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCalDayDialog(false)}>Tutup</Button>
+            <Button onClick={() => { setShowCalDayDialog(false); openCreate(calSelectedDay || undefined) }} className="gap-1">
+              <Plus className="h-4 w-4" /> Buat Konten
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1269,26 +1372,33 @@ export default function ContentPlanDashboard() {
 // Channel Breakdown Tab (Sub-component)
 // ============================================================
 
-function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDetail, onOpenCreate, onOpenRealize }: {
+function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDetail, onOpenCreate, onOpenRealize, onDrilldown }: {
   calMonth: Date; prevMonth: () => void; nextMonth: () => void
   plans: ContentPlan[]; onOpenDetail: (id: string) => void
   onOpenCreate: (date?: string, platform?: string) => void
   onOpenRealize: (plan: ContentPlan) => void
+  onDrilldown: (opts: { status?: string; platform?: string; contentType?: string; overdue?: boolean }) => void
 }) {
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null)
+  const today = new Date().toISOString().split('T')[0]
 
   const channelData = PLATFORM_CONFIGS.map(cfg => {
     const pp = plans.filter(p => p.platform === cfg.id)
     const published = pp.filter(p => p.status === 'published')
     const realized = pp.filter(p => p.realized_at)
+    const overdue = pp.filter(p => p.status !== 'published' && p.scheduled_date < today)
     const contentTypes: Record<string, number> = {}
     pp.forEach(p => { contentTypes[p.content_type] = (contentTypes[p.content_type] || 0) + 1 })
-    const statusDist: Record<string, number> = {}
-    pp.forEach(p => { statusDist[p.status] = (statusDist[p.status] || 0) + 1 })
+    const statusDist: Record<string, number> = { draft: 0, planned: 0, published: 0, overdue: 0 }
+    pp.forEach(p => {
+      if (p.status !== 'published' && p.scheduled_date < today) statusDist.overdue++
+      else statusDist[p.status] = (statusDist[p.status] || 0) + 1
+    })
 
     return {
       platform: cfg.id, label: cfg.label, color: cfg.color,
       total: pp.length, published: published.length, realized: realized.length,
+      overdue: overdue.length,
       plans: pp, contentTypes, statusDist,
       totalViews: realized.reduce((s, p) => s + (p.actual_views || 0), 0),
       totalLikes: realized.reduce((s, p) => s + (p.actual_likes || 0), 0),
@@ -1325,6 +1435,7 @@ function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDeta
               <p className="text-xs font-medium">{ch.label}</p>
               <p className="text-lg font-bold">{ch.total}</p>
               <p className="text-[10px] text-muted-foreground">{ch.published} published</p>
+              {ch.overdue > 0 && <p className="text-[10px] text-red-600">{ch.overdue} overdue</p>}
               {ch.total > 0 && (
                 <div className="mt-1">
                   <ProgressBar value={ch.published} max={ch.total} />
@@ -1348,10 +1459,10 @@ function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDeta
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Stats Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-              {Object.entries(detail.statusDist).map(([status, count]) => (
-                <div key={status} className="text-center p-2 rounded border">
+            {/* Stats Row — drillable */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {Object.entries(detail.statusDist).filter(([, count]) => count > 0).map(([status, count]) => (
+                <div key={status} className="text-center p-2 rounded border cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => status === 'overdue' ? onDrilldown({ platform: detail.platform, overdue: true }) : onDrilldown({ platform: detail.platform, status })}>
                   <StatusBadge status={status} />
                   <p className="text-lg font-bold mt-1">{count}</p>
                 </div>
@@ -1366,13 +1477,13 @@ function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDeta
               </div>
             </div>
 
-            {/* Content Type Distribution */}
+            {/* Content Type Distribution — drillable */}
             {Object.keys(detail.contentTypes).length > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Tipe Konten:</p>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(detail.contentTypes).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
-                    <Badge key={type} variant="secondary" className="text-xs capitalize">{type}: {count}</Badge>
+                    <Badge key={type} variant="secondary" className="text-xs capitalize cursor-pointer hover:bg-accent" onClick={() => onDrilldown({ platform: detail.platform, contentType: type })}>{type}: {count}</Badge>
                   ))}
                 </div>
               </div>
@@ -1383,27 +1494,15 @@ function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDeta
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Total Metrik Realisasi:</p>
                 <div className="grid grid-cols-4 gap-2">
-                  <div className="text-center p-2 border rounded">
-                    <p className="text-[10px] text-muted-foreground">Views</p>
-                    <p className="font-bold text-sm">{detail.totalViews.toLocaleString()}</p>
-                  </div>
-                  <div className="text-center p-2 border rounded">
-                    <p className="text-[10px] text-muted-foreground">Likes</p>
-                    <p className="font-bold text-sm">{detail.totalLikes.toLocaleString()}</p>
-                  </div>
-                  <div className="text-center p-2 border rounded">
-                    <p className="text-[10px] text-muted-foreground">Comments</p>
-                    <p className="font-bold text-sm">{detail.totalComments.toLocaleString()}</p>
-                  </div>
-                  <div className="text-center p-2 border rounded">
-                    <p className="text-[10px] text-muted-foreground">Shares</p>
-                    <p className="font-bold text-sm">{detail.totalShares.toLocaleString()}</p>
-                  </div>
+                  <div className="text-center p-2 border rounded"><p className="text-[10px] text-muted-foreground">Views</p><p className="font-bold text-sm">{detail.totalViews.toLocaleString()}</p></div>
+                  <div className="text-center p-2 border rounded"><p className="text-[10px] text-muted-foreground">Likes</p><p className="font-bold text-sm">{detail.totalLikes.toLocaleString()}</p></div>
+                  <div className="text-center p-2 border rounded"><p className="text-[10px] text-muted-foreground">Comments</p><p className="font-bold text-sm">{detail.totalComments.toLocaleString()}</p></div>
+                  <div className="text-center p-2 border rounded"><p className="text-[10px] text-muted-foreground">Shares</p><p className="font-bold text-sm">{detail.totalShares.toLocaleString()}</p></div>
                 </div>
               </div>
             )}
 
-            {/* Plans List */}
+            {/* Plans List — all drillable */}
             <div>
               <p className="text-xs text-muted-foreground mb-1">Daftar Konten ({detail.plans.length}):</p>
               <div className="space-y-1 max-h-64 overflow-y-auto">
@@ -1413,7 +1512,7 @@ function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDeta
                       <p className="text-sm font-medium truncate">{p.title}</p>
                       <p className="text-xs text-muted-foreground">{p.content_type} • {formatDate(p.scheduled_date)}</p>
                     </div>
-                    <StatusBadge status={p.status} />
+                    <StatusBadge status={p.status} scheduledDate={p.scheduled_date} />
                     {p.status === 'published' && !p.realized_at && (
                       <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-blue-600" onClick={(e) => { e.stopPropagation(); onOpenRealize(p) }}>
                         <TrendingUp className="h-3 w-3" />
@@ -1432,7 +1531,7 @@ function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDeta
         </Card>
       )}
 
-      {/* All Channels Summary (when none selected) */}
+      {/* Empty state */}
       {!selectedChannel && activeChannels.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
@@ -1457,7 +1556,7 @@ function CreateEditDialog({ open, onOpenChange, form, setForm, editingPlanId, ca
   form: any; setForm: (fn: any) => void
   editingPlanId: string | null
   campaigns: Campaign[]; hashtags: Hashtag[]; templates: Template[]
-  onSave: (submitForReview?: boolean) => void
+  onSave: (saveAsDraft?: boolean) => void
   onApplyTemplate: (t: Template) => void
 }) {
   return (
@@ -1619,9 +1718,8 @@ function CreateEditDialog({ open, onOpenChange, form, setForm, editingPlanId, ca
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-          <Button variant="secondary" onClick={() => onSave(false)}>Simpan Draft</Button>
-          {!editingPlanId && <Button onClick={() => onSave(true)}>Submit for Review</Button>}
-          {editingPlanId && <Button onClick={() => onSave(false)}>Simpan</Button>}
+          <Button variant="secondary" onClick={() => onSave(true)}>Simpan Draft</Button>
+          <Button onClick={() => onSave(false)}>Simpan</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1643,6 +1741,7 @@ function DetailDialog({ open, onOpenChange, plan, comments, linkedContent, newCo
   onRealize: (plan: ContentPlan) => void
 }) {
   if (!plan) return null
+  const displayStatus = getDisplayStatus(plan)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1660,7 +1759,7 @@ function DetailDialog({ open, onOpenChange, plan, comments, linkedContent, newCo
         <div className="space-y-4">
           {/* Status + Actions */}
           <div className="flex items-center gap-2 flex-wrap">
-            <StatusBadge status={plan.status} />
+            <StatusBadge status={plan.status} scheduledDate={plan.scheduled_date} />
             <PriorityBadge priority={plan.priority} />
             {plan.campaign && (
               <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted">
@@ -1669,25 +1768,30 @@ function DetailDialog({ open, onOpenChange, plan, comments, linkedContent, newCo
               </span>
             )}
             <div className="flex-1" />
+            {/* Draft: can set to Planned or Edit */}
             {plan.status === 'draft' && (
-              <Button size="sm" variant="outline" onClick={() => onStatusChange(plan, 'in_review')} className="text-xs gap-1"><Send className="h-3 w-3" /> Submit Review</Button>
+              <Button size="sm" variant="default" onClick={() => onStatusChange(plan, 'planned')} className="text-xs gap-1"><CalendarIcon className="h-3 w-3" /> Set Planned</Button>
             )}
-            {plan.status === 'in_review' && (
+            {/* Planned: can Publish (with realization) or go back to Draft */}
+            {plan.status === 'planned' && (
               <>
-                <Button size="sm" variant="default" onClick={() => onStatusChange(plan, 'approved')} className="text-xs gap-1"><CheckCircle2 className="h-3 w-3" /> Approve</Button>
-                <Button size="sm" variant="destructive" onClick={() => onStatusChange(plan, 'rejected')} className="text-xs gap-1"><XCircle className="h-3 w-3" /> Reject</Button>
+                <Button size="sm" variant="outline" onClick={() => onStatusChange(plan, 'draft')} className="text-xs gap-1"><FileEdit className="h-3 w-3" /> Kembali Draft</Button>
+                <Button size="sm" variant="default" onClick={() => onRealize(plan)} className="text-xs gap-1"><Send className="h-3 w-3" /> Publish & Realisasi</Button>
               </>
             )}
-            {plan.status === 'approved' && (
-              <Button size="sm" variant="default" onClick={() => onStatusChange(plan, 'published')} className="text-xs gap-1"><Send className="h-3 w-3" /> Mark Published</Button>
-            )}
-            {plan.status === 'rejected' && (
-              <Button size="sm" variant="outline" onClick={() => onEdit(plan)} className="text-xs gap-1"><Edit className="h-3 w-3" /> Revisi</Button>
-            )}
-            {(plan.status === 'published' || plan.status === 'approved') && (
+            {/* Published: update realisasi */}
+            {plan.status === 'published' && (
               <Button size="sm" variant="outline" onClick={() => onRealize(plan)} className="text-xs gap-1 text-blue-600"><TrendingUp className="h-3 w-3" /> {plan.realized_at ? 'Update' : ''} Realisasi</Button>
             )}
           </div>
+
+          {/* Overdue warning */}
+          {displayStatus === 'overdue' && (
+            <div className="p-3 bg-red-50 dark:bg-red-950 rounded border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Konten ini sudah melewati jadwal posting ({formatDate(plan.scheduled_date)}) tapi belum dipublish.
+            </div>
+          )}
 
           {/* Caption */}
           {plan.caption && (
@@ -1778,7 +1882,7 @@ function DetailDialog({ open, onOpenChange, plan, comments, linkedContent, newCo
             <Label className="text-xs text-muted-foreground mb-2 block">Komentar ({comments.length})</Label>
             <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
               {comments.map(c => (
-                <div key={c.id} className={`p-2 rounded text-sm ${c.comment_type === 'rejection' ? 'bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800' : c.comment_type === 'approval' ? 'bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800' : 'bg-muted/50'}`}>
+                <div key={c.id} className="p-2 rounded text-sm bg-muted/50">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-medium text-xs">{c.commenter?.name}</span>
                     <span className="text-[10px] text-muted-foreground">{formatDateTime(c.created_at)}</span>
@@ -1800,9 +1904,11 @@ function DetailDialog({ open, onOpenChange, plan, comments, linkedContent, newCo
             <Trash2 className="h-3.5 w-3.5" /> Hapus
           </Button>
           <div className="flex-1" />
-          <Button variant="outline" size="sm" onClick={() => onEdit(plan)} className="gap-1">
-            <Edit className="h-3.5 w-3.5" /> Edit
-          </Button>
+          {(plan.status === 'draft' || plan.status === 'planned') && (
+            <Button variant="outline" size="sm" onClick={() => onEdit(plan)} className="gap-1">
+              <Edit className="h-3.5 w-3.5" /> Edit
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const mon = month ? parseInt(month.split('-')[1]) : now.getMonth() + 1
     const startOfMonth = `${year}-${String(mon).padStart(2, '0')}-01`
     const endOfMonth = new Date(year, mon, 0).toISOString().split('T')[0]
+    const today = now.toISOString().split('T')[0]
 
     // All plans this month (include realization data)
     const { data: monthPlans } = await (supabase as any)
@@ -31,14 +32,16 @@ export async function GET(request: NextRequest) {
 
     const plans = monthPlans || []
 
+    // Compute overdue: not published + past scheduled_date
+    const overdueCount = plans.filter((p: any) => p.status !== 'published' && p.scheduled_date < today).length
+
     // Overall KPIs
     const kpis = {
       totalPlanned: plans.length,
-      published: plans.filter((p: any) => p.status === 'published').length,
-      inReview: plans.filter((p: any) => p.status === 'in_review').length,
       draft: plans.filter((p: any) => p.status === 'draft').length,
-      approved: plans.filter((p: any) => p.status === 'approved').length,
-      rejected: plans.filter((p: any) => p.status === 'rejected').length,
+      planned: plans.filter((p: any) => p.status === 'planned').length,
+      published: plans.filter((p: any) => p.status === 'published').length,
+      overdue: overdueCount,
       realized: plans.filter((p: any) => p.realized_at).length,
       withEvidence: plans.filter((p: any) => p.actual_post_url).length,
       completionRate: plans.length > 0
@@ -50,14 +53,14 @@ export async function GET(request: NextRequest) {
     const platforms = ['tiktok', 'instagram', 'youtube', 'facebook', 'linkedin', 'twitter']
     const channelKpis = platforms.map(platform => {
       const pp = plans.filter((p: any) => p.platform === platform)
+      const overdueInChannel = pp.filter((p: any) => p.status !== 'published' && p.scheduled_date < today).length
       return {
         platform,
         total: pp.length,
-        published: pp.filter((p: any) => p.status === 'published').length,
         draft: pp.filter((p: any) => p.status === 'draft').length,
-        inReview: pp.filter((p: any) => p.status === 'in_review').length,
-        approved: pp.filter((p: any) => p.status === 'approved').length,
-        rejected: pp.filter((p: any) => p.status === 'rejected').length,
+        planned: pp.filter((p: any) => p.status === 'planned').length,
+        published: pp.filter((p: any) => p.status === 'published').length,
+        overdue: overdueInChannel,
         realized: pp.filter((p: any) => p.realized_at).length,
         withEvidence: pp.filter((p: any) => p.actual_post_url).length,
         completionRate: pp.length > 0 ? Math.round((pp.filter((p: any) => p.status === 'published').length / pp.length) * 100) : 0,
@@ -73,29 +76,28 @@ export async function GET(request: NextRequest) {
     // Status distribution for chart
     const statusDist = {
       draft: kpis.draft,
-      in_review: kpis.inReview,
-      approved: kpis.approved,
+      planned: kpis.planned,
       published: kpis.published,
-      rejected: kpis.rejected,
+      overdue: kpis.overdue,
     }
 
-    // Upcoming this week
-    const today = now.toISOString().split('T')[0]
+    // Upcoming this week (planned/draft, future dates)
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const { data: upcoming } = await (supabase as any)
       .from('marketing_content_plans')
       .select('id, title, platform, content_type, scheduled_date, scheduled_time, status, priority, assigned_to, campaign:marketing_content_campaigns(name, color)')
       .gte('scheduled_date', today)
       .lte('scheduled_date', nextWeek)
-      .in('status', ['draft', 'in_review', 'approved'])
+      .in('status', ['draft', 'planned'])
       .order('scheduled_date', { ascending: true })
       .limit(10)
 
-    // Needs attention: overdue (past date, not published/archived) + rejected
-    const { data: needsAttention } = await (supabase as any)
+    // Overdue content (not published, past scheduled_date)
+    const { data: overdueItems } = await (supabase as any)
       .from('marketing_content_plans')
       .select('id, title, platform, content_type, scheduled_date, status, priority, created_by, creator:profiles!marketing_content_plans_created_by_fkey(name)')
-      .or(`and(scheduled_date.lt.${today},status.in.(draft,in_review,approved)),status.eq.rejected`)
+      .in('status', ['draft', 'planned'])
+      .lt('scheduled_date', today)
       .order('scheduled_date', { ascending: true })
       .limit(10)
 
@@ -121,7 +123,7 @@ export async function GET(request: NextRequest) {
       contentTypeDist,
       statusDist,
       upcoming: upcoming || [],
-      needsAttention: needsAttention || [],
+      overdueItems: overdueItems || [],
       needsRealization: needsRealization || [],
       recentActivity: recentActivity || [],
     })

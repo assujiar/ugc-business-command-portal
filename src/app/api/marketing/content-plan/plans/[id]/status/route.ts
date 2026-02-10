@@ -4,17 +4,11 @@ import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
 
-const VALID_TRANSITIONS: Record<string, { to: string[]; requiresApprover: boolean }[]> = {
-  draft: [{ to: ['in_review'], requiresApprover: false }],
-  in_review: [
-    { to: ['approved'], requiresApprover: true },
-    { to: ['rejected'], requiresApprover: true },
-    { to: ['draft'], requiresApprover: false }, // withdraw
-  ],
-  approved: [{ to: ['published'], requiresApprover: false }],
-  rejected: [{ to: ['draft'], requiresApprover: false }, { to: ['in_review'], requiresApprover: false }],
-  published: [{ to: ['archived'], requiresApprover: true }],
-  archived: [],
+// Simplified transitions: draft→planned, planned→published, draft can also go straight to published
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  draft: ['planned', 'published'],
+  planned: ['draft', 'published'],
+  published: [], // terminal state
 }
 
 export async function PATCH(
@@ -42,20 +36,9 @@ export async function PATCH(
     if (!plan) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     // Validate transition
-    const transitions = VALID_TRANSITIONS[plan.status] || []
-    const validTransition = transitions.find(t => t.to.includes(newStatus))
-    if (!validTransition) {
+    const allowed = VALID_TRANSITIONS[plan.status] || []
+    if (!allowed.includes(newStatus)) {
       return NextResponse.json({ error: `Cannot transition from ${plan.status} to ${newStatus}` }, { status: 400 })
-    }
-
-    const isApprover = ['super admin', 'Director', 'Marketing Manager'].includes(profile.role)
-    if (validTransition.requiresApprover && !isApprover) {
-      return NextResponse.json({ error: 'Only Manager/Director can perform this action' }, { status: 403 })
-    }
-
-    // Rejection requires comment
-    if (newStatus === 'rejected' && !comment) {
-      return NextResponse.json({ error: 'Comment is required when rejecting' }, { status: 400 })
     }
 
     const updateData: any = {
@@ -76,16 +59,22 @@ export async function PATCH(
 
     // Add comment if provided
     if (comment) {
-      const commentType = newStatus === 'approved' ? 'approval'
-        : newStatus === 'rejected' ? 'rejection'
-        : 'status_change'
       await (supabase as any).from('marketing_content_plan_comments').insert({
         content_plan_id: id,
         user_id: user.id,
         comment,
-        comment_type: commentType,
+        comment_type: 'status_change',
       })
     }
+
+    // Activity log
+    await (supabase as any).from('marketing_content_activity_log').insert({
+      user_id: user.id,
+      entity_type: 'content_plan',
+      entity_id: id,
+      action: 'status_changed',
+      details: { from_status: plan.status, to_status: newStatus },
+    })
 
     return NextResponse.json({ plan: updated })
   } catch (error) {
