@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
     const campaignId = searchParams.get('campaign_id')
     const assignedTo = searchParams.get('assigned_to')
     const search = searchParams.get('search')
+    const contentType = searchParams.get('content_type')
+    const overdue = searchParams.get('overdue') // 'true' to filter overdue only
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)))
     const offset = (page - 1) * limit
@@ -42,10 +44,18 @@ export async function GET(request: NextRequest) {
     if (startDate) query = query.gte('scheduled_date', startDate)
     if (endDate) query = query.lte('scheduled_date', endDate)
     if (platform) query = query.eq('platform', platform)
-    if (status) query = query.eq('status', status)
+    if (contentType) query = query.eq('content_type', contentType)
     if (campaignId) query = query.eq('campaign_id', campaignId)
     if (assignedTo) query = query.eq('assigned_to', assignedTo)
     if (search) query = query.or(`title.ilike.%${search}%,caption.ilike.%${search}%`)
+
+    // Overdue filter: draft/planned content past scheduled_date
+    const today = new Date().toISOString().split('T')[0]
+    if (overdue === 'true') {
+      query = query.in('status', ['draft', 'planned']).lt('scheduled_date', today)
+    } else if (status) {
+      query = query.eq('status', status)
+    }
 
     query = query.range(offset, offset + limit - 1)
 
@@ -55,15 +65,20 @@ export async function GET(request: NextRequest) {
     // Get status counts for the filtered date range
     let countQuery = (supabase as any)
       .from('marketing_content_plans')
-      .select('status', { count: 'exact', head: false })
+      .select('status, scheduled_date', { count: 'exact', head: false })
     if (startDate) countQuery = countQuery.gte('scheduled_date', startDate)
     if (endDate) countQuery = countQuery.lte('scheduled_date', endDate)
     const { data: allForCounts } = await countQuery
 
-    const statusCounts = { draft: 0, in_review: 0, approved: 0, rejected: 0, published: 0, archived: 0 }
+    const statusCounts = { draft: 0, planned: 0, published: 0, overdue: 0 }
     if (allForCounts) {
       for (const p of allForCounts) {
-        if (p.status in statusCounts) statusCounts[p.status as keyof typeof statusCounts]++
+        const isOverdue = p.status !== 'published' && p.scheduled_date < today
+        if (isOverdue) {
+          statusCounts.overdue++
+        } else if (p.status in statusCounts) {
+          statusCounts[p.status as keyof typeof statusCounts]++
+        }
       }
     }
 
@@ -84,7 +99,13 @@ export async function POST(request: NextRequest) {
     if (!profile || !canAccessMarketingPanel(profile.role as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const body = await request.json()
-    const { title, platform, content_type, scheduled_date, scheduled_time, caption, notes, campaign_id, assigned_to, priority, visual_url, visual_thumbnail_url, target_views, target_likes, target_comments, target_shares, target_engagement_rate, hashtag_ids, cross_post_platforms, submit_for_review } = body
+    const {
+      title, platform, content_type, scheduled_date, scheduled_time,
+      caption, notes, campaign_id, assigned_to, priority,
+      visual_url, visual_thumbnail_url,
+      target_views, target_likes, target_comments, target_shares, target_engagement_rate,
+      hashtag_ids, cross_post_platforms, save_as_draft,
+    } = body
 
     if (!title || !platform || !scheduled_date) {
       return NextResponse.json({ error: 'title, platform, and scheduled_date are required' }, { status: 400 })
@@ -111,13 +132,13 @@ export async function POST(request: NextRequest) {
         priority: priority || 'medium',
         visual_url: visual_url || null,
         visual_thumbnail_url: visual_thumbnail_url || null,
-        target_views: target_views || null,
-        target_likes: target_likes || null,
-        target_comments: target_comments || null,
-        target_shares: target_shares || null,
-        target_engagement_rate: target_engagement_rate || null,
+        target_views: target_views ? parseInt(target_views) : null,
+        target_likes: target_likes ? parseInt(target_likes) : null,
+        target_comments: target_comments ? parseInt(target_comments) : null,
+        target_shares: target_shares ? parseInt(target_shares) : null,
+        target_engagement_rate: target_engagement_rate ? parseFloat(target_engagement_rate) : null,
         created_by: user.id,
-        status: submit_for_review ? 'in_review' : 'draft',
+        status: save_as_draft ? 'draft' : 'planned',
         parent_plan_id: parentId,
       }
 

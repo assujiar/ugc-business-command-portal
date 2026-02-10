@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const mon = month ? parseInt(month.split('-')[1]) : now.getMonth() + 1
     const startOfMonth = `${year}-${String(mon).padStart(2, '0')}-01`
     const endOfMonth = new Date(year, mon, 0).toISOString().split('T')[0]
+    const today = now.toISOString().split('T')[0]
 
     // Get all plans for the month with realization data
     const { data: allPlans } = await (supabase as any)
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
       const platformPlans = plans.filter((p: any) => p.platform === platform)
       const published = platformPlans.filter((p: any) => p.status === 'published')
       const realized = platformPlans.filter((p: any) => p.realized_at)
+      const overdue = platformPlans.filter((p: any) => p.status !== 'published' && p.scheduled_date < today)
 
       // Content type distribution
       const contentTypes: Record<string, number> = {}
@@ -49,9 +51,14 @@ export async function GET(request: NextRequest) {
       })
 
       // Status distribution
-      const statusDist: Record<string, number> = {}
+      const statusDist: Record<string, number> = { draft: 0, planned: 0, published: 0, overdue: 0 }
       platformPlans.forEach((p: any) => {
-        statusDist[p.status] = (statusDist[p.status] || 0) + 1
+        const isOverdue = p.status !== 'published' && p.scheduled_date < today
+        if (isOverdue) {
+          statusDist.overdue++
+        } else {
+          statusDist[p.status] = (statusDist[p.status] || 0) + 1
+        }
       })
 
       // Aggregate actual metrics
@@ -73,12 +80,10 @@ export async function GET(request: NextRequest) {
       return {
         platform,
         total: platformPlans.length,
-        draft: statusDist['draft'] || 0,
-        inReview: statusDist['in_review'] || 0,
-        approved: statusDist['approved'] || 0,
+        draft: statusDist.draft,
+        planned: statusDist.planned,
         published: published.length,
-        rejected: statusDist['rejected'] || 0,
-        archived: statusDist['archived'] || 0,
+        overdue: overdue.length,
         realized: realized.length,
         withEvidence,
         completionRate: platformPlans.length > 0 ? Math.round((published.length / platformPlans.length) * 100) : 0,
@@ -106,9 +111,14 @@ export async function GET(request: NextRequest) {
     })
 
     // Overall status distribution
-    const overallStatus: Record<string, number> = {}
+    const overallStatus: Record<string, number> = { draft: 0, planned: 0, published: 0, overdue: 0 }
     plans.forEach((p: any) => {
-      overallStatus[p.status] = (overallStatus[p.status] || 0) + 1
+      const isOverdue = p.status !== 'published' && p.scheduled_date < today
+      if (isOverdue) {
+        overallStatus.overdue++
+      } else {
+        overallStatus[p.status] = (overallStatus[p.status] || 0) + 1
+      }
     })
 
     return NextResponse.json({
@@ -121,6 +131,7 @@ export async function GET(request: NextRequest) {
         totalPublished: plans.filter((p: any) => p.status === 'published').length,
         totalRealized: plans.filter((p: any) => p.realized_at).length,
         totalWithEvidence: plans.filter((p: any) => p.actual_post_url).length,
+        totalOverdue: plans.filter((p: any) => p.status !== 'published' && p.scheduled_date < today).length,
         activePlatforms: channelStats.filter(s => s.total > 0).length,
       },
     })
