@@ -45,9 +45,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   // Build queries with role-based scoping
   // =====================================================
 
-  let leadsQuery = (adminClient as any).from('leads').select('lead_id, company_name, source, triage_status, sales_owner_user_id, marketing_owner_user_id, created_by, opportunity_id, account_id, created_at')
-  let opportunitiesQuery = (adminClient as any).from('opportunities').select('opportunity_id, name, account_id, stage, estimated_value, owner_user_id, created_at, closed_at, lost_reason')
-  let accountsQuery = (adminClient as any).from('accounts').select('account_id, company_name, account_status, industry, owner_user_id, created_at, first_transaction_date, last_transaction_date')
+  let leadsQuery = (adminClient as any).from('leads').select('lead_id, company_name, source, triage_status, sales_owner_user_id, marketing_owner_user_id, created_by, opportunity_id, account_id, created_at, handed_over_at, claimed_at')
+  let opportunitiesQuery = (adminClient as any).from('opportunities').select('opportunity_id, name, account_id, stage, estimated_value, owner_user_id, original_creator_id, created_at, closed_at, lost_reason')
+  let accountsQuery = (adminClient as any).from('accounts').select('account_id, company_name, account_status, industry, owner_user_id, original_creator_id, created_at, first_transaction_date, last_transaction_date')
   let salesPlansQuery = (adminClient as any).from('sales_plans').select('plan_id, plan_type, status, potential_status, owner_user_id, source_account_id, created_at')
   let pipelineUpdatesQuery = (adminClient as any).from('pipeline_updates').select('update_id, opportunity_id, approach_method, updated_by, created_at')
   let activitiesQuery = (adminClient as any).from('activities').select('activity_id, activity_type, status, owner_user_id, created_at, completed_at, related_account_id, related_opportunity_id')
@@ -104,6 +104,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('ticket_id, rfq_data, ticket_type, created_at')
     .eq('ticket_type', 'RFQ')
 
+  // Marketing profiles for marketing dashboard scoping
+  const marketingProfilesQuery = (adminClient as any)
+    .from('profiles')
+    .select('user_id, name, email, role')
+    .in('role', ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'])
+    .eq('is_active', true)
+
   // Execute all queries in parallel
   const [
     { data: leads },
@@ -116,6 +123,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     { data: stageHistory },
     { data: quotations },
     { data: rfqTickets },
+    { data: marketingProfiles },
   ] = await Promise.all([
     leadsQuery,
     opportunitiesQuery,
@@ -127,6 +135,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     stageHistoryQuery,
     quotationsQuery,
     rfqTicketsQuery,
+    marketingProfilesQuery,
   ])
 
   // =====================================================
@@ -157,13 +166,42 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   }
 
   const filteredLeads = filterBySalesperson(filterByDate(leads || []), 'sales_owner_user_id')
-  const filteredOpportunities = filterBySalesperson(filterByDate(opportunities || []))
-  const filteredAccounts = filterBySalesperson(accounts || [])
+  let filteredOpportunities = filterBySalesperson(filterByDate(opportunities || []))
+  let filteredAccounts = filterBySalesperson(accounts || [])
   const filteredSalesPlans = filterBySalesperson(filterByDate(salesPlans || []))
   const filteredPipelineUpdates = filterByDate(pipelineUpdates || []).filter((u: any) =>
     !salespersonId || u.updated_by === salespersonId
   )
   const filteredActivities = filterBySalesperson(filterByDate(activitiesData || []))
+
+  // =====================================================
+  // Marketing role scoping for opportunities & accounts
+  // Based on original_creator_id (the lead creator)
+  // =====================================================
+  const marketingDeptRoles = ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO']
+  const isMarketingDept = marketingDeptRoles.includes(role)
+
+  if (isMarketingDept) {
+    const mktUserIds = new Set((marketingProfiles || []).map((p: any) => p.user_id))
+
+    if (role === 'Marketing Manager' || role === 'MACX') {
+      // Manager/MACX: see opportunities & accounts from any marketing dept lead creator
+      filteredOpportunities = filteredOpportunities.filter((o: any) =>
+        o.original_creator_id && mktUserIds.has(o.original_creator_id)
+      )
+      filteredAccounts = filteredAccounts.filter((a: any) =>
+        a.original_creator_id && mktUserIds.has(a.original_creator_id)
+      )
+    } else {
+      // DGO/Marcomm/VSDO: see only opportunities & accounts from leads they created
+      filteredOpportunities = filteredOpportunities.filter((o: any) =>
+        o.original_creator_id === userId
+      )
+      filteredAccounts = filteredAccounts.filter((a: any) =>
+        a.original_creator_id === userId
+      )
+    }
+  }
 
   // =====================================================
   // Serialize data for client component
@@ -180,6 +218,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       stage: o.stage,
       estimated_value: o.estimated_value || 0,
       owner_user_id: o.owner_user_id,
+      original_creator_id: o.original_creator_id || null,
       created_at: o.created_at,
       closed_at: o.closed_at,
       lost_reason: o.lost_reason,
@@ -190,6 +229,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       account_status: a.account_status,
       industry: a.industry || null,
       owner_user_id: a.owner_user_id,
+      original_creator_id: a.original_creator_id || null,
       created_at: a.created_at,
       first_transaction_date: a.first_transaction_date,
       last_transaction_date: a.last_transaction_date,
@@ -212,7 +252,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       marketing_owner_user_id: l.marketing_owner_user_id,
       created_by: l.created_by,
       opportunity_id: l.opportunity_id,
+      account_id: l.account_id || null,
       created_at: l.created_at,
+      handed_over_at: l.handed_over_at || null,
+      claimed_at: l.claimed_at || null,
     })),
     salesPlans: filteredSalesPlans.map((p: any) => ({
       plan_id: p.plan_id,
@@ -259,6 +302,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       stage: o.stage,
       estimated_value: o.estimated_value || 0,
       owner_user_id: o.owner_user_id,
+      original_creator_id: o.original_creator_id || null,
       created_at: o.created_at,
       closed_at: o.closed_at,
       lost_reason: o.lost_reason,
@@ -269,6 +313,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       account_status: a.account_status,
       industry: a.industry || null,
       owner_user_id: a.owner_user_id,
+      original_creator_id: a.original_creator_id || null,
       created_at: a.created_at,
       first_transaction_date: a.first_transaction_date,
       last_transaction_date: a.last_transaction_date,
@@ -305,6 +350,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       origin_city: t.rfq_data?.origin_city || null,
       destination_city: t.rfq_data?.destination_city || null,
       created_at: t.created_at,
+    })),
+    marketingProfiles: (marketingProfiles || []).map((p: any) => ({
+      user_id: p.user_id,
+      name: p.name,
+      email: p.email,
+      role: p.role,
     })),
   }
 
