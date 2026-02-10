@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -21,9 +22,10 @@ export async function GET(request: NextRequest) {
     const startOfMonth = `${year}-${String(mon).padStart(2, '0')}-01`
     const endOfMonth = new Date(year, mon, 0).toISOString().split('T')[0]
     const today = now.toISOString().split('T')[0]
+    const admin = createAdminClient()
 
     // All plans this month (include realization data) - include cross-posts (children) so counts match list tab
-    const { data: monthPlans } = await (supabase as any)
+    const { data: monthPlans } = await (admin as any)
       .from('marketing_content_plans')
       .select('id, status, platform, content_type, scheduled_date, linked_content_id, actual_post_url, realized_at, actual_views, actual_likes, actual_comments, actual_shares, actual_engagement_rate')
       .gte('scheduled_date', startOfMonth)
@@ -83,7 +85,7 @@ export async function GET(request: NextRequest) {
 
     // Upcoming this week (planned/draft, future dates)
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    const { data: upcoming } = await (supabase as any)
+    const { data: upcoming } = await (admin as any)
       .from('marketing_content_plans')
       .select('id, title, platform, content_type, scheduled_date, scheduled_time, status, priority, assigned_to, campaign:marketing_content_campaigns(name, color)')
       .gte('scheduled_date', today)
@@ -93,7 +95,7 @@ export async function GET(request: NextRequest) {
       .limit(10)
 
     // Overdue content (not published, past scheduled_date)
-    const { data: overdueItems } = await (supabase as any)
+    const { data: overdueItems } = await (admin as any)
       .from('marketing_content_plans')
       .select('id, title, platform, content_type, scheduled_date, status, priority, created_by, creator:profiles!marketing_content_plans_created_by_fkey(name)')
       .in('status', ['draft', 'planned'])
@@ -102,7 +104,7 @@ export async function GET(request: NextRequest) {
       .limit(10)
 
     // Published but not realized (need evidence)
-    const { data: needsRealization } = await (supabase as any)
+    const { data: needsRealization } = await (admin as any)
       .from('marketing_content_plans')
       .select('id, title, platform, content_type, scheduled_date, status, published_at, actual_post_url')
       .eq('status', 'published')
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest) {
       .limit(10)
 
     // Recent activity
-    const { data: recentActivity } = await (supabase as any)
+    const { data: recentActivity } = await (admin as any)
       .from('marketing_content_activity_log')
       .select('*, actor:profiles!marketing_content_activity_log_user_id_fkey(name, role)')
       .order('created_at', { ascending: false })

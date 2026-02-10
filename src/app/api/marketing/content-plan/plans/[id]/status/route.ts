@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +29,9 @@ export async function PATCH(
     const { status: newStatus, comment } = body
     if (!newStatus) return NextResponse.json({ error: 'status is required' }, { status: 400 })
 
-    const { data: plan } = await (supabase as any)
+    const admin = createAdminClient()
+
+    const { data: plan } = await (admin as any)
       .from('marketing_content_plans')
       .select('id, status, created_by, title')
       .eq('id', id)
@@ -48,19 +51,19 @@ export async function PATCH(
     }
     if (newStatus === 'published') updateData.published_at = new Date().toISOString()
 
-    const { data: updatedArr, error } = await (supabase as any)
+    const { data: updatedArr, error } = await (admin as any)
       .from('marketing_content_plans')
       .update(updateData)
       .eq('id', id)
       .select()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (!updatedArr || updatedArr.length === 0) return NextResponse.json({ error: 'Update failed - plan not found or not allowed' }, { status: 404 })
+    if (!updatedArr || updatedArr.length === 0) return NextResponse.json({ error: 'Update failed - plan not found' }, { status: 404 })
     const updated = updatedArr[0]
 
     // Add comment if provided
     if (comment) {
-      await (supabase as any).from('marketing_content_plan_comments').insert({
+      await (admin as any).from('marketing_content_plan_comments').insert({
         content_plan_id: id,
         user_id: user.id,
         comment,
@@ -69,7 +72,7 @@ export async function PATCH(
     }
 
     // Activity log
-    await (supabase as any).from('marketing_content_activity_log').insert({
+    await (admin as any).from('marketing_content_activity_log').insert({
       user_id: user.id,
       entity_type: 'content_plan',
       entity_id: id,

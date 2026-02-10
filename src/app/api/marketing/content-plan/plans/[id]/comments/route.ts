@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +15,8 @@ export async function GET(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data: comments, error } = await (supabase as any)
+    const admin = createAdminClient()
+    const { data: comments, error } = await (admin as any)
       .from('marketing_content_plan_comments')
       .select('*, commenter:profiles!marketing_content_plan_comments_user_id_fkey(user_id, name, role)')
       .eq('content_plan_id', id)
@@ -45,7 +47,8 @@ export async function POST(
     const { comment, comment_type } = body
     if (!comment) return NextResponse.json({ error: 'comment is required' }, { status: 400 })
 
-    const { data, error } = await (supabase as any)
+    const admin = createAdminClient()
+    const { data, error } = await (admin as any)
       .from('marketing_content_plan_comments')
       .insert({
         content_plan_id: id,

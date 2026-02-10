@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -25,9 +26,10 @@ export async function GET(request: NextRequest) {
     const startOfMonth = `${year}-${String(mon).padStart(2, '0')}-01`
     const endOfMonth = new Date(year, mon, 0).toISOString().split('T')[0]
     const today = now.toISOString().split('T')[0]
+    const admin = createAdminClient()
 
     // Get all plans for the month with realization data - include cross-posts so counts match list
-    const { data: allPlans } = await (supabase as any)
+    const { data: allPlans } = await (admin as any)
       .from('marketing_content_plans')
       .select('id, platform, status, content_type, scheduled_date, actual_post_url, actual_views, actual_likes, actual_comments, actual_shares, actual_engagement_rate, actual_reach, actual_impressions, realized_at, target_views, target_likes, target_comments, target_shares, target_engagement_rate')
       .gte('scheduled_date', startOfMonth)

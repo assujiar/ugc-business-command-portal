@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +16,8 @@ export async function GET(request: NextRequest) {
     const contentType = searchParams.get('content_type')
     const search = searchParams.get('search')
 
-    let query = (supabase as any)
+    const admin = createAdminClient()
+    let query = (admin as any)
       .from('marketing_content_templates')
       .select('*')
       .order('usage_count', { ascending: false })
@@ -46,7 +48,8 @@ export async function POST(request: NextRequest) {
     const { name, platform, content_type, caption_template, default_hashtag_ids, notes } = body
     if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
-    const { data, error } = await (supabase as any)
+    const admin = createAdminClient()
+    const { data, error } = await (admin as any)
       .from('marketing_content_templates')
       .insert({ name, platform, content_type, caption_template, default_hashtag_ids: default_hashtag_ids || [], notes, created_by: user.id })
       .select()

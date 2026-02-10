@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +16,8 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category')
     const limit = Math.min(200, parseInt(searchParams.get('limit') || '50', 10))
 
-    let query = (supabase as any)
+    const admin = createAdminClient()
+    let query = (admin as any)
       .from('marketing_hashtags')
       .select('*')
       .order('usage_count', { ascending: false })
@@ -49,7 +51,8 @@ export async function POST(request: NextRequest) {
     const cleanTag = tag.replace(/^#/, '').toLowerCase().trim()
     if (!cleanTag) return NextResponse.json({ error: 'Invalid tag' }, { status: 400 })
 
-    const { data, error } = await (supabase as any)
+    const admin = createAdminClient()
+    const { data, error } = await (admin as any)
       .from('marketing_hashtags')
       .insert({ tag: cleanTag, category: category || 'general', platforms: platforms || [], created_by: user.id })
       .select()

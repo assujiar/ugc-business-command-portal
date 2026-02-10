@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +11,8 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data, error } = await (supabase as any)
+    const admin = createAdminClient()
+    const { data, error } = await (admin as any)
       .from('marketing_hashtag_groups')
       .select('*')
       .order('name')
@@ -36,7 +38,8 @@ export async function POST(request: NextRequest) {
     const { name, hashtag_ids } = body
     if (!name || !hashtag_ids?.length) return NextResponse.json({ error: 'name and hashtag_ids are required' }, { status: 400 })
 
-    const { data, error } = await (supabase as any)
+    const admin = createAdminClient()
+    const { data, error } = await (admin as any)
       .from('marketing_hashtag_groups')
       .insert({ name, hashtag_ids, created_by: user.id })
       .select()
