@@ -47,7 +47,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   let leadsQuery = (adminClient as any).from('leads').select('lead_id, company_name, source, triage_status, sales_owner_user_id, marketing_owner_user_id, created_by, opportunity_id, account_id, created_at')
   let opportunitiesQuery = (adminClient as any).from('opportunities').select('opportunity_id, name, account_id, stage, estimated_value, owner_user_id, created_at, closed_at, lost_reason')
-  let accountsQuery = (adminClient as any).from('accounts').select('account_id, company_name, account_status, owner_user_id, created_at, first_transaction_date, last_transaction_date')
+  let accountsQuery = (adminClient as any).from('accounts').select('account_id, company_name, account_status, industry, owner_user_id, created_at, first_transaction_date, last_transaction_date')
   let salesPlansQuery = (adminClient as any).from('sales_plans').select('plan_id, plan_type, status, potential_status, owner_user_id, source_account_id, created_at')
   let pipelineUpdatesQuery = (adminClient as any).from('pipeline_updates').select('update_id, opportunity_id, approach_method, updated_by, created_at')
   let activitiesQuery = (adminClient as any).from('activities').select('activity_id, activity_type, status, owner_user_id, created_at, completed_at, related_account_id, related_opportunity_id')
@@ -92,11 +92,17 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .from('opportunity_stage_history')
     .select('opportunity_id, old_stage, new_stage, changed_at')
 
-  // Customer quotations for deal value (accepted quotations linked to opportunities)
+  // Customer quotations for deal value and service analytics
   const quotationsQuery = (adminClient as any)
     .from('customer_quotations')
-    .select('id, ticket_id, opportunity_id, status, total_selling_rate, currency, created_by, created_at')
+    .select('id, ticket_id, opportunity_id, status, total_selling_rate, currency, service_type, service_type_code, created_by, created_at')
     .in('status', ['accepted', 'sent', 'rejected'])
+
+  // RFQ tickets for RFQ analytics
+  const rfqTicketsQuery = (adminClient as any)
+    .from('tickets')
+    .select('ticket_id, rfq_data, ticket_type, created_at')
+    .eq('ticket_type', 'RFQ')
 
   // Execute all queries in parallel
   const [
@@ -109,6 +115,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     { data: salesProfiles },
     { data: stageHistory },
     { data: quotations },
+    { data: rfqTickets },
   ] = await Promise.all([
     leadsQuery,
     opportunitiesQuery,
@@ -119,6 +126,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     salesProfilesQuery,
     stageHistoryQuery,
     quotationsQuery,
+    rfqTicketsQuery,
   ])
 
   // =====================================================
@@ -180,6 +188,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       account_id: a.account_id,
       company_name: a.company_name,
       account_status: a.account_status,
+      industry: a.industry || null,
       owner_user_id: a.owner_user_id,
       created_at: a.created_at,
       first_transaction_date: a.first_transaction_date,
@@ -237,6 +246,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       opportunity_id: q.opportunity_id,
       status: q.status,
       total_selling_rate: q.total_selling_rate || 0,
+      service_type: q.service_type || null,
+      service_type_code: q.service_type_code || null,
       created_by: q.created_by,
       created_at: q.created_at,
     })),
@@ -256,6 +267,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       account_id: a.account_id,
       company_name: a.company_name,
       account_status: a.account_status,
+      industry: a.industry || null,
       owner_user_id: a.owner_user_id,
       created_at: a.created_at,
       first_transaction_date: a.first_transaction_date,
@@ -285,6 +297,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       potential_status: p.potential_status,
       owner_user_id: p.owner_user_id,
       created_at: p.created_at,
+    })),
+    rfqTickets: (rfqTickets || []).map((t: any) => ({
+      ticket_id: t.ticket_id,
+      service_type: t.rfq_data?.service_type || null,
+      cargo_category: t.rfq_data?.cargo_category || null,
+      origin_city: t.rfq_data?.origin_city || null,
+      destination_city: t.rfq_data?.destination_city || null,
+      created_at: t.created_at,
     })),
   }
 

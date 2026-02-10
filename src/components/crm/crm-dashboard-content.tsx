@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, Cell, PieChart as RechartPieChart, Pie,
 } from 'recharts'
 import { isAdmin, isSales } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
@@ -56,6 +57,7 @@ interface AccountData {
   account_id: string
   company_name: string
   account_status: string | null
+  industry: string | null
   owner_user_id: string | null
   created_at: string
   first_transaction_date: string | null
@@ -120,7 +122,18 @@ interface QuotationData {
   opportunity_id: string | null
   status: string
   total_selling_rate: number
+  service_type: string | null
+  service_type_code: string | null
   created_by: string
+  created_at: string
+}
+
+interface RFQTicketData {
+  ticket_id: string
+  service_type: string | null
+  cargo_category: string | null
+  origin_city: string | null
+  destination_city: string | null
   created_at: string
 }
 
@@ -142,6 +155,7 @@ export interface DashboardDataProps {
   allActivities: ActivityData[]
   allPipelineUpdates: PipelineUpdateData[]
   allSalesPlans: SalesPlanData[]
+  rfqTickets: RFQTicketData[]
 }
 
 // =====================================================
@@ -419,6 +433,46 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       lostReasons[reason] = (lostReasons[reason] || 0) + 1
     })
 
+    // Industry breakdown (bidang usaha)
+    const industryBreakdown: Record<string, number> = {}
+    accts.forEach(a => {
+      const ind = a.industry || 'Belum Diisi'
+      industryBreakdown[ind] = (industryBreakdown[ind] || 0) + 1
+    })
+
+    // Service type breakdown from customer quotations
+    const serviceBreakdown: Record<string, { count: number; value: number }> = {}
+    data.customerQuotations.forEach(q => {
+      const svc = q.service_type || 'Unknown'
+      if (!serviceBreakdown[svc]) serviceBreakdown[svc] = { count: 0, value: 0 }
+      serviceBreakdown[svc].count++
+      serviceBreakdown[svc].value += q.total_selling_rate
+    })
+
+    // Service type by status
+    const serviceByStatus: Record<string, Record<string, number>> = {}
+    data.customerQuotations.forEach(q => {
+      const svc = q.service_type || 'Unknown'
+      if (!serviceByStatus[svc]) serviceByStatus[svc] = {}
+      serviceByStatus[svc][q.status] = (serviceByStatus[svc][q.status] || 0) + 1
+    })
+
+    // RFQ analytics
+    const rfqByService: Record<string, number> = {}
+    const rfqByRoute: Record<string, number> = {}
+    const rfqByCargo: Record<string, number> = {}
+    data.rfqTickets.forEach(t => {
+      const svc = t.service_type || 'Unknown'
+      rfqByService[svc] = (rfqByService[svc] || 0) + 1
+      if (t.origin_city && t.destination_city) {
+        const route = `${t.origin_city} → ${t.destination_city}`
+        rfqByRoute[route] = (rfqByRoute[route] || 0) + 1
+      }
+      if (t.cargo_category) {
+        rfqByCargo[t.cargo_category] = (rfqByCargo[t.cargo_category] || 0) + 1
+      }
+    })
+
     // Opportunity by stage (for funnel)
     const oppByStage = {
       prospecting: opps.filter(o => o.stage === 'Prospecting').length,
@@ -439,6 +493,8 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       leads, leadsBySource,
       plansByType, plansByStatus, huntingPotential, plans,
       accountsByStatus, oppByStage, acceptedQ, lostReasons,
+      industryBreakdown, serviceBreakdown, serviceByStatus,
+      rfqByService, rfqByRoute, rfqByCargo,
     }
   }, [data])
 
@@ -843,46 +899,76 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
         </CardContent>
       </Card>
 
-      {/* ============ LOST REASON ANALYTICS ============ */}
-      {calc.lost.length > 0 && (
-        <>
-          <SectionDivider title="Lost Pipeline Analysis" icon={<AlertCircle className="h-4 w-4 text-red-500" />} />
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base lg:text-lg flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-red-500" />
-                Lost Reasons ({calc.lost.length} pipeline)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {Object.entries(calc.lostReasons)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([reason, count]) => (
-                    <div key={reason} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
-                      onClick={() => openDrill(`Lost: ${reason}`, calc.lost.filter(o => (o.lost_reason || 'Tidak Diketahui') === reason), [
-                        { key: 'name', label: 'Pipeline' },
-                        { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
-                        { key: 'closed_at', label: 'Closed', format: (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-' },
-                      ])}>
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
-                        <span className="text-sm truncate">{reason}</span>
+      {/* ============ LOST REASON ANALYTICS (Interactive Chart) ============ */}
+      {calc.lost.length > 0 && (() => {
+        const lostChartData = Object.entries(calc.lostReasons)
+          .sort((a, b) => b[1] - a[1])
+          .map(([reason, count]) => ({
+            reason: reason.length > 20 ? reason.slice(0, 20) + '...' : reason,
+            fullReason: reason,
+            count,
+            value: calc.lost.filter(o => (o.lost_reason || 'Tidak Diketahui') === reason).reduce((s, o) => s + o.estimated_value, 0),
+          }))
+        const LOST_COLORS = ['#ef4444', '#f97316', '#eab308', '#a855f7', '#6366f1', '#ec4899', '#14b8a6', '#64748b']
+        return (
+          <>
+            <SectionDivider title="Lost Pipeline Analysis" icon={<AlertCircle className="h-4 w-4 text-red-500" />} />
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-red-500" />
+                  Lost Reasons ({calc.lost.length} pipeline &middot; {formatCurrency(calc.lostValue)})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Bar Chart */}
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={lostChartData} layout="vertical" margin={{ left: 10, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" fontSize={11} />
+                        <YAxis type="category" dataKey="reason" width={120} fontSize={11} tick={{ fill: '#6b7280' }} />
+                        <Tooltip
+                          formatter={(val: number, name: string) => [name === 'count' ? `${val} pipeline` : formatCurrency(val), name === 'count' ? 'Count' : 'Value']}
+                          labelFormatter={(label: string) => {
+                            const item = lostChartData.find(d => d.reason === label)
+                            return item?.fullReason || label
+                          }}
+                        />
+                        <Bar dataKey="count" name="Count" radius={[0, 4, 4, 0]}>
+                          {lostChartData.map((_, i) => <Cell key={i} fill={LOST_COLORS[i % LOST_COLORS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* Detail List */}
+                  <div className="space-y-2">
+                    {lostChartData.map((item, i) => (
+                      <div key={item.fullReason}
+                        className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
+                        onClick={() => openDrill(`Lost: ${item.fullReason}`, calc.lost.filter(o => (o.lost_reason || 'Tidak Diketahui') === item.fullReason), [
+                          { key: 'name', label: 'Pipeline' },
+                          { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+                          { key: 'closed_at', label: 'Closed', format: (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-' },
+                        ])}>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: LOST_COLORS[i % LOST_COLORS.length] }} />
+                          <span className="text-sm truncate">{item.fullReason}</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-xs text-muted-foreground">{formatCurrency(item.value)}</span>
+                          <Badge variant="outline" className="text-xs">{item.count}</Badge>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-xs text-muted-foreground">{pct(count, calc.lost.length)}</span>
-                        <Badge variant="outline" className="text-xs">{count}</Badge>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-              <div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
-                Total lost value: <span className="font-medium text-red-600">{formatCurrency(calc.lostValue)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      )}
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )
+      })()}
 
       {/* ============ WEEKLY ANALYTICS ============ */}
       <SectionDivider title="Weekly Analytics" icon={<BarChart3 className="h-4 w-4 text-indigo-500" />} />
@@ -1319,6 +1405,216 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
           </Card>
         </>
       )}
+
+      {/* ============ INDUSTRY (BIDANG USAHA) ANALYTICS ============ */}
+      {Object.keys(calc.industryBreakdown).length > 0 && (
+        <>
+          <SectionDivider title="Bidang Usaha" icon={<Building2 className="h-4 w-4 text-teal-500" />} />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-teal-500" />
+                Account by Bidang Usaha ({calc.accts.length} accounts)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Chart */}
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={Object.entries(calc.industryBreakdown).sort((a, b) => b[1] - a[1]).map(([ind, count]) => ({
+                        name: ind.length > 18 ? ind.slice(0, 18) + '...' : ind,
+                        fullName: ind,
+                        count,
+                      }))}
+                      layout="vertical" margin={{ left: 10, right: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" fontSize={11} />
+                      <YAxis type="category" dataKey="name" width={120} fontSize={11} tick={{ fill: '#6b7280' }} />
+                      <Tooltip formatter={(val: number) => [`${val} accounts`, 'Count']}
+                        labelFormatter={(label: string, payload: any[]) => payload?.[0]?.payload?.fullName || label} />
+                      <Bar dataKey="count" fill="#14b8a6" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Detail list */}
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {Object.entries(calc.industryBreakdown)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([ind, count]) => (
+                      <div key={ind}
+                        className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
+                        onClick={() => openDrill(`Bidang Usaha: ${ind}`, calc.accts.filter(a => (a.industry || 'Belum Diisi') === ind), [
+                          { key: 'company_name', label: 'Company' },
+                          { key: 'account_status', label: 'Status' },
+                          { key: 'industry', label: 'Bidang Usaha' },
+                        ])}>
+                        <span className="text-sm truncate flex-1">{ind}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-muted-foreground">{pct(count, calc.accts.length)}</span>
+                          <Badge variant="outline" className="text-xs">{count}</Badge>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* ============ SERVICE ANALYTICS (Customer Quotation) ============ */}
+      {Object.keys(calc.serviceBreakdown).length > 0 && (() => {
+        const svcData = Object.entries(calc.serviceBreakdown)
+          .sort((a, b) => b[1].count - a[1].count)
+          .map(([svc, d]) => ({ service: svc, count: d.count, value: d.value }))
+        const SVC_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#14b8a6', '#6366f1']
+        return (
+          <>
+            <SectionDivider title="Service Analytics" icon={<Layers className="h-4 w-4 text-blue-500" />} />
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-blue-500" />
+                  Service Type - Customer Quotation ({data.customerQuotations.length} quotations)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Pie Chart */}
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartPieChart>
+                        <Pie data={svcData} dataKey="count" nameKey="service" cx="50%" cy="50%"
+                          outerRadius={90} innerRadius={40} paddingAngle={2} label={({ service, percent }) => `${service} ${(percent * 100).toFixed(0)}%`}
+                          labelLine={{ strokeWidth: 1 }} fontSize={10}>
+                          {svcData.map((_, i) => <Cell key={i} fill={SVC_COLORS[i % SVC_COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(val: number, name: string, props: any) => [`${val} (${formatCurrency(props.payload.value)})`, name]} />
+                      </RechartPieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* Detail table with status breakdown */}
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {svcData.map((item, i) => {
+                      const statusData = calc.serviceByStatus[item.service] || {}
+                      return (
+                        <div key={item.service}
+                          className="p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                          onClick={() => openDrill(`Service: ${item.service}`, data.customerQuotations.filter(q => (q.service_type || 'Unknown') === item.service), [
+                            { key: 'id', label: 'Quotation ID' },
+                            { key: 'status', label: 'Status' },
+                            { key: 'total_selling_rate', label: 'Value', format: (v: number) => formatCurrency(v) },
+                            { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
+                          ])}>
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: SVC_COLORS[i % SVC_COLORS.length] }} />
+                              <span className="text-sm font-medium">{item.service}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono">{formatCurrency(item.value)}</span>
+                              <Badge variant="outline" className="text-xs">{item.count}</Badge>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 ml-5">
+                            {statusData.accepted && <Badge className="bg-green-100 text-green-800 text-[10px]">Accepted: {statusData.accepted}</Badge>}
+                            {statusData.sent && <Badge className="bg-blue-100 text-blue-800 text-[10px]">Sent: {statusData.sent}</Badge>}
+                            {statusData.rejected && <Badge className="bg-red-100 text-red-800 text-[10px]">Rejected: {statusData.rejected}</Badge>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )
+      })()}
+
+      {/* ============ RFQ ANALYTICS ============ */}
+      {data.rfqTickets.length > 0 && (() => {
+        const rfqSvcData = Object.entries(calc.rfqByService).sort((a, b) => b[1] - a[1]).map(([svc, count]) => ({ service: svc, count }))
+        const rfqRouteData = Object.entries(calc.rfqByRoute).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([route, count]) => ({ route, count }))
+        return (
+          <>
+            <SectionDivider title="RFQ Analytics" icon={<Mail className="h-4 w-4 text-orange-500" />} />
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-orange-500" />
+                  Request for Quotation ({data.rfqTickets.length} RFQs)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* RFQ by Service Type */}
+                  <div>
+                    <h3 className="text-sm font-medium mb-3">By Service Type</h3>
+                    <div className="space-y-2">
+                      {rfqSvcData.map(item => (
+                        <div key={item.service}
+                          className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
+                          onClick={() => openDrill(`RFQ: ${item.service}`, data.rfqTickets.filter(t => (t.service_type || 'Unknown') === item.service), [
+                            { key: 'ticket_id', label: 'Ticket' },
+                            { key: 'cargo_category', label: 'Cargo' },
+                            { key: 'origin_city', label: 'Origin' },
+                            { key: 'destination_city', label: 'Destination' },
+                            { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
+                          ])}>
+                          <span className="text-sm">{item.service}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{pct(item.count, data.rfqTickets.length)}</span>
+                            <Badge variant="outline" className="text-xs">{item.count}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Cargo Category */}
+                    {Object.keys(calc.rfqByCargo).length > 0 && (
+                      <div className="mt-4 pt-3 border-t">
+                        <h3 className="text-sm font-medium mb-2">By Cargo Category</h3>
+                        <div className="flex gap-2 flex-wrap">
+                          {Object.entries(calc.rfqByCargo).sort((a, b) => b[1] - a[1]).map(([cat, count]) => (
+                            <Badge key={cat} variant="outline" className="text-xs">{cat}: {count}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Top Routes */}
+                  <div>
+                    <h3 className="text-sm font-medium mb-3">Top Routes</h3>
+                    {rfqRouteData.length > 0 ? (
+                      <div className="space-y-2">
+                        {rfqRouteData.map(item => (
+                          <div key={item.route} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                            onClick={() => openDrill(`Route: ${item.route}`, data.rfqTickets.filter(t => t.origin_city && t.destination_city && `${t.origin_city} → ${t.destination_city}` === item.route), [
+                              { key: 'ticket_id', label: 'Ticket' },
+                              { key: 'service_type', label: 'Service' },
+                              { key: 'cargo_category', label: 'Cargo' },
+                              { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
+                            ])}>
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-3 w-3 text-orange-500 shrink-0" />
+                              <span className="text-sm">{item.route}</span>
+                            </div>
+                            <Badge variant="outline" className="text-xs">{item.count}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No route data available</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )
+      })()}
 
       {/* ============ DRILLDOWN DIALOG ============ */}
       <Dialog open={drilldownOpen} onOpenChange={setDrilldownOpen}>
