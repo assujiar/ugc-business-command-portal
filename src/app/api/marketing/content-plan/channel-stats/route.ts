@@ -26,16 +26,16 @@ export async function GET(request: NextRequest) {
     const endOfMonth = new Date(year, mon, 0).toISOString().split('T')[0]
     const today = now.toISOString().split('T')[0]
 
-    // Get all plans for the month with realization data
+    // Get all plans for the month with realization data - include cross-posts so counts match list
     const { data: allPlans } = await (supabase as any)
       .from('marketing_content_plans')
       .select('id, platform, status, content_type, scheduled_date, actual_post_url, actual_views, actual_likes, actual_comments, actual_shares, actual_engagement_rate, actual_reach, actual_impressions, realized_at, target_views, target_likes, target_comments, target_shares, target_engagement_rate')
       .gte('scheduled_date', startOfMonth)
       .lte('scheduled_date', endOfMonth)
-      .is('parent_plan_id', null)
 
     const plans = allPlans || []
-    const platforms = ['tiktok', 'instagram', 'youtube', 'facebook', 'linkedin', 'twitter']
+    const platformSet = new Set(plans.map((p: any) => p.platform))
+    const platforms = Array.from(platformSet) as string[]
 
     // Build per-platform stats
     const channelStats = platforms.map(platform => {
