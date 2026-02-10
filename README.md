@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 1.9.0 | Last Updated: 2026-02-10
+> Version: 2.0.0 | Last Updated: 2026-02-10
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -15,15 +15,16 @@ A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC L
 4. [Data Model](#data-model)
 5. [User Roles & Permissions](#user-roles--permissions)
 6. [Module: CRM](#module-crm)
-7. [Module: Ticketing](#module-ticketing)
-8. [Module: Quotations](#module-quotations)
-9. [Workflows & State Machines](#workflows--state-machines)
-10. [Auto-Update Mechanisms](#auto-update-mechanisms)
-11. [API Reference](#api-reference)
-12. [Database Schema](#database-schema)
-13. [Installation & Setup](#installation--setup)
-14. [Version History](#version-history)
-15. [Technical Notes](#technical-notes)
+7. [Module: CRM Dashboard](#module-crm-dashboard)
+8. [Module: Ticketing](#module-ticketing)
+9. [Module: Quotations](#module-quotations)
+10. [Workflows & State Machines](#workflows--state-machines)
+11. [Auto-Update Mechanisms](#auto-update-mechanisms)
+12. [API Reference](#api-reference)
+13. [Database Schema](#database-schema)
+14. [Installation & Setup](#installation--setup)
+15. [Version History](#version-history)
+16. [Technical Notes](#technical-notes)
 
 ---
 
@@ -70,6 +71,8 @@ The Business Command Portal handles:
 | **Email** | Nodemailer SMTP integration |
 | **PDF Generation** | Server-side HTML-to-PDF |
 | **File Storage** | Supabase Storage |
+| **AI Insights** | Google Gemini API for growth analytics |
+| **Charts** | Recharts (LineChart, BarChart, PieChart) |
 
 ---
 
@@ -121,10 +124,14 @@ ugc-business-command-portal/
 │   │   │   ├── server.ts             # Server-side client (SSR)
 │   │   │   ├── admin.ts              # Service role client
 │   │   │   └── client.ts             # Browser client
+│   │   ├── insights/                 # AI Insight system
+│   │   │   ├── gemini-client.ts      # Gemini API calls for growth insights
+│   │   │   └── snapshot-builder.ts   # Builds data snapshot for AI
 │   │   ├── constants.ts              # All app constants (SSOT)
 │   │   ├── constants/
 │   │   │   └── rate-components.ts    # 60+ cost component types
 │   │   ├── email.ts                  # Email service
+│   │   ├── account-status.ts         # Account aging computation (TS mirror of SQL)
 │   │   ├── utils.ts                  # Utility functions
 │   │   └── permissions.ts            # Role-based permissions
 │   │
@@ -132,7 +139,7 @@ ugc-business-command-portal/
 │   └── types/                        # TypeScript definitions
 │
 ├── supabase/
-│   └── migrations/                   # 158 SQL migrations
+│   └── migrations/                   # 158+ SQL migrations
 │       ├── 001-034                   # Core CRM tables
 │       ├── 035-060                   # Ticketing system
 │       ├── 061-090                   # Quotation system
@@ -299,16 +306,16 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 
 ### Dashboard Data Scoping by Role
 
-| Role | CRM Dashboard Data | Ticketing Analytics Scope |
-|------|--------------------|--------------------------|
-| Director / super admin | All data (no filter) | All departments |
-| Sales Manager | All sales data | Sales department |
-| Sales Support | All sales data | Sales department |
-| Salesperson | Own data only | Own tickets only |
-| Marketing Manager / MACX | Marketing-created leads | Marketing department |
-| Marcomm / DGO / VSDO | Own leads only | Own tickets only |
-| Ops roles | Own data only (CRM hidden in sidebar) | Own department |
-| Finance | DSO/AR overview (coming soon) | No access |
+| Role | Leads | Opportunities & Accounts | Pipeline/Activities | Ticketing Analytics |
+|------|-------|--------------------------|---------------------|---------------------|
+| Director / super admin | All data | All data | All data | All departments |
+| Sales Manager | All sales leads | All sales opps/accounts | All sales activities | Sales department |
+| Sales Support | All sales leads | All sales opps/accounts | All sales activities | Sales department |
+| Salesperson | Own leads only | Own opps/accounts only | Own activities only | Own tickets only |
+| Marketing Manager / MACX | All marketing dept leads | Opps/accounts from marketing leads (`original_creator_id` in marketing dept) | Marketing-originated | Marketing department |
+| Marcomm / DGO / VSDO | Own leads only | Opps/accounts from own leads (`original_creator_id = userId`) | Own-originated | Own tickets only |
+| Ops roles | N/A (redirected) | N/A | N/A | Own department |
+| Finance | N/A | N/A | N/A | No access |
 
 ---
 
@@ -482,6 +489,102 @@ AGING-BASED (time-driven, computed on API read + cron):
 1. Account has NO opportunities with stage = 'Closed Won' (no deals)
 2. Account has NO opportunities with stage NOT IN ('Closed Won', 'Closed Lost') (no open opps)
 3. Account status is currently `calon_account`
+
+---
+
+## Module: CRM Dashboard
+
+### Overview (`/overview-crm`)
+
+The CRM Dashboard is the main analytics hub for Sales and Marketing departments. It provides comprehensive role-based analytics with drill-down capabilities.
+
+### Architecture
+
+- **Server Component**: `src/app/(crm)/overview-crm/page.tsx` — Fetches all data from Supabase via `adminClient` (bypasses RLS), applies role-based scoping, serializes to client
+- **Client Component**: `src/components/crm/crm-dashboard-content.tsx` — Renders all dashboard sections with interactive charts (Recharts)
+- **AI Insights**: `src/components/crm/dashboard-insights-section.tsx` + `growth-insights-card.tsx` — Period-selectable AI-powered insights via Gemini
+
+### Data Sources
+
+| Table | Fields Used | Purpose |
+|-------|-------------|---------|
+| `leads` | lead_id, company_name, source, triage_status, handed_over_at, claimed_at, account_id, created_by | Lead analytics, MQL time |
+| `opportunities` | opportunity_id, stage, estimated_value, original_creator_id, closed_at, lost_reason | Pipeline analytics |
+| `accounts` | account_id, account_status, industry, original_creator_id | Account status, industry analytics |
+| `activities` | activity_id, activity_type, status, owner_user_id | Activity tracking |
+| `sales_plans` | plan_id, plan_type, status, potential_status | Sales plan analytics |
+| `pipeline_updates` | update_id, approach_method, updated_by | Activity by method |
+| `customer_quotations` | status, total_selling_rate, service_type | Service analytics, deal value |
+| `tickets` (RFQ) | rfq_data (JSONB: service_type, cargo_category, origin/dest) | RFQ analytics |
+| `opportunity_stage_history` | old_stage, new_stage, changed_at | Sales cycle calculation |
+| `profiles` (sales) | user_id, name, role | Leaderboard, filters |
+| `profiles` (marketing) | user_id, name, role | Marketing dept scoping |
+
+### Dashboard Sections
+
+#### For All Roles (Sales + Marketing)
+
+| Section | Description |
+|---------|-------------|
+| **My Performance Summary** | 4 KPI cards: Pipeline Value, Won Value/Deal Value, Win Rate, Avg Sales Cycle |
+| **Pipeline Funnel** | Stage breakdown (Prospecting → Negotiation) with count and % |
+| **Weekly Analytics** | Line chart showing pipeline movement over last 12 weeks |
+| **Account Status** | 6-status breakdown (calon/new/active/passive/lost/failed) with % |
+| **Quick Actions** | Links to Pipeline, Activities, Sales Plan, Accounts, etc. |
+| **Lost Pipeline Analysis** | Interactive bar chart with lost reasons, value, and percentage |
+| **Industry (Bidang Usaha)** | Horizontal bar chart of accounts by industry |
+| **Service Analytics** | Pie chart of quotations by service type with status breakdown |
+| **RFQ Analytics** | Service type, cargo category, and top routes from RFQ tickets |
+
+#### Sales-Specific Sections
+
+| Section | Description | Roles |
+|---------|-------------|-------|
+| **Salesperson Filter** | Dropdown to filter by salesperson | Sales Manager, Sales Support, Admin |
+| **Lead Source** | Lead distribution by source with conversion count | Sales Manager, Sales Support, Admin |
+| **Activity by Method** | Site Visit, Phone, Online Meeting, WhatsApp, Email, Texting | Sales, Admin |
+| **Sales Plan** | Plan type and status breakdown | Sales, Admin |
+| **Leaderboard** | Top 5 by won value, pipeline value, activities | Sales Manager, Admin |
+| **Salesperson Performance** | Detailed table per salesperson | Sales Manager, Sales Support, Admin |
+
+#### Marketing-Specific Sections
+
+| Section | Description | Roles |
+|---------|-------------|-------|
+| **Lead Status Analysis** | Triage status breakdown (New/In Review/Qualified/Assign to Sales/Nurture/Disqualified) with count and % | Marketing dept, Admin |
+| **Lead-to-MQL Time** | Time from lead creation to handover, categorized (<1h, 1-2h, 2-6h, 6-12h, 12-24h, >24h) with average | Marketing dept, Admin |
+| **MQL Conversion Rate** | Pie chart showing lead → account status conversion (Won/On Progress/Failed/No Account) | Marketing dept, Admin |
+
+### Marketing Data Scoping Logic
+
+Marketing roles see only data originated from their department's leads, using `original_creator_id`:
+
+```
+DGO/Marcomm/VSDO (individual staff):
+├── Leads: created_by = userId OR marketing_owner_user_id = userId
+├── Opportunities: original_creator_id = userId
+└── Accounts: original_creator_id = userId
+
+Marketing Manager / MACX (department managers):
+├── Leads: marketing_owner_user_id IS NOT NULL
+├── Opportunities: original_creator_id IN (all marketing dept user IDs)
+└── Accounts: original_creator_id IN (all marketing dept user IDs)
+```
+
+### AI Insights (Gemini)
+
+- **Period Selection**: Filter Aktif (URL params), Mingguan (week number), Bulanan (month), Year-to-Date
+- **System Instruction**: Requires temporal comparison (weekly/monthly/YTD growth)
+- **Data Snapshot**: Built from all dashboard data via `snapshot-builder.ts`
+- **Output Format**: Executive summary, KPI table, recommendations, risk alerts
+
+### Percentage Display
+
+All charts and analytics sections display both count and percentage (%) against total:
+- Pipeline funnel stages show `count (x%)` format
+- Account status cards show percentage below count
+- Lost reasons show both count% and value%
+- Service/RFQ/Industry analytics include percentage in badges and tooltips
 
 ---
 
@@ -1047,7 +1150,36 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v1.9.0 (Current)
+### v2.0.0 (Current)
+- **Comprehensive CRM Dashboard Overhaul**: Complete redesign of `/overview-crm` with role-based analytics
+  - **My Performance Summary**: 4 KPI cards (Pipeline Value, Won+Deal Value, Win Rate, Avg Sales Cycle)
+  - **Pipeline Funnel**: Stage breakdown with interactive drill-down, count and percentage display
+  - **Weekly Analytics**: 12-week line chart tracking pipeline creation, won, and lost trends
+  - **Account Status**: 6-status grid (calon/new/active/passive/lost/failed) with percentages
+  - **Lost Pipeline Analysis**: Interactive Recharts bar chart with lost reasons, value percentages
+  - **Industry Analytics**: Horizontal bar chart of accounts by bidang usaha (industry)
+  - **Service Analytics**: Pie chart from customer quotations by service type with accepted/sent/rejected status breakdown
+  - **RFQ Analytics**: Service type breakdown, cargo category badges, and top routes from RFQ ticket data
+  - **Leaderboard**: Top 5 by won value, pipeline value, and activity count
+  - **Salesperson Performance Table**: Detailed per-person metrics for managers
+- **Marketing Department Dashboard**: Full analytics parity with sales department
+  - **Marketing Data Scoping**: Opportunities and accounts now filtered by `original_creator_id` for marketing roles
+    - DGO/Marcomm/VSDO: Only see data from leads they created
+    - Marketing Manager/MACX: See data from all marketing department leads
+  - **Lead Status Analysis**: Triage status breakdown (New/In Review/Qualified/Assign to Sales/Nurture/Disqualified)
+  - **Lead-to-MQL Time**: Time analysis from lead creation to handover, categorized (<1h to >24h) with average
+  - **MQL Conversion Rate**: Pie chart showing lead → account status conversion (Won/On Progress/Failed/No Account)
+  - **Quick Actions**: Lead Management, Lead Inbox links for marketing users
+- **Percentage Display on All Charts**: Every chart and analytics section now shows count and value percentages against total
+  - Pipeline funnel, Account status, Lost reasons, Industry, Service, RFQ, Activity by method
+- **AI Insights Period Selector**: Choose analysis period: Filter Aktif, Mingguan (week), Bulanan (month), Year-to-Date
+  - Week/month/year dropdown selectors for precise period control
+  - Updated Gemini prompt with temporal context for period-aware analysis
+- **Unified Activity Count**: Activities count now matches Activities submenu (combines sales_plans + pipeline_updates + activities with deduplication)
+- **Sales Plan Data Fix**: Fixed `source_account_id` column reference (was incorrectly using `account_id`)
+- **Won Pipeline Deal Value**: Now shows both estimated_value and customer quotation deal value
+
+### v1.9.0
 - **Fix Pipeline Activity for Quotation Rejection/Acceptance (Migration 158)**: Fixed activities not appearing in pipeline activity when quotation is rejected or accepted
   - **Root Cause**: `rpc_customer_quotation_mark_accepted` (from migration 133) used wrong column names for `pipeline_updates` INSERT: `update_type`, `old_value`, `new_value`. The actual table has `approach_method`, `old_stage`, `new_stage` (migration 014). This caused the INSERT to fail silently in EXCEPTION block, resulting in ZERO pipeline_updates and activities records.
   - **Fix**: Redefined `mark_accepted` with correct column names and added GUC flag `app.in_quotation_rpc` to prevent AFTER UPDATE trigger interference.

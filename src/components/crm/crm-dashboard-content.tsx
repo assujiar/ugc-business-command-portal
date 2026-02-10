@@ -34,7 +34,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   BarChart, Bar, Cell, PieChart as RechartPieChart, Pie,
 } from 'recharts'
-import { isAdmin, isSales } from '@/lib/permissions'
+import { isAdmin, isSales, isMarketing } from '@/lib/permissions'
 import type { UserRole } from '@/types/database'
 
 // =====================================================
@@ -48,6 +48,7 @@ interface OpportunityData {
   stage: string
   estimated_value: number
   owner_user_id: string | null
+  original_creator_id: string | null
   created_at: string
   closed_at: string | null
   lost_reason: string | null
@@ -59,6 +60,7 @@ interface AccountData {
   account_status: string | null
   industry: string | null
   owner_user_id: string | null
+  original_creator_id: string | null
   created_at: string
   first_transaction_date: string | null
   last_transaction_date: string | null
@@ -83,7 +85,10 @@ interface LeadData {
   marketing_owner_user_id: string | null
   created_by: string
   opportunity_id: string | null
+  account_id: string | null
   created_at: string
+  handed_over_at: string | null
+  claimed_at: string | null
 }
 
 interface SalesPlanData {
@@ -156,6 +161,7 @@ export interface DashboardDataProps {
   allPipelineUpdates: PipelineUpdateData[]
   allSalesPlans: SalesPlanData[]
   rfqTickets: RFQTicketData[]
+  marketingProfiles: SalesProfileData[]
 }
 
 // =====================================================
@@ -268,6 +274,13 @@ const canSeeLeaderboard = (role: string) => isAdmin(role as UserRole) || role ==
 const canSeeSalesTable = (role: string) => isAdmin(role as UserRole) || role === 'sales manager' || role === 'sales support'
 const canSeeLeadSource = (role: string) => isAdmin(role as UserRole) || role === 'sales manager' || role === 'sales support'
 const canSeeSalesFilter = (role: string) => isAdmin(role as UserRole) || role === 'sales manager' || role === 'sales support'
+const isMarketingDept = (role: string) => ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'].includes(role)
+
+function formatHours(hours: number): string {
+  if (hours < 1) return `${Math.round(hours * 60)} menit`
+  if (hours < 24) return `${hours.toFixed(1)} jam`
+  return `${(hours / 24).toFixed(1)} hari`
+}
 
 // =====================================================
 // Sub-Components
@@ -484,17 +497,79 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       onHold: opps.filter(o => o.stage === 'On Hold').length,
     }
 
+    // =====================================================
+    // Marketing-specific analytics
+    // =====================================================
+
+    // Lead status (triage) breakdown
+    const leadsByStatus: Record<string, number> = {}
+    leads.forEach(l => {
+      leadsByStatus[l.triage_status] = (leadsByStatus[l.triage_status] || 0) + 1
+    })
+
+    // Lead-to-MQL time analysis
+    // MQL = lead handed over to sales (handed_over_at or claimed_at)
+    const mqlTimes: number[] = [] // in hours
+    leads.forEach(l => {
+      const handoverTime = l.handed_over_at || l.claimed_at
+      if (handoverTime && l.created_at) {
+        const hours = (new Date(handoverTime).getTime() - new Date(l.created_at).getTime()) / 3600000
+        if (hours >= 0) mqlTimes.push(hours)
+      }
+    })
+
+    const mqlTimeCategories = {
+      under1h: mqlTimes.filter(h => h < 1).length,
+      under2h: mqlTimes.filter(h => h >= 1 && h < 2).length,
+      under6h: mqlTimes.filter(h => h >= 2 && h < 6).length,
+      under12h: mqlTimes.filter(h => h >= 6 && h < 12).length,
+      under24h: mqlTimes.filter(h => h >= 12 && h < 24).length,
+      over24h: mqlTimes.filter(h => h >= 24).length,
+    }
+    const avgMqlTimeHours = mqlTimes.length > 0 ? mqlTimes.reduce((s, h) => s + h, 0) / mqlTimes.length : 0
+    const totalMqlLeads = mqlTimes.length
+
+    // MQL Conversion Rate: lead → account status
+    // Build account lookup by ID
+    const accountMap = new Map(accts.map(a => [a.account_id, a]))
+    const mqlConversion = { onProgress: 0, won: 0, failed: 0, noAccount: 0, total: 0 }
+    leads.forEach(l => {
+      if (!l.account_id) {
+        mqlConversion.noAccount++
+        mqlConversion.total++
+        return
+      }
+      const account = accountMap.get(l.account_id)
+      if (!account) {
+        mqlConversion.noAccount++
+        mqlConversion.total++
+        return
+      }
+      mqlConversion.total++
+      const status = account.account_status
+      if (status === 'calon_account') {
+        mqlConversion.onProgress++
+      } else if (status === 'failed_account' || status === 'lost_account') {
+        mqlConversion.failed++
+      } else if (status === 'new_account' || status === 'active_account' || status === 'passive_account') {
+        mqlConversion.won++
+      } else {
+        mqlConversion.noAccount++
+      }
+    })
+
     return {
       opps, onProgress, won, lost,
       totalValue, onProgressValue, wonValue, lostValue, dealValue,
       winRate, avgSalesCycle, closedCount,
       activeAccounts, newAccounts, accts,
       acts, actByType, methodCounts, updates,
-      leads, leadsBySource,
+      leads, leadsBySource, leadsByStatus,
       plansByType, plansByStatus, huntingPotential, plans,
       accountsByStatus, oppByStage, acceptedQ, lostReasons,
       industryBreakdown, serviceBreakdown, serviceByStatus,
       rfqByService, rfqByRoute, rfqByCargo,
+      mqlTimeCategories, avgMqlTimeHours, totalMqlLeads, mqlConversion,
     }
   }, [data])
 
@@ -930,7 +1005,10 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                         <XAxis type="number" fontSize={11} />
                         <YAxis type="category" dataKey="reason" width={120} fontSize={11} tick={{ fill: '#6b7280' }} />
                         <Tooltip
-                          formatter={(val: number, name: string) => [name === 'count' ? `${val} pipeline` : formatCurrency(val), name === 'count' ? 'Count' : 'Value']}
+                          formatter={(val: number, name: string) => {
+                            if (name === 'count') return [`${val} pipeline (${pct(val, calc.lost.length)})`, 'Count']
+                            return [formatCurrency(val) + ` (${pct(val, calc.lostValue)})`, 'Value']
+                          }}
                           labelFormatter={(label: string) => {
                             const item = lostChartData.find(d => d.reason === label)
                             return item?.fullReason || label
@@ -957,8 +1035,8 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                           <span className="text-sm truncate">{item.fullReason}</span>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-xs text-muted-foreground">{formatCurrency(item.value)}</span>
-                          <Badge variant="outline" className="text-xs">{item.count}</Badge>
+                          <span className="text-xs text-muted-foreground">{formatCurrency(item.value)} ({pct(item.value, calc.lostValue)})</span>
+                          <Badge variant="outline" className="text-xs">{item.count} ({pct(item.count, calc.lost.length)})</Badge>
                         </div>
                       </div>
                     ))}
@@ -1064,14 +1142,14 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
               <div key={s.label} className="space-y-1 cursor-pointer" onClick={() => openDrill(`${s.label} Pipeline`, calc.opps.filter(o => o.stage === s.label), [
                 { key: 'name', label: 'Name' }, { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
               ])}>
-                <div className="flex justify-between text-sm"><span>{s.label}</span><span className="font-medium">{s.count}</span></div>
+                <div className="flex justify-between text-sm"><span>{s.label}</span><span className="font-medium">{s.count} <span className="text-muted-foreground text-xs">({pct(s.count, calc.opps.length)})</span></span></div>
                 <Progress value={calc.opps.length > 0 ? (s.count / calc.opps.length) * 100 : 0} className={`h-2 ${s.color}`} />
               </div>
             ))}
             <div className="flex justify-between pt-2 border-t">
-              <span className="text-sm flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-500" />Won: {calc.oppByStage.closedWon}</span>
-              <span className="text-sm flex items-center gap-1"><AlertCircle className="h-4 w-4 text-red-500" />Lost: {calc.oppByStage.closedLost}</span>
-              {calc.oppByStage.onHold > 0 && <span className="text-sm flex items-center gap-1"><Clock className="h-4 w-4 text-yellow-500" />Hold: {calc.oppByStage.onHold}</span>}
+              <span className="text-sm flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-500" />Won: {calc.oppByStage.closedWon} <span className="text-xs text-muted-foreground">({pct(calc.oppByStage.closedWon, calc.opps.length)})</span></span>
+              <span className="text-sm flex items-center gap-1"><AlertCircle className="h-4 w-4 text-red-500" />Lost: {calc.oppByStage.closedLost} <span className="text-xs text-muted-foreground">({pct(calc.oppByStage.closedLost, calc.opps.length)})</span></span>
+              {calc.oppByStage.onHold > 0 && <span className="text-sm flex items-center gap-1"><Clock className="h-4 w-4 text-yellow-500" />Hold: {calc.oppByStage.onHold} <span className="text-xs text-muted-foreground">({pct(calc.oppByStage.onHold, calc.opps.length)})</span></span>}
             </div>
           </CardContent>
         </Card>
@@ -1295,6 +1373,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                     ])}>
                     <p className={`text-lg font-bold ${s.tc}`}>{calc.accountsByStatus[s.key as keyof typeof calc.accountsByStatus]}</p>
                     <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                    <p className="text-[9px] text-muted-foreground">{pct(calc.accountsByStatus[s.key as keyof typeof calc.accountsByStatus], calc.accts.length)}</p>
                   </div>
                 )
               })}
@@ -1326,6 +1405,17 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                 </a>
               </>
             )}
+            {isMarketingDept(role) && (
+              <>
+                <a href="/lead-management" className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors">
+                  <Users className="h-4 w-4 text-pink-500" /><span className="text-sm font-medium flex-1">Lead Management</span>
+                  <Badge variant="outline" className="text-xs">{calc.leads.length}</Badge>
+                </a>
+                <a href="/lead-inbox" className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors">
+                  <Mail className="h-4 w-4 text-indigo-500" /><span className="text-sm font-medium flex-1">Lead Inbox</span>
+                </a>
+              </>
+            )}
             <a href="/accounts" className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors">
               <Building2 className="h-4 w-4 text-orange-500" /><span className="text-sm font-medium flex-1">Accounts</span>
               <Badge variant="outline" className="text-xs">{calc.accts.length}</Badge>
@@ -1334,8 +1424,147 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
         </Card>
       </div>
 
+      {/* ============ MARKETING ANALYTICS (marketing dept only) ============ */}
+      {(isMarketingDept(role) || isAdmin(role as UserRole)) && calc.leads.length > 0 && (
+        <>
+          <SectionDivider title="Lead Analytics" icon={<Users className="h-4 w-4 text-pink-500" />} />
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* Lead Status (Triage) Breakdown */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Target className="h-5 w-5 text-pink-500" />Lead Status ({calc.leads.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {[
+                    { status: 'New', color: 'bg-gray-100 text-gray-800' },
+                    { status: 'In Review', color: 'bg-blue-100 text-blue-800' },
+                    { status: 'Qualified', color: 'bg-green-100 text-green-800' },
+                    { status: 'Assign to Sales', color: 'bg-indigo-100 text-indigo-800' },
+                    { status: 'Nurture', color: 'bg-yellow-100 text-yellow-800' },
+                    { status: 'Disqualified', color: 'bg-red-100 text-red-800' },
+                  ].map(({ status, color }) => {
+                    const count = calc.leadsByStatus[status] || 0
+                    return (
+                      <div key={status}
+                        className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1.5 rounded transition-colors"
+                        onClick={() => openDrill(`Leads: ${status}`, calc.leads.filter(l => l.triage_status === status), [
+                          { key: 'company_name', label: 'Company' }, { key: 'source', label: 'Source' },
+                          { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
+                        ])}>
+                        <div className="flex items-center gap-2">
+                          <Badge className={`text-[10px] ${color}`}>{status}</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{pct(count, calc.leads.length)}</span>
+                          <span className="text-sm font-bold">{count}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Lead-to-MQL Time Analysis */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-orange-500" />Lead to MQL Time
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center mb-3 p-2 rounded-lg bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800">
+                  <p className="text-xs text-muted-foreground">Rata-rata Waktu</p>
+                  <p className="text-xl font-bold text-orange-600">{calc.totalMqlLeads > 0 ? formatHours(calc.avgMqlTimeHours) : '-'}</p>
+                  <p className="text-[10px] text-muted-foreground">{calc.totalMqlLeads} lead sudah di-handover</p>
+                </div>
+                <div className="space-y-1.5">
+                  {[
+                    { label: '< 1 jam', count: calc.mqlTimeCategories.under1h, color: 'bg-green-500' },
+                    { label: '1-2 jam', count: calc.mqlTimeCategories.under2h, color: 'bg-blue-500' },
+                    { label: '2-6 jam', count: calc.mqlTimeCategories.under6h, color: 'bg-indigo-500' },
+                    { label: '6-12 jam', count: calc.mqlTimeCategories.under12h, color: 'bg-yellow-500' },
+                    { label: '12-24 jam', count: calc.mqlTimeCategories.under24h, color: 'bg-orange-500' },
+                    { label: '> 24 jam', count: calc.mqlTimeCategories.over24h, color: 'bg-red-500' },
+                  ].map(({ label, count, color }) => (
+                    <div key={label} className="space-y-0.5">
+                      <div className="flex justify-between text-xs">
+                        <span>{label}</span>
+                        <span className="font-medium">{count} <span className="text-muted-foreground">({pct(count, calc.totalMqlLeads)})</span></span>
+                      </div>
+                      <Progress value={calc.totalMqlLeads > 0 ? (count / calc.totalMqlLeads) * 100 : 0} className={`h-1.5 [&>div]:${color}`} />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* MQL Conversion Rate */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-green-500" />MQL Conversion Rate
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const { onProgress, won, failed, noAccount, total } = calc.mqlConversion
+                  const conversionData = [
+                    { name: 'Won', value: won, color: '#10b981', desc: 'Active/New/Passive Account' },
+                    { name: 'On Progress', value: onProgress, color: '#3b82f6', desc: 'Calon Account' },
+                    { name: 'Failed', value: failed, color: '#ef4444', desc: 'Failed/Lost Account' },
+                    { name: 'No Account', value: noAccount, color: '#94a3b8', desc: 'Belum Punya Account' },
+                  ].filter(d => d.value > 0)
+                  return (
+                    <div className="space-y-3">
+                      {total > 0 && (
+                        <div className="h-40">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RechartPieChart>
+                              <Pie data={conversionData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                                outerRadius={65} innerRadius={30} paddingAngle={2}
+                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                labelLine={{ strokeWidth: 1 }} fontSize={10}>
+                                {conversionData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                              </Pie>
+                              <Tooltip formatter={(val: number) => [`${val} leads`, 'Count']} />
+                            </RechartPieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
+                        {[
+                          { label: 'Won', count: won, color: 'text-green-600', desc: 'Active/New/Passive' },
+                          { label: 'On Progress', count: onProgress, color: 'text-blue-600', desc: 'Calon Account' },
+                          { label: 'Failed', count: failed, color: 'text-red-600', desc: 'Failed/Lost Account' },
+                          { label: 'No Account', count: noAccount, color: 'text-muted-foreground', desc: 'Belum dikonversi' },
+                        ].map(({ label, count, color, desc }) => (
+                          <div key={label} className="flex items-center justify-between">
+                            <div>
+                              <span className={`text-sm font-medium ${color}`}>{label}</span>
+                              <span className="text-[10px] text-muted-foreground ml-1">({desc})</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground">{pct(count, total)}</span>
+                              <span className="text-sm font-bold">{count}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
       {/* ============ LEAD SOURCE ============ */}
-      {canSeeLeadSource(role) && calc.leads.length > 0 && (
+      {(canSeeLeadSource(role) || isMarketingDept(role)) && calc.leads.length > 0 && (
         <>
           <SectionDivider title="Lead Source" icon={<PieChart className="h-4 w-4 text-pink-500" />} />
           <Card>
@@ -1432,7 +1661,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                       <XAxis type="number" fontSize={11} />
                       <YAxis type="category" dataKey="name" width={120} fontSize={11} tick={{ fill: '#6b7280' }} />
-                      <Tooltip formatter={(val: number) => [`${val} accounts`, 'Count']}
+                      <Tooltip formatter={(val: number) => [`${val} accounts (${pct(val, calc.accts.length)})`, 'Count']}
                         labelFormatter={(label: string, payload: any[]) => payload?.[0]?.payload?.fullName || label} />
                       <Bar dataKey="count" fill="#14b8a6" radius={[0, 4, 4, 0]} />
                     </BarChart>
@@ -1491,7 +1720,11 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                           labelLine={{ strokeWidth: 1 }} fontSize={10}>
                           {svcData.map((_, i) => <Cell key={i} fill={SVC_COLORS[i % SVC_COLORS.length]} />)}
                         </Pie>
-                        <Tooltip formatter={(val: number, name: string, props: any) => [`${val} (${formatCurrency(props.payload.value)})`, name]} />
+                        <Tooltip formatter={(val: number, name: string, props: any) => {
+                          const totalCount = data.customerQuotations.length
+                          const totalValue = data.customerQuotations.reduce((s, q) => s + q.total_selling_rate, 0)
+                          return [`${val} (${pct(val, totalCount)}) - ${formatCurrency(props.payload.value)} (${pct(props.payload.value, totalValue)})`, name]
+                        }} />
                       </RechartPieChart>
                     </ResponsiveContainer>
                   </div>
@@ -1514,8 +1747,8 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                               <span className="text-sm font-medium">{item.service}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-mono">{formatCurrency(item.value)}</span>
-                              <Badge variant="outline" className="text-xs">{item.count}</Badge>
+                              <span className="text-xs font-mono">{formatCurrency(item.value)} ({pct(item.value, svcData.reduce((s, d) => s + d.value, 0))})</span>
+                              <Badge variant="outline" className="text-xs">{item.count} ({pct(item.count, data.customerQuotations.length)})</Badge>
                             </div>
                           </div>
                           <div className="flex gap-2 ml-5">
@@ -1578,7 +1811,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                         <h3 className="text-sm font-medium mb-2">By Cargo Category</h3>
                         <div className="flex gap-2 flex-wrap">
                           {Object.entries(calc.rfqByCargo).sort((a, b) => b[1] - a[1]).map(([cat, count]) => (
-                            <Badge key={cat} variant="outline" className="text-xs">{cat}: {count}</Badge>
+                            <Badge key={cat} variant="outline" className="text-xs">{cat}: {count} ({pct(count, data.rfqTickets.length)})</Badge>
                           ))}
                         </div>
                       </div>
@@ -1601,7 +1834,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                               <MapPin className="h-3 w-3 text-orange-500 shrink-0" />
                               <span className="text-sm">{item.route}</span>
                             </div>
-                            <Badge variant="outline" className="text-xs">{item.count}</Badge>
+                            <Badge variant="outline" className="text-xs">{item.count} ({pct(item.count, data.rfqTickets.length)})</Badge>
                           </div>
                         ))}
                       </div>
