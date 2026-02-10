@@ -37,7 +37,7 @@ CREATE POLICY token_refresh_log_admin_policy ON marketing_token_refresh_log
     auth.jwt() ->> 'role' = 'service_role'
     OR EXISTS (
       SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
+      WHERE profiles.user_id = auth.uid()
       AND profiles.role IN ('super admin', 'Director')
     )
   );
