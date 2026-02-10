@@ -49,7 +49,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   let opportunitiesQuery = (adminClient as any).from('opportunities').select('opportunity_id, name, account_id, stage, estimated_value, owner_user_id, original_creator_id, created_at, closed_at, lost_reason')
   let accountsQuery = (adminClient as any).from('accounts').select('account_id, company_name, account_status, industry, owner_user_id, original_creator_id, created_at, first_transaction_date, last_transaction_date')
   let salesPlansQuery = (adminClient as any).from('sales_plans').select('plan_id, plan_type, status, potential_status, owner_user_id, source_account_id, created_at')
-  let pipelineUpdatesQuery = (adminClient as any).from('pipeline_updates').select('update_id, opportunity_id, approach_method, updated_by, created_at')
+  let pipelineUpdatesQuery = (adminClient as any).from('pipeline_updates').select('update_id, opportunity_id, approach_method, updated_by, created_at, updated_at')
   let activitiesQuery = (adminClient as any).from('activities').select('activity_id, activity_type, status, owner_user_id, created_at, completed_at, related_account_id, related_opportunity_id')
 
   // Role-based data scoping:
@@ -271,6 +271,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       approach_method: u.approach_method,
       updated_by: u.updated_by,
       created_at: u.created_at,
+      updated_at: u.updated_at || u.created_at,
     })),
     stageHistory: (stageHistory || []).map((h: any) => ({
       opportunity_id: h.opportunity_id,
@@ -334,6 +335,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       approach_method: u.approach_method,
       updated_by: u.updated_by,
       created_at: u.created_at,
+      updated_at: u.updated_at || u.created_at,
     })),
     allSalesPlans: (salesPlans || []).map((p: any) => ({
       plan_id: p.plan_id,
