@@ -407,8 +407,10 @@ export default function ContentPlanDashboard() {
         resetForm()
         fetchPlans()
         fetchOverview()
-        // Reopen detail dialog after edit
         if (savedId) openDetail(savedId)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Gagal menyimpan content plan')
       }
     } catch (e) { console.error('Error saving plan:', e) }
   }
@@ -427,6 +429,9 @@ export default function ContentPlanDashboard() {
         fetchPlans()
         fetchOverview()
         if (showDetailDialog) openDetail(selectedPlan.id)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Gagal mengubah status')
       }
     } catch (e) { console.error('Error changing status:', e) }
   }
@@ -478,6 +483,9 @@ export default function ContentPlanDashboard() {
         fetchPlans()
         fetchOverview()
         if (showDetailDialog) openDetail(selectedPlan.id)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Gagal menyimpan realisasi')
       }
     } catch (e) { console.error('Error realizing plan:', e) }
   }

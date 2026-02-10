@@ -26,13 +26,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         status_changer:profiles!marketing_content_plans_status_changed_by_fkey(user_id, name, role),
         hashtags:marketing_content_plan_hashtags(
           hashtag:marketing_hashtags(id, tag, category)
-        ),
-        children:marketing_content_plans!marketing_content_plans_parent_plan_id_fkey(id, platform, status, scheduled_date)
+        )
       `)
       .eq('id', id)
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+
+    // Fetch cross-post children separately (self-referential FK can't be joined inline)
+    let children: any[] = []
+    if (plan) {
+      const { data: childPlans } = await (supabase as any)
+        .from('marketing_content_plans')
+        .select('id, platform, status, scheduled_date')
+        .eq('parent_plan_id', id)
+      children = childPlans || []
+    }
+    plan.children = children
 
     const { data: comments } = await (supabase as any)
       .from('marketing_content_plan_comments')
@@ -94,14 +104,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     delete updateFields.children
     delete updateFields.status_changer
 
-    const { data: plan, error } = await (supabase as any)
+    const { data: plans, error } = await (supabase as any)
       .from('marketing_content_plans')
       .update(updateFields)
       .eq('id', id)
       .select()
-      .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!plans || plans.length === 0) return NextResponse.json({ error: 'Plan not found or update not allowed' }, { status: 404 })
+    const plan = plans[0]
 
     // Update hashtags if provided
     if (hashtag_ids !== undefined) {

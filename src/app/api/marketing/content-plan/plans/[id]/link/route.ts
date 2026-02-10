@@ -31,14 +31,15 @@ export async function PATCH(
 
     if (!content) return NextResponse.json({ error: 'Linked content not found' }, { status: 404 })
 
-    const { data: plan, error } = await (supabase as any)
+    const { data: planArr, error } = await (supabase as any)
       .from('marketing_content_plans')
       .update({ linked_content_id })
       .eq('id', id)
       .select()
-      .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!planArr || planArr.length === 0) return NextResponse.json({ error: 'Plan not found or update not allowed' }, { status: 404 })
+    const plan = planArr[0]
 
     await (supabase as any).from('marketing_content_activity_log').insert({
       user_id: user.id, entity_type: 'content_plan', entity_id: id,
