@@ -336,28 +336,28 @@ BEGIN
     PERFORM cron.schedule(
       'social-media-fetch-0800',
       '0 1 * * *',
-      $$SELECT fn_trigger_social_media_fetch()$$
+      $cron$SELECT fn_trigger_social_media_fetch()$cron$
     );
 
     -- Schedule: 12:00 WIB (05:00 UTC)
     PERFORM cron.schedule(
       'social-media-fetch-1200',
       '0 5 * * *',
-      $$SELECT fn_trigger_social_media_fetch()$$
+      $cron$SELECT fn_trigger_social_media_fetch()$cron$
     );
 
     -- Schedule: 17:00 WIB (10:00 UTC)
     PERFORM cron.schedule(
       'social-media-fetch-1700',
       '0 10 * * *',
-      $$SELECT fn_trigger_social_media_fetch()$$
+      $cron$SELECT fn_trigger_social_media_fetch()$cron$
     );
 
     -- Schedule daily summary computation at 23:55 WIB (16:55 UTC)
     PERFORM cron.schedule(
       'social-media-daily-summary',
       '55 16 * * *',
-      $$SELECT fn_compute_social_media_daily_summary(CURRENT_DATE)$$
+      $cron$SELECT fn_compute_social_media_daily_summary(CURRENT_DATE)$cron$
     );
 
     RAISE NOTICE 'pg_cron jobs scheduled successfully';
