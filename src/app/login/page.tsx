@@ -50,13 +50,13 @@ export default function LoginPage() {
         let redirectPath = '/overview-crm'
         if (authData?.user) {
           try {
-            const { data: profile } = await supabase
+            const { data: profile } = await (supabase as any)
               .from('profiles')
               .select('role')
               .eq('user_id', authData.user.id)
-              .single()
+              .single() as { data: { role: string } | null }
             if (profile?.role) {
-              const role = profile.role as string
+              const role = profile.role
               // Ops roles → Ticketing overview
               if (['EXIM Ops', 'domestics Ops', 'Import DTD Ops', 'traffic & warehous'].includes(role)) {
                 redirectPath = '/overview-ticket'
