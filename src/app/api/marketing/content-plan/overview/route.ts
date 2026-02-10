@@ -22,13 +22,12 @@ export async function GET(request: NextRequest) {
     const endOfMonth = new Date(year, mon, 0).toISOString().split('T')[0]
     const today = now.toISOString().split('T')[0]
 
-    // All plans this month (include realization data)
+    // All plans this month (include realization data) - include cross-posts (children) so counts match list tab
     const { data: monthPlans } = await (supabase as any)
       .from('marketing_content_plans')
       .select('id, status, platform, content_type, scheduled_date, linked_content_id, actual_post_url, realized_at, actual_views, actual_likes, actual_comments, actual_shares, actual_engagement_rate')
       .gte('scheduled_date', startOfMonth)
       .lte('scheduled_date', endOfMonth)
-      .is('parent_plan_id', null)
 
     const plans = monthPlans || []
 
@@ -49,8 +48,9 @@ export async function GET(request: NextRequest) {
         : 0,
     }
 
-    // Per-channel KPIs
-    const platforms = ['tiktok', 'instagram', 'youtube', 'facebook', 'linkedin', 'twitter']
+    // Per-channel KPIs - derive platforms from actual data
+    const platformSet = new Set(plans.map((p: any) => p.platform))
+    const platforms = Array.from(platformSet) as string[]
     const channelKpis = platforms.map(platform => {
       const pp = plans.filter((p: any) => p.platform === platform)
       const overdueInChannel = pp.filter((p: any) => p.status !== 'published' && p.scheduled_date < today).length
