@@ -1,0 +1,1258 @@
+'use client'
+
+// =====================================================
+// CRM Dashboard Content - Comprehensive Client Component
+// Handles all dashboard sections with role-based visibility
+// =====================================================
+
+import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  DollarSign, TrendingUp, CheckCircle, Target, Users, UserPlus, Clock,
+  Activity, BarChart3, Trophy, Medal, Award, Crown, MapPin, Video, Phone,
+  MessageSquare, Mail, Building2, AlertCircle,
+  Briefcase, ArrowUp, ArrowDown, Minus, Layers, PieChart, Filter,
+  RotateCcw, Star, Calendar, X,
+} from 'lucide-react'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from 'recharts'
+import { isAdmin, isSales } from '@/lib/permissions'
+import type { UserRole } from '@/types/database'
+
+// =====================================================
+// Types
+// =====================================================
+
+interface OpportunityData {
+  opportunity_id: string
+  name: string
+  account_id: string
+  stage: string
+  estimated_value: number
+  owner_user_id: string | null
+  created_at: string
+  closed_at: string | null
+  lost_reason: string | null
+}
+
+interface AccountData {
+  account_id: string
+  company_name: string
+  account_status: string | null
+  owner_user_id: string | null
+  created_at: string
+  first_transaction_date: string | null
+  last_transaction_date: string | null
+}
+
+interface ActivityData {
+  activity_id: string
+  activity_type: string
+  status: string
+  owner_user_id: string
+  created_at: string
+  completed_at: string | null
+}
+
+interface LeadData {
+  lead_id: string
+  company_name: string | null
+  source: string | null
+  triage_status: string
+  sales_owner_user_id: string | null
+  marketing_owner_user_id: string | null
+  created_by: string
+  opportunity_id: string | null
+  created_at: string
+}
+
+interface SalesPlanData {
+  plan_id: string
+  plan_type: string
+  status: string
+  potential_status: string | null
+  owner_user_id: string
+  created_at: string
+}
+
+interface PipelineUpdateData {
+  update_id: string
+  opportunity_id: string
+  approach_method: string | null
+  updated_by: string
+  created_at: string
+}
+
+interface StageHistoryData {
+  opportunity_id: string
+  old_stage: string | null
+  new_stage: string
+  changed_at: string
+}
+
+interface SalesProfileData {
+  user_id: string
+  name: string
+  email: string
+  role: string
+}
+
+interface QuotationData {
+  id: string
+  opportunity_id: string | null
+  status: string
+  total_selling_rate: number
+  created_by: string
+  created_at: string
+}
+
+export interface DashboardDataProps {
+  userId: string
+  userName: string
+  role: string
+  opportunities: OpportunityData[]
+  accounts: AccountData[]
+  activities: ActivityData[]
+  leads: LeadData[]
+  salesPlans: SalesPlanData[]
+  pipelineUpdates: PipelineUpdateData[]
+  stageHistory: StageHistoryData[]
+  salesProfiles: SalesProfileData[]
+  customerQuotations: QuotationData[]
+  allOpportunities: OpportunityData[]
+  allAccounts: AccountData[]
+  allActivities: ActivityData[]
+}
+
+// =====================================================
+// Helpers
+// =====================================================
+
+function formatCurrency(value: number): string {
+  if (value >= 1_000_000_000) return `Rp ${(value / 1_000_000_000).toFixed(1)}B`
+  if (value >= 1_000_000) return `Rp ${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `Rp ${(value / 1_000).toFixed(1)}K`
+  return `Rp ${value.toLocaleString('id-ID')}`
+}
+
+function formatDays(days: number): string {
+  if (days === 0) return '-'
+  if (days < 1) return `${Math.round(days * 24)}h`
+  return `${days.toFixed(1)} hari`
+}
+
+function pct(part: number, total: number): string {
+  if (total === 0) return '0%'
+  return `${((part / total) * 100).toFixed(1)}%`
+}
+
+function getWeekStartDate(year: number, weekNum: number): Date {
+  const jan1 = new Date(year, 0, 1)
+  const jan1Day = jan1.getDay() || 7
+  const daysToFirstMonday = jan1Day <= 4 ? 1 - jan1Day : 8 - jan1Day
+  const firstMonday = new Date(year, 0, 1 + daysToFirstMonday)
+  const weekStart = new Date(firstMonday)
+  weekStart.setDate(firstMonday.getDate() + (weekNum - 1) * 7)
+  weekStart.setHours(0, 0, 0, 0)
+  return weekStart
+}
+
+function getWeekEndDate(weekStart: Date): Date {
+  const end = new Date(weekStart)
+  end.setDate(weekStart.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+  return end
+}
+
+function getTotalWeeks(year: number): number {
+  const dec28 = new Date(year, 11, 28)
+  const dayOfDec28 = dec28.getDay() || 7
+  const thu = new Date(dec28)
+  thu.setDate(dec28.getDate() - dayOfDec28 + 4)
+  const jan1 = new Date(thu.getFullYear(), 0, 1)
+  return Math.ceil(((thu.getTime() - jan1.getTime()) / 86400000 + 1) / 7)
+}
+
+function formatWeekLabel(year: number, weekNum: number): string {
+  const start = getWeekStartDate(year, weekNum)
+  const end = getWeekEndDate(start)
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  return `Week ${weekNum} (${start.getDate()}-${end.getDate()} ${months[start.getMonth()]})`
+}
+
+function calcGrowth(current: number, previous: number): number | null {
+  if (previous === 0) return current > 0 ? 100 : null
+  return ((current - previous) / previous) * 100
+}
+
+// Role helpers
+const canSeeLeaderboard = (role: string) => isAdmin(role as UserRole) || role === 'sales manager'
+const canSeeSalesTable = (role: string) => isAdmin(role as UserRole) || role === 'sales manager' || role === 'sales support'
+const canSeeLeadSource = (role: string) => isAdmin(role as UserRole) || role === 'sales manager' || role === 'sales support'
+const canSeeSalesFilter = (role: string) => isAdmin(role as UserRole) || role === 'sales manager' || role === 'sales support'
+
+// =====================================================
+// Sub-Components
+// =====================================================
+
+function GrowthBadge({ value, label }: { value: number | null; label: string }) {
+  if (value === null) return (
+    <span className="text-xs text-muted-foreground flex items-center gap-1">
+      <Minus className="h-3 w-3" />{label}: N/A
+    </span>
+  )
+  const positive = value > 0
+  const neutral = value === 0
+  return (
+    <span className={`text-xs flex items-center gap-1 ${positive ? 'text-green-600' : neutral ? 'text-muted-foreground' : 'text-red-600'}`}>
+      {positive ? <ArrowUp className="h-3 w-3" /> : neutral ? <Minus className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+      {label}: {positive ? '+' : ''}{value.toFixed(1)}%
+    </span>
+  )
+}
+
+function SectionDivider({ title, icon }: { title: string; icon?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 pt-4 pb-1">
+      {icon}
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{title}</h2>
+      <div className="flex-1 border-t" />
+    </div>
+  )
+}
+
+// =====================================================
+// Main Component
+// =====================================================
+
+export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { role, userId } = data
+
+  // Filter state
+  const [dateFrom, setDateFrom] = useState(searchParams.get('startDate') || '')
+  const [dateTo, setDateTo] = useState(searchParams.get('endDate') || '')
+  const [selectedSales, setSelectedSales] = useState(searchParams.get('salespersonId') || 'all')
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+  const [selectedWeek, setSelectedWeek] = useState(0)
+
+  // Sync filter state with URL search params (handles back/forward navigation)
+  useEffect(() => {
+    setDateFrom(searchParams.get('startDate') || '')
+    setDateTo(searchParams.get('endDate') || '')
+    setSelectedSales(searchParams.get('salespersonId') || 'all')
+  }, [searchParams])
+
+  // Drilldown dialog
+  const [drilldownOpen, setDrilldownOpen] = useState(false)
+  const [drilldownTitle, setDrilldownTitle] = useState('')
+  const [drilldownItems, setDrilldownItems] = useState<any[]>([])
+  const [drilldownCols, setDrilldownCols] = useState<{ key: string; label: string; format?: (v: any) => string }[]>([])
+
+  const applyFilters = useCallback(() => {
+    const p = new URLSearchParams()
+    if (dateFrom) p.set('startDate', dateFrom)
+    if (dateTo) p.set('endDate', dateTo)
+    if (selectedSales && selectedSales !== 'all') p.set('salespersonId', selectedSales)
+    router.push(`/overview-crm?${p.toString()}`)
+  }, [dateFrom, dateTo, selectedSales, router])
+
+  const clearFilters = useCallback(() => {
+    setDateFrom('')
+    setDateTo('')
+    setSelectedSales('all')
+    router.push('/overview-crm')
+  }, [router])
+
+  const openDrill = (title: string, items: any[], cols: typeof drilldownCols) => {
+    setDrilldownTitle(title)
+    setDrilldownItems(items)
+    setDrilldownCols(cols)
+    setDrilldownOpen(true)
+  }
+
+  // =====================================================
+  // Core Calculations
+  // =====================================================
+
+  const calc = useMemo(() => {
+    const opps = data.opportunities
+    const onProgress = opps.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
+    const won = opps.filter(o => o.stage === 'Closed Won')
+    const lost = opps.filter(o => o.stage === 'Closed Lost')
+
+    const totalValue = opps.reduce((s, o) => s + o.estimated_value, 0)
+    const onProgressValue = onProgress.reduce((s, o) => s + o.estimated_value, 0)
+    const wonValue = won.reduce((s, o) => s + o.estimated_value, 0)
+    const lostValue = lost.reduce((s, o) => s + o.estimated_value, 0)
+
+    // Deal value from accepted quotations for won opportunities
+    const wonOppIds = new Set(won.map(o => o.opportunity_id))
+    const acceptedQ = data.customerQuotations.filter(q => q.status === 'accepted' && q.opportunity_id && wonOppIds.has(q.opportunity_id))
+    const dealValue = acceptedQ.reduce((s, q) => s + q.total_selling_rate, 0)
+
+    // Win rate
+    const closedCount = won.length + lost.length
+    const winRate = closedCount > 0 ? (won.length / closedCount) * 100 : 0
+
+    // Avg sales cycle
+    let totalCycleDays = 0, cycleCount = 0
+    for (const o of won) {
+      if (o.closed_at && o.created_at) {
+        totalCycleDays += (new Date(o.closed_at).getTime() - new Date(o.created_at).getTime()) / 86400000
+        cycleCount++
+      }
+    }
+    const avgSalesCycle = cycleCount > 0 ? totalCycleDays / cycleCount : 0
+
+    const accts = data.accounts
+    const activeAccounts = accts.filter(a => a.account_status === 'active_account')
+    const newAccounts = accts.filter(a => a.account_status === 'new_account')
+
+    // Activities
+    const acts = data.activities
+    const actByType: Record<string, number> = {}
+    acts.forEach(a => { actByType[a.activity_type] = (actByType[a.activity_type] || 0) + 1 })
+
+    // Pipeline updates by method
+    const updates = data.pipelineUpdates
+    const methodCounts: Record<string, number> = {}
+    updates.forEach(u => { if (u.approach_method) methodCounts[u.approach_method] = (methodCounts[u.approach_method] || 0) + 1 })
+
+    // Leads by source
+    const leads = data.leads
+    const leadsBySource: Record<string, number> = {}
+    leads.forEach(l => { const src = l.source || 'Unknown'; leadsBySource[src] = (leadsBySource[src] || 0) + 1 })
+
+    // Sales plans
+    const plans = data.salesPlans
+    const plansByType = {
+      maintenance: plans.filter(p => p.plan_type === 'maintenance_existing').length,
+      hunting: plans.filter(p => p.plan_type === 'hunting_new').length,
+      winback: plans.filter(p => p.plan_type === 'winback_lost').length,
+    }
+    const plansByStatus = {
+      planned: plans.filter(p => p.status === 'planned').length,
+      completed: plans.filter(p => p.status === 'completed').length,
+    }
+    const huntingPotential = plans.filter(p => p.plan_type === 'hunting_new' && p.potential_status === 'potential').length
+
+    // Account status
+    const accountsByStatus = {
+      calon: accts.filter(a => a.account_status === 'calon_account').length,
+      new: newAccounts.length,
+      active: activeAccounts.length,
+      passive: accts.filter(a => a.account_status === 'passive_account').length,
+      lost: accts.filter(a => a.account_status === 'lost_account').length,
+      failed: accts.filter(a => a.account_status === 'failed_account').length,
+    }
+
+    // Opportunity by stage (for funnel)
+    const oppByStage = {
+      prospecting: opps.filter(o => o.stage === 'Prospecting').length,
+      discovery: opps.filter(o => o.stage === 'Discovery').length,
+      quoteSent: opps.filter(o => o.stage === 'Quote Sent').length,
+      negotiation: opps.filter(o => o.stage === 'Negotiation').length,
+      closedWon: won.length,
+      closedLost: lost.length,
+      onHold: opps.filter(o => o.stage === 'On Hold').length,
+    }
+
+    return {
+      opps, onProgress, won, lost,
+      totalValue, onProgressValue, wonValue, lostValue, dealValue,
+      winRate, avgSalesCycle, closedCount,
+      activeAccounts, newAccounts, accts,
+      acts, actByType, methodCounts, updates,
+      leads, leadsBySource,
+      plansByType, plansByStatus, huntingPotential, plans,
+      accountsByStatus, oppByStage, acceptedQ,
+    }
+  }, [data])
+
+  // =====================================================
+  // Salesperson Rankings
+  // =====================================================
+
+  const salesPerfs = useMemo(() => {
+    const salesUsers = data.salesProfiles.filter(p => p.role === 'salesperson')
+    return salesUsers.map(user => {
+      const uid = user.user_id
+      const userOpps = data.allOpportunities.filter(o => o.owner_user_id === uid)
+      const wonOpps = userOpps.filter(o => o.stage === 'Closed Won')
+      const lostOpps = userOpps.filter(o => o.stage === 'Closed Lost')
+      const activeOpps = userOpps.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
+      const userAccts = data.allAccounts.filter(a => a.owner_user_id === uid)
+      const userActs = data.allActivities.filter(a => a.owner_user_id === uid)
+
+      const pipelineValue = activeOpps.reduce((s, o) => s + o.estimated_value, 0)
+      const wonValue = wonOpps.reduce((s, o) => s + o.estimated_value, 0)
+      const closedCount = wonOpps.length + lostOpps.length
+      const winRate = closedCount > 0 ? (wonOpps.length / closedCount) * 100 : 0
+
+      const wonIds = new Set(wonOpps.map(o => o.opportunity_id))
+      const dealVal = data.customerQuotations.filter(q => q.status === 'accepted' && q.opportunity_id && wonIds.has(q.opportunity_id)).reduce((s, q) => s + q.total_selling_rate, 0)
+
+      const activeCust = userAccts.filter(a => a.account_status === 'active_account').length
+      const newCust = userAccts.filter(a => a.account_status === 'new_account').length
+
+      let totalCycleDays = 0, cycleCount = 0
+      for (const o of wonOpps) {
+        if (o.closed_at && o.created_at) { totalCycleDays += (new Date(o.closed_at).getTime() - new Date(o.created_at).getTime()) / 86400000; cycleCount++ }
+      }
+
+      const actBreak: Record<string, number> = {}
+      userActs.forEach(a => { actBreak[a.activity_type] = (actBreak[a.activity_type] || 0) + 1 })
+
+      return {
+        userId: uid, name: user.name,
+        pipelineValue, wonCount: wonOpps.length, wonValue, dealValue: dealVal,
+        lostCount: lostOpps.length, winRate,
+        activeCustomers: activeCust, newCustomers: newCust,
+        avgSalesCycle: cycleCount > 0 ? totalCycleDays / cycleCount : 0,
+        activities: userActs.length, actBreakdown: actBreak,
+        totalPipeline: userOpps.length,
+      }
+    })
+  }, [data])
+
+  // My performance (salesperson)
+  const myPerf = useMemo(() => salesPerfs.find(p => p.userId === userId), [salesPerfs, userId])
+
+  const myRanks = useMemo(() => {
+    if (role !== 'salesperson') return null
+    const metricKeys = ['pipelineValue', 'wonCount', 'wonValue', 'dealValue', 'winRate', 'activeCustomers', 'newCustomers', 'activities'] as const
+    const ranks: Record<string, { rank: number; total: number }> = {}
+    for (const m of metricKeys) {
+      const sorted = [...salesPerfs].sort((a, b) => (b[m] as number) - (a[m] as number))
+      const idx = sorted.findIndex(p => p.userId === userId)
+      ranks[m] = { rank: idx >= 0 ? idx + 1 : sorted.length, total: sorted.length }
+    }
+    const cycleSorted = [...salesPerfs].filter(p => p.avgSalesCycle > 0).sort((a, b) => a.avgSalesCycle - b.avgSalesCycle)
+    const cycleIdx = cycleSorted.findIndex(p => p.userId === userId)
+    ranks['avgSalesCycle'] = { rank: cycleIdx >= 0 ? cycleIdx + 1 : salesPerfs.length, total: cycleSorted.length || salesPerfs.length }
+    return ranks
+  }, [salesPerfs, role, userId])
+
+  // =====================================================
+  // Weekly Analytics
+  // =====================================================
+
+  const weeklyData = useMemo(() => {
+    const totalWeeks = getTotalWeeks(selectedYear)
+    const opps = data.opportunities
+    const acts = data.activities
+    const accts = data.accounts
+    const now = new Date()
+
+    const weeks: {
+      week: string; weekNum: number
+      activities: number; pipelineCount: number
+      onProgressCount: number; wonCount: number; lostCount: number
+      pipelineValue: number; onProgressValue: number; wonValue: number; lostValue: number
+      customerByStatus: Record<string, number>
+    }[] = []
+
+    for (let w = 1; w <= totalWeeks; w++) {
+      const start = getWeekStartDate(selectedYear, w)
+      const end = getWeekEndDate(start)
+      if (start > now) break
+
+      const inWeek = (dateStr: string) => {
+        const d = new Date(dateStr)
+        return d >= start && d <= end
+      }
+
+      const weekActs = acts.filter(a => inWeek(a.created_at))
+      const weekOpps = opps.filter(o => inWeek(o.created_at))
+      const onP = weekOpps.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
+      const wonW = weekOpps.filter(o => o.stage === 'Closed Won')
+      const lostW = weekOpps.filter(o => o.stage === 'Closed Lost')
+
+      const weekAccts = accts.filter(a => inWeek(a.created_at))
+      const cs: Record<string, number> = {}
+      weekAccts.forEach(a => { cs[a.account_status || 'unknown'] = (cs[a.account_status || 'unknown'] || 0) + 1 })
+
+      weeks.push({
+        week: `W${w}`, weekNum: w,
+        activities: weekActs.length,
+        pipelineCount: weekOpps.length,
+        onProgressCount: onP.length, wonCount: wonW.length, lostCount: lostW.length,
+        pipelineValue: weekOpps.reduce((s, o) => s + o.estimated_value, 0),
+        onProgressValue: onP.reduce((s, o) => s + o.estimated_value, 0),
+        wonValue: wonW.reduce((s, o) => s + o.estimated_value, 0),
+        lostValue: lostW.reduce((s, o) => s + o.estimated_value, 0),
+        customerByStatus: cs,
+      })
+    }
+    return weeks
+  }, [data.opportunities, data.activities, data.accounts, selectedYear])
+
+  const weekComp = useMemo(() => {
+    if (selectedWeek === 0) return null
+    const current = weeklyData.find(w => w.weekNum === selectedWeek)
+    const previous = weeklyData.find(w => w.weekNum === selectedWeek - 1)
+    return current ? { current, previous: previous || null } : null
+  }, [weeklyData, selectedWeek])
+
+  // =====================================================
+  // Render
+  // =====================================================
+
+  const salesOnlyProfiles = data.salesProfiles.filter(p => p.role === 'salesperson')
+  const hasFilters = dateFrom || dateTo || (selectedSales && selectedSales !== 'all')
+
+  return (
+    <div className="space-y-4 lg:space-y-6">
+      {/* ============ FILTERS ============ */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Filter className="h-4 w-4" />
+              Filter
+            </div>
+            <div className="flex-1 flex flex-wrap items-end gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Dari</Label>
+                <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-8 w-36 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Sampai</Label>
+                <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-8 w-36 text-xs" />
+              </div>
+              {canSeeSalesFilter(role) && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Salesperson</Label>
+                  <Select value={selectedSales} onValueChange={setSelectedSales}>
+                    <SelectTrigger className="h-8 w-44 text-xs">
+                      <SelectValue placeholder="Semua Sales" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Sales</SelectItem>
+                      {salesOnlyProfiles.map(p => (
+                        <SelectItem key={p.user_id} value={p.user_id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={applyFilters} className="h-8 text-xs">Terapkan</Button>
+              {hasFilters && (
+                <Button size="sm" variant="ghost" onClick={clearFilters} className="h-8 text-xs">
+                  <X className="h-3 w-3 mr-1" />Reset
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ============ MY PERFORMANCE (salesperson only) ============ */}
+      {role === 'salesperson' && myPerf && myRanks && (
+        <>
+          <SectionDivider title="My Performance Summary" icon={<Star className="h-4 w-4 text-yellow-500" />} />
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            {/* Actual Revenue - Coming Soon */}
+            <Card className="border-dashed opacity-60">
+              <CardContent className="p-3 lg:p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <DollarSign className="h-4 w-4 text-amber-500" />
+                  <Badge variant="outline" className="text-[10px]">Coming Soon</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Actual Revenue</p>
+                <p className="text-lg font-bold text-muted-foreground">-</p>
+              </CardContent>
+            </Card>
+
+            {/* Won Opportunities */}
+            <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+              openDrill('Won Opportunities', data.opportunities.filter(o => o.stage === 'Closed Won'), [
+                { key: 'name', label: 'Name' },
+                { key: 'estimated_value', label: 'Est. Value', format: (v: number) => formatCurrency(v) },
+                { key: 'closed_at', label: 'Closed', format: (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-' },
+              ])
+            }}>
+              <CardContent className="p-3 lg:p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <Trophy className="h-4 w-4 text-emerald-500" />
+                  <Badge variant="secondary" className="text-[10px]">#{myRanks.wonCount.rank}/{myRanks.wonCount.total}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Won Opportunities</p>
+                <p className="text-lg font-bold text-emerald-600">{myPerf.wonCount}</p>
+                <p className="text-[10px] text-muted-foreground">Est: {formatCurrency(myPerf.wonValue)}</p>
+                <p className="text-[10px] text-muted-foreground">Deal: {formatCurrency(myPerf.dealValue)}</p>
+              </CardContent>
+            </Card>
+
+            {/* Won Deals */}
+            <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+              openDrill('Won Deals', data.opportunities.filter(o => o.stage === 'Closed Won'), [
+                { key: 'name', label: 'Deal' },
+                { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+              ])
+            }}>
+              <CardContent className="p-3 lg:p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <Badge variant="secondary" className="text-[10px]">#{myRanks.dealValue.rank}/{myRanks.dealValue.total}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Won Deals</p>
+                <p className="text-lg font-bold text-green-600">{myPerf.wonCount}</p>
+                <p className="text-[10px] text-muted-foreground">Deal Value: {formatCurrency(myPerf.dealValue)}</p>
+              </CardContent>
+            </Card>
+
+            {/* Win Rate */}
+            <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+              openDrill('Win/Loss Detail', [
+                ...data.opportunities.filter(o => o.stage === 'Closed Won').map(o => ({ ...o, result: 'Won' })),
+                ...data.opportunities.filter(o => o.stage === 'Closed Lost').map(o => ({ ...o, result: 'Lost' })),
+              ], [
+                { key: 'name', label: 'Pipeline' }, { key: 'result', label: 'Result' },
+                { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+              ])
+            }}>
+              <CardContent className="p-3 lg:p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <Target className="h-4 w-4 text-blue-500" />
+                  <Badge variant="secondary" className="text-[10px]">#{myRanks.winRate.rank}/{myRanks.winRate.total}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Win Rate</p>
+                <p className="text-lg font-bold text-blue-600">{myPerf.winRate.toFixed(1)}%</p>
+                <p className="text-[10px] text-muted-foreground">{myPerf.wonCount}W / {myPerf.lostCount}L</p>
+              </CardContent>
+            </Card>
+
+            {/* Customers */}
+            <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+              openDrill('Customers', data.accounts.filter(a => ['active_account', 'new_account'].includes(a.account_status || '')), [
+                { key: 'company_name', label: 'Company' }, { key: 'account_status', label: 'Status' },
+              ])
+            }}>
+              <CardContent className="p-3 lg:p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <Users className="h-4 w-4 text-indigo-500" />
+                  <Badge variant="secondary" className="text-[10px]">#{myRanks.activeCustomers.rank}/{myRanks.activeCustomers.total}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Customers</p>
+                <p className="text-lg font-bold text-indigo-600">{myPerf.activeCustomers} <span className="text-sm font-normal">active</span></p>
+                <p className="text-[10px] text-muted-foreground">{myPerf.newCustomers} new</p>
+              </CardContent>
+            </Card>
+
+            {/* Avg Sales Cycle */}
+            <Card>
+              <CardContent className="p-3 lg:p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <Clock className="h-4 w-4 text-orange-500" />
+                  <Badge variant="secondary" className="text-[10px]">#{myRanks.avgSalesCycle.rank}/{myRanks.avgSalesCycle.total}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Avg Sales Cycle</p>
+                <p className="text-lg font-bold text-orange-600">{formatDays(myPerf.avgSalesCycle)}</p>
+              </CardContent>
+            </Card>
+
+            {/* Activities */}
+            <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+              const items = Object.entries(myPerf.actBreakdown).map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count)
+              openDrill('Activity Breakdown', items, [{ key: 'type', label: 'Type' }, { key: 'count', label: 'Count' }])
+            }}>
+              <CardContent className="p-3 lg:p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <Activity className="h-4 w-4 text-purple-500" />
+                  <Badge variant="secondary" className="text-[10px]">#{myRanks.activities.rank}/{myRanks.activities.total}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Activities</p>
+                <p className="text-lg font-bold text-purple-600">{myPerf.activities}</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {Object.entries(myPerf.actBreakdown).slice(0, 3).map(([t, c]) => (
+                    <span key={t} className="text-[10px] text-muted-foreground">{t}: {c}</span>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* DSO/AR Aging - Coming Soon */}
+            <Card className="border-dashed opacity-60">
+              <CardContent className="p-3 lg:p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <Briefcase className="h-4 w-4 text-gray-400" />
+                  <Badge variant="outline" className="text-[10px]">Coming Soon</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">DSO/AR Aging</p>
+                <p className="text-lg font-bold text-muted-foreground">-</p>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {/* ============ PIPELINE VALUE ============ */}
+      <SectionDivider title="Pipeline Overview" icon={<Layers className="h-4 w-4 text-blue-500" />} />
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-green-500" />
+            Pipeline Value
+            <Badge variant="outline" className="ml-auto text-xs">{calc.opps.length} pipeline</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl lg:text-3xl font-bold mb-4">{formatCurrency(calc.totalValue)}</div>
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
+            {/* On Progress */}
+            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => openDrill('On Progress Pipeline', calc.onProgress, [
+                { key: 'name', label: 'Name' }, { key: 'stage', label: 'Stage' },
+                { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+              ])}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-blue-700 dark:text-blue-300">On Progress</span>
+                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">{calc.onProgress.length}</Badge>
+              </div>
+              <p className="text-xl font-bold text-blue-600">{formatCurrency(calc.onProgressValue)}</p>
+              <div className="flex gap-2 mt-2 text-xs text-blue-600">
+                <span>{pct(calc.onProgressValue, calc.totalValue)} value</span>
+                <span>|</span>
+                <span>{pct(calc.onProgress.length, calc.opps.length)} count</span>
+              </div>
+              <Progress value={calc.totalValue > 0 ? (calc.onProgressValue / calc.totalValue) * 100 : 0} className="mt-2 h-1.5 [&>div]:bg-blue-500" />
+            </div>
+
+            {/* Won */}
+            <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => openDrill('Won Pipeline', calc.won, [
+                { key: 'name', label: 'Name' },
+                { key: 'estimated_value', label: 'Est. Value', format: (v: number) => formatCurrency(v) },
+                { key: 'closed_at', label: 'Closed', format: (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-' },
+              ])}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Won</span>
+                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">{calc.won.length}</Badge>
+              </div>
+              <p className="text-xl font-bold text-emerald-600">{formatCurrency(calc.wonValue)}</p>
+              <div className="flex gap-2 mt-2 text-xs text-emerald-600">
+                <span>{pct(calc.wonValue, calc.totalValue)} value</span>
+                <span>|</span>
+                <span>{pct(calc.won.length, calc.opps.length)} count</span>
+              </div>
+              <Progress value={calc.totalValue > 0 ? (calc.wonValue / calc.totalValue) * 100 : 0} className="mt-2 h-1.5 [&>div]:bg-emerald-500" />
+            </div>
+
+            {/* Lost */}
+            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => openDrill('Lost Pipeline', calc.lost, [
+                { key: 'name', label: 'Name' },
+                { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+                { key: 'lost_reason', label: 'Reason' },
+              ])}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-red-700 dark:text-red-300">Lost</span>
+                <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">{calc.lost.length}</Badge>
+              </div>
+              <p className="text-xl font-bold text-red-600">{formatCurrency(calc.lostValue)}</p>
+              <div className="flex gap-2 mt-2 text-xs text-red-600">
+                <span>{pct(calc.lostValue, calc.totalValue)} value</span>
+                <span>|</span>
+                <span>{pct(calc.lost.length, calc.opps.length)} count</span>
+              </div>
+              <Progress value={calc.totalValue > 0 ? (calc.lostValue / calc.totalValue) * 100 : 0} className="mt-2 h-1.5 [&>div]:bg-red-500" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ============ WEEKLY ANALYTICS ============ */}
+      <SectionDivider title="Weekly Analytics" icon={<BarChart3 className="h-4 w-4 text-indigo-500" />} />
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-indigo-500" />
+              Weekly Analytics
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Select value={String(selectedYear)} onValueChange={v => { setSelectedYear(Number(v)); setSelectedWeek(0) }}>
+                <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[2025, 2026, 2027].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={String(selectedWeek)} onValueChange={v => setSelectedWeek(Number(v))}>
+                <SelectTrigger className="h-8 w-52 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">All Weeks</SelectItem>
+                  {Array.from({ length: getTotalWeeks(selectedYear) }, (_, i) => i + 1).map(w => (
+                    <SelectItem key={w} value={String(w)}>{formatWeekLabel(selectedYear, w)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {weekComp && weekComp.current && (
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-4">
+              <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border">
+                <p className="text-xs text-muted-foreground mb-1">Activities</p>
+                <p className="text-lg font-bold">{weekComp.current.activities}</p>
+                {weekComp.previous && <GrowthBadge value={calcGrowth(weekComp.current.activities, weekComp.previous.activities)} label="vs prev" />}
+              </div>
+              <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30 border">
+                <p className="text-xs text-muted-foreground mb-1">Pipeline</p>
+                <p className="text-lg font-bold text-blue-600">{weekComp.current.pipelineCount}</p>
+                <p className="text-[10px] text-muted-foreground">Active: {weekComp.current.onProgressCount} | Won: {weekComp.current.wonCount} | Lost: {weekComp.current.lostCount}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-green-50 dark:bg-green-900/30 border">
+                <p className="text-xs text-muted-foreground mb-1">Pipeline Value</p>
+                <p className="text-lg font-bold text-green-600">{formatCurrency(weekComp.current.pipelineValue)}</p>
+                <p className="text-[10px] text-muted-foreground">Active: {formatCurrency(weekComp.current.onProgressValue)}</p>
+                {weekComp.previous && <GrowthBadge value={calcGrowth(weekComp.current.pipelineValue, weekComp.previous.pipelineValue)} label="vs prev" />}
+              </div>
+              <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-900/30 border">
+                <p className="text-xs text-muted-foreground mb-1">New Customers</p>
+                {Object.entries(weekComp.current.customerByStatus).length > 0 ? (
+                  Object.entries(weekComp.current.customerByStatus).map(([k, v]) => <p key={k} className="text-[10px]">{k.replace('_account', '')}: {v}</p>)
+                ) : (
+                  <p className="text-sm text-muted-foreground">-</p>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="h-56 lg:h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={selectedWeek === 0 ? weeklyData : weeklyData.filter(w => w.weekNum >= Math.max(1, selectedWeek - 4) && w.weekNum <= selectedWeek + 4)} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="week" tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={v => formatCurrency(v)} />
+                <Tooltip contentStyle={{ fontSize: 11 }} formatter={(value: number, name: string) => name.includes('Value') ? [formatCurrency(value), name] : [value, name]} />
+                <Legend wrapperStyle={{ fontSize: 10 }} />
+                <Line yAxisId="left" type="monotone" dataKey="activities" stroke="#6366f1" name="Activities" strokeWidth={2} dot={false} />
+                <Line yAxisId="left" type="monotone" dataKey="pipelineCount" stroke="#3b82f6" name="Pipeline Count" strokeWidth={2} dot={false} />
+                <Line yAxisId="right" type="monotone" dataKey="pipelineValue" stroke="#10b981" name="Pipeline Value" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ============ PIPELINE FUNNEL & SALES PLAN ============ */}
+      <SectionDivider title="Pipeline & Sales Plan" icon={<TrendingUp className="h-4 w-4 text-green-500" />} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />Pipeline Funnel
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[
+              { label: 'Prospecting', count: calc.oppByStage.prospecting, color: '' },
+              { label: 'Discovery', count: calc.oppByStage.discovery, color: '[&>div]:bg-blue-500' },
+              { label: 'Quote Sent', count: calc.oppByStage.quoteSent, color: '[&>div]:bg-indigo-500' },
+              { label: 'Negotiation', count: calc.oppByStage.negotiation, color: '[&>div]:bg-purple-500' },
+            ].map(s => (
+              <div key={s.label} className="space-y-1 cursor-pointer" onClick={() => openDrill(`${s.label} Pipeline`, calc.opps.filter(o => o.stage === s.label), [
+                { key: 'name', label: 'Name' }, { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+              ])}>
+                <div className="flex justify-between text-sm"><span>{s.label}</span><span className="font-medium">{s.count}</span></div>
+                <Progress value={calc.opps.length > 0 ? (s.count / calc.opps.length) * 100 : 0} className={`h-2 ${s.color}`} />
+              </div>
+            ))}
+            <div className="flex justify-between pt-2 border-t">
+              <span className="text-sm flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-500" />Won: {calc.oppByStage.closedWon}</span>
+              <span className="text-sm flex items-center gap-1"><AlertCircle className="h-4 w-4 text-red-500" />Lost: {calc.oppByStage.closedLost}</span>
+              {calc.oppByStage.onHold > 0 && <span className="text-sm flex items-center gap-1"><Clock className="h-4 w-4 text-yellow-500" />Hold: {calc.oppByStage.onHold}</span>}
+            </div>
+          </CardContent>
+        </Card>
+
+        {(isSales(role as UserRole) || isAdmin(role as UserRole)) && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                <Target className="h-5 w-5" />Sales Plan Progress
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950">
+                  <Building2 className="h-5 w-5 mx-auto text-blue-600 mb-1" />
+                  <p className="text-xl font-bold text-blue-600">{calc.plansByType.maintenance}</p>
+                  <p className="text-xs text-muted-foreground">Maintenance</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-green-50 dark:bg-green-950">
+                  <UserPlus className="h-5 w-5 mx-auto text-green-600 mb-1" />
+                  <p className="text-xl font-bold text-green-600">{calc.plansByType.hunting}</p>
+                  <p className="text-xs text-muted-foreground">Hunting</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-orange-50 dark:bg-orange-950">
+                  <RotateCcw className="h-5 w-5 mx-auto text-orange-600 mb-1" />
+                  <p className="text-xl font-bold text-orange-600">{calc.plansByType.winback}</p>
+                  <p className="text-xs text-muted-foreground">Winback</p>
+                </div>
+              </div>
+              <div className="flex justify-between items-center pt-3 border-t text-sm">
+                <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-yellow-500" />Planned: {calc.plansByStatus.planned}</span>
+                <span className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-green-500" />Done: {calc.plansByStatus.completed}</span>
+                <span className="flex items-center gap-1"><Target className="h-3 w-3 text-purple-500" />Potential: {calc.huntingPotential}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* ============ ACTIVITY BY METHOD ============ */}
+      {(isSales(role as UserRole) || isAdmin(role as UserRole)) && (
+        <>
+          <SectionDivider title="Activity Analytics" icon={<Activity className="h-4 w-4 text-purple-500" />} />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                <Activity className="h-5 w-5" />Activity by Method ({calc.updates.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {[
+                  { method: 'Site Visit', icon: <MapPin className="h-4 w-4 text-orange-500" /> },
+                  { method: 'Phone Call', icon: <Phone className="h-4 w-4 text-blue-500" /> },
+                  { method: 'Online Meeting', icon: <Video className="h-4 w-4 text-purple-500" /> },
+                  { method: 'WhatsApp', icon: <MessageSquare className="h-4 w-4 text-green-500" /> },
+                  { method: 'Email', icon: <Mail className="h-4 w-4 text-gray-500" /> },
+                  { method: 'Texting', icon: <MessageSquare className="h-4 w-4 text-cyan-500" /> },
+                ].map(({ method, icon }) => {
+                  const count = calc.methodCounts[method] || 0
+                  return (
+                    <div key={method} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1 rounded"
+                      onClick={() => openDrill(`${method} Activities`, calc.updates.filter(u => u.approach_method === method), [
+                        { key: 'opportunity_id', label: 'Opportunity' },
+                        { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
+                      ])}>
+                      <div className="flex items-center gap-2">{icon}<span className="text-sm">{method}</span></div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{pct(count, calc.updates.length)}</span>
+                        <Badge variant="outline">{count}</Badge>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* ============ LEADERBOARD ============ */}
+      {canSeeLeaderboard(role) && salesPerfs.length > 0 && (
+        <>
+          <SectionDivider title="Leaderboard" icon={<Trophy className="h-4 w-4 text-yellow-500" />} />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-yellow-500" />Sales Leaderboard
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {([
+                  { key: 'pipelineValue' as const, title: 'Pipeline Value', fmt: formatCurrency, icon: <TrendingUp className="h-4 w-4" /> },
+                  { key: 'wonCount' as const, title: 'Won Deals', fmt: (v: number) => String(v), icon: <Trophy className="h-4 w-4" /> },
+                  { key: 'wonValue' as const, title: 'Won Value', fmt: formatCurrency, icon: <DollarSign className="h-4 w-4" /> },
+                  { key: 'dealValue' as const, title: 'Deal Value', fmt: formatCurrency, icon: <CheckCircle className="h-4 w-4" /> },
+                  { key: 'winRate' as const, title: 'Win Rate', fmt: (v: number) => `${v.toFixed(1)}%`, icon: <Target className="h-4 w-4" /> },
+                  { key: 'activities' as const, title: 'Activities', fmt: (v: number) => String(v), icon: <Activity className="h-4 w-4" /> },
+                ] as const).map(metric => {
+                  const sorted = [...salesPerfs].sort((a, b) => (b[metric.key] as number) - (a[metric.key] as number))
+                  const top3 = sorted.slice(0, 3)
+                  const bottom3 = sorted.length > 3 ? sorted.slice(-3).reverse() : []
+                  return (
+                    <div key={metric.key} className="border rounded-lg p-3 hover:shadow-sm transition-shadow cursor-pointer"
+                      onClick={() => openDrill(`${metric.title} Ranking`, sorted.map((p, i) => ({ rank: i + 1, name: p.name, value: metric.fmt(p[metric.key] as number) })), [
+                        { key: 'rank', label: '#' }, { key: 'name', label: 'Name' }, { key: 'value', label: metric.title },
+                      ])}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 rounded-md bg-yellow-100 dark:bg-yellow-900 text-yellow-600">{metric.icon}</div>
+                        <span className="text-sm font-medium">{metric.title}</span>
+                      </div>
+                      <div className="space-y-1.5 mb-2">
+                        {top3.map((p, i) => (
+                          <div key={p.userId} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {i === 0 && <Crown className="h-4 w-4 text-yellow-500" />}
+                              {i === 1 && <Medal className="h-4 w-4 text-gray-400" />}
+                              {i === 2 && <Award className="h-4 w-4 text-amber-600" />}
+                              <span className="text-sm truncate max-w-[100px]">{p.name}</span>
+                            </div>
+                            <Badge variant="outline" className="text-xs">{metric.fmt(p[metric.key] as number)}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                      {bottom3.length > 0 && (
+                        <>
+                          <div className="border-t my-2" />
+                          <p className="text-[10px] text-muted-foreground mb-1">Needs Improvement</p>
+                          {bottom3.slice(0, 2).map(p => (
+                            <div key={p.userId} className="flex items-center justify-between">
+                              <span className="text-xs truncate max-w-[100px]">{p.name}</span>
+                              <span className="text-xs text-red-500">{metric.fmt(p[metric.key] as number)}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* ============ SALESPERSON PERFORMANCE TABLE ============ */}
+      {canSeeSalesTable(role) && salesPerfs.length > 0 && (
+        <>
+          <SectionDivider title="Salesperson Performance" icon={<Users className="h-4 w-4 text-indigo-500" />} />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                <Users className="h-5 w-5 text-indigo-500" />Salesperson Performance Detail
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[120px]">Name</TableHead>
+                      <TableHead className="text-right min-w-[100px]">Pipeline Value</TableHead>
+                      <TableHead className="text-right">Won (Qty)</TableHead>
+                      <TableHead className="text-right min-w-[100px]">Won Value</TableHead>
+                      <TableHead className="text-right min-w-[100px]">Deal Value</TableHead>
+                      <TableHead className="text-right">Win Rate</TableHead>
+                      <TableHead className="text-right">Active Cust.</TableHead>
+                      <TableHead className="text-right">New Cust.</TableHead>
+                      <TableHead className="text-right">Avg Cycle</TableHead>
+                      <TableHead className="text-right">Activities</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[...salesPerfs].sort((a, b) => b.wonValue - a.wonValue).map(p => (
+                      <TableRow key={p.userId}>
+                        <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{formatCurrency(p.pipelineValue)}</TableCell>
+                        <TableCell className="text-right">{p.wonCount}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{formatCurrency(p.wonValue)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{formatCurrency(p.dealValue)}</TableCell>
+                        <TableCell className="text-right">{p.winRate.toFixed(1)}%</TableCell>
+                        <TableCell className="text-right">{p.activeCustomers}</TableCell>
+                        <TableCell className="text-right">{p.newCustomers}</TableCell>
+                        <TableCell className="text-right">{formatDays(p.avgSalesCycle)}</TableCell>
+                        <TableCell className="text-right">{p.activities}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* ============ ACCOUNT STATUS & QUICK ACTIONS ============ */}
+      <SectionDivider title="Account & Customer" icon={<Building2 className="h-4 w-4 text-blue-500" />} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+              <Building2 className="h-5 w-5" />Account Status ({calc.accts.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 text-center">
+              {[
+                { key: 'calon', label: 'Calon', color: 'bg-slate-50 dark:bg-slate-900', tc: '' },
+                { key: 'new', label: 'New', color: 'bg-blue-50 dark:bg-blue-950', tc: 'text-blue-600' },
+                { key: 'active', label: 'Active', color: 'bg-green-50 dark:bg-green-950', tc: 'text-green-600' },
+                { key: 'passive', label: 'Passive', color: 'bg-yellow-50 dark:bg-yellow-950', tc: 'text-yellow-600' },
+                { key: 'lost', label: 'Lost', color: 'bg-orange-50 dark:bg-orange-950', tc: 'text-orange-600' },
+                { key: 'failed', label: 'Failed', color: 'bg-red-50 dark:bg-red-950', tc: 'text-red-600' },
+              ].map(s => {
+                const statusMap: Record<string, string> = { calon: 'calon_account', new: 'new_account', active: 'active_account', passive: 'passive_account', lost: 'lost_account', failed: 'failed_account' }
+                return (
+                  <div key={s.key} className={`p-2 rounded-lg ${s.color} cursor-pointer hover:shadow-sm transition-shadow`}
+                    onClick={() => openDrill(`${s.label} Accounts`, calc.accts.filter(a => a.account_status === statusMap[s.key]), [
+                      { key: 'company_name', label: 'Company' }, { key: 'account_status', label: 'Status' },
+                    ])}>
+                    <p className={`text-lg font-bold ${s.tc}`}>{calc.accountsByStatus[s.key as keyof typeof calc.accountsByStatus]}</p>
+                    <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base lg:text-lg">Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <a href="/pipeline" className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors">
+              <TrendingUp className="h-4 w-4 text-blue-500" />
+              <span className="text-sm font-medium flex-1">Pipeline</span>
+              <Badge variant="outline" className="text-xs">{calc.onProgress.length}</Badge>
+            </a>
+            {(isSales(role as UserRole) || isAdmin(role as UserRole)) && (
+              <>
+                <a href="/activities" className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors">
+                  <Activity className="h-4 w-4 text-purple-500" /><span className="text-sm font-medium flex-1">Activities</span>
+                </a>
+                <a href="/sales-plan" className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors">
+                  <Target className="h-4 w-4 text-green-500" /><span className="text-sm font-medium flex-1">Sales Plan</span>
+                  <Badge className="bg-yellow-100 text-yellow-800 text-xs">{calc.plansByStatus.planned}</Badge>
+                </a>
+                <a href="/lead-bidding" className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors">
+                  <Users className="h-4 w-4 text-indigo-500" /><span className="text-sm font-medium flex-1">Lead Bidding</span>
+                </a>
+              </>
+            )}
+            <a href="/accounts" className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors">
+              <Building2 className="h-4 w-4 text-orange-500" /><span className="text-sm font-medium flex-1">Accounts</span>
+              <Badge variant="outline" className="text-xs">{calc.accts.length}</Badge>
+            </a>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ============ LEAD SOURCE ============ */}
+      {canSeeLeadSource(role) && calc.leads.length > 0 && (
+        <>
+          <SectionDivider title="Lead Source" icon={<PieChart className="h-4 w-4 text-pink-500" />} />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                <PieChart className="h-5 w-5 text-pink-500" />Lead Source Analysis ({calc.leads.length} leads)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Badge className="bg-pink-100 text-pink-800">Marketing</Badge>
+                  </h3>
+                  <div className="space-y-2">
+                    {['Webform (SEM)', 'Webform (Organic)', 'Instagram', 'TikTok', 'Facebook', 'Event'].map(src => {
+                      const count = calc.leadsBySource[src] || 0
+                      return (
+                        <div key={src} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1 rounded"
+                          onClick={() => openDrill(`Leads: ${src}`, calc.leads.filter(l => l.source === src), [
+                            { key: 'company_name', label: 'Company' }, { key: 'triage_status', label: 'Status' },
+                            { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
+                          ])}>
+                          <span className="text-sm">{src}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{pct(count, calc.leads.length)}</span>
+                            <Badge variant="outline" className="text-xs">{count}</Badge>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Badge className="bg-blue-100 text-blue-800">Sales</Badge>
+                  </h3>
+                  <div className="space-y-2">
+                    {['Outbound', 'Referral', 'Lainnya'].map(src => {
+                      const count = calc.leadsBySource[src] || 0
+                      return (
+                        <div key={src} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1 rounded"
+                          onClick={() => openDrill(`Leads: ${src}`, calc.leads.filter(l => l.source === src), [
+                            { key: 'company_name', label: 'Company' }, { key: 'triage_status', label: 'Status' },
+                            { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
+                          ])}>
+                          <span className="text-sm">{src}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{pct(count, calc.leads.length)}</span>
+                            <Badge variant="outline" className="text-xs">{count}</Badge>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {Object.entries(calc.leadsBySource)
+                    .filter(([src]) => !['Webform (SEM)', 'Webform (Organic)', 'Instagram', 'TikTok', 'Facebook', 'Event', 'Outbound', 'Referral', 'Lainnya'].includes(src))
+                    .map(([src, count]) => (
+                      <div key={src} className="flex items-center justify-between mt-2 p-1">
+                        <span className="text-sm text-muted-foreground">{src}</span>
+                        <Badge variant="outline" className="text-xs">{count}</Badge>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* ============ DRILLDOWN DIALOG ============ */}
+      <Dialog open={drilldownOpen} onOpenChange={setDrilldownOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>{drilldownTitle}</DialogTitle>
+            <DialogDescription>{drilldownItems.length} items</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">#</TableHead>
+                  {drilldownCols.map(col => <TableHead key={col.key}>{col.label}</TableHead>)}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {drilldownItems.map((item, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                    {drilldownCols.map(col => (
+                      <TableCell key={col.key}>{col.format ? col.format(item[col.key]) : (item[col.key] ?? '-')}</TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+                {drilldownItems.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={drilldownCols.length + 1} className="text-center text-muted-foreground py-8">No data available</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}

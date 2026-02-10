@@ -68,6 +68,22 @@ PRIORITAS GROWTH (UGC Logistics):
 4. Stage hygiene (pipeline tidak boleh stuck)
 5. Repeat shipment & account expansion
 
+ANALISIS TEMPORAL (WAJIB):
+Setiap insight HARUS mencakup perbandingan temporal berikut jika data tersedia:
+1. WEEKLY: Minggu ini vs minggu sebelumnya - highlight perubahan signifikan (>10%)
+2. MONTHLY: Bulan ini vs bulan sebelumnya - identifikasi tren yang berkembang
+3. YEAR-TO-DATE (YTD): Kumulatif dari awal tahun - evaluasi trajectory keseluruhan
+
+Dalam summary_table, SELALU sertakan baris perbandingan temporal:
+- "Weekly Comparison": Metric minggu ini vs minggu lalu (delta %)
+- "Monthly Comparison": Metric bulan ini vs bulan lalu (delta %)
+- "YTD Progress": Kumulatif YTD vs run rate yang dibutuhkan
+
+Dalam key_points dan risks, berikan konteks temporal:
+- Contoh: "Pipeline value naik 15% WoW (week-over-week), konsisten dengan tren 3 minggu terakhir"
+- Contoh: "Win rate turun dari 35% (bulan lalu) ke 28% (bulan ini) - perlu investigasi"
+- Contoh: "YTD leads masuk 450, run rate 50/bulan, proyeksi akhir tahun ~600"
+
 TUGAS ANDA:
 Buat Growth Insight report untuk bisnis cargo/logistics, fokus pada:
 - Quote→booking conversion (tercermin dari lead→opportunity→closed won)
@@ -76,6 +92,7 @@ Buat Growth Insight report untuk bisnis cargo/logistics, fokus pada:
 - Source/channel quality (bukan sekadar volume)
 - Repeat & expansion account (jika ada)
 - Reliability/ticket impact pada retention (jika ada)
+- Temporal trends: weekly, monthly, dan YTD comparisons
 
 OWNER ROLE MAPPING UGC:
 - Salesperson: follow-up, qualification, pipeline hygiene, closing actions
@@ -401,12 +418,32 @@ ${data_quality_flags.map(f => `- ${f}`).join('\n')}
 `
   }
 
-  prompt += `
-## Catatan Penting
+  // Add temporal context
+  const now = new Date()
+  const currentWeekStart = new Date(now)
+  const dayOfWeek = currentWeekStart.getDay() || 7
+  currentWeekStart.setDate(currentWeekStart.getDate() - dayOfWeek + 1)
+  currentWeekStart.setHours(0, 0, 0, 0)
+
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const ytdStart = new Date(now.getFullYear(), 0, 1)
+
+  prompt += `## Konteks Temporal
+- Tanggal analisis: ${now.toISOString().split('T')[0]}
+- Minggu ini dimulai: ${currentWeekStart.toISOString().split('T')[0]} (Senin)
+- Bulan ini dimulai: ${currentMonthStart.toISOString().split('T')[0]}
+- YTD dimulai: ${ytdStart.toISOString().split('T')[0]}
+- WAJIB berikan perbandingan: minggu ini vs minggu lalu, bulan ini vs bulan lalu, dan YTD progress
+- Untuk setiap metric utama, hitung delta % week-over-week dan month-over-month jika data memungkinkan
+
+`
+
+  prompt += `## Catatan Penting
 - Data di atas dari CRM module (leads, opportunities, activities, accounts)
 - Data quote/booking/shipment spesifik belum terinstrumentasi di CRM - rekomendasikan instrumentasi jika perlu
-- Fokus analisis pada: pipeline velocity, conversion, follow-up discipline, source quality
+- Fokus analisis pada: pipeline velocity, conversion, follow-up discipline, source quality, temporal trends
 - DILARANG membahas target/quota/attainment - out of scope
+- WAJIB sertakan insight perbandingan weekly, monthly, dan YTD di summary_table dan key_points
 `
 
   return prompt
