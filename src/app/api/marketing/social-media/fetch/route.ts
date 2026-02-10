@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { ensureValidToken, isTokenExpired } from '@/lib/social-media-token-refresh'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // allow up to 60s for multiple API calls
@@ -315,7 +316,45 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const data = await fetchFn(config)
+        // Auto-refresh token if expiring soon or expired
+        let activeConfig = config
+        if (config.access_token && config.token_expires_at) {
+          try {
+            activeConfig = await ensureValidToken(config)
+          } catch (refreshErr) {
+            console.error(`Token refresh error for ${config.platform}:`, refreshErr)
+            // Continue with existing token
+          }
+
+          // If token is expired and refresh failed, skip the fetch
+          if (isTokenExpired(activeConfig)) {
+            const { error: insertError } = await adminClient
+              .from('marketing_social_media_analytics')
+              .upsert({
+                platform: config.platform,
+                fetch_date: today,
+                fetch_time_slot: timeSlot,
+                fetch_status: 'failed',
+                error_message: 'Token expired and refresh failed. Please update credentials.',
+                fetched_at: new Date().toISOString(),
+              }, {
+                onConflict: 'platform,fetch_date,fetch_time_slot',
+              })
+
+            if (insertError) {
+              console.error(`Insert error for ${config.platform}:`, insertError)
+            }
+
+            results.push({
+              platform: config.platform,
+              status: 'error',
+              error: 'Token expired, refresh failed',
+            })
+            return
+          }
+        }
+
+        const data = await fetchFn(activeConfig)
 
         if (!data) {
           // Insert a record marking this as not yet configured
