@@ -230,12 +230,23 @@ function calcGrowth(current: number, previous: number): number | null {
  * Compute unified activity count matching the Activities page logic.
  * Activities page combines 3 sources: sales_plans + pipeline_updates + activities (deduplicated).
  * Deduplication: remove activities that have a matching pipeline_update on same opportunity within 1 min.
+ * Returns total, breakdown by method, and a normalized items list for drilldown.
  */
+interface UnifiedActivityItem {
+  id: string
+  method: string
+  source: string // 'Pipeline Update' | 'Activity' | 'Sales Plan'
+  opportunity_id: string | null
+  owner_id: string
+  date: string
+  status?: string
+}
+
 function computeUnifiedActivityCount(
   activities: ActivityData[],
   pipelineUpdates: PipelineUpdateData[],
   salesPlans: SalesPlanData[]
-): { total: number; breakdown: Record<string, number> } {
+): { total: number; breakdown: Record<string, number>; items: UnifiedActivityItem[] } {
   // Build dedup keys from pipeline_updates using updated_at (matching Activities page logic)
   // The Activities page uses pu.updated_at for the dedup timestamp, NOT created_at
   const puKeys = new Set(
@@ -257,18 +268,47 @@ function computeUnifiedActivityCount(
 
   // Build breakdown by method/type
   const breakdown: Record<string, number> = {}
+  const items: UnifiedActivityItem[] = []
+
   pipelineUpdates.forEach(pu => {
-    if (pu.approach_method) breakdown[pu.approach_method] = (breakdown[pu.approach_method] || 0) + 1
+    const method = pu.approach_method || 'Unknown'
+    breakdown[method] = (breakdown[method] || 0) + 1
+    items.push({
+      id: pu.update_id,
+      method,
+      source: 'Pipeline Update',
+      opportunity_id: pu.opportunity_id,
+      owner_id: pu.updated_by,
+      date: pu.updated_at,
+    })
   })
   uniqueActivities.forEach(act => {
     breakdown[act.activity_type] = (breakdown[act.activity_type] || 0) + 1
+    items.push({
+      id: act.activity_id,
+      method: act.activity_type,
+      source: 'Activity',
+      opportunity_id: act.related_opportunity_id || null,
+      owner_id: act.owner_user_id,
+      date: act.completed_at || act.created_at,
+      status: act.status,
+    })
   })
   salesPlans.forEach(sp => {
     const t = sp.plan_type === 'maintenance_existing' ? 'Maintain' : sp.plan_type === 'hunting_new' ? 'Hunting' : 'Winback'
     breakdown[t] = (breakdown[t] || 0) + 1
+    items.push({
+      id: sp.plan_id,
+      method: t,
+      source: 'Sales Plan',
+      opportunity_id: null,
+      owner_id: sp.owner_user_id,
+      date: sp.created_at,
+      status: sp.status,
+    })
   })
 
-  return { total, breakdown }
+  return { total, breakdown, items }
 }
 
 // Role helpers
@@ -342,6 +382,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
   const [drilldownTitle, setDrilldownTitle] = useState('')
   const [drilldownItems, setDrilldownItems] = useState<any[]>([])
   const [drilldownCols, setDrilldownCols] = useState<{ key: string; label: string; format?: (v: any) => string }[]>([])
+  const [drilldownSummary, setDrilldownSummary] = useState<{ label: string; value: string }[]>([])
 
   const applyFilters = useCallback(() => {
     const p = new URLSearchParams()
@@ -358,12 +399,42 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
     router.push('/overview-crm')
   }, [router])
 
-  const openDrill = (title: string, items: any[], cols: typeof drilldownCols) => {
+  const openDrill = (title: string, items: any[], cols: typeof drilldownCols, summary?: { label: string; value: string }[]) => {
     setDrilldownTitle(title)
     setDrilldownItems(items)
     setDrilldownCols(cols)
+    setDrilldownSummary(summary || [])
     setDrilldownOpen(true)
   }
+
+  // Lookup maps for enriching drilldown data with human-readable names
+  const userNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    data.salesProfiles.forEach(p => map.set(p.user_id, p.name))
+    data.marketingProfiles.forEach(p => map.set(p.user_id, p.name))
+    map.set(data.userId, data.userName)
+    return map
+  }, [data.salesProfiles, data.marketingProfiles, data.userId, data.userName])
+
+  const accountNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    data.accounts.forEach(a => map.set(a.account_id, a.company_name))
+    data.allAccounts.forEach(a => map.set(a.account_id, a.company_name))
+    return map
+  }, [data.accounts, data.allAccounts])
+
+  const oppNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    data.opportunities.forEach(o => map.set(o.opportunity_id, o.name))
+    data.allOpportunities.forEach(o => map.set(o.opportunity_id, o.name))
+    return map
+  }, [data.opportunities, data.allOpportunities])
+
+  const resolveUser = useCallback((id: string | null) => id ? (userNameMap.get(id) || '-') : '-', [userNameMap])
+  const resolveAccount = useCallback((id: string | null) => id ? (accountNameMap.get(id) || '-') : '-', [accountNameMap])
+  const resolveOpp = useCallback((id: string | null) => id ? (oppNameMap.get(id) || id.slice(0, 8) + '...') : '-', [oppNameMap])
+  const fmtDate = (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-'
+  const fmtCurrency = (v: number) => formatCurrency(v)
 
   // =====================================================
   // Core Calculations
@@ -779,10 +850,17 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
 
             {/* Won Opportunities */}
             <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
-              openDrill('Won Opportunities', data.opportunities.filter(o => o.stage === 'Closed Won'), [
-                { key: 'name', label: 'Name' },
-                { key: 'estimated_value', label: 'Est. Value', format: (v: number) => formatCurrency(v) },
-                { key: 'closed_at', label: 'Closed', format: (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-' },
+              const items = data.opportunities.filter(o => o.stage === 'Closed Won')
+              openDrill('Won Opportunities', items, [
+                { key: 'name', label: 'Pipeline' },
+                { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                { key: 'account_id', label: 'Account', format: resolveAccount },
+                { key: 'estimated_value', label: 'Est. Value', format: fmtCurrency },
+                { key: 'created_at', label: 'Created', format: fmtDate },
+                { key: 'closed_at', label: 'Closed', format: fmtDate },
+              ], [
+                { label: 'Total', value: `${items.length} pipeline` },
+                { label: 'Total Value', value: formatCurrency(items.reduce((s, o) => s + o.estimated_value, 0)) },
               ])
             }}>
               <CardContent className="p-3 lg:p-4">
@@ -799,9 +877,22 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
 
             {/* Won Deals */}
             <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
-              openDrill('Won Deals', data.opportunities.filter(o => o.stage === 'Closed Won'), [
-                { key: 'name', label: 'Deal' },
-                { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+              const wonOpps = data.opportunities.filter(o => o.stage === 'Closed Won')
+              const wonIds = new Set(wonOpps.map(o => o.opportunity_id))
+              const dealQ = data.customerQuotations.filter(q => q.status === 'accepted' && q.opportunity_id && wonIds.has(q.opportunity_id))
+              const items = wonOpps.map(o => {
+                const qts = dealQ.filter(q => q.opportunity_id === o.opportunity_id)
+                return { ...o, deal_value: qts.reduce((s, q) => s + q.total_selling_rate, 0) }
+              })
+              openDrill('Won Deals', items, [
+                { key: 'name', label: 'Pipeline' },
+                { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                { key: 'estimated_value', label: 'Est. Value', format: fmtCurrency },
+                { key: 'deal_value', label: 'Deal Value', format: fmtCurrency },
+                { key: 'closed_at', label: 'Closed', format: fmtDate },
+              ], [
+                { label: 'Total Est.', value: formatCurrency(items.reduce((s, o) => s + o.estimated_value, 0)) },
+                { label: 'Total Deal', value: formatCurrency(items.reduce((s, o) => s + o.deal_value, 0)) },
               ])
             }}>
               <CardContent className="p-3 lg:p-4">
@@ -817,12 +908,22 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
 
             {/* Win Rate */}
             <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
-              openDrill('Win/Loss Detail', [
+              const items = [
                 ...data.opportunities.filter(o => o.stage === 'Closed Won').map(o => ({ ...o, result: 'Won' })),
                 ...data.opportunities.filter(o => o.stage === 'Closed Lost').map(o => ({ ...o, result: 'Lost' })),
+              ]
+              const wonTotal = items.filter(i => i.result === 'Won').reduce((s, o) => s + o.estimated_value, 0)
+              const lostTotal = items.filter(i => i.result === 'Lost').reduce((s, o) => s + o.estimated_value, 0)
+              openDrill('Win/Loss Detail', items, [
+                { key: 'name', label: 'Pipeline' },
+                { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                { key: 'result', label: 'Result' },
+                { key: 'estimated_value', label: 'Value', format: fmtCurrency },
+                { key: 'lost_reason', label: 'Lost Reason', format: (v: string) => v || '-' },
+                { key: 'closed_at', label: 'Closed', format: fmtDate },
               ], [
-                { key: 'name', label: 'Pipeline' }, { key: 'result', label: 'Result' },
-                { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+                { label: 'Won', value: `${items.filter(i => i.result === 'Won').length} (${formatCurrency(wonTotal)})` },
+                { label: 'Lost', value: `${items.filter(i => i.result === 'Lost').length} (${formatCurrency(lostTotal)})` },
               ])
             }}>
               <CardContent className="p-3 lg:p-4">
@@ -838,8 +939,16 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
 
             {/* Customers */}
             <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
-              openDrill('Customers', data.accounts.filter(a => ['active_account', 'new_account'].includes(a.account_status || '')), [
-                { key: 'company_name', label: 'Company' }, { key: 'account_status', label: 'Status' },
+              const items = data.accounts.filter(a => ['active_account', 'new_account'].includes(a.account_status || ''))
+              openDrill('Active & New Customers', items, [
+                { key: 'company_name', label: 'Company' },
+                { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                { key: 'account_status', label: 'Status', format: (v: string) => v?.replace('_account', '') || '-' },
+                { key: 'industry', label: 'Bidang Usaha', format: (v: string) => v || '-' },
+                { key: 'created_at', label: 'Created', format: fmtDate },
+              ], [
+                { label: 'Active', value: String(items.filter(a => a.account_status === 'active_account').length) },
+                { label: 'New', value: String(items.filter(a => a.account_status === 'new_account').length) },
               ])
             }}>
               <CardContent className="p-3 lg:p-4">
@@ -867,8 +976,18 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
 
             {/* Activities */}
             <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
-              const items = Object.entries(myPerf.actBreakdown).map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count)
-              openDrill('Activity Breakdown', items, [{ key: 'type', label: 'Type' }, { key: 'count', label: 'Count' }])
+              const items = Object.entries(myPerf.actBreakdown).map(([type, count]) => ({
+                type,
+                count,
+                pctVal: myPerf.activities > 0 ? ((count / myPerf.activities) * 100).toFixed(1) + '%' : '0%',
+              })).sort((a, b) => b.count - a.count)
+              openDrill('Activity Breakdown', items, [
+                { key: 'type', label: 'Method/Type' },
+                { key: 'count', label: 'Count' },
+                { key: 'pctVal', label: '%' },
+              ], [
+                { label: 'Total', value: String(myPerf.activities) },
+              ])
             }}>
               <CardContent className="p-3 lg:p-4">
                 <div className="flex items-center justify-between mb-1">
@@ -916,8 +1035,14 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
             {/* On Progress */}
             <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => openDrill('On Progress Pipeline', calc.onProgress, [
-                { key: 'name', label: 'Name' }, { key: 'stage', label: 'Stage' },
-                { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
+                { key: 'name', label: 'Pipeline' },
+                { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                { key: 'stage', label: 'Stage' },
+                { key: 'estimated_value', label: 'Value', format: fmtCurrency },
+                { key: 'created_at', label: 'Created', format: fmtDate },
+              ], [
+                { label: 'Total', value: `${calc.onProgress.length} pipeline` },
+                { label: 'Total Value', value: formatCurrency(calc.onProgressValue) },
               ])}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-blue-700 dark:text-blue-300">On Progress</span>
@@ -935,9 +1060,14 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
             {/* Won */}
             <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => openDrill('Won Pipeline', calc.won, [
-                { key: 'name', label: 'Name' },
-                { key: 'estimated_value', label: 'Est. Value', format: (v: number) => formatCurrency(v) },
-                { key: 'closed_at', label: 'Closed', format: (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-' },
+                { key: 'name', label: 'Pipeline' },
+                { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                { key: 'estimated_value', label: 'Est. Value', format: fmtCurrency },
+                { key: 'created_at', label: 'Created', format: fmtDate },
+                { key: 'closed_at', label: 'Closed', format: fmtDate },
+              ], [
+                { label: 'Total', value: `${calc.won.length} pipeline` },
+                { label: 'Total Value', value: formatCurrency(calc.wonValue) },
               ])}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Won</span>
@@ -959,9 +1089,14 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
             {/* Lost */}
             <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => openDrill('Lost Pipeline', calc.lost, [
-                { key: 'name', label: 'Name' },
-                { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
-                { key: 'lost_reason', label: 'Reason' },
+                { key: 'name', label: 'Pipeline' },
+                { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                { key: 'estimated_value', label: 'Value', format: fmtCurrency },
+                { key: 'lost_reason', label: 'Reason', format: (v: string) => v || 'Tidak Diketahui' },
+                { key: 'closed_at', label: 'Closed', format: fmtDate },
+              ], [
+                { label: 'Total', value: `${calc.lost.length} pipeline` },
+                { label: 'Total Value', value: formatCurrency(calc.lostValue) },
               ])}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-red-700 dark:text-red-300">Lost</span>
@@ -1030,11 +1165,20 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                     {lostChartData.map((item, i) => (
                       <div key={item.fullReason}
                         className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
-                        onClick={() => openDrill(`Lost: ${item.fullReason}`, calc.lost.filter(o => (o.lost_reason || 'Tidak Diketahui') === item.fullReason), [
-                          { key: 'name', label: 'Pipeline' },
-                          { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
-                          { key: 'closed_at', label: 'Closed', format: (v: string) => v ? new Date(v).toLocaleDateString('id-ID') : '-' },
-                        ])}>
+                        onClick={() => {
+                          const items = calc.lost.filter(o => (o.lost_reason || 'Tidak Diketahui') === item.fullReason)
+                          openDrill(`Lost: ${item.fullReason}`, items, [
+                            { key: 'name', label: 'Pipeline' },
+                            { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                            { key: 'account_id', label: 'Account', format: resolveAccount },
+                            { key: 'estimated_value', label: 'Value', format: fmtCurrency },
+                            { key: 'created_at', label: 'Created', format: fmtDate },
+                            { key: 'closed_at', label: 'Closed', format: fmtDate },
+                          ], [
+                            { label: 'Total', value: `${items.length} pipeline` },
+                            { label: 'Total Value', value: formatCurrency(items.reduce((s, o) => s + o.estimated_value, 0)) },
+                          ])
+                        }}>
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: LOST_COLORS[i % LOST_COLORS.length] }} />
                           <span className="text-sm truncate">{item.fullReason}</span>
@@ -1144,9 +1288,19 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
               { label: 'Quote Sent', count: calc.oppByStage.quoteSent, color: '[&>div]:bg-indigo-500' },
               { label: 'Negotiation', count: calc.oppByStage.negotiation, color: '[&>div]:bg-purple-500' },
             ].map(s => (
-              <div key={s.label} className="space-y-1 cursor-pointer" onClick={() => openDrill(`${s.label} Pipeline`, calc.opps.filter(o => o.stage === s.label), [
-                { key: 'name', label: 'Name' }, { key: 'estimated_value', label: 'Value', format: (v: number) => formatCurrency(v) },
-              ])}>
+              <div key={s.label} className="space-y-1 cursor-pointer" onClick={() => {
+                const items = calc.opps.filter(o => o.stage === s.label)
+                openDrill(`${s.label} Pipeline`, items, [
+                  { key: 'name', label: 'Pipeline' },
+                  { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                  { key: 'account_id', label: 'Account', format: resolveAccount },
+                  { key: 'estimated_value', label: 'Value', format: fmtCurrency },
+                  { key: 'created_at', label: 'Created', format: fmtDate },
+                ], [
+                  { label: 'Total', value: `${items.length} pipeline` },
+                  { label: 'Total Value', value: formatCurrency(items.reduce((s2, o) => s2 + o.estimated_value, 0)) },
+                ])
+              }}>
                 <div className="flex justify-between text-sm"><span>{s.label}</span><span className="font-medium">{s.count} <span className="text-muted-foreground text-xs">({pct(s.count, calc.opps.length)})</span></span></div>
                 <Progress value={calc.opps.length > 0 ? (s.count / calc.opps.length) * 100 : 0} className={`h-2 ${s.color}`} />
               </div>
@@ -1221,10 +1375,18 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                   if (count === 0) return null
                   return (
                     <div key={method} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1 rounded"
-                      onClick={() => openDrill(`${method} Activities`, calc.updates.filter(u => u.approach_method === method), [
-                        { key: 'opportunity_id', label: 'Opportunity' },
-                        { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
-                      ])}>
+                      onClick={() => {
+                        const items = calc.unifiedActivity.items.filter(i => i.method === method)
+                        openDrill(`${method} Activities`, items, [
+                          { key: 'opportunity_id', label: 'Pipeline', format: resolveOpp },
+                          { key: 'owner_id', label: 'By', format: resolveUser },
+                          { key: 'source', label: 'Source' },
+                          { key: 'date', label: 'Date', format: fmtDate },
+                          { key: 'status', label: 'Status', format: (v: string) => v || '-' },
+                        ], [
+                          { label: 'Total', value: `${items.length} activities` },
+                        ])
+                      }}>
                       <div className="flex items-center gap-2">{icon}<span className="text-sm">{method}</span></div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">{pct(count, calc.unifiedActivity.total)}</span>
@@ -1264,8 +1426,12 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                   const bottom3 = sorted.length > 3 ? sorted.slice(-3).reverse() : []
                   return (
                     <div key={metric.key} className="border rounded-lg p-3 hover:shadow-sm transition-shadow cursor-pointer"
-                      onClick={() => openDrill(`${metric.title} Ranking`, sorted.map((p, i) => ({ rank: i + 1, name: p.name, value: metric.fmt(p[metric.key] as number) })), [
-                        { key: 'rank', label: '#' }, { key: 'name', label: 'Name' }, { key: 'value', label: metric.title },
+                      onClick={() => openDrill(`${metric.title} Ranking`, sorted.map((p, i) => ({
+                        rank: i + 1, name: p.name, value: metric.fmt(p[metric.key] as number),
+                        pipeline: p.totalPipeline, wonCount: p.wonCount, winRate: p.winRate.toFixed(1) + '%',
+                      })), [
+                        { key: 'rank', label: '#' }, { key: 'name', label: 'Salesperson' }, { key: 'value', label: metric.title },
+                        { key: 'pipeline', label: 'Pipeline' }, { key: 'wonCount', label: 'Won' }, { key: 'winRate', label: 'Win Rate' },
                       ])}>
                       <div className="flex items-center gap-2 mb-3">
                         <div className="p-1.5 rounded-md bg-yellow-100 dark:bg-yellow-900 text-yellow-600">{metric.icon}</div>
@@ -1377,9 +1543,19 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                 const statusMap: Record<string, string> = { calon: 'calon_account', new: 'new_account', active: 'active_account', passive: 'passive_account', lost: 'lost_account', failed: 'failed_account' }
                 return (
                   <div key={s.key} className={`p-2 rounded-lg ${s.color} cursor-pointer hover:shadow-sm transition-shadow`}
-                    onClick={() => openDrill(`${s.label} Accounts`, calc.accts.filter(a => a.account_status === statusMap[s.key]), [
-                      { key: 'company_name', label: 'Company' }, { key: 'account_status', label: 'Status' },
-                    ])}>
+                    onClick={() => {
+                      const items = calc.accts.filter(a => a.account_status === statusMap[s.key])
+                      openDrill(`${s.label} Accounts`, items, [
+                        { key: 'company_name', label: 'Company' },
+                        { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                        { key: 'industry', label: 'Bidang Usaha', format: (v: string) => v || '-' },
+                        { key: 'created_at', label: 'Created', format: fmtDate },
+                        { key: 'first_transaction_date', label: 'First Trx', format: fmtDate },
+                        { key: 'last_transaction_date', label: 'Last Trx', format: fmtDate },
+                      ], [
+                        { label: 'Total', value: `${items.length} accounts` },
+                      ])
+                    }}>
                     <p className={`text-lg font-bold ${s.tc}`}>{calc.accountsByStatus[s.key as keyof typeof calc.accountsByStatus]}</p>
                     <p className="text-[10px] text-muted-foreground">{s.label}</p>
                     <p className="text-[9px] text-muted-foreground">{pct(calc.accountsByStatus[s.key as keyof typeof calc.accountsByStatus], calc.accts.length)}</p>
@@ -1459,10 +1635,19 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                     return (
                       <div key={status}
                         className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1.5 rounded transition-colors"
-                        onClick={() => openDrill(`Leads: ${status}`, calc.leads.filter(l => l.triage_status === status), [
-                          { key: 'company_name', label: 'Company' }, { key: 'source', label: 'Source' },
-                          { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
-                        ])}>
+                        onClick={() => {
+                          const items = calc.leads.filter(l => l.triage_status === status)
+                          openDrill(`Leads: ${status}`, items, [
+                            { key: 'company_name', label: 'Company' },
+                            { key: 'source', label: 'Source', format: (v: string) => v || '-' },
+                            { key: 'created_by', label: 'Created By', format: resolveUser },
+                            { key: 'marketing_owner_user_id', label: 'Mkt Owner', format: resolveUser },
+                            { key: 'sales_owner_user_id', label: 'Sales Owner', format: resolveUser },
+                            { key: 'created_at', label: 'Created', format: fmtDate },
+                          ], [
+                            { label: 'Total', value: `${items.length} leads` },
+                          ])
+                        }}>
                         <div className="flex items-center gap-2">
                           <Badge className={`text-[10px] ${color}`}>{status}</Badge>
                         </div>
@@ -1593,10 +1778,17 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                       const count = calc.leadsBySource[src] || 0
                       return (
                         <div key={src} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1 rounded"
-                          onClick={() => openDrill(`Leads: ${src}`, calc.leads.filter(l => l.source === src), [
-                            { key: 'company_name', label: 'Company' }, { key: 'triage_status', label: 'Status' },
-                            { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
-                          ])}>
+                          onClick={() => {
+                            const items = calc.leads.filter(l => l.source === src)
+                            openDrill(`Leads: ${src}`, items, [
+                              { key: 'company_name', label: 'Company' },
+                              { key: 'triage_status', label: 'Status' },
+                              { key: 'created_by', label: 'Created By', format: resolveUser },
+                              { key: 'sales_owner_user_id', label: 'Sales Owner', format: resolveUser },
+                              { key: 'created_at', label: 'Created', format: fmtDate },
+                              { key: 'handed_over_at', label: 'Handover', format: fmtDate },
+                            ], [{ label: 'Total', value: `${items.length} leads` }])
+                          }}>
                           <span className="text-sm">{src}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">{pct(count, calc.leads.length)}</span>
@@ -1616,10 +1808,17 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                       const count = calc.leadsBySource[src] || 0
                       return (
                         <div key={src} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1 rounded"
-                          onClick={() => openDrill(`Leads: ${src}`, calc.leads.filter(l => l.source === src), [
-                            { key: 'company_name', label: 'Company' }, { key: 'triage_status', label: 'Status' },
-                            { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
-                          ])}>
+                          onClick={() => {
+                            const items = calc.leads.filter(l => l.source === src)
+                            openDrill(`Leads: ${src}`, items, [
+                              { key: 'company_name', label: 'Company' },
+                              { key: 'triage_status', label: 'Status' },
+                              { key: 'created_by', label: 'Created By', format: resolveUser },
+                              { key: 'sales_owner_user_id', label: 'Sales Owner', format: resolveUser },
+                              { key: 'created_at', label: 'Created', format: fmtDate },
+                              { key: 'handed_over_at', label: 'Handover', format: fmtDate },
+                            ], [{ label: 'Total', value: `${items.length} leads` }])
+                          }}>
                           <span className="text-sm">{src}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">{pct(count, calc.leads.length)}</span>
@@ -1683,11 +1882,16 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                     .map(([ind, count]) => (
                       <div key={ind}
                         className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
-                        onClick={() => openDrill(`Bidang Usaha: ${ind}`, calc.accts.filter(a => (a.industry || 'Belum Diisi') === ind), [
-                          { key: 'company_name', label: 'Company' },
-                          { key: 'account_status', label: 'Status' },
-                          { key: 'industry', label: 'Bidang Usaha' },
-                        ])}>
+                        onClick={() => {
+                          const items = calc.accts.filter(a => (a.industry || 'Belum Diisi') === ind)
+                          openDrill(`Bidang Usaha: ${ind}`, items, [
+                            { key: 'company_name', label: 'Company' },
+                            { key: 'owner_user_id', label: 'Owner', format: resolveUser },
+                            { key: 'account_status', label: 'Status', format: (v: string) => v?.replace('_account', '') || '-' },
+                            { key: 'created_at', label: 'Created', format: fmtDate },
+                            { key: 'first_transaction_date', label: 'First Trx', format: fmtDate },
+                          ], [{ label: 'Total', value: `${items.length} accounts` }])
+                        }}>
                         <span className="text-sm truncate flex-1">{ind}</span>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xs text-muted-foreground">{pct(count, calc.accts.length)}</span>
@@ -1744,12 +1948,22 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                       return (
                         <div key={item.service}
                           className="p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                          onClick={() => openDrill(`Service: ${item.service}`, data.customerQuotations.filter(q => (q.service_type || 'Unknown') === item.service), [
-                            { key: 'id', label: 'Quotation ID' },
-                            { key: 'status', label: 'Status' },
-                            { key: 'total_selling_rate', label: 'Value', format: (v: number) => formatCurrency(v) },
-                            { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
-                          ])}>
+                          onClick={() => {
+                            const items = data.customerQuotations.filter(q => (q.service_type || 'Unknown') === item.service)
+                            openDrill(`Service: ${item.service}`, items, [
+                              { key: 'opportunity_id', label: 'Pipeline', format: resolveOpp },
+                              { key: 'status', label: 'Status' },
+                              { key: 'total_selling_rate', label: 'Value', format: fmtCurrency },
+                              { key: 'created_by', label: 'Created By', format: resolveUser },
+                              { key: 'created_at', label: 'Date', format: fmtDate },
+                            ], [
+                              { label: 'Total', value: `${items.length} quotations` },
+                              { label: 'Total Value', value: formatCurrency(items.reduce((s, q) => s + q.total_selling_rate, 0)) },
+                              { label: 'Accepted', value: String(items.filter(q => q.status === 'accepted').length) },
+                              { label: 'Sent', value: String(items.filter(q => q.status === 'sent').length) },
+                              { label: 'Rejected', value: String(items.filter(q => q.status === 'rejected').length) },
+                            ])
+                          }}>
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: SVC_COLORS[i % SVC_COLORS.length] }} />
@@ -1799,13 +2013,16 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                       {rfqSvcData.map(item => (
                         <div key={item.service}
                           className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
-                          onClick={() => openDrill(`RFQ: ${item.service}`, data.rfqTickets.filter(t => (t.service_type || 'Unknown') === item.service), [
-                            { key: 'ticket_id', label: 'Ticket' },
-                            { key: 'cargo_category', label: 'Cargo' },
-                            { key: 'origin_city', label: 'Origin' },
-                            { key: 'destination_city', label: 'Destination' },
-                            { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
-                          ])}>
+                          onClick={() => {
+                            const items = data.rfqTickets.filter(t => (t.service_type || 'Unknown') === item.service)
+                            openDrill(`RFQ: ${item.service}`, items, [
+                              { key: 'ticket_id', label: 'Ticket', format: (v: string) => v?.slice(0, 8) + '...' },
+                              { key: 'cargo_category', label: 'Cargo', format: (v: string) => v || '-' },
+                              { key: 'origin_city', label: 'Origin', format: (v: string) => v || '-' },
+                              { key: 'destination_city', label: 'Destination', format: (v: string) => v || '-' },
+                              { key: 'created_at', label: 'Date', format: fmtDate },
+                            ], [{ label: 'Total', value: `${items.length} RFQs` }])
+                          }}>
                           <span className="text-sm">{item.service}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">{pct(item.count, data.rfqTickets.length)}</span>
@@ -1833,12 +2050,15 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                       <div className="space-y-2">
                         {rfqRouteData.map(item => (
                           <div key={item.route} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                            onClick={() => openDrill(`Route: ${item.route}`, data.rfqTickets.filter(t => t.origin_city && t.destination_city && `${t.origin_city} → ${t.destination_city}` === item.route), [
-                              { key: 'ticket_id', label: 'Ticket' },
-                              { key: 'service_type', label: 'Service' },
-                              { key: 'cargo_category', label: 'Cargo' },
-                              { key: 'created_at', label: 'Date', format: (v: string) => new Date(v).toLocaleDateString('id-ID') },
-                            ])}>
+                            onClick={() => {
+                              const items = data.rfqTickets.filter(t => t.origin_city && t.destination_city && `${t.origin_city} → ${t.destination_city}` === item.route)
+                              openDrill(`Route: ${item.route}`, items, [
+                                { key: 'ticket_id', label: 'Ticket', format: (v: string) => v?.slice(0, 8) + '...' },
+                                { key: 'service_type', label: 'Service', format: (v: string) => v || '-' },
+                                { key: 'cargo_category', label: 'Cargo', format: (v: string) => v || '-' },
+                                { key: 'created_at', label: 'Date', format: fmtDate },
+                              ], [{ label: 'Total', value: `${items.length} RFQs` }])
+                            }}>
                             <div className="flex items-center gap-2">
                               <MapPin className="h-3 w-3 text-orange-500 shrink-0" />
                               <span className="text-sm">{item.route}</span>
@@ -1860,12 +2080,12 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
 
       {/* ============ DRILLDOWN DIALOG ============ */}
       <Dialog open={drilldownOpen} onOpenChange={setDrilldownOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh]">
+        <DialogContent className="max-w-4xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>{drilldownTitle}</DialogTitle>
             <DialogDescription>{drilldownItems.length} items</DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[60vh]">
+          <ScrollArea className="max-h-[55vh]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1876,9 +2096,9 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
               <TableBody>
                 {drilldownItems.map((item, idx) => (
                   <TableRow key={idx}>
-                    <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{idx + 1}</TableCell>
                     {drilldownCols.map(col => (
-                      <TableCell key={col.key}>{col.format ? col.format(item[col.key]) : (item[col.key] ?? '-')}</TableCell>
+                      <TableCell key={col.key} className="text-sm">{col.format ? col.format(item[col.key]) : (item[col.key] ?? '-')}</TableCell>
                     ))}
                   </TableRow>
                 ))}
@@ -1890,6 +2110,16 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
               </TableBody>
             </Table>
           </ScrollArea>
+          {drilldownSummary.length > 0 && (
+            <div className="flex flex-wrap gap-4 pt-3 border-t">
+              {drilldownSummary.map(s => (
+                <div key={s.label} className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{s.label}:</span>
+                  <span className="text-sm font-semibold">{s.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
