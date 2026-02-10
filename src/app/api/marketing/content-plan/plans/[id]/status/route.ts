@@ -48,14 +48,15 @@ export async function PATCH(
     }
     if (newStatus === 'published') updateData.published_at = new Date().toISOString()
 
-    const { data: updated, error } = await (supabase as any)
+    const { data: updatedArr, error } = await (supabase as any)
       .from('marketing_content_plans')
       .update(updateData)
       .eq('id', id)
       .select()
-      .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!updatedArr || updatedArr.length === 0) return NextResponse.json({ error: 'Update failed - plan not found or not allowed' }, { status: 404 })
+    const updated = updatedArr[0]
 
     // Add comment if provided
     if (comment) {
