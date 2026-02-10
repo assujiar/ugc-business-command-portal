@@ -41,6 +41,12 @@ import {
   Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  SocialIconBadge,
+  SocialIconInline,
+  SOCIAL_BRAND_COLORS,
+  PLATFORM_CONFIG_MAP,
+} from './social-media-icons'
 
 // =====================================================
 // Types
@@ -112,15 +118,13 @@ interface AnalyticsEnhancementsProps {
 // Constants
 // =====================================================
 
-const PLATFORM_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
-  tiktok: { label: 'TikTok', icon: '🎵', color: '#000000' },
-  instagram: { label: 'Instagram', icon: '📸', color: '#E4405F' },
-  youtube: { label: 'YouTube', icon: '▶️', color: '#FF0000' },
-  facebook: { label: 'Facebook', icon: '📘', color: '#1877F2' },
-  linkedin: { label: 'LinkedIn', icon: '💼', color: '#0A66C2' },
+const PLATFORM_CONFIG: Record<string, { label: string; color: string }> = {
+  tiktok: { label: 'TikTok', color: '#ee1d52' },
+  instagram: { label: 'Instagram', color: '#c13584' },
+  youtube: { label: 'YouTube', color: '#ff0000' },
+  facebook: { label: 'Facebook', color: '#1877f2' },
+  linkedin: { label: 'LinkedIn', color: '#0077b5' },
 }
-
-const PLATFORM_COLORS = ['#000000', '#E4405F', '#FF0000', '#1877F2', '#0A66C2']
 
 // =====================================================
 // Helpers
@@ -311,7 +315,7 @@ export function AnalyticsEnhancements({
                     <tr key={wc.platform} className="border-b last:border-0">
                       <td className="py-3 pr-4">
                         <span className="flex items-center gap-1.5">
-                          <span>{conf.icon}</span>
+                          <SocialIconBadge platform={wc.platform} size="xs" variant="filled" />
                           <span className="font-medium">{conf.label}</span>
                         </span>
                       </td>
@@ -579,7 +583,7 @@ export function AnalyticsEnhancements({
               <div key={platform} className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-xs font-medium">
-                    <span>{conf?.icon}</span>
+                    <SocialIconBadge platform={platform} size="xs" variant="filled" />
                     <span>{conf?.label}</span>
                   </span>
                   <span className="flex items-center gap-2">
@@ -688,7 +692,7 @@ export function AnalyticsEnhancements({
 
     const barData = crossPlatformData.map(d => ({
       name: PLATFORM_CONFIG[d.platform]?.label || d.platform,
-      icon: PLATFORM_CONFIG[d.platform]?.icon || '',
+      platform: d.platform,
       Likes: d.likes,
       Comments: d.comments,
       Shares: d.shares,

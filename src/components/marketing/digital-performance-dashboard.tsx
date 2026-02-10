@@ -43,18 +43,17 @@ import {
 import { cn } from '@/lib/utils'
 import { ContentPerformanceTable } from './content-performance-table'
 import { AnalyticsEnhancements } from './analytics-enhancements'
+import {
+  SocialIconBadge,
+  SocialIconInline,
+  SOCIAL_BRAND_COLORS,
+  PLATFORM_CONFIGS,
+  PLATFORM_CONFIG_MAP,
+} from './social-media-icons'
 
-// Platform definitions
-const PLATFORMS = [
-  { id: 'all', label: 'All Platforms', color: '#6366f1' },
-  { id: 'tiktok', label: 'TikTok', color: '#000000', icon: '🎵' },
-  { id: 'instagram', label: 'Instagram', color: '#E4405F', icon: '📸' },
-  { id: 'youtube', label: 'YouTube', color: '#FF0000', icon: '▶️' },
-  { id: 'facebook', label: 'Facebook', color: '#1877F2', icon: '📘' },
-  { id: 'linkedin', label: 'LinkedIn', color: '#0A66C2', icon: '💼' },
-] as const
-
-type PlatformId = typeof PLATFORMS[number]['id']
+// Platform list for filters and iteration
+const PLATFORM_IDS = ['tiktok', 'instagram', 'youtube', 'facebook', 'linkedin'] as const
+type PlatformId = typeof PLATFORM_IDS[number] | 'all'
 
 // Period options
 const PERIODS = [
@@ -77,21 +76,7 @@ interface PlatformSummary {
 
 interface DailyData {
   date: string
-  tiktok_followers?: number
-  instagram_followers?: number
-  youtube_followers?: number
-  facebook_followers?: number
-  linkedin_followers?: number
-  tiktok_engagement?: number
-  instagram_engagement?: number
-  youtube_engagement?: number
-  facebook_engagement?: number
-  linkedin_engagement?: number
-  tiktok_views?: number
-  instagram_views?: number
-  youtube_views?: number
-  facebook_views?: number
-  linkedin_views?: number
+  [key: string]: any
 }
 
 interface LatestSnapshot {
@@ -121,6 +106,13 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
 }
 
+function formatDateTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleString('id-ID', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
 function TrendIndicator({ value }: { value: number }) {
   if (value > 0) {
     return (
@@ -141,10 +133,6 @@ function TrendIndicator({ value }: { value: number }) {
       <Minus className="h-3 w-3" />0
     </span>
   )
-}
-
-function getPlatformConfig(platformId: string) {
-  return PLATFORMS.find(p => p.id === platformId) || PLATFORMS[0]
 }
 
 export function DigitalPerformanceDashboard() {
@@ -212,8 +200,6 @@ export function DigitalPerformanceDashboard() {
     fetchData()
   }, [fetchData])
 
-  const activePlatforms = PLATFORMS.filter(p => p.id !== 'all')
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -227,35 +213,46 @@ export function DigitalPerformanceDashboard() {
             Analitik performa sosial media - TikTok, Instagram, YouTube, Facebook, LinkedIn
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {lastFetchTime && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              Update: {new Date(lastFetchTime).toLocaleString('id-ID')}
-            </span>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchData}
-            disabled={loading}
-          >
-            <RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />
-            Refresh
-          </Button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            {lastFetchTime && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Last Update: {formatDateTime(lastFetchTime)}
+              </span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchData}
+              disabled={loading}
+            >
+              <RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />
+              Refresh
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         <Select value={selectedPlatform} onValueChange={(v) => setSelectedPlatform(v as PlatformId)}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Platform" />
           </SelectTrigger>
           <SelectContent>
-            {PLATFORMS.map(p => (
+            <SelectItem value="all">
+              <span className="flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                All Platforms
+              </span>
+            </SelectItem>
+            {PLATFORM_CONFIGS.map(p => (
               <SelectItem key={p.id} value={p.id}>
-                {'icon' in p ? `${p.icon} ` : ''}{p.label}
+                <span className="flex items-center gap-2">
+                  <SocialIconInline platform={p.id} size={16} />
+                  {p.label}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -342,13 +339,13 @@ export function DigitalPerformanceDashboard() {
       {/* Platform Overview Cards */}
       {loading ? (
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
-          {activePlatforms.map(p => (
-            <Skeleton key={p.id} className="h-32" />
+          {PLATFORM_CONFIGS.map(p => (
+            <Skeleton key={p.id} className="h-36" />
           ))}
         </div>
       ) : (
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
-          {activePlatforms.map(platform => {
+          {PLATFORM_CONFIGS.map(platform => {
             const summary = summaries.find(s => s.platform === platform.id)
             const snapshot = latestSnapshots.find(s => s.platform === platform.id)
             const isSelected = selectedPlatform === platform.id
@@ -358,16 +355,17 @@ export function DigitalPerformanceDashboard() {
                 key={platform.id}
                 className={cn(
                   'cursor-pointer transition-all hover:shadow-md',
-                  isSelected && 'ring-2 ring-brand'
+                  isSelected && 'ring-2',
                 )}
+                style={isSelected ? { borderColor: platform.color, boxShadow: `0 0 0 2px ${platform.color}30` } : {}}
                 onClick={() => setSelectedPlatform(
                   selectedPlatform === platform.id ? 'all' : platform.id as PlatformId
                 )}
               >
                 <CardHeader className="pb-2 p-3">
                   <CardTitle className="text-xs font-medium flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <span>{platform.icon}</span>
+                    <span className="flex items-center gap-2">
+                      <SocialIconBadge platform={platform.id} size="xs" variant="filled" />
                       <span>{platform.label}</span>
                     </span>
                     {snapshot?.fetch_status === 'success' && (
@@ -405,6 +403,15 @@ export function DigitalPerformanceDashboard() {
                       <span className="ml-0.5">{summary ? formatNumber(summary.likes_gained) : '-'}</span>
                     </div>
                   </div>
+                  {/* Last update per platform */}
+                  {snapshot && (
+                    <div className="pt-1 border-t">
+                      <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                        <Clock className="h-2 w-2" />
+                        {formatDateTime(snapshot.fetched_at)}
+                      </span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )
@@ -442,11 +449,7 @@ export function DigitalPerformanceDashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={dailyData}>
                       <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                      <XAxis
-                        dataKey="date"
-                        tickFormatter={formatDate}
-                        tick={{ fontSize: 11 }}
-                      />
+                      <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 11 }} />
                       <YAxis tickFormatter={formatNumber} tick={{ fontSize: 11 }} />
                       <Tooltip
                         formatter={(value: number) => formatNumber(value)}
@@ -455,21 +458,11 @@ export function DigitalPerformanceDashboard() {
                         })}
                       />
                       <Legend />
-                      {(selectedPlatform === 'all' || selectedPlatform === 'tiktok') && (
-                        <Line type="monotone" dataKey="tiktok_followers" name="TikTok" stroke="#000" strokeWidth={2} dot={false} />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'instagram') && (
-                        <Line type="monotone" dataKey="instagram_followers" name="Instagram" stroke="#E4405F" strokeWidth={2} dot={false} />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'youtube') && (
-                        <Line type="monotone" dataKey="youtube_followers" name="YouTube" stroke="#FF0000" strokeWidth={2} dot={false} />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'facebook') && (
-                        <Line type="monotone" dataKey="facebook_followers" name="Facebook" stroke="#1877F2" strokeWidth={2} dot={false} />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'linkedin') && (
-                        <Line type="monotone" dataKey="linkedin_followers" name="LinkedIn" stroke="#0A66C2" strokeWidth={2} dot={false} />
-                      )}
+                      {PLATFORM_CONFIGS
+                        .filter(p => selectedPlatform === 'all' || selectedPlatform === p.id)
+                        .map(p => (
+                          <Line key={p.id} type="monotone" dataKey={`${p.id}_followers`} name={p.label} stroke={p.color} strokeWidth={2} dot={false} />
+                        ))}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -496,11 +489,7 @@ export function DigitalPerformanceDashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={dailyData}>
                       <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                      <XAxis
-                        dataKey="date"
-                        tickFormatter={formatDate}
-                        tick={{ fontSize: 11 }}
-                      />
+                      <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip
                         formatter={(value: number) => `${value.toFixed(2)}%`}
@@ -509,21 +498,11 @@ export function DigitalPerformanceDashboard() {
                         })}
                       />
                       <Legend />
-                      {(selectedPlatform === 'all' || selectedPlatform === 'tiktok') && (
-                        <Line type="monotone" dataKey="tiktok_engagement" name="TikTok" stroke="#000" strokeWidth={2} dot={false} />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'instagram') && (
-                        <Line type="monotone" dataKey="instagram_engagement" name="Instagram" stroke="#E4405F" strokeWidth={2} dot={false} />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'youtube') && (
-                        <Line type="monotone" dataKey="youtube_engagement" name="YouTube" stroke="#FF0000" strokeWidth={2} dot={false} />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'facebook') && (
-                        <Line type="monotone" dataKey="facebook_engagement" name="Facebook" stroke="#1877F2" strokeWidth={2} dot={false} />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'linkedin') && (
-                        <Line type="monotone" dataKey="linkedin_engagement" name="LinkedIn" stroke="#0A66C2" strokeWidth={2} dot={false} />
-                      )}
+                      {PLATFORM_CONFIGS
+                        .filter(p => selectedPlatform === 'all' || selectedPlatform === p.id)
+                        .map(p => (
+                          <Line key={p.id} type="monotone" dataKey={`${p.id}_engagement`} name={p.label} stroke={p.color} strokeWidth={2} dot={false} />
+                        ))}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -550,11 +529,7 @@ export function DigitalPerformanceDashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={dailyData}>
                       <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                      <XAxis
-                        dataKey="date"
-                        tickFormatter={formatDate}
-                        tick={{ fontSize: 11 }}
-                      />
+                      <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 11 }} />
                       <YAxis tickFormatter={formatNumber} tick={{ fontSize: 11 }} />
                       <Tooltip
                         formatter={(value: number) => formatNumber(value)}
@@ -563,21 +538,11 @@ export function DigitalPerformanceDashboard() {
                         })}
                       />
                       <Legend />
-                      {(selectedPlatform === 'all' || selectedPlatform === 'tiktok') && (
-                        <Bar dataKey="tiktok_views" name="TikTok" fill="#000" stackId="views" />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'instagram') && (
-                        <Bar dataKey="instagram_views" name="Instagram" fill="#E4405F" stackId="views" />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'youtube') && (
-                        <Bar dataKey="youtube_views" name="YouTube" fill="#FF0000" stackId="views" />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'facebook') && (
-                        <Bar dataKey="facebook_views" name="Facebook" fill="#1877F2" stackId="views" />
-                      )}
-                      {(selectedPlatform === 'all' || selectedPlatform === 'linkedin') && (
-                        <Bar dataKey="linkedin_views" name="LinkedIn" fill="#0A66C2" stackId="views" />
-                      )}
+                      {PLATFORM_CONFIGS
+                        .filter(p => selectedPlatform === 'all' || selectedPlatform === p.id)
+                        .map(p => (
+                          <Bar key={p.id} dataKey={`${p.id}_views`} name={p.label} fill={p.color} stackId="views" />
+                        ))}
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -597,7 +562,7 @@ export function DigitalPerformanceDashboard() {
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Detail Per Platform</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {activePlatforms
+            {PLATFORM_CONFIGS
               .filter(p => selectedPlatform === 'all' || selectedPlatform === p.id)
               .map(platform => {
               const snapshot = latestSnapshots.find(s => s.platform === platform.id)
@@ -607,7 +572,7 @@ export function DigitalPerformanceDashboard() {
                 <Card key={platform.id}>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <span className="text-lg">{platform.icon}</span>
+                      <SocialIconBadge platform={platform.id} size="sm" variant="filled" />
                       <span>{platform.label}</span>
                       <Badge
                         variant="outline"
@@ -671,10 +636,16 @@ export function DigitalPerformanceDashboard() {
                       </div>
                     </div>
 
-                    {/* Last updated */}
-                    <p className="text-[10px] text-muted-foreground text-right">
-                      {snapshot ? `Updated: ${new Date(snapshot.fetched_at).toLocaleString('id-ID')}` : 'Menunggu data dari API platform'}
-                    </p>
+                    {/* Last updated per platform */}
+                    <div className="pt-2 border-t">
+                      <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-2.5 w-2.5" />
+                        {snapshot
+                          ? `Last update: ${formatDateTime(snapshot.fetched_at)}`
+                          : 'Menunggu data dari API platform'
+                        }
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               )

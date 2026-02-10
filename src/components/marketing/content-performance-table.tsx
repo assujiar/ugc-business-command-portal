@@ -40,13 +40,14 @@ import {
   Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SocialIconBadge, SocialIconInline, PLATFORM_CONFIG_MAP } from './social-media-icons'
 
-const PLATFORM_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
-  tiktok: { label: 'TikTok', icon: '🎵', color: '#000000' },
-  instagram: { label: 'Instagram', icon: '📸', color: '#E4405F' },
-  youtube: { label: 'YouTube', icon: '▶️', color: '#FF0000' },
-  facebook: { label: 'Facebook', icon: '📘', color: '#1877F2' },
-  linkedin: { label: 'LinkedIn', icon: '💼', color: '#0A66C2' },
+const PLATFORM_CONFIG: Record<string, { label: string; color: string }> = {
+  tiktok: { label: 'TikTok', color: '#ee1d52' },
+  instagram: { label: 'Instagram', color: '#c13584' },
+  youtube: { label: 'YouTube', color: '#ff0000' },
+  facebook: { label: 'Facebook', color: '#1877f2' },
+  linkedin: { label: 'LinkedIn', color: '#0077b5' },
 }
 
 const CONTENT_TYPE_ICONS: Record<string, typeof Film> = {
@@ -206,7 +207,7 @@ export function ContentPerformanceTable({ selectedPlatform = 'all', period = '30
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-sm">{platformConf?.icon}</span>
+                        <SocialIconInline platform={item.platform} size={18} />
                         <Badge variant="outline" className="text-[9px] px-1 py-0">
                           <ContentIcon className="h-2.5 w-2.5 mr-0.5" />
                           {item.content_type}
@@ -371,7 +372,7 @@ export function ContentPerformanceTable({ selectedPlatform = 'all', period = '30
                             </div>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm">{platformConf?.icon}</span>
+                            <SocialIconInline platform={item.platform} size={18} />
                           </TableCell>
                           <TableCell className="text-xs font-medium tabular-nums">
                             {formatNumber(item.views_count)}
@@ -454,7 +455,7 @@ export function ContentPerformanceTable({ selectedPlatform = 'all', period = '30
                 return (
                   <div key={platform} className="p-3 rounded-lg border">
                     <div className="flex items-center gap-2 mb-2">
-                      <span>{platformConf?.icon}</span>
+                      <SocialIconBadge platform={platform} size="xs" variant="filled" />
                       <span className="text-xs font-medium">{platformConf?.label}</span>
                       <Badge variant="outline" className="ml-auto text-[10px]">{totalForPlatform}</Badge>
                     </div>
