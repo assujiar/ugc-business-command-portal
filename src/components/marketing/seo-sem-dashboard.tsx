@@ -1,0 +1,371 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Search, BarChart3, Globe, Gauge, DollarSign,
+  GitCompareArrows, RefreshCcw, Settings, AlertCircle, Loader2
+} from 'lucide-react'
+
+import { SEOOverviewSection } from './seo/seo-overview-section'
+import { KeywordPerformanceSection } from './seo/keyword-performance-section'
+import { PagePerformanceSection } from './seo/page-performance-section'
+import WebVitalsSection from './seo/web-vitals-section'
+import AdsOverviewSection from './sem/ads-overview-section'
+import CombinedViewSection from './sem/combined-view-section'
+
+type TabValue = 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'ads' | 'combined'
+
+export default function SEOSEMDashboard() {
+  // Global filters
+  const [dateRange, setDateRange] = useState('30d')
+  const [site, setSite] = useState('__all__')
+  const [activeTab, setActiveTab] = useState<TabValue>('seo_overview')
+  const [sites, setSites] = useState<string[]>([])
+
+  // Data states
+  const [overviewData, setOverviewData] = useState<any>(null)
+  const [keywordData, setKeywordData] = useState<any>(null)
+  const [pageData, setPageData] = useState<any>(null)
+  const [vitalsData, setVitalsData] = useState<any>(null)
+  const [adsData, setAdsData] = useState<any>(null)
+  const [combinedData, setCombinedData] = useState<any>(null)
+
+  // Loading states
+  const [loadingOverview, setLoadingOverview] = useState(false)
+  const [loadingKeywords, setLoadingKeywords] = useState(false)
+  const [loadingPages, setLoadingPages] = useState(false)
+  const [loadingVitals, setLoadingVitals] = useState(false)
+  const [loadingAds, setLoadingAds] = useState(false)
+  const [loadingCombined, setLoadingCombined] = useState(false)
+  const [fetchingData, setFetchingData] = useState(false)
+
+  // Keyword filters
+  const [kwFilters, setKwFilters] = useState({
+    device: '__all__', branded: '__all__', search: '',
+    minImpressions: 10, page: 1, sort: 'clicks', dir: 'desc',
+  })
+
+  // Page filters
+  const [pageFilters, setPageFilters] = useState({
+    search: '', page: 1, sort: 'gsc_clicks', dir: 'desc',
+  })
+  const [expandedUrl, setExpandedUrl] = useState<string | null>(null)
+
+  // Fetch overview
+  const fetchOverview = useCallback(async () => {
+    setLoadingOverview(true)
+    try {
+      const params = new URLSearchParams({ range: dateRange, site })
+      const res = await fetch(`/api/marketing/seo-sem/overview?${params}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setOverviewData(data)
+      if (data.sites?.length) setSites(data.sites)
+    } catch (err) {
+      console.error('Overview fetch error:', err)
+    } finally {
+      setLoadingOverview(false)
+    }
+  }, [dateRange, site])
+
+  // Fetch keywords
+  const fetchKeywords = useCallback(async () => {
+    setLoadingKeywords(true)
+    try {
+      const params = new URLSearchParams({
+        range: dateRange, site,
+        device: kwFilters.device, branded: kwFilters.branded,
+        search: kwFilters.search, min_impressions: String(kwFilters.minImpressions),
+        page: String(kwFilters.page), limit: '50',
+        sort: kwFilters.sort, dir: kwFilters.dir,
+      })
+      const res = await fetch(`/api/marketing/seo-sem/keywords?${params}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setKeywordData(data)
+    } catch (err) {
+      console.error('Keywords fetch error:', err)
+    } finally {
+      setLoadingKeywords(false)
+    }
+  }, [dateRange, site, kwFilters])
+
+  // Fetch pages
+  const fetchPages = useCallback(async () => {
+    setLoadingPages(true)
+    try {
+      const params = new URLSearchParams({
+        range: dateRange, site,
+        search: pageFilters.search,
+        page: String(pageFilters.page), limit: '50',
+        sort: pageFilters.sort, dir: pageFilters.dir,
+      })
+      if (expandedUrl) params.set('expand_url', expandedUrl)
+      const res = await fetch(`/api/marketing/seo-sem/pages?${params}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setPageData(data)
+    } catch (err) {
+      console.error('Pages fetch error:', err)
+    } finally {
+      setLoadingPages(false)
+    }
+  }, [dateRange, site, pageFilters, expandedUrl])
+
+  // Fetch vitals
+  const fetchVitals = useCallback(async () => {
+    setLoadingVitals(true)
+    try {
+      const res = await fetch('/api/marketing/seo-sem/web-vitals')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setVitalsData(data)
+    } catch (err) {
+      console.error('Vitals fetch error:', err)
+    } finally {
+      setLoadingVitals(false)
+    }
+  }, [])
+
+  // Fetch ads
+  const fetchAds = useCallback(async () => {
+    setLoadingAds(true)
+    try {
+      const params = new URLSearchParams({ range: dateRange })
+      const res = await fetch(`/api/marketing/seo-sem/ads?${params}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setAdsData(data)
+    } catch (err) {
+      console.error('Ads fetch error:', err)
+    } finally {
+      setLoadingAds(false)
+    }
+  }, [dateRange])
+
+  // Fetch combined
+  const fetchCombined = useCallback(async () => {
+    setLoadingCombined(true)
+    try {
+      const params = new URLSearchParams({ range: dateRange })
+      const res = await fetch(`/api/marketing/seo-sem/combined?${params}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setCombinedData(data)
+    } catch (err) {
+      console.error('Combined fetch error:', err)
+    } finally {
+      setLoadingCombined(false)
+    }
+  }, [dateRange])
+
+  // Manual data fetch trigger
+  const handleManualFetch = async () => {
+    setFetchingData(true)
+    try {
+      const res = await fetch('/api/marketing/seo-sem/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'manual', type: 'manual' }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Gagal fetch data')
+      } else {
+        const failed = data.results?.filter((r: any) => !r.success) || []
+        if (failed.length > 0) {
+          alert(`Sebagian gagal: ${failed.map((f: any) => `${f.service}: ${f.error}`).join(', ')}`)
+        } else {
+          alert('Data berhasil di-refresh!')
+        }
+        // Refresh current tab
+        if (activeTab === 'seo_overview') fetchOverview()
+        if (activeTab === 'keywords') fetchKeywords()
+        if (activeTab === 'pages') fetchPages()
+        if (activeTab === 'web_vitals') fetchVitals()
+      }
+    } catch {
+      alert('Error saat fetch data')
+    } finally {
+      setFetchingData(false)
+    }
+  }
+
+  // Load data on tab change
+  useEffect(() => {
+    if (activeTab === 'seo_overview') fetchOverview()
+    if (activeTab === 'keywords') fetchKeywords()
+    if (activeTab === 'pages') fetchPages()
+    if (activeTab === 'web_vitals') fetchVitals()
+    if (activeTab === 'ads') fetchAds()
+    if (activeTab === 'combined') fetchCombined()
+  }, [activeTab, dateRange, site])
+
+  // Refetch keywords on filter change
+  useEffect(() => {
+    if (activeTab === 'keywords') fetchKeywords()
+  }, [kwFilters])
+
+  // Refetch pages on filter change
+  useEffect(() => {
+    if (activeTab === 'pages') fetchPages()
+  }, [pageFilters, expandedUrl])
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold">SEO & SEM Performance</h2>
+          <p className="text-xs text-muted-foreground">
+            Monitor organic search, paid ads, dan web performance
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date Range */}
+          <Select value={dateRange} onValueChange={setDateRange}>
+            <SelectTrigger className="w-24 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7d">7 Hari</SelectItem>
+              <SelectItem value="30d">30 Hari</SelectItem>
+              <SelectItem value="90d">90 Hari</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Site Filter */}
+          <Select value={site} onValueChange={setSite}>
+            <SelectTrigger className="w-44 h-8 text-xs">
+              <SelectValue placeholder="Semua Site" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Semua Site</SelectItem>
+              {sites.map(s => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Manual Fetch */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleManualFetch}
+            disabled={fetchingData}
+            className="h-8 text-xs"
+          >
+            {fetchingData ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCcw className="h-3 w-3 mr-1" />}
+            Refresh Data
+          </Button>
+        </div>
+      </div>
+
+      {/* Config Status */}
+      {overviewData?.configs && (
+        <div className="flex gap-2 flex-wrap">
+          {overviewData.configs.map((c: any) => (
+            <Badge
+              key={c.service}
+              variant={c.is_active ? 'default' : 'secondary'}
+              className="text-[10px]"
+            >
+              {c.service.replace('google_', 'G. ').replace('_', ' ')}:
+              {c.is_active ? (
+                c.last_fetch_at ? ` ${new Date(c.last_fetch_at).toLocaleDateString('id-ID')}` : ' Aktif'
+              ) : ' Belum Aktif'}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="seo_overview" className="gap-1 text-xs sm:text-sm">
+            <BarChart3 className="h-3.5 w-3.5" />
+            SEO Overview
+          </TabsTrigger>
+          <TabsTrigger value="keywords" className="gap-1 text-xs sm:text-sm">
+            <Search className="h-3.5 w-3.5" />
+            Keywords
+          </TabsTrigger>
+          <TabsTrigger value="pages" className="gap-1 text-xs sm:text-sm">
+            <Globe className="h-3.5 w-3.5" />
+            Pages
+          </TabsTrigger>
+          <TabsTrigger value="web_vitals" className="gap-1 text-xs sm:text-sm">
+            <Gauge className="h-3.5 w-3.5" />
+            Web Vitals
+          </TabsTrigger>
+          <TabsTrigger value="ads" className="gap-1 text-xs sm:text-sm">
+            <DollarSign className="h-3.5 w-3.5" />
+            Paid Ads
+          </TabsTrigger>
+          <TabsTrigger value="combined" className="gap-1 text-xs sm:text-sm">
+            <GitCompareArrows className="h-3.5 w-3.5" />
+            Combined
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {/* Tab Content */}
+      {activeTab === 'seo_overview' && (
+        <SEOOverviewSection
+          kpis={overviewData?.kpis || null}
+          dailyTrend={overviewData?.dailyTrend || []}
+          deviceBreakdown={overviewData?.deviceBreakdown || null}
+          loading={loadingOverview}
+        />
+      )}
+
+      {activeTab === 'keywords' && (
+        <KeywordPerformanceSection
+          data={keywordData}
+          loading={loadingKeywords}
+          filters={kwFilters}
+          onFilterChange={(f) => setKwFilters(prev => ({ ...prev, ...f }))}
+        />
+      )}
+
+      {activeTab === 'pages' && (
+        <PagePerformanceSection
+          data={pageData}
+          loading={loadingPages}
+          filters={pageFilters}
+          onFilterChange={(f) => setPageFilters(prev => ({ ...prev, ...f }))}
+          onExpandRow={setExpandedUrl}
+          expandedUrl={expandedUrl}
+        />
+      )}
+
+      {activeTab === 'web_vitals' && (
+        <WebVitalsSection
+          data={vitalsData}
+          loading={loadingVitals}
+        />
+      )}
+
+      {activeTab === 'ads' && (
+        <AdsOverviewSection
+          data={adsData}
+          loading={loadingAds}
+        />
+      )}
+
+      {activeTab === 'combined' && (
+        <CombinedViewSection
+          data={combinedData}
+          loading={loadingCombined}
+        />
+      )}
+    </div>
+  )
+}
