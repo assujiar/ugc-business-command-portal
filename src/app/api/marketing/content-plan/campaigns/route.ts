@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +17,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
 
-    let query = (supabase as any)
+    const admin = createAdminClient()
+
+    let query = (admin as any)
       .from('marketing_content_campaigns')
       .select('*, creator:profiles!marketing_content_campaigns_created_by_fkey(name)')
       .order('created_at', { ascending: false })
@@ -29,11 +32,11 @@ export async function GET(request: NextRequest) {
     // Get plan counts per campaign
     const campaignsWithCounts = await Promise.all(
       (campaigns || []).map(async (c: any) => {
-        const { count: totalPlans } = await (supabase as any)
+        const { count: totalPlans } = await (admin as any)
           .from('marketing_content_plans')
           .select('id', { count: 'exact', head: true })
           .eq('campaign_id', c.id)
-        const { count: publishedPlans } = await (supabase as any)
+        const { count: publishedPlans } = await (admin as any)
           .from('marketing_content_plans')
           .select('id', { count: 'exact', head: true })
           .eq('campaign_id', c.id)
@@ -62,7 +65,9 @@ export async function POST(request: NextRequest) {
     const { name, description, color, start_date, end_date } = body
     if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
-    const { data, error } = await (supabase as any)
+    const admin = createAdminClient()
+
+    const { data, error } = await (admin as any)
       .from('marketing_content_campaigns')
       .insert({ name, description, color: color || '#6366f1', start_date, end_date, created_by: user.id })
       .select()
@@ -70,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    await (supabase as any).from('marketing_content_activity_log').insert({
+    await (admin as any).from('marketing_content_activity_log').insert({
       user_id: user.id, entity_type: 'campaign', entity_id: data.id, action: 'created', details: { name },
     })
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -27,7 +28,9 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)))
     const offset = (page - 1) * limit
 
-    let query = (supabase as any)
+    const admin = createAdminClient()
+
+    let query = (admin as any)
       .from('marketing_content_plans')
       .select(`
         *,
@@ -63,7 +66,7 @@ export async function GET(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     // Get status counts for the filtered date range
-    let countQuery = (supabase as any)
+    let countQuery = (admin as any)
       .from('marketing_content_plans')
       .select('status, scheduled_date', { count: 'exact', head: false })
     if (startDate) countQuery = countQuery.gte('scheduled_date', startDate)
@@ -111,6 +114,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'title, platform, and scheduled_date are required' }, { status: 400 })
     }
 
+    const admin = createAdminClient()
     const platforms = cross_post_platforms && cross_post_platforms.length > 0
       ? [platform, ...cross_post_platforms.filter((p: string) => p !== platform)]
       : [platform]
@@ -142,7 +146,7 @@ export async function POST(request: NextRequest) {
         parent_plan_id: parentId,
       }
 
-      const { data: plan, error } = await (supabase as any)
+      const { data: plan, error } = await (admin as any)
         .from('marketing_content_plans')
         .insert(planData)
         .select()
@@ -158,11 +162,11 @@ export async function POST(request: NextRequest) {
           content_plan_id: plan.id,
           hashtag_id: hid,
         }))
-        await (supabase as any).from('marketing_content_plan_hashtags').insert(hashtagLinks)
+        await (admin as any).from('marketing_content_plan_hashtags').insert(hashtagLinks)
       }
 
       // Activity log
-      await (supabase as any).from('marketing_content_activity_log').insert({
+      await (admin as any).from('marketing_content_activity_log').insert({
         user_id: user.id,
         entity_type: 'content_plan',
         entity_id: plan.id,

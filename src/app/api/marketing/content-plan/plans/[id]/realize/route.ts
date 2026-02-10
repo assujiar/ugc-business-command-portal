@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -37,8 +38,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       realization_notes,
     } = body
 
+    const admin = createAdminClient()
+
     // Get current plan
-    const { data: plan } = await (supabase as any)
+    const { data: plan } = await (admin as any)
       .from('marketing_content_plans')
       .select('id, title, status, realized_at')
       .eq('id', id)
@@ -77,18 +80,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateData.published_at = new Date().toISOString()
     }
 
-    const { data: updatedArr, error } = await (supabase as any)
+    const { data: updatedArr, error } = await (admin as any)
       .from('marketing_content_plans')
       .update(updateData)
       .eq('id', id)
       .select()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (!updatedArr || updatedArr.length === 0) return NextResponse.json({ error: 'Update failed - plan not found or not allowed' }, { status: 404 })
+    if (!updatedArr || updatedArr.length === 0) return NextResponse.json({ error: 'Update failed - plan not found' }, { status: 404 })
     const updated = updatedArr[0]
 
     // Log activity
-    await (supabase as any).from('marketing_content_activity_log').insert({
+    await (admin as any).from('marketing_content_activity_log').insert({
       user_id: user.id,
       entity_type: 'content_plan',
       entity_id: id,

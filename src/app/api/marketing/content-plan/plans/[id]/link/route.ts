@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -22,8 +23,10 @@ export async function PATCH(
 
     if (!linked_content_id) return NextResponse.json({ error: 'linked_content_id is required' }, { status: 400 })
 
+    const admin = createAdminClient()
+
     // Verify the content exists
-    const { data: content } = await (supabase as any)
+    const { data: content } = await (admin as any)
       .from('marketing_social_media_content')
       .select('id, platform, title')
       .eq('id', linked_content_id)
@@ -31,7 +34,7 @@ export async function PATCH(
 
     if (!content) return NextResponse.json({ error: 'Linked content not found' }, { status: 404 })
 
-    const { data: planArr, error } = await (supabase as any)
+    const { data: planArr, error } = await (admin as any)
       .from('marketing_content_plans')
       .update({ linked_content_id })
       .eq('id', id)
@@ -41,7 +44,7 @@ export async function PATCH(
     if (!planArr || planArr.length === 0) return NextResponse.json({ error: 'Plan not found or update not allowed' }, { status: 404 })
     const plan = planArr[0]
 
-    await (supabase as any).from('marketing_content_activity_log').insert({
+    await (admin as any).from('marketing_content_activity_log').insert({
       user_id: user.id, entity_type: 'content_plan', entity_id: id,
       action: 'linked', details: { linked_content_id, content_title: content.title },
     })
