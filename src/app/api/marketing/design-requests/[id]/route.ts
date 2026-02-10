@@ -65,6 +65,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       versions: versions || [],
       comments: comments || [],
       timeMetrics,
+      userRole: profile.role,
     })
   } catch (error) {
     console.error('Error fetching design request detail:', error)

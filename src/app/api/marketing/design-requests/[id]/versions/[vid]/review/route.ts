@@ -22,6 +22,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json()
     const { review_status, review_comment } = body
 
+    // RBAC: VDCO cannot review designs they produce
+    if (profile.role === 'VSDO') {
+      return NextResponse.json({ error: 'VSDO tidak bisa mereview design yang mereka produksi' }, { status: 403 })
+    }
+
     if (!review_status || !['approved', 'revision_requested'].includes(review_status)) {
       return NextResponse.json({ error: 'review_status must be approved or revision_requested' }, { status: 400 })
     }

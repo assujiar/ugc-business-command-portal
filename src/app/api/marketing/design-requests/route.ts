@@ -4,6 +4,10 @@ import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
 
+const SUPERVISOR_ROLES = ['Director', 'super admin', 'Marketing Manager', 'MACX']
+const PRODUCER_ROLE = 'VSDO'
+const REQUESTER_ROLES = ['Director', 'super admin', 'Marketing Manager', 'Marcomm', 'DGO', 'MACX']
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -33,12 +37,31 @@ export async function GET(request: NextRequest) {
         campaign:marketing_content_campaigns(id, name, color)
       `, { count: 'exact' })
 
+    // RBAC: Server-side data visibility filtering
+    const isSupervisor = SUPERVISOR_ROLES.includes(profile.role)
+    const isProducer = profile.role === PRODUCER_ROLE
+
+    if (!isSupervisor && !isProducer) {
+      // Normal requester: only see own requests
+      query = query.eq('requested_by', user.id)
+    } else if (isProducer) {
+      // VDCO: see assigned to them + all non-draft requests (work queue)
+      query = query.or(`assigned_to.eq.${user.id},status.neq.draft`)
+    }
+    // Supervisors see all (no additional filter)
+
     if (status && status !== 'all') query = query.eq('status', status)
     if (design_type && design_type !== 'all') query = query.eq('design_type', design_type)
     if (priority && priority !== 'all') query = query.eq('priority', priority)
     if (assigned_to) query = query.eq('assigned_to', assigned_to)
     if (requested_by) query = query.eq('requested_by', requested_by)
-    if (my_requests === 'true') query = query.eq('requested_by', user.id)
+    if (my_requests === 'true') {
+      if (isProducer) {
+        query = query.eq('assigned_to', user.id)
+      } else {
+        query = query.eq('requested_by', user.id)
+      }
+    }
     if (search) query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
 
     query = query
@@ -46,7 +69,6 @@ export async function GET(request: NextRequest) {
       .range((page - 1) * limit, page * limit - 1)
 
     const { data: requests, error, count } = await query
-
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     // Get version counts per request
@@ -57,20 +79,19 @@ export async function GET(request: NextRequest) {
         .from('marketing_design_versions')
         .select('request_id')
         .in('request_id', requestIds)
-
       if (versions) {
-        versions.forEach((v: any) => {
-          versionCounts[v.request_id] = (versionCounts[v.request_id] || 0) + 1
-        })
+        versions.forEach((v: any) => { versionCounts[v.request_id] = (versionCounts[v.request_id] || 0) + 1 })
       }
     }
 
-    const enriched = (requests || []).map((r: any) => ({
-      ...r,
-      version_count: versionCounts[r.id] || 0,
-    }))
+    const enriched = (requests || []).map((r: any) => ({ ...r, version_count: versionCounts[r.id] || 0 }))
 
-    return NextResponse.json({ requests: enriched, total: count || 0, page })
+    return NextResponse.json({
+      requests: enriched,
+      total: count || 0,
+      page,
+      userRole: profile.role,
+    })
   } catch (error) {
     console.error('Error fetching design requests:', error)
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 })
@@ -86,10 +107,9 @@ export async function POST(request: NextRequest) {
     const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single() as { data: { role: string } | null }
     if (!profile || !canAccessMarketingPanel(profile.role as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    // Only marketing requesters can create
-    const requesterRoles = ['Director', 'super admin', 'Marketing Manager', 'Marcomm', 'DGO', 'MACX']
-    if (!requesterRoles.includes(profile.role)) {
-      return NextResponse.json({ error: 'Only marketing roles can create design requests' }, { status: 403 })
+    // Only non-VDCO marketing roles can create requests
+    if (!REQUESTER_ROLES.includes(profile.role)) {
+      return NextResponse.json({ error: 'VSDO tidak bisa membuat design request. Hanya role marketing yang bisa membuat request.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -105,9 +125,7 @@ export async function POST(request: NextRequest) {
     }
 
     const insertData: any = {
-      title,
-      description,
-      design_type,
+      title, description, design_type,
       design_subtype: design_subtype || null,
       platform_target: platform_target || [],
       dimensions: dimensions || null,
@@ -126,10 +144,7 @@ export async function POST(request: NextRequest) {
       requested_by: user.id,
       status: submit_immediately ? 'submitted' : 'draft',
     }
-
-    if (submit_immediately) {
-      insertData.submitted_at = new Date().toISOString()
-    }
+    if (submit_immediately) insertData.submitted_at = new Date().toISOString()
 
     const { data: created, error } = await (supabase as any)
       .from('marketing_design_requests')

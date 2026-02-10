@@ -6,9 +6,12 @@ export const dynamic = 'force-dynamic'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
+const SUPERVISOR_ROLES = ['Director', 'super admin', 'Marketing Manager', 'MACX']
+const PRODUCER_ROLE = 'VSDO'
+
 const VALID_TRANSITIONS: Record<string, { targets: string[]; requesterOnly?: boolean; producerOnly?: boolean }> = {
   draft: { targets: ['submitted', 'cancelled'], requesterOnly: true },
-  submitted: { targets: ['accepted', 'cancelled'] },
+  submitted: { targets: ['accepted', 'cancelled'], producerOnly: true },
   accepted: { targets: ['in_progress'], producerOnly: true },
   in_progress: { targets: ['delivered'], producerOnly: true },
   delivered: { targets: ['approved', 'revision_requested'], requesterOnly: true },
@@ -44,14 +47,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: `Cannot transition from ${req.status} to ${targetStatus}` }, { status: 400 })
     }
 
-    const isProducer = ['VSDO', 'Director', 'super admin'].includes(profile.role)
-    const isRequester = req.requested_by === user.id || ['Director', 'super admin', 'Marketing Manager'].includes(profile.role)
+    const isSupervisor = SUPERVISOR_ROLES.includes(profile.role)
+    const isProducer = profile.role === PRODUCER_ROLE
+    const isRequester = req.requested_by === user.id
 
-    if (transition.requesterOnly && !isRequester) {
-      return NextResponse.json({ error: 'Only requester can perform this action' }, { status: 403 })
+    if (transition.requesterOnly) {
+      // VDCO cannot do requester actions (submit, approve, request revision)
+      if (isProducer) return NextResponse.json({ error: 'VSDO tidak bisa melakukan aksi ini' }, { status: 403 })
+      if (!isRequester && !isSupervisor) return NextResponse.json({ error: 'Hanya requester yang bisa melakukan aksi ini' }, { status: 403 })
     }
-    if (transition.producerOnly && !isProducer) {
-      return NextResponse.json({ error: 'Only VSDO can perform this action' }, { status: 403 })
+    if (transition.producerOnly) {
+      // Only VDCO + supervisor can do producer actions (accept, start, deliver)
+      if (!isProducer && !isSupervisor) return NextResponse.json({ error: 'Hanya VSDO yang bisa melakukan aksi ini' }, { status: 403 })
     }
 
     // Revision requires comment

@@ -98,6 +98,9 @@ const DESIGN_TYPES = [
   { value: 'other', label: 'Lainnya' },
 ]
 
+const SUPERVISOR_ROLES = ['Director', 'super admin', 'Marketing Manager', 'MACX']
+const PRODUCER_ROLE = 'VSDO'
+
 const MOOD_OPTIONS = ['professional', 'playful', 'bold', 'minimalist', 'elegant', 'modern', 'retro', 'colorful', 'dark', 'clean']
 const OUTPUT_FORMATS = ['png', 'jpg', 'pdf', 'psd', 'ai', 'svg', 'mp4', 'gif']
 const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'facebook', 'linkedin', 'twitter', 'website', 'email', 'print']
@@ -144,6 +147,10 @@ export default function DesignRequestDashboard() {
   const [requests, setRequests] = useState<DesignRequest[]>([])
   const [analytics, setAnalytics] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [userRole, setUserRole] = useState('')
+
+  const isProducer = userRole === PRODUCER_ROLE
+  const isSupervisor = SUPERVISOR_ROLES.includes(userRole)
 
   // Filters
   const [filterStatus, setFilterStatus] = useState('all')
@@ -192,7 +199,7 @@ export default function DesignRequestDashboard() {
       if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`
       if (showMyOnly) url += `&my_requests=true`
       const res = await fetch(url)
-      if (res.ok) { const data = await res.json(); setRequests(data.requests || []) }
+      if (res.ok) { const data = await res.json(); setRequests(data.requests || []); if (data.userRole) setUserRole(data.userRole) }
     } catch (e) { console.error('Error fetching requests:', e) }
   }, [filterStatus, filterType, filterPriority, searchQuery, showMyOnly])
 
@@ -330,11 +337,15 @@ export default function DesignRequestDashboard() {
           <h1 className="text-xl lg:text-2xl font-bold flex items-center gap-2">
             <Palette className="h-6 w-6" /> Design Request (VDCO)
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Request dan tracking produksi visual design oleh VSDO</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isProducer ? 'Kelola dan produksi design request dari tim marketing' : 'Request dan tracking produksi visual design oleh VSDO'}
+          </p>
         </div>
-        <Button onClick={() => { resetForm(); setShowCreateDialog(true) }} size="sm" className="gap-1">
-          <Plus className="h-4 w-4" /> Buat Request Baru
-        </Button>
+        {!isProducer && (
+          <Button onClick={() => { resetForm(); setShowCreateDialog(true) }} size="sm" className="gap-1">
+            <Plus className="h-4 w-4" /> Buat Request Baru
+          </Button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -342,7 +353,7 @@ export default function DesignRequestDashboard() {
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview" className="gap-1 text-xs sm:text-sm"><LayoutGrid className="h-3.5 w-3.5" /> Overview</TabsTrigger>
           <TabsTrigger value="requests" className="gap-1 text-xs sm:text-sm"><List className="h-3.5 w-3.5" /> Semua Request</TabsTrigger>
-          <TabsTrigger value="my_requests" className="gap-1 text-xs sm:text-sm"><User className="h-3.5 w-3.5" /> Request Saya</TabsTrigger>
+          <TabsTrigger value="my_requests" className="gap-1 text-xs sm:text-sm"><User className="h-3.5 w-3.5" /> {isProducer ? 'Ditugaskan ke Saya' : 'Request Saya'}</TabsTrigger>
           <TabsTrigger value="analytics" className="gap-1 text-xs sm:text-sm"><BarChart3 className="h-3.5 w-3.5" /> Analytics</TabsTrigger>
         </TabsList>
       </Tabs>
@@ -782,16 +793,18 @@ export default function DesignRequestDashboard() {
                   {selectedRequest.revision_count > 0 && <Badge variant="outline" className="text-xs">{selectedRequest.revision_count}x revisi</Badge>}
                   {selectedRequest.assignee && <Badge variant="secondary" className="text-xs">VSDO: {selectedRequest.assignee.name}</Badge>}
                   <div className="flex-1" />
-                  {/* Action buttons */}
-                  {selectedRequest.status === 'draft' && <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'submitted')}><Send className="h-3 w-3" /> Kirim ke VSDO</Button>}
-                  {selectedRequest.status === 'submitted' && <Button size="sm" variant="default" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'accepted')}><CheckCircle2 className="h-3 w-3" /> Terima Request</Button>}
-                  {selectedRequest.status === 'accepted' && <Button size="sm" variant="default" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'in_progress')}><RefreshCw className="h-3 w-3" /> Mulai Kerjakan</Button>}
-                  {(selectedRequest.status === 'in_progress' || selectedRequest.status === 'accepted') && (
+                  {/* Action buttons - role-based */}
+                  {/* Requester actions: submit to VSDO */}
+                  {selectedRequest.status === 'draft' && !isProducer && <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'submitted')}><Send className="h-3 w-3" /> Kirim ke VSDO</Button>}
+                  {/* VDCO/Supervisor actions: accept, start, deliver */}
+                  {selectedRequest.status === 'submitted' && (isProducer || isSupervisor) && <Button size="sm" variant="default" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'accepted')}><CheckCircle2 className="h-3 w-3" /> Terima Request</Button>}
+                  {selectedRequest.status === 'accepted' && (isProducer || isSupervisor) && <Button size="sm" variant="default" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'in_progress')}><RefreshCw className="h-3 w-3" /> Mulai Kerjakan</Button>}
+                  {(selectedRequest.status === 'in_progress' || selectedRequest.status === 'accepted') && (isProducer || isSupervisor) && (
                     <Button size="sm" variant="default" className="text-xs gap-1" onClick={() => { setDeliverForm({ design_url: '', design_url_2: '', file_format: 'png', notes: '' }); setShowDeliverDialog(true) }}>
                       <Upload className="h-3 w-3" /> Kirim Design
                     </Button>
                   )}
-                  {selectedRequest.status === 'revision_requested' && <Button size="sm" variant="default" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'in_progress')}><RefreshCw className="h-3 w-3" /> Mulai Revisi</Button>}
+                  {selectedRequest.status === 'revision_requested' && (isProducer || isSupervisor) && <Button size="sm" variant="default" className="text-xs gap-1" onClick={() => openStatusChange(selectedRequest, 'in_progress')}><RefreshCw className="h-3 w-3" /> Mulai Revisi</Button>}
                 </div>
 
                 {/* Time Metrics */}
@@ -857,7 +870,7 @@ export default function DesignRequestDashboard() {
                             <div className="flex items-center gap-2">
                               {v.review_status === 'approved' && <Badge className="bg-green-600 text-xs">Approved</Badge>}
                               {v.review_status === 'revision_requested' && <Badge variant="destructive" className="text-xs">Revisi</Badge>}
-                              {v.review_status === 'pending' && selectedRequest.status === 'delivered' && (
+                              {v.review_status === 'pending' && selectedRequest.status === 'delivered' && !isProducer && (
                                 <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setReviewingVersion(v); setReviewForm({ review_status: 'approved', review_comment: '' }); setShowReviewDialog(true) }}>
                                   <Eye className="h-3 w-3 mr-1" /> Review
                                 </Button>
@@ -907,13 +920,13 @@ export default function DesignRequestDashboard() {
                 </div>
               </div>
               <DialogFooter className="gap-2">
-                {selectedRequest.status === 'draft' && (
+                {selectedRequest.status === 'draft' && !isProducer && (
                   <Button variant="ghost" size="sm" className="text-red-600 gap-1" onClick={() => handleDelete(selectedRequest.id)}>
                     <Trash2 className="h-3.5 w-3.5" /> Hapus
                   </Button>
                 )}
                 <div className="flex-1" />
-                {['draft', 'submitted'].includes(selectedRequest.status) && !['approved', 'cancelled'].includes(selectedRequest.status) && (
+                {['draft', 'submitted'].includes(selectedRequest.status) && !isProducer && (
                   <Button variant="ghost" size="sm" className="text-red-600 text-xs" onClick={() => openStatusChange(selectedRequest, 'cancelled')}>Batalkan</Button>
                 )}
               </DialogFooter>
