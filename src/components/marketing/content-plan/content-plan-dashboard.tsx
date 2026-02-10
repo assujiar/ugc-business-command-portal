@@ -1230,20 +1230,20 @@ export default function ContentPlanDashboard() {
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label>Platform</Label>
-                <Select value={templateForm.platform} onValueChange={v => setTemplateForm(f => ({ ...f, platform: v }))}>
+                <Select value={templateForm.platform || '__all__'} onValueChange={v => setTemplateForm(f => ({ ...f, platform: v === '__all__' ? '' : v }))}>
                   <SelectTrigger><SelectValue placeholder="Semua" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua platform</SelectItem>
+                    <SelectItem value="__all__">Semua platform</SelectItem>
                     {PLATFORMS.map(p => <SelectItem key={p} value={p}>{PLATFORM_CONFIGS.find(c => c.id === p)?.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
                 <Label>Tipe</Label>
-                <Select value={templateForm.content_type} onValueChange={v => setTemplateForm(f => ({ ...f, content_type: v }))}>
+                <Select value={templateForm.content_type || '__all__'} onValueChange={v => setTemplateForm(f => ({ ...f, content_type: v === '__all__' ? '' : v }))}>
                   <SelectTrigger><SelectValue placeholder="Semua" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua tipe</SelectItem>
+                    <SelectItem value="__all__">Semua tipe</SelectItem>
                     {CONTENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -1537,10 +1537,10 @@ function CreateEditDialog({ open, onOpenChange, form, setForm, editingPlanId, ca
           </div>
           <div className="grid gap-2">
             <Label>Campaign</Label>
-            <Select value={form.campaign_id} onValueChange={(v: string) => setForm((f: any) => ({ ...f, campaign_id: v }))}>
+            <Select value={form.campaign_id || '__none__'} onValueChange={(v: string) => setForm((f: any) => ({ ...f, campaign_id: v === '__none__' ? '' : v }))}>
               <SelectTrigger><SelectValue placeholder="Pilih campaign" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Tanpa campaign</SelectItem>
+                <SelectItem value="__none__">Tanpa campaign</SelectItem>
                 {campaigns.filter(c => c.status === 'active').map(c => (
                   <SelectItem key={c.id} value={c.id}>
                     <span className="flex items-center gap-2">
