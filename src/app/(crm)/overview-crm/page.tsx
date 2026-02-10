@@ -192,6 +192,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       owner_user_id: a.owner_user_id,
       created_at: a.created_at,
       completed_at: a.completed_at,
+      related_opportunity_id: a.related_opportunity_id || null,
     })),
     leads: filteredLeads.map((l: any) => ({
       lead_id: l.lead_id,
@@ -267,6 +268,23 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       owner_user_id: a.owner_user_id,
       created_at: a.created_at,
       completed_at: a.completed_at,
+      related_opportunity_id: a.related_opportunity_id || null,
+    })),
+    // Unfiltered pipeline_updates and sales_plans for unified activity count
+    allPipelineUpdates: (pipelineUpdates || []).map((u: any) => ({
+      update_id: u.update_id,
+      opportunity_id: u.opportunity_id,
+      approach_method: u.approach_method,
+      updated_by: u.updated_by,
+      created_at: u.created_at,
+    })),
+    allSalesPlans: (salesPlans || []).map((p: any) => ({
+      plan_id: p.plan_id,
+      plan_type: p.plan_type,
+      status: p.status,
+      potential_status: p.potential_status,
+      owner_user_id: p.owner_user_id,
+      created_at: p.created_at,
     })),
   }
 

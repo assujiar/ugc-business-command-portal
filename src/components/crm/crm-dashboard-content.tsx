@@ -69,6 +69,7 @@ interface ActivityData {
   owner_user_id: string
   created_at: string
   completed_at: string | null
+  related_opportunity_id?: string | null
 }
 
 interface LeadData {
@@ -139,6 +140,8 @@ export interface DashboardDataProps {
   allOpportunities: OpportunityData[]
   allAccounts: AccountData[]
   allActivities: ActivityData[]
+  allPipelineUpdates: PipelineUpdateData[]
+  allSalesPlans: SalesPlanData[]
 }
 
 // =====================================================
@@ -200,6 +203,50 @@ function formatWeekLabel(year: number, weekNum: number): string {
 function calcGrowth(current: number, previous: number): number | null {
   if (previous === 0) return current > 0 ? 100 : null
   return ((current - previous) / previous) * 100
+}
+
+/**
+ * Compute unified activity count matching the Activities page logic.
+ * Activities page combines 3 sources: sales_plans + pipeline_updates + activities (deduplicated).
+ * Deduplication: remove activities that have a matching pipeline_update on same opportunity within 1 min.
+ */
+function computeUnifiedActivityCount(
+  activities: ActivityData[],
+  pipelineUpdates: PipelineUpdateData[],
+  salesPlans: SalesPlanData[]
+): { total: number; breakdown: Record<string, number> } {
+  // Build dedup keys from pipeline_updates (opportunity_id + timestamp within 1-min window)
+  const puKeys = new Set(
+    pipelineUpdates.map(pu => {
+      const ts = new Date(pu.created_at).getTime()
+      return `${pu.opportunity_id}_${Math.floor(ts / 60000)}`
+    })
+  )
+
+  // Filter out activities that duplicate a pipeline_update
+  const uniqueActivities = activities.filter(act => {
+    if (!act.related_opportunity_id) return true
+    const ts = act.completed_at ? new Date(act.completed_at).getTime() : 0
+    const key = `${act.related_opportunity_id}_${Math.floor(ts / 60000)}`
+    return !puKeys.has(key)
+  })
+
+  const total = salesPlans.length + pipelineUpdates.length + uniqueActivities.length
+
+  // Build breakdown by method/type
+  const breakdown: Record<string, number> = {}
+  pipelineUpdates.forEach(pu => {
+    if (pu.approach_method) breakdown[pu.approach_method] = (breakdown[pu.approach_method] || 0) + 1
+  })
+  uniqueActivities.forEach(act => {
+    breakdown[act.activity_type] = (breakdown[act.activity_type] || 0) + 1
+  })
+  salesPlans.forEach(sp => {
+    const t = sp.plan_type === 'maintenance_existing' ? 'Maintain' : sp.plan_type === 'hunting_new' ? 'Hunting' : 'Winback'
+    breakdown[t] = (breakdown[t] || 0) + 1
+  })
+
+  return { total, breakdown }
 }
 
 // Role helpers
@@ -402,6 +449,8 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       const activeOpps = userOpps.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage))
       const userAccts = data.allAccounts.filter(a => a.owner_user_id === uid)
       const userActs = data.allActivities.filter(a => a.owner_user_id === uid)
+      const userPUs = data.allPipelineUpdates.filter(u => u.updated_by === uid)
+      const userPlans = data.allSalesPlans.filter(p => p.owner_user_id === uid)
 
       const pipelineValue = activeOpps.reduce((s, o) => s + o.estimated_value, 0)
       const wonValue = wonOpps.reduce((s, o) => s + o.estimated_value, 0)
@@ -419,8 +468,8 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
         if (o.closed_at && o.created_at) { totalCycleDays += (new Date(o.closed_at).getTime() - new Date(o.created_at).getTime()) / 86400000; cycleCount++ }
       }
 
-      const actBreak: Record<string, number> = {}
-      userActs.forEach(a => { actBreak[a.activity_type] = (actBreak[a.activity_type] || 0) + 1 })
+      // Unified activity count: sales_plans + pipeline_updates + activities (deduplicated)
+      const unified = computeUnifiedActivityCount(userActs, userPUs, userPlans)
 
       return {
         userId: uid, name: user.name,
@@ -428,7 +477,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
         lostCount: lostOpps.length, winRate,
         activeCustomers: activeCust, newCustomers: newCust,
         avgSalesCycle: cycleCount > 0 ? totalCycleDays / cycleCount : 0,
-        activities: userActs.length, actBreakdown: actBreak,
+        activities: unified.total, actBreakdown: unified.breakdown,
         totalPipeline: userOpps.length,
       }
     })
