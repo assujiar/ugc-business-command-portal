@@ -157,8 +157,8 @@ BEGIN
             UPDATE public.opportunities
             SET
                 stage = v_new_opp_stage,
-                expected_value = COALESCE(v_quotation.total_selling_rate, expected_value),
-                close_date = CURRENT_DATE,
+                estimated_value = COALESCE(v_quotation.total_selling_rate, estimated_value),
+                closed_at = NOW(),
                 updated_at = NOW()
             WHERE opportunity_id = v_effective_opportunity_id;
 
@@ -272,7 +272,6 @@ BEGIN
                 status = 'closed'::ticket_status,
                 close_outcome = 'won',
                 closed_at = NOW(),
-                closed_by = v_actor_id,
                 updated_at = NOW()
             WHERE id = v_quotation.ticket_id
             RETURNING * INTO v_ticket;
