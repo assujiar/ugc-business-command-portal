@@ -922,7 +922,8 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
 
   // Deduplicate timeline items - collapse redundant entries from batch operations and mirror trigger
   const deduplicateTimelineItems = (items: TimelineItem[]): TimelineItem[] => {
-    const WINDOW_MS = 5000 // 5-second window for grouping related entries
+    const WINDOW_MS = 5000 // 5-second window for exact duplicate grouping
+    const EXTENDED_WINDOW_MS = 30000 // 30-second window for related event merging
     const removedIds = new Set<string>()
 
     const sorted = [...items].sort((a, b) =>
@@ -934,19 +935,23 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     sorted.forEach(item => tsMap.set(item.id, new Date(item.created_at).getTime()))
     const ts = (item: TimelineItem) => tsMap.get(item.id)!
     const nearBy = (a: TimelineItem, b: TimelineItem) => Math.abs(ts(a) - ts(b)) <= WINDOW_MS
+    const nearByExtended = (a: TimelineItem, b: TimelineItem) => Math.abs(ts(a) - ts(b)) <= EXTENDED_WINDOW_MS
 
     // Quotation lifecycle events that suppress mirror-trigger auto-comments
     const LIFECYCLE_BADGES = new Set([
       'rejected', 'quotation_sent', 'quotation', 'accepted', 'sent_to_customer',
     ])
 
+    // Status change badges that are auto-generated alongside lifecycle events
+    const AUTO_STATUS_BADGES = new Set(['status', 'adjustment', 'assigned'])
+
     sorted.forEach((item) => {
       if (removedIds.has(item.id)) return
 
-      // Rule 1: Rejection hides request_adjustment events within window
+      // Rule 1: Rejection hides request_adjustment events within extended window
       if (item.badge_type === 'rejected') {
         sorted.forEach((other) => {
-          if (other.id !== item.id && !removedIds.has(other.id) && nearBy(item, other)) {
+          if (other.id !== item.id && !removedIds.has(other.id) && nearByExtended(item, other)) {
             if (other.extra_data?.event_type === 'request_adjustment') {
               removedIds.add(other.id)
             }
@@ -954,10 +959,10 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
         })
       }
 
-      // Rule 2: Lifecycle events hide auto-comments from same actor within window
+      // Rule 2: Lifecycle events hide auto-comments from same actor within extended window
       if (LIFECYCLE_BADGES.has(item.badge_type)) {
         sorted.forEach((other) => {
-          if (other.id !== item.id && !removedIds.has(other.id) && nearBy(item, other)) {
+          if (other.id !== item.id && !removedIds.has(other.id) && nearByExtended(item, other)) {
             if (other.type === 'comment' && other.user_id === item.user_id) {
               removedIds.add(other.id)
             }
@@ -971,6 +976,30 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
           other.type === 'cost' && !removedIds.has(other.id) && nearBy(item, other)
         )
         if (hasCosts) removedIds.add(item.id)
+      }
+
+      // Rule 5: Lifecycle events absorb status_changed events from same actor within extended window
+      // When a quotation is rejected/accepted/sent, status_changed event is redundant
+      if (LIFECYCLE_BADGES.has(item.badge_type)) {
+        sorted.forEach((other) => {
+          if (other.id !== item.id && !removedIds.has(other.id) && nearByExtended(item, other)) {
+            if (other.type === 'status_change' && other.user_id === item.user_id) {
+              removedIds.add(other.id)
+            }
+          }
+        })
+      }
+
+      // Rule 6: Lifecycle events absorb other auto-generated events within extended window
+      // e.g., assigned/reassigned events that fire alongside status changes
+      if (LIFECYCLE_BADGES.has(item.badge_type)) {
+        sorted.forEach((other) => {
+          if (other.id !== item.id && !removedIds.has(other.id) && nearByExtended(item, other)) {
+            if (other.type === 'event' && AUTO_STATUS_BADGES.has(other.badge_type) && other.user_id === item.user_id) {
+              removedIds.add(other.id)
+            }
+          }
+        })
       }
     })
 
@@ -987,6 +1016,20 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
           } else {
             removedIds.add(sorted[j].id)
           }
+        }
+      }
+    }
+
+    // Rule 7: Consecutive status_changed events from same user within extended window → keep last
+    for (let i = 0; i < sorted.length; i++) {
+      if (removedIds.has(sorted[i].id) || sorted[i].type !== 'status_change') continue
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (removedIds.has(sorted[j].id)) continue
+        if (ts(sorted[j]) - ts(sorted[i]) > EXTENDED_WINDOW_MS) break
+        if (sorted[j].type === 'status_change' && sorted[j].user_id === sorted[i].user_id) {
+          // Keep the later one (more recent status), remove earlier
+          removedIds.add(sorted[i].id)
+          break
         }
       }
     }
