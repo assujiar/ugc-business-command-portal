@@ -18,10 +18,10 @@ import {
   FileEdit, Plus, ChevronLeft, ChevronRight, Calendar as CalendarIcon,
   List, LayoutGrid, Clock, AlertTriangle, CheckCircle2, Eye, Send,
   XCircle, Archive, MessageSquare, Hash, Bookmark, FileText, Search,
-  MoreHorizontal, Trash2, Edit, Link2, ArrowUpRight, ArrowDownRight,
-  Minus, Filter, Tag,
+  Trash2, Edit, Link2, BarChart3, ExternalLink, TrendingUp,
+  Target, Layers, Activity,
 } from 'lucide-react'
-import { SocialIconBadge, SocialIconInline, PLATFORM_CONFIGS } from '@/components/marketing/social-media-icons'
+import { SocialIconBadge, SocialIconInline, PLATFORM_CONFIGS, PLATFORM_CONFIG_MAP } from '@/components/marketing/social-media-icons'
 
 // ============================================================
 // Types
@@ -51,6 +51,19 @@ interface ContentPlan {
   target_engagement_rate: number | null
   linked_content_id: number | null
   published_at: string | null
+  actual_post_url: string | null
+  actual_post_url_2: string | null
+  actual_views: number | null
+  actual_likes: number | null
+  actual_comments: number | null
+  actual_shares: number | null
+  actual_engagement_rate: number | null
+  actual_reach: number | null
+  actual_impressions: number | null
+  actual_saves: number | null
+  actual_clicks: number | null
+  realized_at: string | null
+  realization_notes: string | null
   created_at: string
   updated_at: string
   campaign?: { id: string; name: string; color: string } | null
@@ -83,6 +96,13 @@ interface Comment {
 interface KPIs {
   totalPlanned: number; published: number; inReview: number
   draft: number; approved: number; rejected: number; completionRate: number
+  realized: number; withEvidence: number
+}
+
+interface ChannelKpi {
+  platform: string; total: number; published: number; draft: number
+  inReview: number; approved: number; rejected: number
+  realized: number; withEvidence: number; completionRate: number
 }
 
 // ============================================================
@@ -123,6 +143,42 @@ function PriorityBadge({ priority }: { priority: string }) {
   return <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors[priority] || colors.medium}`}>{priority}</span>
 }
 
+function ProgressBar({ value, max, color = 'bg-green-500' }: { value: number; max: number; color?: string }) {
+  const pct = max > 0 ? Math.min(Math.round((value / max) * 100), 100) : 0
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 bg-muted rounded-full h-2">
+        <div className={`${color} h-2 rounded-full transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs font-medium min-w-[32px] text-right">{pct}%</span>
+    </div>
+  )
+}
+
+function MetricCard({ label, actual, target, suffix = '' }: { label: string; actual: number | null; target: number | null; suffix?: string }) {
+  const hasTarget = target !== null && target !== undefined && target > 0
+  const hasActual = actual !== null && actual !== undefined
+  const achievement = hasTarget && hasActual ? Math.round((actual / target) * 100) : null
+  return (
+    <div className="p-2 border rounded text-center">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+      {hasActual ? (
+        <p className="font-bold text-sm">{actual.toLocaleString()}{suffix}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground">-</p>
+      )}
+      {hasTarget && (
+        <p className="text-[10px] text-muted-foreground">Target: {target.toLocaleString()}{suffix}</p>
+      )}
+      {achievement !== null && (
+        <p className={`text-[10px] font-medium ${achievement >= 100 ? 'text-green-600' : achievement >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+          {achievement}% tercapai
+        </p>
+      )}
+    </div>
+  )
+}
+
 function formatDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
@@ -142,8 +198,11 @@ export default function ContentPlanDashboard() {
   const [hashtags, setHashtags] = useState<Hashtag[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [kpis, setKpis] = useState<KPIs | null>(null)
+  const [channelKpis, setChannelKpis] = useState<ChannelKpi[]>([])
+  const [contentTypeDist, setContentTypeDist] = useState<Record<string, number>>({})
   const [upcoming, setUpcoming] = useState<ContentPlan[]>([])
   const [needsAttention, setNeedsAttention] = useState<ContentPlan[]>([])
+  const [needsRealization, setNeedsRealization] = useState<ContentPlan[]>([])
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -167,20 +226,27 @@ export default function ContentPlanDashboard() {
   const [showCampaignDialog, setShowCampaignDialog] = useState(false)
   const [showHashtagDialog, setShowHashtagDialog] = useState(false)
   const [showTemplateDialog, setShowTemplateDialog] = useState(false)
+  const [showRealizeDialog, setShowRealizeDialog] = useState(false)
 
   // Form state
   const [form, setForm] = useState({
     title: '', platform: 'instagram', content_type: 'post', scheduled_date: '',
     scheduled_time: '', caption: '', notes: '', campaign_id: '', assigned_to: '',
     priority: 'medium', visual_url: '', target_views: '', target_likes: '',
-    target_engagement_rate: '', hashtag_ids: [] as number[],
-    cross_post_platforms: [] as string[],
+    target_comments: '', target_shares: '', target_engagement_rate: '',
+    hashtag_ids: [] as number[], cross_post_platforms: [] as string[],
   })
   const [campaignForm, setCampaignForm] = useState({ name: '', description: '', color: '#6366f1', start_date: '', end_date: '' })
   const [hashtagForm, setHashtagForm] = useState({ tag: '', category: 'general' })
   const [templateForm, setTemplateForm] = useState({ name: '', platform: '', content_type: '', caption_template: '', notes: '' })
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [newComment, setNewComment] = useState('')
+  const [realizeForm, setRealizeForm] = useState({
+    actual_post_url: '', actual_post_url_2: '',
+    actual_views: '', actual_likes: '', actual_comments: '', actual_shares: '',
+    actual_engagement_rate: '', actual_reach: '', actual_impressions: '',
+    actual_saves: '', actual_clicks: '', realization_notes: '',
+  })
 
   // ============================================================
   // Data Fetching
@@ -193,8 +259,11 @@ export default function ContentPlanDashboard() {
       if (res.ok) {
         const data = await res.json()
         setKpis(data.kpis)
+        setChannelKpis(data.channelKpis || [])
+        setContentTypeDist(data.contentTypeDist || {})
         setUpcoming(data.upcoming || [])
         setNeedsAttention(data.needsAttention || [])
+        setNeedsRealization(data.needsRealization || [])
         setRecentActivity(data.recentActivity || [])
       }
     } catch (e) { console.error('Error fetching overview:', e) }
@@ -204,7 +273,7 @@ export default function ContentPlanDashboard() {
     try {
       const startDate = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1).toISOString().split('T')[0]
       const endDate = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).toISOString().split('T')[0]
-      let url = `/api/marketing/content-plan/plans?start_date=${startDate}&end_date=${endDate}&limit=100`
+      let url = `/api/marketing/content-plan/plans?start_date=${startDate}&end_date=${endDate}&limit=200`
       if (filterPlatform !== 'all') url += `&platform=${filterPlatform}`
       if (filterStatus !== 'all') url += `&status=${filterStatus}`
       if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`
@@ -254,6 +323,8 @@ export default function ContentPlanDashboard() {
         ...form,
         target_views: form.target_views ? parseInt(form.target_views) : null,
         target_likes: form.target_likes ? parseInt(form.target_likes) : null,
+        target_comments: form.target_comments ? parseInt(form.target_comments) : null,
+        target_shares: form.target_shares ? parseInt(form.target_shares) : null,
         target_engagement_rate: form.target_engagement_rate ? parseFloat(form.target_engagement_rate) / 100 : null,
         campaign_id: form.campaign_id || null,
         assigned_to: form.assigned_to || null,
@@ -310,6 +381,37 @@ export default function ContentPlanDashboard() {
     } catch (e) { console.error('Error deleting plan:', e) }
   }
 
+  const handleRealize = async () => {
+    if (!selectedPlan) return
+    try {
+      const body: any = {}
+      if (realizeForm.actual_post_url) body.actual_post_url = realizeForm.actual_post_url
+      if (realizeForm.actual_post_url_2) body.actual_post_url_2 = realizeForm.actual_post_url_2
+      if (realizeForm.actual_views) body.actual_views = parseInt(realizeForm.actual_views)
+      if (realizeForm.actual_likes) body.actual_likes = parseInt(realizeForm.actual_likes)
+      if (realizeForm.actual_comments) body.actual_comments = parseInt(realizeForm.actual_comments)
+      if (realizeForm.actual_shares) body.actual_shares = parseInt(realizeForm.actual_shares)
+      if (realizeForm.actual_engagement_rate) body.actual_engagement_rate = parseFloat(realizeForm.actual_engagement_rate) / 100
+      if (realizeForm.actual_reach) body.actual_reach = parseInt(realizeForm.actual_reach)
+      if (realizeForm.actual_impressions) body.actual_impressions = parseInt(realizeForm.actual_impressions)
+      if (realizeForm.actual_saves) body.actual_saves = parseInt(realizeForm.actual_saves)
+      if (realizeForm.actual_clicks) body.actual_clicks = parseInt(realizeForm.actual_clicks)
+      if (realizeForm.realization_notes) body.realization_notes = realizeForm.realization_notes
+
+      const res = await fetch(`/api/marketing/content-plan/plans/${selectedPlan.id}/realize`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        setShowRealizeDialog(false)
+        fetchPlans()
+        fetchOverview()
+        if (showDetailDialog) openDetail(selectedPlan.id)
+      }
+    } catch (e) { console.error('Error realizing plan:', e) }
+  }
+
   const handleCreateCampaign = async () => {
     if (!campaignForm.name) return
     try {
@@ -359,24 +461,30 @@ export default function ContentPlanDashboard() {
   const openEdit = (plan: ContentPlan) => {
     setEditingPlanId(plan.id)
     setForm({
-      title: plan.title,
-      platform: plan.platform,
-      content_type: plan.content_type,
-      scheduled_date: plan.scheduled_date,
-      scheduled_time: plan.scheduled_time || '',
-      caption: plan.caption || '',
-      notes: plan.notes || '',
-      campaign_id: plan.campaign_id || '',
-      assigned_to: plan.assigned_to || '',
-      priority: plan.priority,
-      visual_url: plan.visual_url || '',
-      target_views: plan.target_views?.toString() || '',
-      target_likes: plan.target_likes?.toString() || '',
+      title: plan.title, platform: plan.platform, content_type: plan.content_type,
+      scheduled_date: plan.scheduled_date, scheduled_time: plan.scheduled_time || '',
+      caption: plan.caption || '', notes: plan.notes || '', campaign_id: plan.campaign_id || '',
+      assigned_to: plan.assigned_to || '', priority: plan.priority, visual_url: plan.visual_url || '',
+      target_views: plan.target_views?.toString() || '', target_likes: plan.target_likes?.toString() || '',
+      target_comments: plan.target_comments?.toString() || '', target_shares: plan.target_shares?.toString() || '',
       target_engagement_rate: plan.target_engagement_rate ? (plan.target_engagement_rate * 100).toString() : '',
-      hashtag_ids: plan.hashtags?.map(h => h.hashtag.id) || [],
-      cross_post_platforms: [],
+      hashtag_ids: plan.hashtags?.map(h => h.hashtag.id) || [], cross_post_platforms: [],
     })
     setShowCreateDialog(true)
+  }
+
+  const openRealize = (plan: ContentPlan) => {
+    setSelectedPlan(plan)
+    setRealizeForm({
+      actual_post_url: plan.actual_post_url || '', actual_post_url_2: plan.actual_post_url_2 || '',
+      actual_views: plan.actual_views?.toString() || '', actual_likes: plan.actual_likes?.toString() || '',
+      actual_comments: plan.actual_comments?.toString() || '', actual_shares: plan.actual_shares?.toString() || '',
+      actual_engagement_rate: plan.actual_engagement_rate ? (plan.actual_engagement_rate * 100).toString() : '',
+      actual_reach: plan.actual_reach?.toString() || '', actual_impressions: plan.actual_impressions?.toString() || '',
+      actual_saves: plan.actual_saves?.toString() || '', actual_clicks: plan.actual_clicks?.toString() || '',
+      realization_notes: plan.realization_notes || '',
+    })
+    setShowRealizeDialog(true)
   }
 
   const openStatusChange = (plan: ContentPlan, targetStatus: string) => {
@@ -392,14 +500,26 @@ export default function ContentPlanDashboard() {
       title: '', platform: 'instagram', content_type: 'post', scheduled_date: '',
       scheduled_time: '', caption: '', notes: '', campaign_id: '', assigned_to: '',
       priority: 'medium', visual_url: '', target_views: '', target_likes: '',
-      target_engagement_rate: '', hashtag_ids: [], cross_post_platforms: [],
+      target_comments: '', target_shares: '', target_engagement_rate: '',
+      hashtag_ids: [], cross_post_platforms: [],
     })
   }
 
-  const openCreate = (date?: string) => {
+  const openCreate = (date?: string, platform?: string) => {
     resetForm()
     if (date) setForm(prev => ({ ...prev, scheduled_date: date }))
+    if (platform) setForm(prev => ({ ...prev, platform }))
     setShowCreateDialog(true)
+  }
+
+  const applyTemplate = (t: Template) => {
+    setForm(f => ({
+      ...f,
+      caption: t.caption_template || f.caption,
+      platform: t.platform || f.platform,
+      content_type: t.content_type || f.content_type,
+      hashtag_ids: t.default_hashtag_ids?.length ? t.default_hashtag_ids : f.hashtag_ids,
+    }))
   }
 
   // ============================================================
@@ -437,10 +557,10 @@ export default function ContentPlanDashboard() {
           <h1 className="text-xl lg:text-2xl font-bold flex items-center gap-2">
             <FileEdit className="h-6 w-6" /> Content Plan
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Perencanaan dan tracking konten marketing di seluruh channel</p>
+          <p className="text-sm text-muted-foreground mt-1">Perencanaan, tracking, dan realisasi konten di seluruh digital channel</p>
         </div>
         <Button onClick={() => openCreate()} size="sm" className="gap-1">
-          <Plus className="h-4 w-4" /> Buat Konten
+          <Plus className="h-4 w-4" /> Buat Konten Baru
         </Button>
       </div>
 
@@ -448,6 +568,7 @@ export default function ContentPlanDashboard() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview" className="gap-1 text-xs sm:text-sm"><LayoutGrid className="h-3.5 w-3.5" /> Overview</TabsTrigger>
+          <TabsTrigger value="channels" className="gap-1 text-xs sm:text-sm"><BarChart3 className="h-3.5 w-3.5" /> Channel</TabsTrigger>
           <TabsTrigger value="calendar" className="gap-1 text-xs sm:text-sm"><CalendarIcon className="h-3.5 w-3.5" /> Kalender</TabsTrigger>
           <TabsTrigger value="list" className="gap-1 text-xs sm:text-sm"><List className="h-3.5 w-3.5" /> List</TabsTrigger>
           <TabsTrigger value="campaigns" className="gap-1 text-xs sm:text-sm"><Bookmark className="h-3.5 w-3.5" /> Campaign</TabsTrigger>
@@ -461,14 +582,13 @@ export default function ContentPlanDashboard() {
         <div className="space-y-4">
           {/* KPI Cards */}
           {kpis && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
-                { label: 'Total Planned', value: kpis.totalPlanned, icon: CalendarIcon, color: 'text-blue-600' },
+                { label: 'Total Konten', value: kpis.totalPlanned, icon: Layers, color: 'text-blue-600' },
                 { label: 'Published', value: kpis.published, icon: Send, color: 'text-green-600' },
                 { label: 'In Review', value: kpis.inReview, icon: Eye, color: 'text-yellow-600' },
-                { label: 'Draft', value: kpis.draft, icon: FileEdit, color: 'text-gray-600' },
-                { label: 'Rejected', value: kpis.rejected, icon: XCircle, color: 'text-red-600' },
-                { label: 'Completion', value: `${kpis.completionRate}%`, icon: CheckCircle2, color: 'text-emerald-600' },
+                { label: 'Terealisasi', value: kpis.realized, icon: CheckCircle2, color: 'text-emerald-600' },
+                { label: 'Completion', value: `${kpis.completionRate}%`, icon: Target, color: 'text-purple-600' },
               ].map(kpi => (
                 <Card key={kpi.label}>
                   <CardContent className="p-3">
@@ -481,6 +601,57 @@ export default function ContentPlanDashboard() {
                 </Card>
               ))}
             </div>
+          )}
+
+          {/* Channel Breakdown Cards */}
+          {channelKpis.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold mb-2 flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Breakdown per Channel</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {channelKpis.map(ch => {
+                  const cfg = PLATFORM_CONFIG_MAP[ch.platform]
+                  return (
+                    <Card key={ch.platform} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setFilterPlatform(ch.platform); setActiveTab('list') }}>
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <SocialIconBadge platform={ch.platform} size="sm" variant="filled" />
+                            <span className="font-medium text-sm">{cfg?.label || ch.platform}</span>
+                          </div>
+                          <Badge variant="secondary" className="text-[10px]">{ch.total} konten</Badge>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1 text-center text-[10px] mb-2">
+                          <div><p className="text-muted-foreground">Draft</p><p className="font-bold">{ch.draft}</p></div>
+                          <div><p className="text-muted-foreground">Review</p><p className="font-bold">{ch.inReview}</p></div>
+                          <div><p className="text-muted-foreground">Approved</p><p className="font-bold">{ch.approved}</p></div>
+                          <div><p className="text-muted-foreground">Published</p><p className="font-bold text-green-600">{ch.published}</p></div>
+                        </div>
+                        <ProgressBar value={ch.published} max={ch.total} color={cfg?.color ? `bg-[${cfg.color}]` : 'bg-green-500'} />
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Content Type Distribution */}
+          {Object.keys(contentTypeDist).length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2"><Layers className="h-4 w-4" /> Distribusi Tipe Konten</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(contentTypeDist).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+                    <div key={type} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/30">
+                      <span className="text-sm font-medium capitalize">{type}</span>
+                      <Badge variant="secondary" className="text-[10px]">{count}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -517,7 +688,7 @@ export default function ContentPlanDashboard() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{p.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        {p.status === 'rejected' ? 'Ditolak' : `Overdue: ${formatDate(p.scheduled_date)}`}
+                        {p.status === 'rejected' ? 'Ditolak - perlu revisi' : `Overdue: ${formatDate(p.scheduled_date)}`}
                       </p>
                     </div>
                     <StatusBadge status={p.status} />
@@ -527,10 +698,33 @@ export default function ContentPlanDashboard() {
             </Card>
           </div>
 
+          {/* Needs Realization */}
+          {needsRealization.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2"><Target className="h-4 w-4 text-blue-500" /> Belum Diupdate Realisasi ({needsRealization.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {needsRealization.map(p => (
+                  <div key={p.id} className="flex items-center gap-2 p-2 rounded border border-blue-200 dark:border-blue-800">
+                    <SocialIconBadge platform={p.platform} size="xs" variant="filled" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{p.title}</p>
+                      <p className="text-xs text-muted-foreground">{p.content_type} • Published {p.published_at ? formatDateTime(p.published_at) : ''}</p>
+                    </div>
+                    <Button size="sm" variant="outline" className="text-xs gap-1 shrink-0" onClick={() => { setSelectedPlan(p as ContentPlan); openRealize(p as ContentPlan) }}>
+                      <TrendingUp className="h-3 w-3" /> Update Realisasi
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Recent Activity */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2"><MessageSquare className="h-4 w-4" /> Aktivitas Terbaru</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-2"><Activity className="h-4 w-4" /> Aktivitas Terbaru</CardTitle>
             </CardHeader>
             <CardContent>
               {recentActivity.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">Belum ada aktivitas</p>}
@@ -542,9 +736,10 @@ export default function ContentPlanDashboard() {
                       <span className="text-muted-foreground">
                         {a.action === 'created' && 'membuat konten baru'}
                         {a.action === 'updated' && 'mengupdate konten'}
-                        {a.action === 'status_changed' && `mengubah status ${a.details?.from_status} → ${a.details?.to_status}`}
+                        {a.action === 'status_changed' && `mengubah status ${a.details?.from_status || ''} → ${a.details?.to_status || ''}`}
                         {a.action === 'deleted' && 'menghapus konten'}
                         {a.action === 'linked' && 'menghubungkan ke data performa'}
+                        {a.action === 'realized' && 'mengupdate realisasi konten'}
                       </span>
                     </div>
                     <span className="text-muted-foreground whitespace-nowrap">{formatDateTime(a.created_at)}</span>
@@ -556,10 +751,22 @@ export default function ContentPlanDashboard() {
         </div>
       )}
 
+      {/* ===== CHANNEL TAB ===== */}
+      {activeTab === 'channels' && (
+        <ChannelBreakdownTab
+          calMonth={calMonth}
+          prevMonth={prevMonth}
+          nextMonth={nextMonth}
+          plans={plans}
+          onOpenDetail={openDetail}
+          onOpenCreate={openCreate}
+          onOpenRealize={openRealize}
+        />
+      )}
+
       {/* ===== CALENDAR TAB ===== */}
       {activeTab === 'calendar' && (
         <div className="space-y-3">
-          {/* Calendar Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon" onClick={prevMonth}><ChevronLeft className="h-4 w-4" /></Button>
@@ -569,7 +776,7 @@ export default function ContentPlanDashboard() {
               <Button variant="outline" size="icon" onClick={nextMonth}><ChevronRight className="h-4 w-4" /></Button>
             </div>
             <div className="flex items-center gap-2">
-              <Select value={filterPlatform} onValueChange={setFilterPlatform}>
+              <Select value={filterPlatform} onValueChange={v => { setFilterPlatform(v); }}>
                 <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua Platform</SelectItem>
@@ -586,7 +793,6 @@ export default function ContentPlanDashboard() {
             </div>
           </div>
 
-          {/* Calendar Grid */}
           <Card>
             <CardContent className="p-2 sm:p-4">
               <div className="grid grid-cols-7 gap-px">
@@ -629,6 +835,16 @@ export default function ContentPlanDashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Calendar Legend */}
+          <div className="flex flex-wrap gap-3 justify-center">
+            {PLATFORM_CONFIGS.map(p => (
+              <div key={p.id} className="flex items-center gap-1 text-xs">
+                <SocialIconInline platform={p.id} size={12} />
+                <span className="text-muted-foreground">{p.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -667,7 +883,7 @@ export default function ContentPlanDashboard() {
                       <th className="text-left p-3 font-medium">Tanggal</th>
                       <th className="text-left p-3 font-medium">Status</th>
                       <th className="text-left p-3 font-medium hidden md:table-cell">Priority</th>
-                      <th className="text-left p-3 font-medium hidden lg:table-cell">Campaign</th>
+                      <th className="text-left p-3 font-medium hidden lg:table-cell">Realisasi</th>
                       <th className="p-3 w-8"></th>
                     </tr>
                   </thead>
@@ -694,11 +910,14 @@ export default function ContentPlanDashboard() {
                         <td className="p-3"><StatusBadge status={p.status} /></td>
                         <td className="p-3 hidden md:table-cell"><PriorityBadge priority={p.priority} /></td>
                         <td className="p-3 hidden lg:table-cell">
-                          {p.campaign && (
-                            <span className="inline-flex items-center gap-1 text-xs">
-                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.campaign.color }} />
-                              {p.campaign.name}
-                            </span>
+                          {p.realized_at ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="h-3 w-3" /> Done</span>
+                          ) : p.status === 'published' ? (
+                            <Button size="sm" variant="ghost" className="text-xs h-6 px-2 text-blue-600" onClick={(e) => { e.stopPropagation(); openRealize(p) }}>
+                              <TrendingUp className="h-3 w-3 mr-1" /> Update
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
                           )}
                         </td>
                         <td className="p-3">
@@ -742,9 +961,7 @@ export default function ContentPlanDashboard() {
                   )}
                   <div className="flex items-center gap-3 mt-3 pt-2 border-t">
                     <div className="text-xs"><span className="font-semibold">{c.publishedPlans}</span><span className="text-muted-foreground">/{c.totalPlans} published</span></div>
-                    <div className="flex-1 bg-muted rounded-full h-1.5">
-                      <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{ width: `${c.totalPlans > 0 ? (c.publishedPlans / c.totalPlans) * 100 : 0}%` }} />
-                    </div>
+                    <ProgressBar value={c.publishedPlans} max={c.totalPlans} />
                   </div>
                 </CardContent>
               </Card>
@@ -805,327 +1022,34 @@ export default function ContentPlanDashboard() {
       )}
 
       {/* ===== CREATE/EDIT DIALOG ===== */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingPlanId ? 'Edit Content Plan' : 'Buat Content Plan Baru'}</DialogTitle>
-            <DialogDescription>Isi detail konten yang akan dijadwalkan</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label>Judul *</Label>
-              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Judul konten" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label>Platform *</Label>
-                <Select value={form.platform} onValueChange={v => setForm(f => ({ ...f, platform: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PLATFORMS.map(p => (
-                      <SelectItem key={p} value={p}>
-                        <span className="flex items-center gap-2">
-                          <SocialIconInline platform={p} size={14} /> {PLATFORM_CONFIGS.find(c => c.id === p)?.label}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Tipe Konten</Label>
-                <Select value={form.content_type} onValueChange={v => setForm(f => ({ ...f, content_type: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CONTENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label>Tanggal *</Label>
-                <Input type="date" value={form.scheduled_date} onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Jam (opsional)</Label>
-                <Input type="time" value={form.scheduled_time} onChange={e => setForm(f => ({ ...f, scheduled_time: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Caption</Label>
-              <Textarea value={form.caption} onChange={e => setForm(f => ({ ...f, caption: e.target.value }))} rows={4} placeholder="Caption/copy untuk konten ini..." />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label>Campaign</Label>
-                <Select value={form.campaign_id} onValueChange={v => setForm(f => ({ ...f, campaign_id: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Pilih campaign" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Tanpa campaign</SelectItem>
-                    {campaigns.filter(c => c.status === 'active').map(c => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} /> {c.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Prioritas</Label>
-                <Select value={form.priority} onValueChange={v => setForm(f => ({ ...f, priority: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PRIORITIES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Hashtags</Label>
-              <div className="flex flex-wrap gap-1 p-2 border rounded min-h-[40px]">
-                {form.hashtag_ids.map(hid => {
-                  const ht = hashtags.find(h => h.id === hid)
-                  return ht ? (
-                    <span key={hid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-xs">
-                      #{ht.tag}
-                      <button onClick={() => setForm(f => ({ ...f, hashtag_ids: f.hashtag_ids.filter(x => x !== hid) }))} className="hover:text-red-500">&times;</button>
-                    </span>
-                  ) : null
-                })}
-                <Select onValueChange={v => { const id = parseInt(v); if (!form.hashtag_ids.includes(id)) setForm(f => ({ ...f, hashtag_ids: [...f.hashtag_ids, id] })) }}>
-                  <SelectTrigger className="h-6 w-20 border-0 text-xs p-0 shadow-none"><SelectValue placeholder="+ Add" /></SelectTrigger>
-                  <SelectContent>
-                    {hashtags.filter(h => !form.hashtag_ids.includes(h.id)).map(h => (
-                      <SelectItem key={h.id} value={h.id.toString()}>#{h.tag}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Visual Reference URL (opsional)</Label>
-              <Input value={form.visual_url} onChange={e => setForm(f => ({ ...f, visual_url: e.target.value }))} placeholder="https://drive.google.com/... atau URL Canva" />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="grid gap-2">
-                <Label>Target Views</Label>
-                <Input type="number" value={form.target_views} onChange={e => setForm(f => ({ ...f, target_views: e.target.value }))} placeholder="10000" />
-              </div>
-              <div className="grid gap-2">
-                <Label>Target Likes</Label>
-                <Input type="number" value={form.target_likes} onChange={e => setForm(f => ({ ...f, target_likes: e.target.value }))} placeholder="500" />
-              </div>
-              <div className="grid gap-2">
-                <Label>Target Engagement %</Label>
-                <Input type="number" step="0.1" value={form.target_engagement_rate} onChange={e => setForm(f => ({ ...f, target_engagement_rate: e.target.value }))} placeholder="5.0" />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Catatan Internal</Label>
-              <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Brief, referensi, catatan untuk tim..." />
-            </div>
-            {/* Cross-post */}
-            {!editingPlanId && (
-              <div className="grid gap-2">
-                <Label>Cross-post ke Platform Lain</Label>
-                <div className="flex flex-wrap gap-2">
-                  {PLATFORMS.filter(p => p !== form.platform).map(p => (
-                    <label key={p} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.cross_post_platforms.includes(p)}
-                        onChange={e => setForm(f => ({
-                          ...f,
-                          cross_post_platforms: e.target.checked
-                            ? [...f.cross_post_platforms, p]
-                            : f.cross_post_platforms.filter(x => x !== p),
-                        }))}
-                        className="rounded"
-                      />
-                      <SocialIconInline platform={p} size={14} />
-                      {PLATFORM_CONFIGS.find(c => c.id === p)?.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Batal</Button>
-            <Button variant="secondary" onClick={() => handleCreatePlan(false)}>Simpan Draft</Button>
-            {!editingPlanId && <Button onClick={() => handleCreatePlan(true)}>Submit for Review</Button>}
-            {editingPlanId && <Button onClick={() => handleCreatePlan(false)}>Simpan</Button>}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateEditDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        form={form}
+        setForm={setForm}
+        editingPlanId={editingPlanId}
+        campaigns={campaigns}
+        hashtags={hashtags}
+        templates={templates}
+        onSave={handleCreatePlan}
+        onApplyTemplate={applyTemplate}
+      />
 
       {/* ===== DETAIL DIALOG ===== */}
-      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          {selectedPlan && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <SocialIconBadge platform={selectedPlan.platform} size="sm" variant="filled" />
-                  {selectedPlan.title}
-                </DialogTitle>
-                <DialogDescription>
-                  {selectedPlan.content_type} • {formatDate(selectedPlan.scheduled_date)}
-                  {selectedPlan.scheduled_time && ` • ${selectedPlan.scheduled_time.slice(0, 5)}`}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                {/* Status + Actions */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <StatusBadge status={selectedPlan.status} />
-                  <PriorityBadge priority={selectedPlan.priority} />
-                  {selectedPlan.campaign && (
-                    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted">
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: selectedPlan.campaign.color }} />
-                      {selectedPlan.campaign.name}
-                    </span>
-                  )}
-                  <div className="flex-1" />
-                  {/* Status action buttons */}
-                  {selectedPlan.status === 'draft' && (
-                    <Button size="sm" variant="outline" onClick={() => openStatusChange(selectedPlan, 'in_review')} className="text-xs gap-1"><Send className="h-3 w-3" /> Submit Review</Button>
-                  )}
-                  {selectedPlan.status === 'in_review' && (
-                    <>
-                      <Button size="sm" variant="default" onClick={() => openStatusChange(selectedPlan, 'approved')} className="text-xs gap-1"><CheckCircle2 className="h-3 w-3" /> Approve</Button>
-                      <Button size="sm" variant="destructive" onClick={() => openStatusChange(selectedPlan, 'rejected')} className="text-xs gap-1"><XCircle className="h-3 w-3" /> Reject</Button>
-                    </>
-                  )}
-                  {selectedPlan.status === 'approved' && (
-                    <Button size="sm" variant="default" onClick={() => openStatusChange(selectedPlan, 'published')} className="text-xs gap-1"><Send className="h-3 w-3" /> Mark Published</Button>
-                  )}
-                  {selectedPlan.status === 'rejected' && (
-                    <Button size="sm" variant="outline" onClick={() => { openEdit(selectedPlan); setShowDetailDialog(false) }} className="text-xs gap-1"><Edit className="h-3 w-3" /> Revisi</Button>
-                  )}
-                </div>
-
-                {/* Caption */}
-                {selectedPlan.caption && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Caption</Label>
-                    <div className="mt-1 p-3 bg-muted/50 rounded text-sm whitespace-pre-wrap">{selectedPlan.caption}</div>
-                  </div>
-                )}
-
-                {/* Hashtags */}
-                {selectedPlan.hashtags && selectedPlan.hashtags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {selectedPlan.hashtags.map(h => (
-                      <span key={h.hashtag.id} className="text-xs text-blue-600 dark:text-blue-400">#{h.hashtag.tag}</span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Target vs Actual */}
-                {(selectedPlan.target_views || selectedPlan.target_likes || selectedPlan.target_engagement_rate) && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Target vs Aktual</Label>
-                    <div className="grid grid-cols-3 gap-2 mt-1">
-                      {selectedPlan.target_views && (
-                        <div className="p-2 border rounded text-center">
-                          <p className="text-xs text-muted-foreground">Views</p>
-                          <p className="font-semibold text-sm">{selectedPlan.target_views.toLocaleString()}</p>
-                          {detailLinkedContent && (
-                            <p className={`text-xs ${detailLinkedContent.views_count >= selectedPlan.target_views ? 'text-green-600' : 'text-red-600'}`}>
-                              Aktual: {detailLinkedContent.views_count?.toLocaleString() || '-'}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      {selectedPlan.target_likes && (
-                        <div className="p-2 border rounded text-center">
-                          <p className="text-xs text-muted-foreground">Likes</p>
-                          <p className="font-semibold text-sm">{selectedPlan.target_likes.toLocaleString()}</p>
-                          {detailLinkedContent && (
-                            <p className={`text-xs ${detailLinkedContent.likes_count >= selectedPlan.target_likes ? 'text-green-600' : 'text-red-600'}`}>
-                              Aktual: {detailLinkedContent.likes_count?.toLocaleString() || '-'}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      {selectedPlan.target_engagement_rate && (
-                        <div className="p-2 border rounded text-center">
-                          <p className="text-xs text-muted-foreground">Engagement</p>
-                          <p className="font-semibold text-sm">{(selectedPlan.target_engagement_rate * 100).toFixed(1)}%</p>
-                          {detailLinkedContent && (
-                            <p className={`text-xs ${(detailLinkedContent.engagement_rate || 0) >= selectedPlan.target_engagement_rate ? 'text-green-600' : 'text-red-600'}`}>
-                              Aktual: {detailLinkedContent.engagement_rate ? (detailLinkedContent.engagement_rate * 100).toFixed(1) + '%' : '-'}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Notes */}
-                {selectedPlan.notes && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Catatan</Label>
-                    <p className="text-sm mt-1">{selectedPlan.notes}</p>
-                  </div>
-                )}
-
-                {/* Visual */}
-                {selectedPlan.visual_url && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Visual Reference</Label>
-                    <a href={selectedPlan.visual_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline flex items-center gap-1 mt-1">
-                      <Link2 className="h-3 w-3" /> Buka Link
-                    </a>
-                  </div>
-                )}
-
-                {/* Meta */}
-                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground border-t pt-3">
-                  <div>Dibuat oleh: <span className="text-foreground">{selectedPlan.creator?.name || '-'}</span></div>
-                  <div>Assigned: <span className="text-foreground">{selectedPlan.assignee?.name || '-'}</span></div>
-                </div>
-
-                {/* Comments */}
-                <div className="border-t pt-3">
-                  <Label className="text-xs text-muted-foreground mb-2 block">Komentar ({detailComments.length})</Label>
-                  <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
-                    {detailComments.map(c => (
-                      <div key={c.id} className={`p-2 rounded text-sm ${c.comment_type === 'rejection' ? 'bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800' : c.comment_type === 'approval' ? 'bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800' : 'bg-muted/50'}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-xs">{c.commenter?.name}</span>
-                          <span className="text-[10px] text-muted-foreground">{formatDateTime(c.created_at)}</span>
-                          {c.comment_type !== 'comment' && <Badge variant="outline" className="text-[10px]">{c.comment_type}</Badge>}
-                        </div>
-                        <p className="text-xs">{c.comment}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <Input value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Tulis komentar..." className="text-sm" onKeyDown={e => e.key === 'Enter' && handleAddComment()} />
-                    <Button size="sm" onClick={handleAddComment} disabled={!newComment.trim()}>Kirim</Button>
-                  </div>
-                </div>
-              </div>
-
-              <DialogFooter className="gap-2">
-                <Button variant="ghost" size="sm" className="text-red-600 gap-1" onClick={() => handleDeletePlan(selectedPlan.id)}>
-                  <Trash2 className="h-3.5 w-3.5" /> Hapus
-                </Button>
-                <div className="flex-1" />
-                <Button variant="outline" size="sm" onClick={() => { openEdit(selectedPlan); setShowDetailDialog(false) }} className="gap-1">
-                  <Edit className="h-3.5 w-3.5" /> Edit
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <DetailDialog
+        open={showDetailDialog}
+        onOpenChange={setShowDetailDialog}
+        plan={selectedPlan}
+        comments={detailComments}
+        linkedContent={detailLinkedContent}
+        newComment={newComment}
+        setNewComment={setNewComment}
+        onAddComment={handleAddComment}
+        onStatusChange={openStatusChange}
+        onEdit={(p) => { openEdit(p); setShowDetailDialog(false) }}
+        onDelete={handleDeletePlan}
+        onRealize={openRealize}
+      />
 
       {/* ===== STATUS CHANGE DIALOG ===== */}
       <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
@@ -1160,6 +1084,86 @@ export default function ContentPlanDashboard() {
               {statusTarget === 'published' && 'Confirm'}
               {statusTarget === 'archived' && 'Archive'}
               {statusTarget === 'draft' && 'Kembali ke Draft'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== REALIZE DIALOG ===== */}
+      <Dialog open={showRealizeDialog} onOpenChange={setShowRealizeDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-600" /> Update Realisasi Konten
+            </DialogTitle>
+            <DialogDescription>{selectedPlan?.title} • {selectedPlan?.platform}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
+              Masukkan link bukti posting dan metrik aktual dari platform. Data ini akan dibandingkan dengan target yang sudah ditentukan.
+            </div>
+            <div className="grid gap-2">
+              <Label>Link Bukti Posting (Evidence URL) *</Label>
+              <Input value={realizeForm.actual_post_url} onChange={e => setRealizeForm(f => ({ ...f, actual_post_url: e.target.value }))} placeholder="https://www.instagram.com/p/..." />
+            </div>
+            <div className="grid gap-2">
+              <Label>Link Tambahan (opsional)</Label>
+              <Input value={realizeForm.actual_post_url_2} onChange={e => setRealizeForm(f => ({ ...f, actual_post_url_2: e.target.value }))} placeholder="URL backup atau cross-post link" />
+            </div>
+            <div className="border-t pt-3">
+              <Label className="text-xs text-muted-foreground mb-2 block">Metrik Aktual</Label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid gap-1">
+                  <Label className="text-xs">Views</Label>
+                  <Input type="number" value={realizeForm.actual_views} onChange={e => setRealizeForm(f => ({ ...f, actual_views: e.target.value }))} placeholder="0" />
+                  {selectedPlan?.target_views && <p className="text-[10px] text-muted-foreground">Target: {selectedPlan.target_views.toLocaleString()}</p>}
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Likes</Label>
+                  <Input type="number" value={realizeForm.actual_likes} onChange={e => setRealizeForm(f => ({ ...f, actual_likes: e.target.value }))} placeholder="0" />
+                  {selectedPlan?.target_likes && <p className="text-[10px] text-muted-foreground">Target: {selectedPlan.target_likes.toLocaleString()}</p>}
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Comments</Label>
+                  <Input type="number" value={realizeForm.actual_comments} onChange={e => setRealizeForm(f => ({ ...f, actual_comments: e.target.value }))} placeholder="0" />
+                  {selectedPlan?.target_comments && <p className="text-[10px] text-muted-foreground">Target: {selectedPlan.target_comments.toLocaleString()}</p>}
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Shares</Label>
+                  <Input type="number" value={realizeForm.actual_shares} onChange={e => setRealizeForm(f => ({ ...f, actual_shares: e.target.value }))} placeholder="0" />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Reach</Label>
+                  <Input type="number" value={realizeForm.actual_reach} onChange={e => setRealizeForm(f => ({ ...f, actual_reach: e.target.value }))} placeholder="0" />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Impressions</Label>
+                  <Input type="number" value={realizeForm.actual_impressions} onChange={e => setRealizeForm(f => ({ ...f, actual_impressions: e.target.value }))} placeholder="0" />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Saves</Label>
+                  <Input type="number" value={realizeForm.actual_saves} onChange={e => setRealizeForm(f => ({ ...f, actual_saves: e.target.value }))} placeholder="0" />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Clicks</Label>
+                  <Input type="number" value={realizeForm.actual_clicks} onChange={e => setRealizeForm(f => ({ ...f, actual_clicks: e.target.value }))} placeholder="0" />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Engagement Rate %</Label>
+                  <Input type="number" step="0.01" value={realizeForm.actual_engagement_rate} onChange={e => setRealizeForm(f => ({ ...f, actual_engagement_rate: e.target.value }))} placeholder="0.00" />
+                  {selectedPlan?.target_engagement_rate && <p className="text-[10px] text-muted-foreground">Target: {(selectedPlan.target_engagement_rate * 100).toFixed(2)}%</p>}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Catatan Realisasi</Label>
+              <Textarea value={realizeForm.realization_notes} onChange={e => setRealizeForm(f => ({ ...f, realization_notes: e.target.value }))} rows={2} placeholder="Catatan tambahan tentang performa konten ini..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRealizeDialog(false)}>Batal</Button>
+            <Button onClick={handleRealize} disabled={!realizeForm.actual_post_url} className="gap-1">
+              <CheckCircle2 className="h-4 w-4" /> Simpan Realisasi
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1258,5 +1262,549 @@ export default function ContentPlanDashboard() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// ============================================================
+// Channel Breakdown Tab (Sub-component)
+// ============================================================
+
+function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDetail, onOpenCreate, onOpenRealize }: {
+  calMonth: Date; prevMonth: () => void; nextMonth: () => void
+  plans: ContentPlan[]; onOpenDetail: (id: string) => void
+  onOpenCreate: (date?: string, platform?: string) => void
+  onOpenRealize: (plan: ContentPlan) => void
+}) {
+  const [selectedChannel, setSelectedChannel] = useState<string | null>(null)
+
+  const channelData = PLATFORM_CONFIGS.map(cfg => {
+    const pp = plans.filter(p => p.platform === cfg.id)
+    const published = pp.filter(p => p.status === 'published')
+    const realized = pp.filter(p => p.realized_at)
+    const contentTypes: Record<string, number> = {}
+    pp.forEach(p => { contentTypes[p.content_type] = (contentTypes[p.content_type] || 0) + 1 })
+    const statusDist: Record<string, number> = {}
+    pp.forEach(p => { statusDist[p.status] = (statusDist[p.status] || 0) + 1 })
+
+    return {
+      platform: cfg.id, label: cfg.label, color: cfg.color,
+      total: pp.length, published: published.length, realized: realized.length,
+      plans: pp, contentTypes, statusDist,
+      totalViews: realized.reduce((s, p) => s + (p.actual_views || 0), 0),
+      totalLikes: realized.reduce((s, p) => s + (p.actual_likes || 0), 0),
+      totalComments: realized.reduce((s, p) => s + (p.actual_comments || 0), 0),
+      totalShares: realized.reduce((s, p) => s + (p.actual_shares || 0), 0),
+      withEvidence: realized.filter(p => p.actual_post_url).length,
+    }
+  })
+
+  const activeChannels = channelData.filter(c => c.total > 0)
+  const detail = selectedChannel ? channelData.find(c => c.platform === selectedChannel) : null
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Breakdown per Digital Channel</h3>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={prevMonth}><ChevronLeft className="h-4 w-4" /></Button>
+          <span className="text-sm font-medium min-w-[120px] text-center">{calMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</span>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={nextMonth}><ChevronRight className="h-4 w-4" /></Button>
+        </div>
+      </div>
+
+      {/* Channel Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {channelData.map(ch => (
+          <Card
+            key={ch.platform}
+            className={`cursor-pointer transition-all hover:shadow-md ${selectedChannel === ch.platform ? 'ring-2 ring-primary' : ''} ${ch.total === 0 ? 'opacity-50' : ''}`}
+            onClick={() => setSelectedChannel(selectedChannel === ch.platform ? null : ch.platform)}
+          >
+            <CardContent className="p-3 text-center">
+              <SocialIconBadge platform={ch.platform} size="sm" variant="filled" className="mx-auto mb-1" />
+              <p className="text-xs font-medium">{ch.label}</p>
+              <p className="text-lg font-bold">{ch.total}</p>
+              <p className="text-[10px] text-muted-foreground">{ch.published} published</p>
+              {ch.total > 0 && (
+                <div className="mt-1">
+                  <ProgressBar value={ch.published} max={ch.total} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Channel Detail */}
+      {detail && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <SocialIconBadge platform={detail.platform} size="sm" variant="filled" />
+              {detail.label} — Detail Bulan Ini
+              <Button size="sm" variant="outline" className="ml-auto text-xs gap-1" onClick={() => onOpenCreate(undefined, detail.platform)}>
+                <Plus className="h-3 w-3" /> Buat Konten {detail.label}
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Stats Row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+              {Object.entries(detail.statusDist).map(([status, count]) => (
+                <div key={status} className="text-center p-2 rounded border">
+                  <StatusBadge status={status} />
+                  <p className="text-lg font-bold mt-1">{count}</p>
+                </div>
+              ))}
+              <div className="text-center p-2 rounded border border-green-200 dark:border-green-800">
+                <p className="text-[10px] text-muted-foreground">Terealisasi</p>
+                <p className="text-lg font-bold text-green-600">{detail.realized}</p>
+              </div>
+              <div className="text-center p-2 rounded border border-blue-200 dark:border-blue-800">
+                <p className="text-[10px] text-muted-foreground">Evidence</p>
+                <p className="text-lg font-bold text-blue-600">{detail.withEvidence}</p>
+              </div>
+            </div>
+
+            {/* Content Type Distribution */}
+            {Object.keys(detail.contentTypes).length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Tipe Konten:</p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(detail.contentTypes).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+                    <Badge key={type} variant="secondary" className="text-xs capitalize">{type}: {count}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Aggregate Metrics */}
+            {detail.realized > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Total Metrik Realisasi:</p>
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="text-center p-2 border rounded">
+                    <p className="text-[10px] text-muted-foreground">Views</p>
+                    <p className="font-bold text-sm">{detail.totalViews.toLocaleString()}</p>
+                  </div>
+                  <div className="text-center p-2 border rounded">
+                    <p className="text-[10px] text-muted-foreground">Likes</p>
+                    <p className="font-bold text-sm">{detail.totalLikes.toLocaleString()}</p>
+                  </div>
+                  <div className="text-center p-2 border rounded">
+                    <p className="text-[10px] text-muted-foreground">Comments</p>
+                    <p className="font-bold text-sm">{detail.totalComments.toLocaleString()}</p>
+                  </div>
+                  <div className="text-center p-2 border rounded">
+                    <p className="text-[10px] text-muted-foreground">Shares</p>
+                    <p className="font-bold text-sm">{detail.totalShares.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Plans List */}
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Daftar Konten ({detail.plans.length}):</p>
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {detail.plans.map(p => (
+                  <div key={p.id} className="flex items-center gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer" onClick={() => onOpenDetail(p.id)}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{p.title}</p>
+                      <p className="text-xs text-muted-foreground">{p.content_type} • {formatDate(p.scheduled_date)}</p>
+                    </div>
+                    <StatusBadge status={p.status} />
+                    {p.status === 'published' && !p.realized_at && (
+                      <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-blue-600" onClick={(e) => { e.stopPropagation(); onOpenRealize(p) }}>
+                        <TrendingUp className="h-3 w-3" />
+                      </Button>
+                    )}
+                    {p.actual_post_url && (
+                      <a href={p.actual_post_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* All Channels Summary (when none selected) */}
+      {!selectedChannel && activeChannels.length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <BarChart3 className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Belum ada konten yang direncanakan bulan ini</p>
+            <Button size="sm" className="mt-3 gap-1" onClick={() => onOpenCreate()}>
+              <Plus className="h-4 w-4" /> Buat Konten Pertama
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ============================================================
+// Create/Edit Dialog (Sub-component)
+// ============================================================
+
+function CreateEditDialog({ open, onOpenChange, form, setForm, editingPlanId, campaigns, hashtags, templates, onSave, onApplyTemplate }: {
+  open: boolean; onOpenChange: (v: boolean) => void
+  form: any; setForm: (fn: any) => void
+  editingPlanId: string | null
+  campaigns: Campaign[]; hashtags: Hashtag[]; templates: Template[]
+  onSave: (submitForReview?: boolean) => void
+  onApplyTemplate: (t: Template) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{editingPlanId ? 'Edit Content Plan' : 'Buat Content Plan Baru'}</DialogTitle>
+          <DialogDescription>Isi detail konten yang akan dijadwalkan</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          {/* Template Quick Apply */}
+          {!editingPlanId && templates.length > 0 && (
+            <div className="grid gap-2">
+              <Label className="text-xs text-muted-foreground">Gunakan Template</Label>
+              <div className="flex flex-wrap gap-1">
+                {templates.slice(0, 5).map(t => (
+                  <Button key={t.id} variant="outline" size="sm" className="text-xs h-7" onClick={() => onApplyTemplate(t)}>
+                    <FileText className="h-3 w-3 mr-1" /> {t.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-2">
+            <Label>Judul Konten *</Label>
+            <Input value={form.title} onChange={(e: any) => setForm((f: any) => ({ ...f, title: e.target.value }))} placeholder="Judul konten / topik utama" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label>Platform *</Label>
+              <Select value={form.platform} onValueChange={(v: string) => setForm((f: any) => ({ ...f, platform: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PLATFORMS.map(p => (
+                    <SelectItem key={p} value={p}>
+                      <span className="flex items-center gap-2">
+                        <SocialIconInline platform={p} size={14} /> {PLATFORM_CONFIGS.find(c => c.id === p)?.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Tipe Konten *</Label>
+              <Select value={form.content_type} onValueChange={(v: string) => setForm((f: any) => ({ ...f, content_type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CONTENT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-2">
+              <Label>Tanggal Posting *</Label>
+              <Input type="date" value={form.scheduled_date} onChange={(e: any) => setForm((f: any) => ({ ...f, scheduled_date: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Jam Posting</Label>
+              <Input type="time" value={form.scheduled_time} onChange={(e: any) => setForm((f: any) => ({ ...f, scheduled_time: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Prioritas</Label>
+              <Select value={form.priority} onValueChange={(v: string) => setForm((f: any) => ({ ...f, priority: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PRIORITIES.map(p => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label>Caption / Copy</Label>
+            <Textarea value={form.caption} onChange={(e: any) => setForm((f: any) => ({ ...f, caption: e.target.value }))} rows={4} placeholder="Caption/copy untuk konten ini..." />
+          </div>
+          <div className="grid gap-2">
+            <Label>Campaign</Label>
+            <Select value={form.campaign_id} onValueChange={(v: string) => setForm((f: any) => ({ ...f, campaign_id: v }))}>
+              <SelectTrigger><SelectValue placeholder="Pilih campaign" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Tanpa campaign</SelectItem>
+                {campaigns.filter(c => c.status === 'active').map(c => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} /> {c.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label>Hashtags</Label>
+            <div className="flex flex-wrap gap-1 p-2 border rounded min-h-[40px]">
+              {form.hashtag_ids.map((hid: number) => {
+                const ht = hashtags.find(h => h.id === hid)
+                return ht ? (
+                  <span key={hid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-xs">
+                    #{ht.tag}
+                    <button onClick={() => setForm((f: any) => ({ ...f, hashtag_ids: f.hashtag_ids.filter((x: number) => x !== hid) }))} className="hover:text-red-500">&times;</button>
+                  </span>
+                ) : null
+              })}
+              <Select onValueChange={(v: string) => { const id = parseInt(v); if (!form.hashtag_ids.includes(id)) setForm((f: any) => ({ ...f, hashtag_ids: [...f.hashtag_ids, id] })) }}>
+                <SelectTrigger className="h-6 w-20 border-0 text-xs p-0 shadow-none"><SelectValue placeholder="+ Add" /></SelectTrigger>
+                <SelectContent>
+                  {hashtags.filter(h => !form.hashtag_ids.includes(h.id)).map(h => (
+                    <SelectItem key={h.id} value={h.id.toString()}>#{h.tag}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label>Visual Reference URL</Label>
+            <Input value={form.visual_url} onChange={(e: any) => setForm((f: any) => ({ ...f, visual_url: e.target.value }))} placeholder="https://drive.google.com/... atau URL Canva" />
+          </div>
+          <div className="border-t pt-3">
+            <Label className="text-xs text-muted-foreground mb-2 block">Target Metrik (opsional)</Label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid gap-1"><Label className="text-xs">Target Views</Label><Input type="number" value={form.target_views} onChange={(e: any) => setForm((f: any) => ({ ...f, target_views: e.target.value }))} placeholder="0" /></div>
+              <div className="grid gap-1"><Label className="text-xs">Target Likes</Label><Input type="number" value={form.target_likes} onChange={(e: any) => setForm((f: any) => ({ ...f, target_likes: e.target.value }))} placeholder="0" /></div>
+              <div className="grid gap-1"><Label className="text-xs">Target Comments</Label><Input type="number" value={form.target_comments} onChange={(e: any) => setForm((f: any) => ({ ...f, target_comments: e.target.value }))} placeholder="0" /></div>
+              <div className="grid gap-1"><Label className="text-xs">Target Shares</Label><Input type="number" value={form.target_shares} onChange={(e: any) => setForm((f: any) => ({ ...f, target_shares: e.target.value }))} placeholder="0" /></div>
+              <div className="grid gap-1"><Label className="text-xs">Target Engagement %</Label><Input type="number" step="0.1" value={form.target_engagement_rate} onChange={(e: any) => setForm((f: any) => ({ ...f, target_engagement_rate: e.target.value }))} placeholder="0.0" /></div>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label>Catatan Internal / Brief</Label>
+            <Textarea value={form.notes} onChange={(e: any) => setForm((f: any) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Brief, referensi, catatan untuk tim..." />
+          </div>
+          {/* Cross-post */}
+          {!editingPlanId && (
+            <div className="grid gap-2">
+              <Label>Cross-post ke Platform Lain</Label>
+              <div className="flex flex-wrap gap-2">
+                {PLATFORMS.filter(p => p !== form.platform).map(p => (
+                  <label key={p} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.cross_post_platforms.includes(p)}
+                      onChange={(e: any) => setForm((f: any) => ({
+                        ...f,
+                        cross_post_platforms: e.target.checked
+                          ? [...f.cross_post_platforms, p]
+                          : f.cross_post_platforms.filter((x: string) => x !== p),
+                      }))}
+                      className="rounded"
+                    />
+                    <SocialIconInline platform={p} size={14} />
+                    {PLATFORM_CONFIGS.find(c => c.id === p)?.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
+          <Button variant="secondary" onClick={() => onSave(false)}>Simpan Draft</Button>
+          {!editingPlanId && <Button onClick={() => onSave(true)}>Submit for Review</Button>}
+          {editingPlanId && <Button onClick={() => onSave(false)}>Simpan</Button>}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ============================================================
+// Detail Dialog (Sub-component)
+// ============================================================
+
+function DetailDialog({ open, onOpenChange, plan, comments, linkedContent, newComment, setNewComment, onAddComment, onStatusChange, onEdit, onDelete, onRealize }: {
+  open: boolean; onOpenChange: (v: boolean) => void
+  plan: ContentPlan | null; comments: Comment[]
+  linkedContent: any; newComment: string; setNewComment: (v: string) => void
+  onAddComment: () => void
+  onStatusChange: (plan: ContentPlan, status: string) => void
+  onEdit: (plan: ContentPlan) => void
+  onDelete: (id: string) => void
+  onRealize: (plan: ContentPlan) => void
+}) {
+  if (!plan) return null
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <SocialIconBadge platform={plan.platform} size="sm" variant="filled" />
+            {plan.title}
+          </DialogTitle>
+          <DialogDescription>
+            {plan.content_type} • {formatDate(plan.scheduled_date)}
+            {plan.scheduled_time && ` • ${plan.scheduled_time.slice(0, 5)}`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Status + Actions */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <StatusBadge status={plan.status} />
+            <PriorityBadge priority={plan.priority} />
+            {plan.campaign && (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: plan.campaign.color }} />
+                {plan.campaign.name}
+              </span>
+            )}
+            <div className="flex-1" />
+            {plan.status === 'draft' && (
+              <Button size="sm" variant="outline" onClick={() => onStatusChange(plan, 'in_review')} className="text-xs gap-1"><Send className="h-3 w-3" /> Submit Review</Button>
+            )}
+            {plan.status === 'in_review' && (
+              <>
+                <Button size="sm" variant="default" onClick={() => onStatusChange(plan, 'approved')} className="text-xs gap-1"><CheckCircle2 className="h-3 w-3" /> Approve</Button>
+                <Button size="sm" variant="destructive" onClick={() => onStatusChange(plan, 'rejected')} className="text-xs gap-1"><XCircle className="h-3 w-3" /> Reject</Button>
+              </>
+            )}
+            {plan.status === 'approved' && (
+              <Button size="sm" variant="default" onClick={() => onStatusChange(plan, 'published')} className="text-xs gap-1"><Send className="h-3 w-3" /> Mark Published</Button>
+            )}
+            {plan.status === 'rejected' && (
+              <Button size="sm" variant="outline" onClick={() => onEdit(plan)} className="text-xs gap-1"><Edit className="h-3 w-3" /> Revisi</Button>
+            )}
+            {(plan.status === 'published' || plan.status === 'approved') && (
+              <Button size="sm" variant="outline" onClick={() => onRealize(plan)} className="text-xs gap-1 text-blue-600"><TrendingUp className="h-3 w-3" /> {plan.realized_at ? 'Update' : ''} Realisasi</Button>
+            )}
+          </div>
+
+          {/* Caption */}
+          {plan.caption && (
+            <div>
+              <Label className="text-xs text-muted-foreground">Caption</Label>
+              <div className="mt-1 p-3 bg-muted/50 rounded text-sm whitespace-pre-wrap">{plan.caption}</div>
+            </div>
+          )}
+
+          {/* Hashtags */}
+          {plan.hashtags && plan.hashtags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {plan.hashtags.map(h => (
+                <span key={h.hashtag.id} className="text-xs text-blue-600 dark:text-blue-400">#{h.hashtag.tag}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Evidence Links */}
+          {(plan.actual_post_url || plan.actual_post_url_2) && (
+            <div className="p-3 bg-green-50 dark:bg-green-950 rounded border border-green-200 dark:border-green-800">
+              <Label className="text-xs text-green-700 dark:text-green-300 mb-1 block">Link Bukti Posting</Label>
+              {plan.actual_post_url && (
+                <a href={plan.actual_post_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline flex items-center gap-1">
+                  <ExternalLink className="h-3 w-3" /> {plan.actual_post_url}
+                </a>
+              )}
+              {plan.actual_post_url_2 && (
+                <a href={plan.actual_post_url_2} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline flex items-center gap-1 mt-1">
+                  <ExternalLink className="h-3 w-3" /> {plan.actual_post_url_2}
+                </a>
+              )}
+            </div>
+          )}
+
+          {/* Target vs Actual Metrics */}
+          {(plan.target_views || plan.target_likes || plan.target_engagement_rate || plan.actual_views != null) && (
+            <div>
+              <Label className="text-xs text-muted-foreground">Target vs Realisasi</Label>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-1">
+                <MetricCard label="Views" actual={plan.actual_views} target={plan.target_views} />
+                <MetricCard label="Likes" actual={plan.actual_likes} target={plan.target_likes} />
+                <MetricCard label="Comments" actual={plan.actual_comments} target={plan.target_comments} />
+                <MetricCard label="Shares" actual={plan.actual_shares} target={plan.target_shares} />
+                <MetricCard label="Engagement" actual={plan.actual_engagement_rate ? Math.round(plan.actual_engagement_rate * 10000) / 100 : null} target={plan.target_engagement_rate ? Math.round(plan.target_engagement_rate * 10000) / 100 : null} suffix="%" />
+              </div>
+            </div>
+          )}
+
+          {/* Additional Metrics */}
+          {(plan.actual_reach || plan.actual_impressions || plan.actual_saves || plan.actual_clicks) && (
+            <div className="grid grid-cols-4 gap-2">
+              {plan.actual_reach && <div className="p-2 border rounded text-center"><p className="text-[10px] text-muted-foreground">Reach</p><p className="font-bold text-sm">{plan.actual_reach.toLocaleString()}</p></div>}
+              {plan.actual_impressions && <div className="p-2 border rounded text-center"><p className="text-[10px] text-muted-foreground">Impressions</p><p className="font-bold text-sm">{plan.actual_impressions.toLocaleString()}</p></div>}
+              {plan.actual_saves && <div className="p-2 border rounded text-center"><p className="text-[10px] text-muted-foreground">Saves</p><p className="font-bold text-sm">{plan.actual_saves.toLocaleString()}</p></div>}
+              {plan.actual_clicks && <div className="p-2 border rounded text-center"><p className="text-[10px] text-muted-foreground">Clicks</p><p className="font-bold text-sm">{plan.actual_clicks.toLocaleString()}</p></div>}
+            </div>
+          )}
+
+          {/* Notes */}
+          {plan.notes && (
+            <div>
+              <Label className="text-xs text-muted-foreground">Catatan / Brief</Label>
+              <p className="text-sm mt-1 bg-muted/30 p-2 rounded">{plan.notes}</p>
+            </div>
+          )}
+
+          {/* Visual */}
+          {plan.visual_url && (
+            <div>
+              <Label className="text-xs text-muted-foreground">Visual Reference</Label>
+              <a href={plan.visual_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline flex items-center gap-1 mt-1">
+                <Link2 className="h-3 w-3" /> Buka Visual Reference
+              </a>
+            </div>
+          )}
+
+          {/* Meta */}
+          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground border-t pt-3">
+            <div>Dibuat oleh: <span className="text-foreground">{plan.creator?.name || '-'}</span></div>
+            <div>Assigned: <span className="text-foreground">{plan.assignee?.name || '-'}</span></div>
+            {plan.realized_at && <div>Realisasi: <span className="text-foreground">{formatDateTime(plan.realized_at)}</span></div>}
+            {plan.published_at && <div>Published: <span className="text-foreground">{formatDateTime(plan.published_at)}</span></div>}
+          </div>
+
+          {/* Comments */}
+          <div className="border-t pt-3">
+            <Label className="text-xs text-muted-foreground mb-2 block">Komentar ({comments.length})</Label>
+            <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
+              {comments.map(c => (
+                <div key={c.id} className={`p-2 rounded text-sm ${c.comment_type === 'rejection' ? 'bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800' : c.comment_type === 'approval' ? 'bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800' : 'bg-muted/50'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-xs">{c.commenter?.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{formatDateTime(c.created_at)}</span>
+                    {c.comment_type !== 'comment' && <Badge variant="outline" className="text-[10px]">{c.comment_type}</Badge>}
+                  </div>
+                  <p className="text-xs">{c.comment}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Tulis komentar..." className="text-sm" onKeyDown={e => e.key === 'Enter' && onAddComment()} />
+              <Button size="sm" onClick={onAddComment} disabled={!newComment.trim()}>Kirim</Button>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" size="sm" className="text-red-600 gap-1" onClick={() => onDelete(plan.id)}>
+            <Trash2 className="h-3.5 w-3.5" /> Hapus
+          </Button>
+          <div className="flex-1" />
+          <Button variant="outline" size="sm" onClick={() => onEdit(plan)} className="gap-1">
+            <Edit className="h-3.5 w-3.5" /> Edit
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
