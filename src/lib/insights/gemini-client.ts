@@ -372,12 +372,21 @@ ${JSON.stringify(snapshot.metrics, null, 2)}`
 function buildUserPrompt(snapshot: GrowthSnapshot): string {
   const { context, metrics, examples, data_quality_flags, prev_period } = snapshot
 
+  const periodType = context.filters?.period || 'default'
+  const periodLabel = (context.filters as any)?.periodLabel || null
+
   let prompt = `## Filter Aktif
 - Period: ${context.startDate || 'All time'} s/d ${context.endDate || 'Present'}
+- Period Type: ${periodType}${periodLabel ? ` (${periodLabel})` : ''}
 - Scope: ${context.scope_type}
 - Role View: ${context.role_view}
 - Salesperson/Team Filter: ${context.filters?.salespersonId || 'null'}
 - Channel/Source Filter: ${context.filters?.source || 'null'}
+
+PENTING: Analisis ini untuk periode "${periodLabel || (context.startDate ? `${context.startDate} s/d ${context.endDate}` : 'All time')}".
+${periodType === 'week' ? 'Fokus pada perbandingan WEEKLY: bandingkan data minggu ini dengan minggu sebelumnya. Highlight perubahan signifikan.' : ''}
+${periodType === 'month' ? 'Fokus pada perbandingan MONTHLY: bandingkan data bulan ini dengan bulan sebelumnya. Identifikasi tren bulanan.' : ''}
+${periodType === 'ytd' ? 'Fokus pada analisis YEAR-TO-DATE: evaluasi trajectory kumulatif dari awal tahun. Proyeksikan pencapaian akhir tahun berdasarkan run rate saat ini.' : ''}
 
 ## Current Period Metrics (CRM Data)
 ${JSON.stringify(metrics, null, 2)}
