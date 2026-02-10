@@ -33,6 +33,7 @@ import {
   Search,
   Mail,
   FileEdit,
+  Palette,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canAccessLeadInbox, canAccessSalesInbox, canAccessPipeline, canImportData, canAccessSalesPlan, canAccessActivities, canAccessTicketing, canAssignTickets, canAccessMarketingPanel, isOps } from '@/lib/permissions'
@@ -358,6 +359,19 @@ export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
                 >
                   <FileEdit className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">Content Plan</span>
+                </Link>
+                <Link
+                  href="/marketing/design-request"
+                  onClick={handleNavClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    pathname === '/marketing/design-request'
+                      ? 'bg-brand text-white'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <Palette className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Design Request</span>
                 </Link>
               </div>
             )}
