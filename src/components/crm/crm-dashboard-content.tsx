@@ -106,6 +106,7 @@ interface PipelineUpdateData {
   approach_method: string | null
   updated_by: string
   created_at: string
+  updated_at: string
 }
 
 interface StageHistoryData {
@@ -235,15 +236,16 @@ function computeUnifiedActivityCount(
   pipelineUpdates: PipelineUpdateData[],
   salesPlans: SalesPlanData[]
 ): { total: number; breakdown: Record<string, number> } {
-  // Build dedup keys from pipeline_updates (opportunity_id + timestamp within 1-min window)
+  // Build dedup keys from pipeline_updates using updated_at (matching Activities page logic)
+  // The Activities page uses pu.updated_at for the dedup timestamp, NOT created_at
   const puKeys = new Set(
     pipelineUpdates.map(pu => {
-      const ts = new Date(pu.created_at).getTime()
+      const ts = new Date(pu.updated_at).getTime()
       return `${pu.opportunity_id}_${Math.floor(ts / 60000)}`
     })
   )
 
-  // Filter out activities that duplicate a pipeline_update
+  // Filter out activities that duplicate a pipeline_update (same opp + same 1-min window)
   const uniqueActivities = activities.filter(act => {
     if (!act.related_opportunity_id) return true
     const ts = act.completed_at ? new Date(act.completed_at).getTime() : 0
