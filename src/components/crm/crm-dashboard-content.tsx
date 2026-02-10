@@ -230,12 +230,23 @@ function calcGrowth(current: number, previous: number): number | null {
  * Compute unified activity count matching the Activities page logic.
  * Activities page combines 3 sources: sales_plans + pipeline_updates + activities (deduplicated).
  * Deduplication: remove activities that have a matching pipeline_update on same opportunity within 1 min.
+ * Returns total, breakdown by method, and a normalized items list for drilldown.
  */
+interface UnifiedActivityItem {
+  id: string
+  method: string
+  source: string // 'Pipeline Update' | 'Activity' | 'Sales Plan'
+  opportunity_id: string | null
+  owner_id: string
+  date: string
+  status?: string
+}
+
 function computeUnifiedActivityCount(
   activities: ActivityData[],
   pipelineUpdates: PipelineUpdateData[],
   salesPlans: SalesPlanData[]
-): { total: number; breakdown: Record<string, number> } {
+): { total: number; breakdown: Record<string, number>; items: UnifiedActivityItem[] } {
   // Build dedup keys from pipeline_updates using updated_at (matching Activities page logic)
   // The Activities page uses pu.updated_at for the dedup timestamp, NOT created_at
   const puKeys = new Set(
@@ -257,18 +268,47 @@ function computeUnifiedActivityCount(
 
   // Build breakdown by method/type
   const breakdown: Record<string, number> = {}
+  const items: UnifiedActivityItem[] = []
+
   pipelineUpdates.forEach(pu => {
-    if (pu.approach_method) breakdown[pu.approach_method] = (breakdown[pu.approach_method] || 0) + 1
+    const method = pu.approach_method || 'Unknown'
+    breakdown[method] = (breakdown[method] || 0) + 1
+    items.push({
+      id: pu.update_id,
+      method,
+      source: 'Pipeline Update',
+      opportunity_id: pu.opportunity_id,
+      owner_id: pu.updated_by,
+      date: pu.updated_at,
+    })
   })
   uniqueActivities.forEach(act => {
     breakdown[act.activity_type] = (breakdown[act.activity_type] || 0) + 1
+    items.push({
+      id: act.activity_id,
+      method: act.activity_type,
+      source: 'Activity',
+      opportunity_id: act.related_opportunity_id || null,
+      owner_id: act.owner_user_id,
+      date: act.completed_at || act.created_at,
+      status: act.status,
+    })
   })
   salesPlans.forEach(sp => {
     const t = sp.plan_type === 'maintenance_existing' ? 'Maintain' : sp.plan_type === 'hunting_new' ? 'Hunting' : 'Winback'
     breakdown[t] = (breakdown[t] || 0) + 1
+    items.push({
+      id: sp.plan_id,
+      method: t,
+      source: 'Sales Plan',
+      opportunity_id: null,
+      owner_id: sp.owner_user_id,
+      date: sp.created_at,
+      status: sp.status,
+    })
   })
 
-  return { total, breakdown }
+  return { total, breakdown, items }
 }
 
 // Role helpers
@@ -1336,11 +1376,13 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                   return (
                     <div key={method} className="flex items-center justify-between cursor-pointer hover:bg-muted/50 p-1 rounded"
                       onClick={() => {
-                        const items = calc.updates.filter(u => u.approach_method === method)
+                        const items = calc.unifiedActivity.items.filter(i => i.method === method)
                         openDrill(`${method} Activities`, items, [
                           { key: 'opportunity_id', label: 'Pipeline', format: resolveOpp },
-                          { key: 'updated_by', label: 'By', format: resolveUser },
-                          { key: 'updated_at', label: 'Date', format: fmtDate },
+                          { key: 'owner_id', label: 'By', format: resolveUser },
+                          { key: 'source', label: 'Source' },
+                          { key: 'date', label: 'Date', format: fmtDate },
+                          { key: 'status', label: 'Status', format: (v: string) => v || '-' },
                         ], [
                           { label: 'Total', value: `${items.length} activities` },
                         ])
