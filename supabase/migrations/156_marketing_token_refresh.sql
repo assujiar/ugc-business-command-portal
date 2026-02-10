@@ -46,28 +46,42 @@ CREATE POLICY token_refresh_log_admin_policy ON marketing_token_refresh_log
 -- Runs every 6 hours to proactively check and refresh expiring tokens
 -- This ensures tokens are refreshed well before the 3x daily fetch jobs
 
--- Token refresh job - every 6 hours
-SELECT cron.schedule(
-  'social-media-token-refresh',
-  '0 */6 * * *',  -- every 6 hours at minute 0
-  $$
-  SELECT net.http_post(
-    url := current_setting('app.settings.base_url', true) || '/api/marketing/social-media/token-refresh',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
-    ),
-    body := '{"source": "pg_cron"}'::jsonb
-  );
-  $$
-);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    -- Remove existing jobs if any (idempotent)
+    PERFORM cron.unschedule(jobname)
+    FROM cron.job
+    WHERE jobname IN ('social-media-token-refresh', 'cleanup-token-refresh-logs');
 
--- Cleanup old refresh logs - once a week on Sunday at 2 AM UTC
-SELECT cron.schedule(
-  'cleanup-token-refresh-logs',
-  '0 2 * * 0',
-  $$ SELECT fn_cleanup_token_refresh_logs(); $$
-);
+    -- Token refresh job - every 6 hours
+    PERFORM cron.schedule(
+      'social-media-token-refresh',
+      '0 */6 * * *',
+      $cron$
+      SELECT net.http_post(
+        url := current_setting('app.settings.base_url', true) || '/api/marketing/social-media/token-refresh',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
+        ),
+        body := '{"source": "pg_cron"}'::jsonb
+      );
+      $cron$
+    );
+
+    -- Cleanup old refresh logs - once a week on Sunday at 2 AM UTC
+    PERFORM cron.schedule(
+      'cleanup-token-refresh-logs',
+      '0 2 * * 0',
+      $cron$ SELECT fn_cleanup_token_refresh_logs(); $cron$
+    );
+
+    RAISE NOTICE 'pg_cron token refresh jobs scheduled successfully';
+  ELSE
+    RAISE NOTICE 'pg_cron extension not enabled. Skipping token refresh cron jobs.';
+  END IF;
+END $$;
 
 -- 3. Add last_refresh_at and refresh_error columns to config table
 ALTER TABLE marketing_social_media_config
