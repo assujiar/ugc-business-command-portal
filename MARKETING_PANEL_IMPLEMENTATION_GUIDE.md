@@ -90,10 +90,24 @@ Pilih salah satu cara:
 
 **Opsi A: Menggunakan Supabase Vault (Recommended)**
 
+Aplikasi ini memiliki 3 domain:
+| Domain | Keterangan |
+|--------|------------|
+| `ugc-business-command-portal.vercel.app` | Vercel default domain |
+| `board.ugc.id` | Custom domain (short) |
+| `board.utamaglobalindocargo.com` | Custom domain (full company) |
+
+Cukup simpan **1 domain utama** di Vault. Rekomendasi: gunakan `board.ugc.id` (paling pendek, custom domain).
+
 1. Buka Supabase Dashboard > Settings > Vault
 2. Tambahkan secret:
-   - Name: `app_url` → Value: `https://your-app-domain.com` (URL produksi)
+   - Name: `app_url` → Value: `https://board.ugc.id`
    - Name: `service_role_key` → Value: (copy dari Settings > API > service_role key)
+
+   > **Catatan domain**: Ketiga domain di atas mengarah ke aplikasi yang sama di Vercel.
+   > Pilih salah satu saja. Jika `board.ugc.id` belum aktif, gunakan `board.utamaglobalindocargo.com`
+   > atau `ugc-business-command-portal.vercel.app` sebagai fallback.
+
 3. Update fungsi `fn_trigger_social_media_fetch` untuk membaca dari vault:
 
 ```sql
@@ -104,7 +118,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_supabase_url TEXT;
+  v_app_url TEXT;
   v_service_role_key TEXT;
   v_time_slot TEXT;
   v_current_hour INTEGER;
@@ -118,18 +132,22 @@ BEGIN
   END IF;
 
   -- Baca dari Vault
-  SELECT decrypted_secret INTO v_supabase_url
+  -- app_url berisi salah satu dari:
+  --   https://board.ugc.id (recommended)
+  --   https://board.utamaglobalindocargo.com
+  --   https://ugc-business-command-portal.vercel.app
+  SELECT decrypted_secret INTO v_app_url
     FROM vault.decrypted_secrets WHERE name = 'app_url';
   SELECT decrypted_secret INTO v_service_role_key
     FROM vault.decrypted_secrets WHERE name = 'service_role_key';
 
-  IF v_supabase_url IS NULL OR v_service_role_key IS NULL THEN
-    RAISE NOTICE 'Vault secrets not configured';
+  IF v_app_url IS NULL OR v_service_role_key IS NULL THEN
+    RAISE NOTICE 'Vault secrets not configured. Set app_url and service_role_key in Supabase Vault.';
     RETURN;
   END IF;
 
   PERFORM net.http_post(
-    url := v_supabase_url || '/api/marketing/social-media/fetch',
+    url := v_app_url || '/api/marketing/social-media/fetch',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'Authorization', 'Bearer ' || v_service_role_key
@@ -147,11 +165,18 @@ $$;
 
 ```sql
 -- Jalankan di SQL Editor:
-ALTER DATABASE postgres SET app.settings.app_url = 'https://your-app-domain.com';
+-- Pilih salah satu domain:
+ALTER DATABASE postgres SET app.settings.app_url = 'https://board.ugc.id';
+-- Alternatif:
+-- ALTER DATABASE postgres SET app.settings.app_url = 'https://board.utamaglobalindocargo.com';
+-- ALTER DATABASE postgres SET app.settings.app_url = 'https://ugc-business-command-portal.vercel.app';
+
 ALTER DATABASE postgres SET app.settings.service_role_key = 'your-service-role-key-here';
 ```
 
 > **Catatan**: Opsi A lebih aman karena secret di-encrypt. Opsi B lebih simple tapi key disimpan plaintext di database settings.
+>
+> **Tentang 3 domain**: Ketiga domain mengarah ke deployment Vercel yang sama. Cukup pilih 1 domain saja untuk Vault/settings. Rekomendasi: `https://board.ugc.id`.
 
 ### Step 4: Environment Variables untuk Token Refresh
 
