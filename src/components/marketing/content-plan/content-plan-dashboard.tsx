@@ -220,6 +220,7 @@ export default function ContentPlanDashboard() {
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterContentType, setFilterContentType] = useState('all')
+  const [filterCampaign, setFilterCampaign] = useState('all')
   const [filterOverdue, setFilterOverdue] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -250,6 +251,7 @@ export default function ContentPlanDashboard() {
   const [hashtagForm, setHashtagForm] = useState({ tag: '', category: 'general' })
   const [templateForm, setTemplateForm] = useState({ name: '', platform: '', content_type: '', caption_template: '', notes: '' })
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
+  const [editingOriginalStatus, setEditingOriginalStatus] = useState<string | null>(null)
   const [newComment, setNewComment] = useState('')
   const [realizeForm, setRealizeForm] = useState({
     actual_post_url: '', actual_post_url_2: '',
@@ -286,6 +288,7 @@ export default function ContentPlanDashboard() {
       let url = `/api/marketing/content-plan/plans?start_date=${startDate}&end_date=${endDate}&limit=200`
       if (filterPlatform !== 'all') url += `&platform=${filterPlatform}`
       if (filterContentType !== 'all') url += `&content_type=${filterContentType}`
+      if (filterCampaign !== 'all') url += `&campaign_id=${filterCampaign}`
       if (filterOverdue) {
         url += `&overdue=true`
       } else if (filterStatus !== 'all') {
@@ -298,7 +301,7 @@ export default function ContentPlanDashboard() {
         setPlans(data.plans || [])
       }
     } catch (e) { console.error('Error fetching plans:', e) }
-  }, [calMonth, filterPlatform, filterStatus, filterContentType, filterOverdue, searchQuery])
+  }, [calMonth, filterPlatform, filterStatus, filterContentType, filterCampaign, filterOverdue, searchQuery])
 
   const fetchCampaigns = useCallback(async () => {
     try {
@@ -331,15 +334,17 @@ export default function ContentPlanDashboard() {
   // Drilldown helper
   // ============================================================
 
-  const drilldown = (opts: { status?: string; platform?: string; contentType?: string; overdue?: boolean }) => {
-    if (opts.platform) setFilterPlatform(opts.platform)
-    if (opts.contentType) setFilterContentType(opts.contentType)
+  const drilldown = (opts: { status?: string; platform?: string; contentType?: string; campaignId?: string; overdue?: boolean }) => {
+    // Reset all filters first, then apply specific ones
+    setFilterPlatform(opts.platform || 'all')
+    setFilterContentType(opts.contentType || 'all')
+    setFilterCampaign(opts.campaignId || 'all')
     if (opts.overdue) {
       setFilterOverdue(true)
       setFilterStatus('all')
-    } else if (opts.status) {
+    } else {
       setFilterOverdue(false)
-      setFilterStatus(opts.status)
+      setFilterStatus(opts.status || 'all')
     }
     setActiveTab('list')
   }
@@ -351,32 +356,59 @@ export default function ContentPlanDashboard() {
   const handleCreatePlan = async (saveAsDraft = false) => {
     if (!form.title || !form.platform || !form.scheduled_date) return
     try {
-      const body: any = {
-        ...form,
-        target_views: form.target_views ? parseInt(form.target_views) : null,
-        target_likes: form.target_likes ? parseInt(form.target_likes) : null,
-        target_comments: form.target_comments ? parseInt(form.target_comments) : null,
-        target_shares: form.target_shares ? parseInt(form.target_shares) : null,
-        target_engagement_rate: form.target_engagement_rate ? parseFloat(form.target_engagement_rate) / 100 : null,
-        campaign_id: form.campaign_id || null,
-        assigned_to: form.assigned_to || null,
-        scheduled_time: form.scheduled_time || null,
-        save_as_draft: saveAsDraft,
-      }
-      const url = editingPlanId ? `/api/marketing/content-plan/plans/${editingPlanId}` : '/api/marketing/content-plan/plans'
-      const method = editingPlanId ? 'PATCH' : 'POST'
+      const isEdit = !!editingPlanId
+      const url = isEdit ? `/api/marketing/content-plan/plans/${editingPlanId}` : '/api/marketing/content-plan/plans'
+      const method = isEdit ? 'PATCH' : 'POST'
 
-      // If editing, decide status based on save mode
-      if (editingPlanId) {
-        body.status = saveAsDraft ? 'draft' : 'planned'
+      let body: any
+      if (isEdit) {
+        // For PATCH: only send updateable column fields
+        body = {
+          title: form.title,
+          platform: form.platform,
+          content_type: form.content_type,
+          scheduled_date: form.scheduled_date,
+          scheduled_time: form.scheduled_time || null,
+          caption: form.caption || null,
+          notes: form.notes || null,
+          campaign_id: form.campaign_id || null,
+          assigned_to: form.assigned_to || null,
+          priority: form.priority,
+          visual_url: form.visual_url || null,
+          target_views: form.target_views ? parseInt(form.target_views) : null,
+          target_likes: form.target_likes ? parseInt(form.target_likes) : null,
+          target_comments: form.target_comments ? parseInt(form.target_comments) : null,
+          target_shares: form.target_shares ? parseInt(form.target_shares) : null,
+          target_engagement_rate: form.target_engagement_rate ? parseFloat(form.target_engagement_rate) / 100 : null,
+          hashtag_ids: form.hashtag_ids,
+          // For published content, keep status as-is; for draft/planned, allow toggle
+          status: editingOriginalStatus === 'published' ? 'published' : (saveAsDraft ? 'draft' : 'planned'),
+        }
+      } else {
+        // For POST: include cross_post and save_as_draft
+        body = {
+          ...form,
+          target_views: form.target_views ? parseInt(form.target_views) : null,
+          target_likes: form.target_likes ? parseInt(form.target_likes) : null,
+          target_comments: form.target_comments ? parseInt(form.target_comments) : null,
+          target_shares: form.target_shares ? parseInt(form.target_shares) : null,
+          target_engagement_rate: form.target_engagement_rate ? parseFloat(form.target_engagement_rate) / 100 : null,
+          campaign_id: form.campaign_id || null,
+          assigned_to: form.assigned_to || null,
+          scheduled_time: form.scheduled_time || null,
+          save_as_draft: saveAsDraft,
+        }
       }
 
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (res.ok) {
+        const savedId = editingPlanId
         setShowCreateDialog(false)
         resetForm()
         fetchPlans()
         fetchOverview()
+        // Reopen detail dialog after edit
+        if (savedId) openDetail(savedId)
       }
     } catch (e) { console.error('Error saving plan:', e) }
   }
@@ -498,6 +530,7 @@ export default function ContentPlanDashboard() {
 
   const openEdit = (plan: ContentPlan) => {
     setEditingPlanId(plan.id)
+    setEditingOriginalStatus(plan.status)
     setForm({
       title: plan.title, platform: plan.platform, content_type: plan.content_type,
       scheduled_date: plan.scheduled_date, scheduled_time: plan.scheduled_time || '',
@@ -534,6 +567,7 @@ export default function ContentPlanDashboard() {
 
   const resetForm = () => {
     setEditingPlanId(null)
+    setEditingOriginalStatus(null)
     setForm({
       title: '', platform: 'instagram', content_type: 'post', scheduled_date: '',
       scheduled_time: '', caption: '', notes: '', campaign_id: '', assigned_to: '',
@@ -616,7 +650,7 @@ export default function ContentPlanDashboard() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); if (v !== 'list') { setFilterOverdue(false); setFilterStatus('all'); setFilterPlatform('all'); setFilterContentType('all') } }}>
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); if (v !== 'list') { setFilterOverdue(false); setFilterStatus('all'); setFilterPlatform('all'); setFilterContentType('all'); setFilterCampaign('all') } }}>
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview" className="gap-1 text-xs sm:text-sm"><LayoutGrid className="h-3.5 w-3.5" /> Overview</TabsTrigger>
           <TabsTrigger value="channels" className="gap-1 text-xs sm:text-sm"><BarChart3 className="h-3.5 w-3.5" /> Channel</TabsTrigger>
@@ -931,17 +965,25 @@ export default function ContentPlanDashboard() {
                 {CONTENT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={filterCampaign} onValueChange={setFilterCampaign}>
+              <SelectTrigger className="w-[150px] h-9 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Campaign</SelectItem>
+                {campaigns.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Active filters indicator */}
-          {(filterPlatform !== 'all' || filterStatus !== 'all' || filterOverdue || filterContentType !== 'all') && (
-            <div className="flex items-center gap-2 text-xs">
+          {(filterPlatform !== 'all' || filterStatus !== 'all' || filterOverdue || filterContentType !== 'all' || filterCampaign !== 'all') && (
+            <div className="flex items-center gap-2 text-xs flex-wrap">
               <span className="text-muted-foreground">Filter aktif:</span>
               {filterPlatform !== 'all' && <Badge variant="secondary" className="text-[10px]">{PLATFORM_CONFIG_MAP[filterPlatform]?.label || filterPlatform}</Badge>}
               {filterOverdue && <Badge variant="destructive" className="text-[10px]">Overdue</Badge>}
               {!filterOverdue && filterStatus !== 'all' && <Badge variant="secondary" className="text-[10px]">{STATUS_CONFIG[filterStatus]?.label || filterStatus}</Badge>}
               {filterContentType !== 'all' && <Badge variant="secondary" className="text-[10px] capitalize">{filterContentType}</Badge>}
-              <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" onClick={() => { setFilterPlatform('all'); setFilterStatus('all'); setFilterOverdue(false); setFilterContentType('all') }}>Reset</Button>
+              {filterCampaign !== 'all' && <Badge variant="secondary" className="text-[10px]">{campaigns.find(c => c.id === filterCampaign)?.name || 'Campaign'}</Badge>}
+              <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" onClick={() => { setFilterPlatform('all'); setFilterStatus('all'); setFilterOverdue(false); setFilterContentType('all'); setFilterCampaign('all') }}>Reset</Button>
             </div>
           )}
 
@@ -994,11 +1036,9 @@ export default function ContentPlanDashboard() {
                           )}
                         </td>
                         <td className="p-3">
-                          {(p.status === 'draft' || p.status === 'planned') && (
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEdit(p) }}>
-                              <Edit className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEdit(p) }}>
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -1019,7 +1059,7 @@ export default function ContentPlanDashboard() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {campaigns.length === 0 && <p className="text-sm text-muted-foreground col-span-full text-center py-8">Belum ada campaign</p>}
             {campaigns.map(c => (
-              <Card key={c.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setFilterPlatform('all'); setFilterStatus('all'); setFilterOverdue(false); setActiveTab('list') }}>
+              <Card key={c.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => drilldown({ campaignId: c.id })}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -1103,6 +1143,7 @@ export default function ContentPlanDashboard() {
         form={form}
         setForm={setForm}
         editingPlanId={editingPlanId}
+        editingOriginalStatus={editingOriginalStatus}
         campaigns={campaigns}
         hashtags={hashtags}
         templates={templates}
@@ -1377,7 +1418,7 @@ function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDeta
   plans: ContentPlan[]; onOpenDetail: (id: string) => void
   onOpenCreate: (date?: string, platform?: string) => void
   onOpenRealize: (plan: ContentPlan) => void
-  onDrilldown: (opts: { status?: string; platform?: string; contentType?: string; overdue?: boolean }) => void
+  onDrilldown: (opts: { status?: string; platform?: string; contentType?: string; campaignId?: string; overdue?: boolean }) => void
 }) {
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null)
   const today = new Date().toISOString().split('T')[0]
@@ -1551,14 +1592,16 @@ function ChannelBreakdownTab({ calMonth, prevMonth, nextMonth, plans, onOpenDeta
 // Create/Edit Dialog (Sub-component)
 // ============================================================
 
-function CreateEditDialog({ open, onOpenChange, form, setForm, editingPlanId, campaigns, hashtags, templates, onSave, onApplyTemplate }: {
+function CreateEditDialog({ open, onOpenChange, form, setForm, editingPlanId, editingOriginalStatus, campaigns, hashtags, templates, onSave, onApplyTemplate }: {
   open: boolean; onOpenChange: (v: boolean) => void
   form: any; setForm: (fn: any) => void
   editingPlanId: string | null
+  editingOriginalStatus: string | null
   campaigns: Campaign[]; hashtags: Hashtag[]; templates: Template[]
   onSave: (saveAsDraft?: boolean) => void
   onApplyTemplate: (t: Template) => void
 }) {
+  const isPublished = editingOriginalStatus === 'published'
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1718,8 +1761,14 @@ function CreateEditDialog({ open, onOpenChange, form, setForm, editingPlanId, ca
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-          <Button variant="secondary" onClick={() => onSave(true)}>Simpan Draft</Button>
-          <Button onClick={() => onSave(false)}>Simpan</Button>
+          {isPublished ? (
+            <Button onClick={() => onSave(false)}>Simpan Perubahan</Button>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={() => onSave(true)}>Simpan Draft</Button>
+              <Button onClick={() => onSave(false)}>Simpan</Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1900,15 +1949,15 @@ function DetailDialog({ open, onOpenChange, plan, comments, linkedContent, newCo
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="ghost" size="sm" className="text-red-600 gap-1" onClick={() => onDelete(plan.id)}>
-            <Trash2 className="h-3.5 w-3.5" /> Hapus
-          </Button>
-          <div className="flex-1" />
-          {(plan.status === 'draft' || plan.status === 'planned') && (
-            <Button variant="outline" size="sm" onClick={() => onEdit(plan)} className="gap-1">
-              <Edit className="h-3.5 w-3.5" /> Edit
+          {plan.status === 'draft' && (
+            <Button variant="ghost" size="sm" className="text-red-600 gap-1" onClick={() => onDelete(plan.id)}>
+              <Trash2 className="h-3.5 w-3.5" /> Hapus
             </Button>
           )}
+          <div className="flex-1" />
+          <Button variant="outline" size="sm" onClick={() => onEdit(plan)} className="gap-1">
+            <Edit className="h-3.5 w-3.5" /> Edit
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

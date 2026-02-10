@@ -79,10 +79,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json()
     const { hashtag_ids, ...updateFields } = body
 
-    // Remove fields that shouldn't be directly updated
+    // Remove fields that shouldn't be directly updated or aren't columns
     delete updateFields.id
     delete updateFields.created_by
     delete updateFields.created_at
+    delete updateFields.save_as_draft
+    delete updateFields.cross_post_platforms
+    delete updateFields.submit_immediately
+    // Remove nested relation objects returned from queries
+    delete updateFields.campaign
+    delete updateFields.creator
+    delete updateFields.assignee
+    delete updateFields.hashtags
+    delete updateFields.children
+    delete updateFields.status_changer
 
     const { data: plan, error } = await (supabase as any)
       .from('marketing_content_plans')
