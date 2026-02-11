@@ -12,6 +12,7 @@ import {
   DollarSign, MousePointerClick, Target, TrendingUp,
   BarChart3, Eye, AlertCircle, ArrowUpRight, ArrowDownRight
 } from 'lucide-react'
+import { MetricInfoButton, TableHeaderInfo, METRIC_DESCRIPTIONS } from '../shared/metric-info-dialog'
 
 interface KpiValue {
   value: number
@@ -120,11 +121,11 @@ export default function AdsOverviewSection({ data, loading }: AdsOverviewProps) 
   const topRoas = [...campaigns].sort((a, b) => b.roas - a.roas).slice(0, 5)
 
   const kpiCards = [
-    { label: 'Total Ad Spend', value: formatCurrency(kpis.totalSpend.value), yoy: kpis.totalSpend.yoy, icon: DollarSign, color: 'text-red-500', invertYoy: true },
-    { label: 'Total Conversions', value: formatNumber(kpis.totalConversions.value), yoy: kpis.totalConversions.yoy, icon: Target, color: 'text-green-500' },
-    { label: 'Avg CPC', value: formatCurrency(kpis.avgCpc.value), yoy: kpis.avgCpc.yoy, icon: MousePointerClick, color: 'text-blue-500', invertYoy: true },
-    { label: 'Avg CPA', value: formatCurrency(kpis.avgCpa.value), yoy: kpis.avgCpa.yoy, icon: TrendingUp, color: 'text-purple-500', invertYoy: true },
-    { label: 'Overall ROAS', value: `${kpis.overallRoas.value.toFixed(2)}x`, yoy: kpis.overallRoas.yoy, icon: BarChart3, color: 'text-amber-500' },
+    { label: 'Total Ad Spend', value: formatCurrency(kpis.totalSpend.value), yoy: kpis.totalSpend.yoy, icon: DollarSign, color: 'text-red-500', invertYoy: true, metricKey: 'totalSpend' },
+    { label: 'Total Conversions', value: formatNumber(kpis.totalConversions.value), yoy: kpis.totalConversions.yoy, icon: Target, color: 'text-green-500', metricKey: 'totalConversions' },
+    { label: 'Avg CPC', value: formatCurrency(kpis.avgCpc.value), yoy: kpis.avgCpc.yoy, icon: MousePointerClick, color: 'text-blue-500', invertYoy: true, metricKey: 'avgCpc' },
+    { label: 'Avg CPA', value: formatCurrency(kpis.avgCpa.value), yoy: kpis.avgCpa.yoy, icon: TrendingUp, color: 'text-purple-500', invertYoy: true, metricKey: 'avgCpa' },
+    { label: 'Overall ROAS', value: `${kpis.overallRoas.value.toFixed(2)}x`, yoy: kpis.overallRoas.yoy, icon: BarChart3, color: 'text-amber-500', metricKey: 'overallRoas' },
   ]
 
   return (
@@ -135,11 +136,15 @@ export default function AdsOverviewSection({ data, loading }: AdsOverviewProps) 
           const yoyVal = kpi.yoy || 0
           const isPositive = kpi.invertYoy ? yoyVal < 0 : yoyVal > 0
           const isNegative = kpi.invertYoy ? yoyVal > 0 : yoyVal < 0
+          const info = METRIC_DESCRIPTIONS[kpi.metricKey]
           return (
             <Card key={i}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground">{kpi.label}</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">{kpi.label}</span>
+                    {info && <MetricInfoButton title={info.title}><p>{info.description}</p>{info.formula && <p className="mt-2 font-mono text-xs">{info.formula}</p>}{info.tip && <p className="mt-2 text-xs font-medium">{info.tip}</p>}</MetricInfoButton>}
+                  </div>
                   <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
                 </div>
                 <p className="text-xl font-bold">{kpi.value}</p>
@@ -204,14 +209,14 @@ export default function AdsOverviewSection({ data, loading }: AdsOverviewProps) 
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-xs">Platform</TableHead>
-                      <TableHead className="text-xs">Campaign</TableHead>
-                      <TableHead className="text-xs">Status</TableHead>
-                      <TableHead className="text-xs text-right">Spend</TableHead>
-                      <TableHead className="text-xs text-right">Clicks</TableHead>
-                      <TableHead className="text-xs text-right">CTR</TableHead>
-                      <TableHead className="text-xs text-right">CPC</TableHead>
-                      <TableHead className="text-xs text-right">Conv.</TableHead>
-                      <TableHead className="text-xs text-right">ROAS</TableHead>
+                      <TableHead className="text-xs"><TableHeaderInfo label="Campaign" info={METRIC_DESCRIPTIONS.campaignName?.description || ''} /></TableHead>
+                      <TableHead className="text-xs"><TableHeaderInfo label="Status" info={METRIC_DESCRIPTIONS.campaignStatus?.description || ''} /></TableHead>
+                      <TableHead className="text-xs text-right"><TableHeaderInfo label="Spend" info={METRIC_DESCRIPTIONS.spend?.description || ''} /></TableHead>
+                      <TableHead className="text-xs text-right"><TableHeaderInfo label="Clicks" info={METRIC_DESCRIPTIONS.clicks?.description || ''} /></TableHead>
+                      <TableHead className="text-xs text-right"><TableHeaderInfo label="CTR" info={METRIC_DESCRIPTIONS.ctr?.description || ''} /></TableHead>
+                      <TableHead className="text-xs text-right"><TableHeaderInfo label="CPC" info={METRIC_DESCRIPTIONS.avgCpc?.description || ''} /></TableHead>
+                      <TableHead className="text-xs text-right"><TableHeaderInfo label="Conv." info={METRIC_DESCRIPTIONS.conversions?.description || ''} /></TableHead>
+                      <TableHead className="text-xs text-right"><TableHeaderInfo label="ROAS" info={METRIC_DESCRIPTIONS.roas?.description || ''} /></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

@@ -24,6 +24,13 @@ import {
   Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { METRIC_DESCRIPTIONS } from '../shared/metric-info-dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Info } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -169,18 +176,19 @@ interface ColumnDef {
   key: string
   label: string
   className?: string
+  infoKey?: string
 }
 
 const COLUMNS: ColumnDef[] = [
   { key: 'page_url', label: 'Page URL', className: 'min-w-[220px]' },
-  { key: 'gsc_clicks', label: 'Clicks' },
-  { key: 'gsc_impressions', label: 'Impressions' },
-  { key: 'gsc_ctr', label: 'CTR' },
-  { key: 'gsc_position', label: 'Avg Position' },
-  { key: 'ga_sessions', label: 'Sessions' },
-  { key: 'ga_engagement_rate', label: 'Eng. Rate' },
-  { key: 'ga_bounce_rate', label: 'Bounce Rate' },
-  { key: 'ga_conversions', label: 'Conversions' },
+  { key: 'gsc_clicks', label: 'Clicks', infoKey: 'clicks' },
+  { key: 'gsc_impressions', label: 'Impressions', infoKey: 'impressions' },
+  { key: 'gsc_ctr', label: 'CTR', infoKey: 'ctr' },
+  { key: 'gsc_position', label: 'Avg Position', infoKey: 'position' },
+  { key: 'ga_sessions', label: 'Sessions', infoKey: 'sessions' },
+  { key: 'ga_engagement_rate', label: 'Eng. Rate', infoKey: 'engagementRate' },
+  { key: 'ga_bounce_rate', label: 'Bounce Rate', infoKey: 'bounceRate' },
+  { key: 'ga_conversions', label: 'Conversions', infoKey: 'conversions' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -199,21 +207,43 @@ function SortableHeader({
   onSort: (key: string) => void
 }) {
   const isActive = currentSort === column.key
+  const info = column.infoKey ? METRIC_DESCRIPTIONS[column.infoKey] : null
   return (
-    <button
-      className="flex items-center gap-1 hover:text-foreground transition-colors whitespace-nowrap"
-      onClick={() => onSort(column.key)}
-    >
-      {column.label}
-      <span
-        className={cn(
-          'text-[10px]',
-          isActive ? 'text-brand' : 'text-muted-foreground'
-        )}
+    <div className="flex items-center gap-1">
+      <button
+        className="flex items-center gap-1 hover:text-foreground transition-colors whitespace-nowrap"
+        onClick={() => onSort(column.key)}
       >
-        {isActive ? (currentDir === 'asc' ? '\u25B2' : '\u25BC') : '\u25BC'}
-      </span>
-    </button>
+        {column.label}
+        <span
+          className={cn(
+            'text-[10px]',
+            isActive ? 'text-brand' : 'text-muted-foreground'
+          )}
+        >
+          {isActive ? (currentDir === 'asc' ? '\u25B2' : '\u25BC') : '\u25BC'}
+        </span>
+      </button>
+      {info && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center rounded-full p-0.5 text-muted-foreground/50 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+              aria-label={`Info: ${column.label}`}
+            >
+              <Info className="h-3 w-3" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent side="top" align="center" className="w-64 text-xs leading-relaxed text-muted-foreground">
+            <p className="font-medium text-foreground mb-1">{info.title}</p>
+            <p>{info.description}</p>
+            {info.formula && <p className="mt-1 font-mono text-[10px]">{info.formula}</p>}
+            {info.tip && <p className="mt-1 italic">{info.tip}</p>}
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
   )
 }
 

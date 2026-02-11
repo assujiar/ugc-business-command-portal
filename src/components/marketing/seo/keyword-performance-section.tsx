@@ -40,6 +40,13 @@ import {
   Hash,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { METRIC_DESCRIPTIONS } from '../shared/metric-info-dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Info } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -138,12 +145,12 @@ const DISTRIBUTION_COLORS: Record<string, string> = {
 }
 
 const SORTABLE_COLUMNS = [
-  { key: 'query', label: 'Keyword' },
-  { key: 'clicks', label: 'Clicks' },
-  { key: 'impressions', label: 'Impressions' },
-  { key: 'ctr', label: 'CTR' },
-  { key: 'position', label: 'Avg Position' },
-  { key: 'positionChange', label: 'Position Change' },
+  { key: 'query', label: 'Keyword', infoKey: 'keyword' },
+  { key: 'clicks', label: 'Clicks', infoKey: 'clicks' },
+  { key: 'impressions', label: 'Impressions', infoKey: 'impressions' },
+  { key: 'ctr', label: 'CTR', infoKey: 'ctr' },
+  { key: 'position', label: 'Avg Position', infoKey: 'position' },
+  { key: 'positionChange', label: 'Position Change', infoKey: '' },
 ] as const
 
 // ---------------------------------------------------------------------------
@@ -182,14 +189,17 @@ function SortableHeader({
   currentSort,
   currentDir,
   onSort,
+  infoKey,
 }: {
   label: string
   sortKey: string
   currentSort: string
   currentDir: string
   onSort: (key: string) => void
+  infoKey?: string
 }) {
   const isActive = currentSort === sortKey
+  const info = infoKey ? METRIC_DESCRIPTIONS[infoKey] : null
   return (
     <TableHead
       className="cursor-pointer select-none hover:bg-muted/50 transition-colors"
@@ -197,6 +207,26 @@ function SortableHeader({
     >
       <div className="flex items-center gap-1">
         {label}
+        {info && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full p-0.5 text-muted-foreground/50 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Info: ${label}`}
+              >
+                <Info className="h-3 w-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="center" className="w-64 text-xs leading-relaxed text-muted-foreground">
+              <p className="font-medium text-foreground mb-1">{info.title}</p>
+              <p>{info.description}</p>
+              {info.formula && <p className="mt-1 font-mono text-[10px]">{info.formula}</p>}
+              {info.tip && <p className="mt-1 italic">{info.tip}</p>}
+            </PopoverContent>
+          </Popover>
+        )}
         {isActive && (
           <span className="text-foreground">
             {currentDir === 'asc' ? (
@@ -501,6 +531,7 @@ export function KeywordPerformanceSection({
                           currentSort={filters.sort}
                           currentDir={filters.dir}
                           onSort={handleSort}
+                          infoKey={col.infoKey || undefined}
                         />
                       ))}
                       <TableHead>Type</TableHead>
