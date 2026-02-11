@@ -1,30 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { canAccessMarketingPanel } from '@/lib/permissions'
 import { runDailySEOFetch, runWeeklyVitalsFetch, fetchPageSpeedData, fetchGSCData, fetchGA4Data } from '@/lib/seo-sem-fetcher'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    // Auth: only service_role or authenticated admin
+    // Auth: service_role key OR authenticated marketing user
     const authHeader = request.headers.get('Authorization')
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     let isAuthorized = false
 
-    // Check service role key
+    // Check service role key (for cron jobs)
     if (authHeader && serviceKey && authHeader.replace('Bearer ', '') === serviceKey) {
       isAuthorized = true
     }
 
-    // Check if user is admin
+    // Check if user has marketing panel access
     if (!isAuthorized) {
       const { createClient } = await import('@/lib/supabase/server')
       const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single() as { data: { role: string } | null }
-        if (profile && ['super admin', 'Director', 'Marketing Manager'].includes(profile.role)) {
+        if (profile && canAccessMarketingPanel(profile.role as any)) {
           isAuthorized = true
         }
       }
