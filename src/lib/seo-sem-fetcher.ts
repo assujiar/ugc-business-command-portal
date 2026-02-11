@@ -615,6 +615,290 @@ function getVitalRating(type: string, value: number | null | undefined): string 
 }
 
 // =====================================================
+// Google Ads Fetcher (SEM)
+// Uses Google Ads API REST + GAQL
+// =====================================================
+
+async function getGoogleAdsConfig(): Promise<{
+  accessToken: string
+  refreshToken: string
+  customerId: string
+  developerToken: string
+  loginCustomerId: string
+  extraConfig: Record<string, any>
+} | null> {
+  const admin = createAdminClient()
+  const { data } = await (admin as any)
+    .from('marketing_seo_config')
+    .select('*')
+    .eq('service', 'google_ads')
+    .eq('is_active', true)
+    .single()
+
+  if (!data || !data.access_token) return null
+
+  const devToken = data.extra_config?.developer_token || process.env.GOOGLE_ADS_DEVELOPER_TOKEN || ''
+  const customerId = (data.extra_config?.customer_id || '').replace(/-/g, '')
+  if (!devToken || !customerId) return null
+
+  // Check token expiry and refresh if needed
+  if (data.token_expires_at && new Date(data.token_expires_at) < new Date()) {
+    const refreshed = await refreshGoogleToken(data.refresh_token, 'google_ads')
+    if (!refreshed) return null
+    return {
+      accessToken: refreshed.access_token,
+      refreshToken: data.refresh_token,
+      customerId,
+      developerToken: devToken,
+      loginCustomerId: (data.extra_config?.login_customer_id || '').replace(/-/g, ''),
+      extraConfig: data.extra_config || {},
+    }
+  }
+
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    customerId,
+    developerToken: devToken,
+    loginCustomerId: (data.extra_config?.login_customer_id || '').replace(/-/g, ''),
+    extraConfig: data.extra_config || {},
+  }
+}
+
+async function googleAdsQuery(config: { accessToken: string; customerId: string; developerToken: string; loginCustomerId: string }, query: string): Promise<any[]> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${config.accessToken}`,
+    'developer-token': config.developerToken,
+    'Content-Type': 'application/json',
+  }
+  if (config.loginCustomerId) {
+    headers['login-customer-id'] = config.loginCustomerId
+  }
+
+  const res = await fetch(
+    `https://googleads.googleapis.com/v18/customers/${config.customerId}/googleAds:searchStream`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query }),
+    }
+  )
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Google Ads API error: ${err}`)
+  }
+
+  const data = await res.json()
+  // searchStream returns array of result batches
+  const allResults: any[] = []
+  for (const batch of data) {
+    if (batch.results) allResults.push(...batch.results)
+  }
+  return allResults
+}
+
+export async function fetchGoogleAdsData(targetDate: string): Promise<{ success: boolean; error?: string }> {
+  const config = await getGoogleAdsConfig()
+  if (!config) return { success: false, error: 'Google Ads not configured or token expired' }
+
+  const admin = createAdminClient()
+
+  try {
+    // 1. Fetch campaign performance for target date
+    const campaignResults = await googleAdsQuery(config, `
+      SELECT
+        campaign.id, campaign.name, campaign.status,
+        campaign_budget.amount_micros,
+        metrics.cost_micros, metrics.impressions, metrics.clicks,
+        metrics.ctr, metrics.average_cpc, metrics.conversions,
+        metrics.conversions_value, metrics.cost_per_conversion,
+        metrics.search_impression_share
+      FROM campaign
+      WHERE segments.date = '${targetDate}'
+        AND campaign.status != 'REMOVED'
+    `)
+
+    let totalSpend = 0, totalImpressions = 0, totalClicks = 0
+    let totalConversions = 0, totalConversionValue = 0
+
+    const campaigns = campaignResults.map((r: any) => {
+      const c = r.campaign || {}
+      const m = r.metrics || {}
+      const b = r.campaignBudget || {}
+
+      const spend = (m.costMicros || 0) / 1_000_000
+      const clicks = m.clicks || 0
+      const impressions = m.impressions || 0
+      const conversions = parseFloat(m.conversions || '0')
+      const convValue = parseFloat(m.conversionsValue || '0')
+      const budget = (b.amountMicros || 0) / 1_000_000
+
+      totalSpend += spend
+      totalImpressions += impressions
+      totalClicks += clicks
+      totalConversions += conversions
+      totalConversionValue += convValue
+
+      return {
+        fetch_date: targetDate,
+        platform: 'google_ads',
+        campaign_id: String(c.id || ''),
+        campaign_name: c.name || '',
+        campaign_status: (c.status || '').toLowerCase(),
+        spend,
+        impressions,
+        clicks,
+        ctr: parseFloat(m.ctr || '0'),
+        avg_cpc: (m.averageCpc || 0) / 1_000_000,
+        conversions,
+        conversion_value: convValue,
+        cost_per_conversion: spend > 0 && conversions > 0 ? spend / conversions : 0,
+        roas: spend > 0 ? convValue / spend : 0,
+        impression_share: parseFloat(m.searchImpressionShare || '0'),
+        quality_score_avg: null,
+        daily_budget: budget,
+        budget_utilization: budget > 0 ? (spend / budget) * 100 : 0,
+      }
+    })
+
+    // Upsert campaigns
+    if (campaigns.length > 0) {
+      await (admin as any).from('marketing_sem_campaigns')
+        .delete()
+        .eq('fetch_date', targetDate)
+        .eq('platform', 'google_ads')
+
+      for (let i = 0; i < campaigns.length; i += 100) {
+        await (admin as any).from('marketing_sem_campaigns').insert(campaigns.slice(i, i + 100))
+      }
+    }
+
+    // Upsert daily spend aggregate
+    const activeCampaigns = campaigns.filter(c => c.campaign_status === 'enabled').length
+    await (admin as any).from('marketing_sem_daily_spend').upsert({
+      fetch_date: targetDate,
+      platform: 'google_ads',
+      total_spend: totalSpend,
+      total_impressions: totalImpressions,
+      total_clicks: totalClicks,
+      total_conversions: totalConversions,
+      total_conversion_value: totalConversionValue,
+      avg_cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
+      avg_cpa: totalConversions > 0 ? totalSpend / totalConversions : 0,
+      overall_roas: totalSpend > 0 ? totalConversionValue / totalSpend : 0,
+      active_campaigns: activeCampaigns,
+    }, { onConflict: 'fetch_date,platform' })
+
+    // 2. Fetch keyword performance
+    try {
+      const kwResults = await googleAdsQuery(config, `
+        SELECT
+          campaign.id, campaign.name,
+          ad_group.id, ad_group.name,
+          ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
+          metrics.cost_micros, metrics.impressions, metrics.clicks,
+          metrics.ctr, metrics.average_cpc, metrics.conversions,
+          ad_group_criterion.quality_info.quality_score
+        FROM keyword_view
+        WHERE segments.date = '${targetDate}'
+        ORDER BY metrics.cost_micros DESC
+        LIMIT 1000
+      `)
+
+      const keywords = kwResults.map((r: any) => {
+        const kw = r.adGroupCriterion?.keyword || {}
+        const m = r.metrics || {}
+        const qi = r.adGroupCriterion?.qualityInfo || {}
+        return {
+          fetch_date: targetDate,
+          campaign_id: String(r.campaign?.id || ''),
+          campaign_name: r.campaign?.name || '',
+          ad_group_id: String(r.adGroup?.id || ''),
+          ad_group_name: r.adGroup?.name || '',
+          keyword_text: kw.text || '',
+          match_type: (kw.matchType || '').toLowerCase(),
+          spend: (m.costMicros || 0) / 1_000_000,
+          impressions: m.impressions || 0,
+          clicks: m.clicks || 0,
+          ctr: parseFloat(m.ctr || '0'),
+          avg_cpc: (m.averageCpc || 0) / 1_000_000,
+          conversions: parseFloat(m.conversions || '0'),
+          quality_score: qi.qualityScore || null,
+        }
+      })
+
+      if (keywords.length > 0) {
+        await (admin as any).from('marketing_sem_keywords')
+          .delete()
+          .eq('fetch_date', targetDate)
+
+        for (let i = 0; i < keywords.length; i += 500) {
+          await (admin as any).from('marketing_sem_keywords').insert(keywords.slice(i, i + 500))
+        }
+      }
+    } catch (kwErr: any) {
+      console.error('Google Ads keyword fetch error:', kwErr.message)
+    }
+
+    // 3. Fetch search terms
+    try {
+      const stResults = await googleAdsQuery(config, `
+        SELECT
+          search_term_view.search_term,
+          campaign.name, ad_group.name,
+          segments.keyword.info.text,
+          metrics.impressions, metrics.clicks,
+          metrics.cost_micros, metrics.conversions
+        FROM search_term_view
+        WHERE segments.date = '${targetDate}'
+        ORDER BY metrics.impressions DESC
+        LIMIT 500
+      `)
+
+      const searchTerms = stResults.map((r: any) => {
+        const m = r.metrics || {}
+        return {
+          fetch_date: targetDate,
+          search_term: r.searchTermView?.searchTerm || '',
+          campaign_name: r.campaign?.name || '',
+          ad_group_name: r.adGroup?.name || '',
+          keyword_text: r.segments?.keyword?.info?.text || '',
+          impressions: m.impressions || 0,
+          clicks: m.clicks || 0,
+          spend: (m.costMicros || 0) / 1_000_000,
+          conversions: parseFloat(m.conversions || '0'),
+        }
+      })
+
+      if (searchTerms.length > 0) {
+        await (admin as any).from('marketing_sem_search_terms')
+          .delete()
+          .eq('fetch_date', targetDate)
+
+        for (let i = 0; i < searchTerms.length; i += 500) {
+          await (admin as any).from('marketing_sem_search_terms').insert(searchTerms.slice(i, i + 500))
+        }
+      }
+    } catch (stErr: any) {
+      console.error('Google Ads search terms fetch error:', stErr.message)
+    }
+
+    // Update last fetch
+    await (admin as any).from('marketing_seo_config')
+      .update({ last_fetch_at: new Date().toISOString(), last_fetch_error: null })
+      .eq('service', 'google_ads')
+
+    return { success: true }
+  } catch (err: any) {
+    await (admin as any).from('marketing_seo_config')
+      .update({ last_fetch_error: err.message })
+      .eq('service', 'google_ads')
+    return { success: false, error: `Google Ads fetch error: ${err.message}` }
+  }
+}
+
+// =====================================================
 // Orchestrator: run all fetchers
 // =====================================================
 
@@ -633,6 +917,12 @@ export async function runDailySEOFetch(): Promise<{
 
   // Fetch GA4 data
   results.push({ service: 'google_analytics', ...await fetchGA4Data(dateStr) })
+
+  // Fetch Google Ads data (uses yesterday, not 3 days ago)
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split('T')[0]
+  results.push({ service: 'google_ads', ...await fetchGoogleAdsData(yesterdayStr) })
 
   return { results }
 }

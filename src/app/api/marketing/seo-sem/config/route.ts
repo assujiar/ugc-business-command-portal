@@ -63,6 +63,17 @@ export async function GET(request: NextRequest) {
         state: 'google_search_console',
       })}`
 
+      // Google Ads OAuth URL
+      oauthUrls.google_ads = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: 'https://www.googleapis.com/auth/adwords',
+        access_type: 'offline',
+        prompt: 'consent',
+        state: 'google_ads',
+      })}`
+
       // GA4 OAuth URL
       oauthUrls.google_analytics = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
         client_id: clientId,
@@ -182,6 +193,28 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           })
           .eq('service', 'google_analytics')
+        return NextResponse.json({ success: true })
+      }
+
+      case 'update_google_ads': {
+        // Get existing extra_config to preserve detected_customers etc
+        const { data: existingAds } = await (admin as any).from('marketing_seo_config')
+          .select('extra_config')
+          .eq('service', 'google_ads')
+          .single()
+
+        const adsExtra = { ...(existingAds?.extra_config || {}) }
+        if (data.customer_id) adsExtra.customer_id = data.customer_id
+        if (data.developer_token) adsExtra.developer_token = data.developer_token
+        if (data.login_customer_id !== undefined) adsExtra.login_customer_id = data.login_customer_id
+
+        await (admin as any).from('marketing_seo_config')
+          .update({
+            extra_config: adsExtra,
+            is_active: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('service', 'google_ads')
         return NextResponse.json({ success: true })
       }
 

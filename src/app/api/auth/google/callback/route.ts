@@ -109,6 +109,31 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // For Google Ads, we just store the token (customer_id is set separately via settings)
+    if (service === 'google_ads') {
+      // Fetch accessible customer accounts
+      try {
+        const custRes = await fetch(
+          `https://googleads.googleapis.com/v18/customers:listAccessibleCustomers`,
+          { headers: { Authorization: `Bearer ${access_token}`, 'developer-token': process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '' } }
+        )
+        if (custRes.ok) {
+          const custData = await custRes.json()
+          const customerIds = (custData.resourceNames || []).map((r: string) => r.replace('customers/', ''))
+          // Store detected customer IDs in extra_config
+          if (customerIds.length > 0) {
+            // Get existing config to preserve developer_token and customer_id
+            const { data: existingAds } = await (admin as any).from('marketing_seo_config')
+              .select('extra_config').eq('service', 'google_ads').single()
+            const existingExtra = existingAds?.extra_config || {}
+            updateData.extra_config = { ...existingExtra, detected_customers: customerIds }
+          }
+        }
+      } catch (e) {
+        console.error('Error listing Google Ads customers:', e)
+      }
+    }
+
     // For GSC, fetch available sites
     let gscSites: string[] = []
     if (service === 'google_search_console') {

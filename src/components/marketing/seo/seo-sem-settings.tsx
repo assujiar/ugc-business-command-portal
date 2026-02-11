@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
   CheckCircle2, XCircle, ExternalLink, Loader2, Plus, Trash2,
-  Key, Globe, BarChart3, Gauge, RefreshCcw, Settings, AlertCircle
+  Key, Globe, BarChart3, Gauge, RefreshCcw, Settings, AlertCircle, DollarSign
 } from 'lucide-react'
 
 interface ServiceConfig {
@@ -51,6 +51,11 @@ export default function SEOSEMSettings() {
   const [newGa4Site, setNewGa4Site] = useState('')
   const [newGa4Name, setNewGa4Name] = useState('')
 
+  // Google Ads form
+  const [adsCustomerId, setAdsCustomerId] = useState('')
+  const [adsDeveloperToken, setAdsDeveloperToken] = useState('')
+  const [adsLoginCustomerId, setAdsLoginCustomerId] = useState('')
+
   const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch('/api/marketing/seo-sem/config')
@@ -67,6 +72,12 @@ export default function SEOSEMSettings() {
         const gscConfig = data.configs?.find((c: ServiceConfig) => c.service === 'google_search_console')
         if (gscConfig) {
           setGscSites(gscConfig.extra_config?.sites || [])
+        }
+
+        const adsConfig = data.configs?.find((c: ServiceConfig) => c.service === 'google_ads')
+        if (adsConfig) {
+          setAdsCustomerId(adsConfig.extra_config?.customer_id || '')
+          setAdsLoginCustomerId(adsConfig.extra_config?.login_customer_id || '')
         }
 
         const gaConfig = data.configs?.find((c: ServiceConfig) => c.service === 'google_analytics')
@@ -189,6 +200,41 @@ export default function SEOSEMSettings() {
     setGa4Properties(ga4Properties.filter(p => p.property_id !== propertyId))
   }
 
+  const handleSaveGoogleAds = async () => {
+    if (!adsCustomerId) {
+      alert('Customer ID wajib diisi')
+      return
+    }
+    setSaving('google_ads')
+    try {
+      const res = await fetch('/api/marketing/seo-sem/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_google_ads',
+          service: 'google_ads',
+          data: {
+            customer_id: adsCustomerId,
+            developer_token: adsDeveloperToken,
+            login_customer_id: adsLoginCustomerId,
+          },
+        }),
+      })
+      if (res.ok) {
+        setAdsDeveloperToken('')
+        await fetchSettings()
+        alert('Google Ads berhasil dikonfigurasi!')
+      } else {
+        const err = await res.json()
+        alert(err.error || 'Gagal menyimpan')
+      }
+    } catch {
+      alert('Gagal menyimpan konfigurasi Google Ads')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   const handleDisconnect = async (service: string) => {
     if (!confirm(`Yakin ingin disconnect ${service.replace(/_/g, ' ')}?`)) return
     setSaving(service)
@@ -249,7 +295,7 @@ export default function SEOSEMSettings() {
     if (!config) return <Badge variant="outline" className="text-xs">Not Found</Badge>
     if (config.is_active && config.token_valid) return <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-xs"><CheckCircle2 className="w-3 h-3 mr-1" />Connected</Badge>
     if (config.is_active && config.has_token && !config.token_valid) return <Badge variant="destructive" className="text-xs"><XCircle className="w-3 h-3 mr-1" />Token Expired</Badge>
-    if (config.is_active && !config.has_token && config.service === 'pagespeed') return <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-xs"><CheckCircle2 className="w-3 h-3 mr-1" />Active</Badge>
+    if (config.is_active && !config.has_token && (config.service === 'pagespeed' || config.service === 'google_ads')) return <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-xs"><CheckCircle2 className="w-3 h-3 mr-1" />Active</Badge>
     return <Badge variant="secondary" className="text-xs">Not Connected</Badge>
   }
 
@@ -561,6 +607,154 @@ export default function SEOSEMSettings() {
         </CardContent>
       </Card>
 
+      {/* ===== 4. Google Ads (SEM) ===== */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-yellow-600" />
+              <CardTitle className="text-base">Google Ads (SEM)</CardTitle>
+              <StatusBadge config={getConfig('google_ads')} />
+            </div>
+            <div className="flex items-center gap-2">
+              {getConfig('google_ads')?.is_active && (
+                <>
+                  <Button size="sm" variant="outline" className="h-7 text-xs"
+                    onClick={() => handleManualFetch('google_ads')}
+                    disabled={!!fetching}>
+                    {fetching === 'google_ads' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCcw className="w-3 h-3 mr-1" />}
+                    Fetch Now
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs text-red-500"
+                    onClick={() => handleDisconnect('google_ads')}>
+                    Disconnect
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="text-xs text-muted-foreground">
+            Data campaign performance, keyword bids, dan search terms dari Google Ads.
+          </div>
+
+          {/* Step 1: OAuth Connect */}
+          {!getConfig('google_ads')?.token_valid && !getConfig('google_ads')?.is_active ? (
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium mb-2">Langkah 1: Connect akun Google</p>
+                {settings?.oauthUrls?.google_ads ? (
+                  <a href={settings.oauthUrls.google_ads}>
+                    <Button size="sm" className="h-8 text-xs">
+                      <ExternalLink className="w-3 h-3 mr-1" />
+                      Connect Google Ads
+                    </Button>
+                  </a>
+                ) : (
+                  <p className="text-xs text-amber-600">
+                    Set GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET di environment variables dulu.
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium mb-2">Langkah 2: Konfigurasi Akun</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-xs font-medium">Customer ID <span className="text-red-500">*</span></label>
+                    <Input
+                      placeholder="xxx-xxx-xxxx (dari Google Ads)"
+                      value={adsCustomerId}
+                      onChange={e => setAdsCustomerId(e.target.value)}
+                      className="h-7 text-xs mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">Developer Token <span className="text-red-500">*</span></label>
+                    <Input
+                      type="password"
+                      placeholder={process.env.NEXT_PUBLIC_HAS_ADS_DEV_TOKEN ? '********** (dari env var)' : 'Masukkan Developer Token'}
+                      value={adsDeveloperToken}
+                      onChange={e => setAdsDeveloperToken(e.target.value)}
+                      className="h-7 text-xs mt-1"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Dari Google Ads {' > '} Tools {' > '} API Center. Atau set env var <code className="px-1 py-0.5 bg-muted rounded">GOOGLE_ADS_DEVELOPER_TOKEN</code>.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">Manager Account ID (opsional)</label>
+                    <Input
+                      placeholder="MCC ID jika pakai manager account"
+                      value={adsLoginCustomerId}
+                      onChange={e => setAdsLoginCustomerId(e.target.value)}
+                      className="h-7 text-xs mt-1"
+                    />
+                  </div>
+                  <Button size="sm" className="h-7 text-xs" onClick={handleSaveGoogleAds}
+                    disabled={saving === 'google_ads' || !adsCustomerId}>
+                    {saving === 'google_ads' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                    Simpan & Aktifkan
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2 bg-muted/30 rounded">
+                  <p className="text-[10px] text-muted-foreground">Customer ID</p>
+                  <p className="text-xs font-mono">{getConfig('google_ads')?.extra_config?.customer_id || '-'}</p>
+                </div>
+                <div className="p-2 bg-muted/30 rounded">
+                  <p className="text-[10px] text-muted-foreground">Manager Account</p>
+                  <p className="text-xs font-mono">{getConfig('google_ads')?.extra_config?.login_customer_id || 'Tidak ada'}</p>
+                </div>
+              </div>
+
+              {/* Edit config inline */}
+              <div className="p-2 border border-dashed rounded space-y-1.5">
+                <p className="text-[10px] font-medium text-muted-foreground">Update Konfigurasi</p>
+                <div className="flex gap-2 flex-wrap">
+                  <Input
+                    placeholder="Customer ID"
+                    value={adsCustomerId}
+                    onChange={e => setAdsCustomerId(e.target.value)}
+                    className="h-7 text-xs w-36"
+                  />
+                  <Input
+                    type="password"
+                    placeholder="Developer Token (baru)"
+                    value={adsDeveloperToken}
+                    onChange={e => setAdsDeveloperToken(e.target.value)}
+                    className="h-7 text-xs w-40"
+                  />
+                  <Input
+                    placeholder="MCC ID (opsional)"
+                    value={adsLoginCustomerId}
+                    onChange={e => setAdsLoginCustomerId(e.target.value)}
+                    className="h-7 text-xs w-36"
+                  />
+                  <Button size="sm" className="h-7 text-xs" onClick={handleSaveGoogleAds}
+                    disabled={saving === 'google_ads' || !adsCustomerId}>
+                    Update
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {getConfig('google_ads')?.last_fetch_at && (
+            <p className="text-[10px] text-muted-foreground">
+              Last fetch: {new Date(getConfig('google_ads')!.last_fetch_at!).toLocaleString('id-ID')}
+              {getConfig('google_ads')?.last_fetch_error && (
+                <span className="text-red-500 ml-2">Error: {getConfig('google_ads')!.last_fetch_error}</span>
+              )}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ===== Setup Guide ===== */}
       <Card>
         <CardHeader className="pb-3">
@@ -610,6 +804,24 @@ export default function SEOSEMSettings() {
                 <li>Redeploy aplikasi agar env vars aktif</li>
                 <li>Kembali ke halaman ini, klik "Connect Google Search Console" / "Connect Google Analytics"</li>
                 <li>Login dengan akun Google yang punya akses ke GSC & GA4</li>
+              </ol>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-sm mb-1">Fase 3: Google Ads (SEM)</h4>
+              <ol className="list-decimal ml-4 space-y-0.5 text-muted-foreground">
+                <li>Buka Google Ads, klik <strong>Tools {'>'} API Center</strong></li>
+                <li>Apply untuk <strong>Developer Token</strong> (Basic Access cukup)</li>
+                <li>Di Google Cloud Console, enable <a href="https://console.cloud.google.com/apis/library/googleads.googleapis.com" target="_blank" rel="noopener noreferrer" className="underline text-blue-500">Google Ads API</a></li>
+                <li>
+                  Add scope baru ke OAuth consent screen:
+                  <code className="block px-1 py-0.5 bg-muted rounded mt-0.5">https://www.googleapis.com/auth/adwords</code>
+                </li>
+                <li>Klik "Connect Google Ads" di atas</li>
+                <li>Masukkan <strong>Customer ID</strong> (format: xxx-xxx-xxxx, dari Google Ads header)</li>
+                <li>Masukkan <strong>Developer Token</strong> atau set env var <code className="px-1 py-0.5 bg-muted rounded">GOOGLE_ADS_DEVELOPER_TOKEN</code></li>
+                <li>Jika pakai MCC (Manager Account), masukkan MCC ID juga</li>
+                <li>Klik "Simpan & Aktifkan", lalu "Fetch Now" untuk test</li>
               </ol>
             </div>
 
