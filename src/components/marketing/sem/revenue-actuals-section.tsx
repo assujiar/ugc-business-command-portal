@@ -57,6 +57,9 @@ interface RevenueRow {
   ad_clicks: number
   ad_conversions: number
   roas: number | null
+  crm_leads: number
+  crm_deals: number
+  crm_deal_value: number
   isNew?: boolean
 }
 
@@ -111,7 +114,7 @@ export default function RevenueActualsSection() {
     const newRow: RevenueRow = {
       channel: entry.channel,
       month: entry.month,
-      revenue: 0,
+      revenue: entry.crm_deal_value || 0,
       leads_count: 0,
       deals_count: 0,
       notes: '',
@@ -119,7 +122,15 @@ export default function RevenueActualsSection() {
       ad_clicks: entry.ad_clicks,
       ad_conversions: entry.ad_conversions,
       roas: null,
+      crm_leads: entry.crm_leads || 0,
+      crm_deals: entry.crm_deals || 0,
+      crm_deal_value: entry.crm_deal_value || 0,
       isNew: true,
+    }
+    // Auto-calculate ROAS if we have deal value and spend
+    if (newRow.crm_deal_value > 0 && newRow.ad_spend > 0) {
+      newRow.revenue = newRow.crm_deal_value
+      newRow.roas = newRow.revenue / newRow.ad_spend
     }
     setRows(prev => [newRow, ...prev])
     setMissingEntries(prev => prev.filter(e => !(e.channel === entry.channel && e.month === entry.month)))
@@ -127,19 +138,25 @@ export default function RevenueActualsSection() {
   }
 
   const addAllMissing = () => {
-    const newRows: RevenueRow[] = missingEntries.map(entry => ({
-      channel: entry.channel,
-      month: entry.month,
-      revenue: 0,
-      leads_count: 0,
-      deals_count: 0,
-      notes: '',
-      ad_spend: entry.ad_spend,
-      ad_clicks: entry.ad_clicks,
-      ad_conversions: entry.ad_conversions,
-      roas: null,
-      isNew: true,
-    }))
+    const newRows: RevenueRow[] = missingEntries.map(entry => {
+      const revenue = entry.crm_deal_value || 0
+      return {
+        channel: entry.channel,
+        month: entry.month,
+        revenue,
+        leads_count: 0,
+        deals_count: 0,
+        notes: '',
+        ad_spend: entry.ad_spend,
+        ad_clicks: entry.ad_clicks,
+        ad_conversions: entry.ad_conversions,
+        roas: entry.ad_spend > 0 && revenue > 0 ? revenue / entry.ad_spend : null,
+        crm_leads: entry.crm_leads || 0,
+        crm_deals: entry.crm_deals || 0,
+        crm_deal_value: entry.crm_deal_value || 0,
+        isNew: true,
+      }
+    })
     const newDirty = new Set(dirtyRows)
     for (const entry of missingEntries) {
       newDirty.add(`${entry.channel}|${entry.month}`)
@@ -238,9 +255,9 @@ export default function RevenueActualsSection() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Total Leads</p>
-            <p className="text-xl font-bold">{rows.reduce((s, r) => s + (r.leads_count || 0), 0).toLocaleString('id-ID')}</p>
-            <p className="text-[10px] text-muted-foreground">{rows.reduce((s, r) => s + (r.deals_count || 0), 0)} deals closed</p>
+            <p className="text-xs text-muted-foreground mb-1">Leads (CRM)</p>
+            <p className="text-xl font-bold">{rows.reduce((s, r) => s + (r.crm_leads || 0), 0).toLocaleString('id-ID')}</p>
+            <p className="text-[10px] text-muted-foreground">{rows.reduce((s, r) => s + (r.crm_deals || 0), 0)} deals won</p>
           </CardContent>
         </Card>
       </div>
@@ -253,7 +270,7 @@ export default function RevenueActualsSection() {
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                  {missingEntries.length} bulan ada ad spend tapi belum ada data revenue
+                  {missingEntries.length} channel × bulan ada data tapi belum ada entri revenue
                 </p>
               </div>
               <Button size="sm" variant="outline" onClick={addAllMissing} className="text-xs h-7">
@@ -269,7 +286,7 @@ export default function RevenueActualsSection() {
                   className="text-[10px] cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900"
                   onClick={() => addMissingRow(e)}
                 >
-                  {CHANNEL_LABELS[e.channel] || e.channel} - {formatMonth(e.month)} ({formatCurrency(e.ad_spend)})
+                  {CHANNEL_LABELS[e.channel] || e.channel} - {formatMonth(e.month)}{e.ad_spend > 0 ? ` (${formatCurrency(e.ad_spend)})` : ''}{e.crm_leads > 0 ? ` ${e.crm_leads} leads` : ''}
                 </Badge>
               ))}
               {missingEntries.length > 6 && (
@@ -313,7 +330,7 @@ export default function RevenueActualsSection() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Input nilai revenue aktual dari tim finance. ROAS dihitung otomatis = Revenue / Ad Spend.
+            Leads &amp; Deals otomatis dari CRM. Input Revenue aktual dari tim finance, ROAS dihitung otomatis = Revenue / Ad Spend.
           </p>
         </CardHeader>
         <CardContent>
@@ -329,14 +346,21 @@ export default function RevenueActualsSection() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-xs w-[100px]">Bulan</TableHead>
-                    <TableHead className="text-xs w-[100px]">Channel</TableHead>
-                    <TableHead className="text-xs text-right w-[120px]">Ad Spend</TableHead>
-                    <TableHead className="text-xs text-right w-[140px]">Revenue (Rp)</TableHead>
-                    <TableHead className="text-xs text-right w-[80px]">Leads</TableHead>
-                    <TableHead className="text-xs text-right w-[80px]">Deals</TableHead>
-                    <TableHead className="text-xs text-right w-[80px]">ROAS</TableHead>
-                    <TableHead className="text-xs w-[150px]">Catatan</TableHead>
+                    <TableHead className="text-xs w-[90px]">Bulan</TableHead>
+                    <TableHead className="text-xs w-[90px]">Channel</TableHead>
+                    <TableHead className="text-xs text-right w-[100px]">Ad Spend</TableHead>
+                    <TableHead className="text-xs text-right w-[70px]">
+                      <span title="Dari CRM - auto">Leads</span>
+                    </TableHead>
+                    <TableHead className="text-xs text-right w-[70px]">
+                      <span title="Dari CRM - Closed Won">Deals</span>
+                    </TableHead>
+                    <TableHead className="text-xs text-right w-[100px]">
+                      <span title="Dari CRM - estimated_value Closed Won">Deal Value</span>
+                    </TableHead>
+                    <TableHead className="text-xs text-right w-[130px]">Revenue (Rp)</TableHead>
+                    <TableHead className="text-xs text-right w-[70px]">ROAS</TableHead>
+                    <TableHead className="text-xs w-[130px]">Catatan</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -355,31 +379,22 @@ export default function RevenueActualsSection() {
                         <TableCell className="text-xs text-right text-muted-foreground">
                           {formatCurrency(row.ad_spend)}
                         </TableCell>
+                        <TableCell className="text-xs text-right text-muted-foreground">
+                          {row.crm_leads || 0}
+                        </TableCell>
+                        <TableCell className="text-xs text-right text-muted-foreground">
+                          {row.crm_deals || 0}
+                        </TableCell>
+                        <TableCell className="text-xs text-right text-muted-foreground">
+                          {row.crm_deal_value > 0 ? formatCurrency(row.crm_deal_value) : '-'}
+                        </TableCell>
                         <TableCell className="text-xs text-right p-1">
                           <Input
                             type="number"
                             value={row.revenue || ''}
                             onChange={(e) => handleFieldChange(row.channel, row.month, 'revenue', e.target.value)}
                             placeholder="0"
-                            className="h-7 text-xs text-right w-[120px] ml-auto"
-                          />
-                        </TableCell>
-                        <TableCell className="text-xs text-right p-1">
-                          <Input
-                            type="number"
-                            value={row.leads_count || ''}
-                            onChange={(e) => handleFieldChange(row.channel, row.month, 'leads_count', e.target.value)}
-                            placeholder="0"
-                            className="h-7 text-xs text-right w-[60px] ml-auto"
-                          />
-                        </TableCell>
-                        <TableCell className="text-xs text-right p-1">
-                          <Input
-                            type="number"
-                            value={row.deals_count || ''}
-                            onChange={(e) => handleFieldChange(row.channel, row.month, 'deals_count', e.target.value)}
-                            placeholder="0"
-                            className="h-7 text-xs text-right w-[60px] ml-auto"
+                            className="h-7 text-xs text-right w-[110px] ml-auto"
                           />
                         </TableCell>
                         <TableCell className="text-xs text-right">
@@ -431,7 +446,10 @@ export default function RevenueActualsSection() {
                   const chRevenue = channelRows.reduce((s, r) => s + r.revenue, 0)
                   const chSpend = channelRows.reduce((s, r) => s + r.ad_spend, 0)
                   const chRoas = chSpend > 0 ? chRevenue / chSpend : null
-                  const chLeads = channelRows.reduce((s, r) => s + (r.leads_count || 0), 0)
+                  const chLeads = channelRows.reduce((s, r) => s + (r.crm_leads || 0), 0)
+                  const chDeals = channelRows.reduce((s, r) => s + (r.crm_deals || 0), 0)
+                  const chDealValue = channelRows.reduce((s, r) => s + (r.crm_deal_value || 0), 0)
+                  const costPerLead = chLeads > 0 && chSpend > 0 ? chSpend / chLeads : null
                   return (
                     <div key={ch} className="rounded-lg border p-3">
                       <div className="flex items-center gap-1.5 mb-2">
@@ -460,6 +478,22 @@ export default function RevenueActualsSection() {
                           <span className="text-muted-foreground">Leads</span>
                           <span>{chLeads}</span>
                         </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Deals Won</span>
+                          <span>{chDeals}</span>
+                        </div>
+                        {chDealValue > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Deal Value</span>
+                            <span>{formatCurrency(chDealValue)}</span>
+                          </div>
+                        )}
+                        {costPerLead !== null && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Cost/Lead</span>
+                            <span>{formatCurrency(costPerLead)}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
