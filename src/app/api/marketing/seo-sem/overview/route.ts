@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
+import { parseDateRange } from '@/lib/date-range-helper'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,38 +16,10 @@ export async function GET(request: NextRequest) {
     if (!profile || !canAccessMarketingPanel(profile.role as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
-    const range = searchParams.get('range') || '30d'
     const site = searchParams.get('site') || '__all__'
 
     const admin = createAdminClient()
-    const days = range === '7d' ? 7 : range === '90d' ? 90 : range === 'ytd' ? 0 : 30
-    const now = new Date()
-    const endDate = new Date(now)
-    endDate.setDate(endDate.getDate() - 3) // GSC data delay
-
-    let startDate: Date
-    if (range === 'ytd') {
-      startDate = new Date(now.getFullYear(), 0, 1)
-    } else {
-      startDate = new Date(endDate)
-      startDate.setDate(startDate.getDate() - days)
-    }
-
-    const prevStartDate = new Date(startDate)
-    prevStartDate.setDate(prevStartDate.getDate() - days)
-
-    const startStr = startDate.toISOString().split('T')[0]
-    const endStr = endDate.toISOString().split('T')[0]
-    const prevStartStr = prevStartDate.toISOString().split('T')[0]
-    const prevEndStr = startStr
-
-    // YoY: Same period last year
-    const yoyStartDate = new Date(startDate)
-    yoyStartDate.setFullYear(yoyStartDate.getFullYear() - 1)
-    const yoyEndDate = new Date(endDate)
-    yoyEndDate.setFullYear(yoyEndDate.getFullYear() - 1)
-    const yoyStartStr = yoyStartDate.toISOString().split('T')[0]
-    const yoyEndStr = yoyEndDate.toISOString().split('T')[0]
+    const { startStr, endStr, prevStartStr, prevEndStr, yoyStartStr, yoyEndStr } = parseDateRange(searchParams, { gscDelay: true })
 
     // Current period
     let currentQuery = (admin as any)
@@ -65,7 +38,7 @@ export async function GET(request: NextRequest) {
       .from('marketing_seo_daily_snapshot')
       .select('*')
       .gte('fetch_date', prevStartStr)
-      .lt('fetch_date', prevEndStr)
+      .lte('fetch_date', prevEndStr)
 
     if (site !== '__all__') prevQuery = prevQuery.eq('site', site)
 

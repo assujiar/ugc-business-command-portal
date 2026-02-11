@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
+import { parseDateRange } from '@/lib/date-range-helper'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,25 +16,10 @@ export async function GET(request: NextRequest) {
     if (!profile || !canAccessMarketingPanel(profile.role as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
-    const range = searchParams.get('range') || '30d'
     const site = searchParams.get('site') || '__all__'
 
     const admin = createAdminClient()
-    const days = range === '7d' ? 7 : range === '90d' ? 90 : range === 'ytd' ? 0 : 30
-    const now = new Date()
-    const endDate = new Date(now)
-    endDate.setDate(endDate.getDate() - 1)
-
-    let startDate: Date
-    if (range === 'ytd') {
-      startDate = new Date(now.getFullYear(), 0, 1)
-    } else {
-      startDate = new Date(endDate)
-      startDate.setDate(startDate.getDate() - days)
-    }
-
-    const startStr = startDate.toISOString().split('T')[0]
-    const endStr = endDate.toISOString().split('T')[0]
+    const { startStr, endStr } = parseDateRange(searchParams)
 
     // Fetch all demographics data for the date range
     // We use the most recent fetch_date within range as demographics are aggregated

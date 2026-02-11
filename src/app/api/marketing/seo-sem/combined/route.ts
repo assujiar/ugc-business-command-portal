@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
+import { parseDateRange } from '@/lib/date-range-helper'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,18 +16,9 @@ export async function GET(request: NextRequest) {
     if (!profile || !canAccessMarketingPanel(profile.role as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
-    const range = searchParams.get('range') || '30d'
 
     const admin = createAdminClient()
-    const days = range === '7d' ? 7 : range === '90d' ? 90 : 30
-    const now = new Date()
-    const endDate = new Date(now)
-    endDate.setDate(endDate.getDate() - 3)
-    const startDate = new Date(endDate)
-    startDate.setDate(startDate.getDate() - days)
-
-    const startStr = startDate.toISOString().split('T')[0]
-    const endStr = endDate.toISOString().split('T')[0]
+    const { startStr, endStr } = parseDateRange(searchParams, { gscDelay: true })
 
     // Organic data
     const { data: seoData } = await (admin as any)
@@ -85,6 +77,7 @@ export async function GET(request: NextRequest) {
     const monthlyTrend = Array.from(monthlyMap.values()).sort((a, b) => a.month.localeCompare(b.month))
 
     // Keyword overlap: organic keywords that also appear in paid
+    // Use case-insensitive matching and aggregate across dates
     const { data: organicKws } = await (admin as any)
       .from('marketing_seo_keywords')
       .select('query, clicks, position')
@@ -92,42 +85,62 @@ export async function GET(request: NextRequest) {
       .lte('fetch_date', endStr)
       .is('device', null)
       .order('clicks', { ascending: false })
-      .limit(200)
+      .limit(500)
 
     const { data: paidKws } = await (admin as any)
       .from('marketing_sem_keywords')
       .select('keyword_text, clicks, avg_cpc')
       .gte('fetch_date', startStr)
       .lte('fetch_date', endStr)
-      .limit(500)
+      .limit(1000)
 
-    const paidKwMap = new Map<string, { clicks: number; cpc: number }>()
-    for (const pk of (paidKws || [])) {
-      const existing = paidKwMap.get(pk.keyword_text) || { clicks: 0, cpc: 0 }
-      existing.clicks += Number(pk.clicks) || 0
-      existing.cpc = Number(pk.avg_cpc) || 0
-      paidKwMap.set(pk.keyword_text, existing)
+    // Aggregate organic keywords by normalized query (lowercase, trimmed)
+    const organicKwMap = new Map<string, { query: string; clicks: number; posSum: number; count: number }>()
+    for (const ok of (organicKws || [])) {
+      const key = (ok.query || '').toLowerCase().trim()
+      if (!key) continue
+      const existing = organicKwMap.get(key) || { query: ok.query, clicks: 0, posSum: 0, count: 0 }
+      existing.clicks += Number(ok.clicks) || 0
+      existing.posSum += Number(ok.position) || 0
+      existing.count += 1
+      organicKwMap.set(key, existing)
     }
 
-    const keywordOverlap = (organicKws || [])
-      .filter((ok: any) => paidKwMap.has(ok.query))
-      .map((ok: any) => {
-        const paid = paidKwMap.get(ok.query)!
-        return {
-          keyword: ok.query,
-          organicPosition: Number(ok.position),
-          organicClicks: Number(ok.clicks),
+    // Aggregate paid keywords by normalized text (lowercase, trimmed)
+    const paidKwMap = new Map<string, { clicks: number; cpcSum: number; count: number }>()
+    for (const pk of (paidKws || [])) {
+      const key = (pk.keyword_text || '').toLowerCase().trim()
+      if (!key) continue
+      const existing = paidKwMap.get(key) || { clicks: 0, cpcSum: 0, count: 0 }
+      existing.clicks += Number(pk.clicks) || 0
+      existing.cpcSum += Number(pk.avg_cpc) || 0
+      existing.count += 1
+      paidKwMap.set(key, existing)
+    }
+
+    // Find overlapping keywords (case-insensitive)
+    const keywordOverlap: any[] = []
+    for (const [key, organic] of Array.from(organicKwMap.entries())) {
+      const paid = paidKwMap.get(key)
+      if (paid) {
+        keywordOverlap.push({
+          keyword: organic.query,
+          organicPosition: organic.count > 0 ? Math.round((organic.posSum / organic.count) * 10) / 10 : 0,
+          organicClicks: organic.clicks,
           paidClicks: paid.clicks,
-          paidCpc: paid.cpc,
-        }
-      })
-      .slice(0, 20)
+          paidCpc: paid.count > 0 ? paid.cpcSum / paid.count : 0,
+        })
+      }
+    }
+    // Sort by total clicks (organic + paid) and take top 20
+    keywordOverlap.sort((a, b) => (b.organicClicks + b.paidClicks) - (a.organicClicks + a.paidClicks))
+    const topOverlap = keywordOverlap.slice(0, 20)
 
     return NextResponse.json({
       channelSplit,
       blendedMetrics,
       monthlyTrend,
-      keywordOverlap,
+      keywordOverlap: topOverlap,
     })
   } catch (error) {
     console.error('Combined view error:', error)
