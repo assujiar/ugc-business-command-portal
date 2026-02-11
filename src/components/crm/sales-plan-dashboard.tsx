@@ -66,7 +66,7 @@ import {
   Phone,
   Mail,
   FileText,
-  Image,
+  Image as ImageIcon,
   ExternalLink,
   Camera,
   Loader2,
@@ -1331,7 +1331,7 @@ export function SalesPlanDashboard({
               {evidenceFile && (
                 <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
                   {evidenceFile.type.startsWith('image/') ? (
-                    <Image className="h-4 w-4 text-muted-foreground" />
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
                   ) : (
                     <FileText className="h-4 w-4 text-muted-foreground" />
                   )}
@@ -1601,6 +1601,7 @@ export function SalesPlanDashboard({
                       <p className="text-xs text-muted-foreground mb-2">Evidence</p>
                       {isImageUrl(selectedPlan.evidence_url) ? (
                         <a href={selectedPlan.evidence_url} target="_blank" rel="noopener noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={selectedPlan.evidence_url}
                             alt="Evidence"

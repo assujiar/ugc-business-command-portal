@@ -217,7 +217,7 @@ function ShipmentCard({
         onUpdate({ weight_total_kg: total })
       }
     }
-  }, [shipment.quantity, shipment.weight_per_unit_kg])
+  }, [shipment.quantity, shipment.weight_per_unit_kg, shipment.weight_total_kg, onUpdate])
 
   // Auto-calculate volume in CBM
   React.useEffect(() => {
@@ -238,7 +238,7 @@ function ShipmentCard({
         onUpdate({ volume_total_cbm: rounded })
       }
     }
-  }, [shipment.length_cm, shipment.width_cm, shipment.height_cm, shipment.quantity])
+  }, [shipment.length_cm, shipment.width_cm, shipment.height_cm, shipment.quantity, shipment.volume_total_cbm, onUpdate])
 
   const routeSummary = formatShipmentRoute(shipment)
 

@@ -292,7 +292,7 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
 
     fetchQuotation()
     fetchTermTemplates()
-  }, [quotationId])
+  }, [quotationId, router, toast])
 
   // Fetch term templates
   const fetchTermTemplates = async () => {

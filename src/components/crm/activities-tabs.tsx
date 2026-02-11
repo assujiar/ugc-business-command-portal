@@ -35,7 +35,7 @@ import {
   Calendar,
   MapPin,
   FileText,
-  Image,
+  Image as ImageIcon,
   ExternalLink,
   Eye,
   Building2,
@@ -256,7 +256,7 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
                           className="flex items-center gap-1 text-brand hover:underline text-sm"
                         >
                           {isImageUrl(activity.evidence_url) ? (
-                            <Image className="h-4 w-4" />
+                            <ImageIcon className="h-4 w-4" />
                           ) : (
                             <FileText className="h-4 w-4" />
                           )}
@@ -347,7 +347,7 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
                       className="flex items-center gap-1 text-brand hover:underline"
                     >
                       {isImageUrl(activity.evidence_url) ? (
-                        <Image className="h-3 w-3" />
+                        <ImageIcon className="h-3 w-3" />
                       ) : (
                         <FileText className="h-3 w-3" />
                       )}
@@ -604,6 +604,7 @@ export function ActivitiesTabs({ activities, currentUserId, userRole }: Activiti
                       target="_blank"
                       rel="noopener noreferrer"
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={selectedActivity.evidence_url}
                         alt="Evidence"

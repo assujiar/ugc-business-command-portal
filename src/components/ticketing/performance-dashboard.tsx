@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Users,
   Building2,
@@ -76,7 +76,7 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
   const canViewAll = canViewAllTickets(profile.role)
 
   // Fetch performance data
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!canViewAll) return
 
     setLoading(true)
@@ -101,11 +101,11 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [canViewAll, period, department])
 
   useEffect(() => {
     fetchData()
-  }, [period, department])
+  }, [fetchData])
 
   if (!canViewAll) {
     return (

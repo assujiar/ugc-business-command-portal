@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Ticket,
@@ -92,7 +92,7 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
   const canViewAll = canViewAllTickets(profile.role)
 
   // Fetch all data
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const params = `?period=${period}`
@@ -127,11 +127,11 @@ export function OverviewDashboard({ profile }: OverviewDashboardProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [period])
 
   useEffect(() => {
     fetchData()
-  }, [period])
+  }, [fetchData])
 
   if (loading) {
     return (

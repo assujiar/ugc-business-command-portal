@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Clock,
   CheckCircle2,
@@ -162,7 +162,7 @@ export function SLAComplianceSection({ profile }: SLAComplianceSectionProps) {
   const [ticketsLoading, setTicketsLoading] = useState(false)
 
   // Fetch SLA metrics
-  const fetchMetrics = async () => {
+  const fetchMetrics = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -187,7 +187,7 @@ export function SLAComplianceSection({ profile }: SLAComplianceSectionProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedDepartment, selectedTicketType, toast])
 
   // Fetch tickets for drill-down
   const fetchTickets = async (slaType: string, status: string) => {
@@ -221,7 +221,7 @@ export function SLAComplianceSection({ profile }: SLAComplianceSectionProps) {
 
   useEffect(() => {
     fetchMetrics()
-  }, [selectedDepartment, selectedTicketType])
+  }, [fetchMetrics])
 
   const handleViewTickets = (slaType: string, status: string) => {
     setSelectedSLAType(slaType)
