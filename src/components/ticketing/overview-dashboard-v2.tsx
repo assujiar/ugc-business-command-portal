@@ -158,13 +158,7 @@ function DrilldownModal({
   const [tickets, setTickets] = useState<DrilldownTicket[]>([])
   const [totalCount, setTotalCount] = useState(0)
 
-  useEffect(() => {
-    if (open && metric) {
-      fetchDrilldown()
-    }
-  }, [open, metric, ticketType, period])
-
-  const fetchDrilldown = async () => {
+  const fetchDrilldown = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -184,7 +178,13 @@ function DrilldownModal({
     } finally {
       setLoading(false)
     }
-  }
+  }, [metric, ticketType, period])
+
+  useEffect(() => {
+    if (open && metric) {
+      fetchDrilldown()
+    }
+  }, [open, metric, fetchDrilldown])
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>

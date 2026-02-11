@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -81,7 +81,7 @@ export function OperationalCostsDashboard({ profile }: OperationalCostsDashboard
   const canViewAll = canViewAllTickets(profile.role)
 
   // Fetch operational costs
-  const fetchCosts = async () => {
+  const fetchCosts = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -114,11 +114,11 @@ export function OperationalCostsDashboard({ profile }: OperationalCostsDashboard
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter, searchQuery])
 
   useEffect(() => {
     fetchCosts()
-  }, [statusFilter, searchQuery])
+  }, [fetchCosts])
 
   // Format date
   const formatDate = (dateString: string) => {

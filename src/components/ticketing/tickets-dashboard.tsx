@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createBrowserClient } from '@supabase/ssr'
@@ -102,7 +102,7 @@ export function TicketsDashboard({ profile }: TicketsDashboardProps) {
   const canViewAll = canViewAllTickets(profile.role)
 
   // Fetch tickets
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     setLoading(true)
     try {
       let query = (supabase as any)
@@ -161,11 +161,12 @@ export function TicketsDashboard({ profile }: TicketsDashboardProps) {
     } finally {
       setLoading(false)
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, priorityFilter, typeFilter, departmentFilter, searchQuery, canViewAll, profile.user_id])
 
   useEffect(() => {
     fetchTickets()
-  }, [statusFilter, priorityFilter, typeFilter, departmentFilter, searchQuery])
+  }, [fetchTickets])
 
   // Format date
   const formatDate = (dateString: string) => {

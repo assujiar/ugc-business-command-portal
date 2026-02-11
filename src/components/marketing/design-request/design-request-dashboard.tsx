@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import {
   Palette, Plus, LayoutGrid, List, Clock, AlertTriangle, CheckCircle2, Eye, Send,
-  XCircle, Search, Trash2, Edit, ExternalLink, TrendingUp, Image,
+  XCircle, Search, Trash2, Edit, ExternalLink, TrendingUp, Image as ImageIcon,
   MessageSquare, Upload, RefreshCw, Timer, Target, BarChart3, User,
   ChevronRight, FileImage, Zap, ArrowRight,
 } from 'lucide-react'
@@ -452,7 +452,7 @@ export default function DesignRequestDashboard() {
           {analytics.byType && Object.keys(analytics.byType).length > 0 && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2"><Image className="h-4 w-4" /> Distribusi Tipe Design</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2"><ImageIcon className="h-4 w-4" /> Distribusi Tipe Design</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
