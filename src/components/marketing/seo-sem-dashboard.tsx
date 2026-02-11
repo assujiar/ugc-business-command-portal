@@ -205,17 +205,17 @@ export default function SEOSEMDashboard() {
     if (activeTab === 'web_vitals') fetchVitals()
     if (activeTab === 'ads') fetchAds()
     if (activeTab === 'combined') fetchCombined()
-  }, [activeTab, dateRange, site])
+  }, [activeTab, dateRange, site, fetchOverview, fetchKeywords, fetchPages, fetchVitals, fetchAds, fetchCombined])
 
   // Refetch keywords on filter change
   useEffect(() => {
     if (activeTab === 'keywords') fetchKeywords()
-  }, [kwFilters])
+  }, [activeTab, kwFilters, fetchKeywords])
 
   // Refetch pages on filter change
   useEffect(() => {
     if (activeTab === 'pages') fetchPages()
-  }, [pageFilters, expandedUrl])
+  }, [activeTab, pageFilters, expandedUrl, fetchPages])
 
   return (
     <div className="space-y-4">
