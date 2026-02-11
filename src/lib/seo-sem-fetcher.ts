@@ -279,138 +279,159 @@ export async function fetchGA4Data(targetDate: string, site?: string): Promise<{
   const tokens = await getGoogleTokens('google_analytics')
   if (!tokens) return { success: false, error: 'Google Analytics not configured or token expired' }
 
-  const propertyId = tokens.propertyId
-  if (!propertyId) return { success: false, error: 'GA4 property_id not configured' }
-
   const admin = createAdminClient()
-  const siteName = site || tokens.extraConfig.site || 'ugc.id'
 
-  try {
-    // 1. Fetch organic sessions aggregate
-    const reportRes = await fetch(
-      `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${tokens.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          dateRanges: [{ startDate: targetDate, endDate: targetDate }],
-          dimensions: [{ name: 'sessionDefaultChannelGroup' }],
-          metrics: [
-            { name: 'sessions' },
-            { name: 'totalUsers' },
-            { name: 'newUsers' },
-            { name: 'engagedSessions' },
-            { name: 'engagementRate' },
-            { name: 'averageSessionDuration' },
-            { name: 'bounceRate' },
-            { name: 'conversions' },
-            { name: 'screenPageViews' },
-          ],
-          dimensionFilter: {
-            filter: {
-              fieldName: 'sessionDefaultChannelGroup',
-              stringFilter: { matchType: 'EXACT', value: 'Organic Search' },
-            },
-          },
-        }),
-      }
-    )
-
-    if (!reportRes.ok) {
-      const err = await reportRes.text()
-      throw new Error(`GA4 report failed: ${err}`)
-    }
-
-    const report = await reportRes.json()
-    const row = report.rows?.[0]
-
-    if (row) {
-      const metrics = row.metricValues || []
-      await (admin as any).from('marketing_seo_daily_snapshot').upsert({
-        fetch_date: targetDate,
-        site: siteName,
-        ga_organic_sessions: parseInt(metrics[0]?.value || '0'),
-        ga_organic_users: parseInt(metrics[1]?.value || '0'),
-        ga_organic_new_users: parseInt(metrics[2]?.value || '0'),
-        ga_organic_engaged_sessions: parseInt(metrics[3]?.value || '0'),
-        ga_organic_engagement_rate: parseFloat(metrics[4]?.value || '0'),
-        ga_organic_avg_session_duration: parseFloat(metrics[5]?.value || '0'),
-        ga_organic_bounce_rate: parseFloat(metrics[6]?.value || '0'),
-        ga_organic_conversions: parseInt(metrics[7]?.value || '0'),
-        ga_organic_page_views: parseInt(metrics[8]?.value || '0'),
-      }, { onConflict: 'fetch_date,site' })
-    }
-
-    // 2. Fetch per-page organic data
-    const pageReportRes = await fetch(
-      `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${tokens.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          dateRanges: [{ startDate: targetDate, endDate: targetDate }],
-          dimensions: [{ name: 'pagePath' }],
-          metrics: [
-            { name: 'sessions' },
-            { name: 'totalUsers' },
-            { name: 'engagementRate' },
-            { name: 'averageSessionDuration' },
-            { name: 'bounceRate' },
-            { name: 'conversions' },
-          ],
-          dimensionFilter: {
-            filter: {
-              fieldName: 'sessionDefaultChannelGroup',
-              stringFilter: { matchType: 'EXACT', value: 'Organic Search' },
-            },
-          },
-          limit: 500,
-          orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
-        }),
-      }
-    )
-
-    if (pageReportRes.ok) {
-      const pageReport = await pageReportRes.json()
-      for (const pr of pageReport.rows || []) {
-        const pagePath = pr.dimensionValues[0]?.value
-        const m = pr.metricValues || []
-        if (!pagePath) continue
-
-        // Update existing page record (GSC data may already be there)
-        const pageUrl = `https://${siteName}${pagePath}`
-        await (admin as any).from('marketing_seo_pages')
-          .upsert({
-            fetch_date: targetDate,
-            site: siteName,
-            page_url: pageUrl,
-            ga_sessions: parseInt(m[0]?.value || '0'),
-            ga_users: parseInt(m[1]?.value || '0'),
-            ga_engagement_rate: parseFloat(m[2]?.value || '0'),
-            ga_avg_session_duration: parseFloat(m[3]?.value || '0'),
-            ga_bounce_rate: parseFloat(m[4]?.value || '0'),
-            ga_conversions: parseInt(m[5]?.value || '0'),
-          }, { onConflict: 'fetch_date,site,page_url' })
-      }
-    }
-
-    await (admin as any).from('marketing_seo_config')
-      .update({ last_fetch_at: new Date().toISOString(), last_fetch_error: null })
-      .eq('service', 'google_analytics')
-
-    return { success: true }
-  } catch (err: any) {
-    await (admin as any).from('marketing_seo_config')
-      .update({ last_fetch_error: err.message })
-      .eq('service', 'google_analytics')
-    return { success: false, error: `GA4 fetch error: ${err.message}` }
+  // Support multiple properties from extra_config.properties
+  // Fallback to single property_id for backward compatibility
+  const properties: Array<{ property_id: string; site: string }> = tokens.extraConfig.properties || []
+  if (properties.length === 0 && tokens.propertyId) {
+    properties.push({ property_id: tokens.propertyId, site: site || tokens.extraConfig.site || 'ugc.id' })
   }
+
+  if (properties.length === 0) {
+    return { success: false, error: 'GA4 property_id not configured' }
+  }
+
+  const errors: string[] = []
+
+  for (const prop of properties) {
+    const propertyId = prop.property_id
+    const siteName = prop.site || 'ugc.id'
+
+    try {
+      // 1. Fetch organic sessions aggregate
+      const reportRes = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokens.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            dateRanges: [{ startDate: targetDate, endDate: targetDate }],
+            dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+            metrics: [
+              { name: 'sessions' },
+              { name: 'totalUsers' },
+              { name: 'newUsers' },
+              { name: 'engagedSessions' },
+              { name: 'engagementRate' },
+              { name: 'averageSessionDuration' },
+              { name: 'bounceRate' },
+              { name: 'conversions' },
+              { name: 'screenPageViews' },
+            ],
+            dimensionFilter: {
+              filter: {
+                fieldName: 'sessionDefaultChannelGroup',
+                stringFilter: { matchType: 'EXACT', value: 'Organic Search' },
+              },
+            },
+          }),
+        }
+      )
+
+      if (!reportRes.ok) {
+        const err = await reportRes.text()
+        throw new Error(`GA4 report failed for ${siteName} (${propertyId}): ${err}`)
+      }
+
+      const report = await reportRes.json()
+      const row = report.rows?.[0]
+
+      if (row) {
+        const metrics = row.metricValues || []
+        await (admin as any).from('marketing_seo_daily_snapshot').upsert({
+          fetch_date: targetDate,
+          site: siteName,
+          ga_organic_sessions: parseInt(metrics[0]?.value || '0'),
+          ga_organic_users: parseInt(metrics[1]?.value || '0'),
+          ga_organic_new_users: parseInt(metrics[2]?.value || '0'),
+          ga_organic_engaged_sessions: parseInt(metrics[3]?.value || '0'),
+          ga_organic_engagement_rate: parseFloat(metrics[4]?.value || '0'),
+          ga_organic_avg_session_duration: parseFloat(metrics[5]?.value || '0'),
+          ga_organic_bounce_rate: parseFloat(metrics[6]?.value || '0'),
+          ga_organic_conversions: parseInt(metrics[7]?.value || '0'),
+          ga_organic_page_views: parseInt(metrics[8]?.value || '0'),
+        }, { onConflict: 'fetch_date,site' })
+      }
+
+      // 2. Fetch per-page organic data
+      const pageReportRes = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokens.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            dateRanges: [{ startDate: targetDate, endDate: targetDate }],
+            dimensions: [{ name: 'pagePath' }],
+            metrics: [
+              { name: 'sessions' },
+              { name: 'totalUsers' },
+              { name: 'engagementRate' },
+              { name: 'averageSessionDuration' },
+              { name: 'bounceRate' },
+              { name: 'conversions' },
+            ],
+            dimensionFilter: {
+              filter: {
+                fieldName: 'sessionDefaultChannelGroup',
+                stringFilter: { matchType: 'EXACT', value: 'Organic Search' },
+              },
+            },
+            limit: 500,
+            orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+          }),
+        }
+      )
+
+      if (pageReportRes.ok) {
+        const pageReport = await pageReportRes.json()
+        for (const pr of pageReport.rows || []) {
+          const pagePath = pr.dimensionValues[0]?.value
+          const m = pr.metricValues || []
+          if (!pagePath) continue
+
+          const pageUrl = `https://${siteName}${pagePath}`
+          await (admin as any).from('marketing_seo_pages')
+            .upsert({
+              fetch_date: targetDate,
+              site: siteName,
+              page_url: pageUrl,
+              ga_sessions: parseInt(m[0]?.value || '0'),
+              ga_users: parseInt(m[1]?.value || '0'),
+              ga_engagement_rate: parseFloat(m[2]?.value || '0'),
+              ga_avg_session_duration: parseFloat(m[3]?.value || '0'),
+              ga_bounce_rate: parseFloat(m[4]?.value || '0'),
+              ga_conversions: parseInt(m[5]?.value || '0'),
+            }, { onConflict: 'fetch_date,site,page_url' })
+        }
+      }
+    } catch (err: any) {
+      errors.push(err.message)
+    }
+  }
+
+  if (errors.length > 0 && errors.length === properties.length) {
+    // All properties failed
+    await (admin as any).from('marketing_seo_config')
+      .update({ last_fetch_error: errors.join('; ') })
+      .eq('service', 'google_analytics')
+    return { success: false, error: `GA4 fetch errors: ${errors.join('; ')}` }
+  }
+
+  await (admin as any).from('marketing_seo_config')
+    .update({
+      last_fetch_at: new Date().toISOString(),
+      last_fetch_error: errors.length > 0 ? `Partial: ${errors.join('; ')}` : null,
+    })
+    .eq('service', 'google_analytics')
+
+  return { success: true }
 }
 
 // =====================================================

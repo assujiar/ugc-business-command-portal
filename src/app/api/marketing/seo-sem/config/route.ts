@@ -163,6 +163,28 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true })
       }
 
+      case 'update_ga4_properties': {
+        // Multiple GA4 properties support
+        const properties = data.properties || []
+        const primaryPropertyId = properties[0]?.property_id || ''
+        const primarySite = properties[0]?.site || ''
+
+        // Get existing extra_config to preserve tokens etc
+        const { data: existing } = await (admin as any).from('marketing_seo_config')
+          .select('extra_config')
+          .eq('service', 'google_analytics')
+          .single()
+
+        await (admin as any).from('marketing_seo_config')
+          .update({
+            property_id: primaryPropertyId,
+            extra_config: { ...(existing?.extra_config || {}), site: primarySite, properties },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('service', 'google_analytics')
+        return NextResponse.json({ success: true })
+      }
+
       case 'disconnect': {
         await (admin as any).from('marketing_seo_config')
           .update({

@@ -45,9 +45,11 @@ export default function SEOSEMSettings() {
   // GSC form
   const [gscSites, setGscSites] = useState<string[]>([])
 
-  // GA4 form
-  const [ga4PropertyId, setGa4PropertyId] = useState('')
-  const [ga4Site, setGa4Site] = useState('')
+  // GA4 form - multiple properties
+  const [ga4Properties, setGa4Properties] = useState<Array<{ property_id: string; site: string; name: string }>>([])
+  const [newGa4PropertyId, setNewGa4PropertyId] = useState('')
+  const [newGa4Site, setNewGa4Site] = useState('')
+  const [newGa4Name, setNewGa4Name] = useState('')
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -69,8 +71,13 @@ export default function SEOSEMSettings() {
 
         const gaConfig = data.configs?.find((c: ServiceConfig) => c.service === 'google_analytics')
         if (gaConfig) {
-          setGa4PropertyId(gaConfig.property_id || '')
-          setGa4Site(gaConfig.extra_config?.site || '')
+          // Load multiple properties from extra_config, fallback to single property_id
+          const props = gaConfig.extra_config?.properties || []
+          if (props.length > 0) {
+            setGa4Properties(props)
+          } else if (gaConfig.property_id) {
+            setGa4Properties([{ property_id: gaConfig.property_id, site: gaConfig.extra_config?.site || '', name: '' }])
+          }
         }
       }
     } catch (err) {
@@ -139,27 +146,47 @@ export default function SEOSEMSettings() {
     }
   }
 
-  const handleSaveGA4 = async () => {
+  const handleSaveGA4Properties = async () => {
+    if (ga4Properties.length === 0) {
+      alert('Tambahkan minimal 1 property')
+      return
+    }
     setSaving('ga4')
     try {
       const res = await fetch('/api/marketing/seo-sem/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'update_ga4_property',
+          action: 'update_ga4_properties',
           service: 'google_analytics',
-          data: { property_id: ga4PropertyId, site: ga4Site, extra_config: { site: ga4Site } },
+          data: { properties: ga4Properties },
         }),
       })
       if (res.ok) {
         await fetchSettings()
-        alert('GA4 Property berhasil disimpan!')
+        alert('GA4 Properties berhasil disimpan!')
       }
-    } catch (err) {
-      alert('Gagal menyimpan GA4 Property')
+    } catch {
+      alert('Gagal menyimpan GA4 Properties')
     } finally {
       setSaving(null)
     }
+  }
+
+  const addGa4Property = () => {
+    if (!newGa4PropertyId) return
+    if (ga4Properties.some(p => p.property_id === newGa4PropertyId)) {
+      alert('Property ID sudah ada')
+      return
+    }
+    setGa4Properties([...ga4Properties, { property_id: newGa4PropertyId, site: newGa4Site, name: newGa4Name }])
+    setNewGa4PropertyId('')
+    setNewGa4Site('')
+    setNewGa4Name('')
+  }
+
+  const removeGa4Property = (propertyId: string) => {
+    setGa4Properties(ga4Properties.filter(p => p.property_id !== propertyId))
   }
 
   const handleDisconnect = async (service: string) => {
@@ -461,30 +488,64 @@ export default function SEOSEMSettings() {
               )}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div>
-                <label className="text-xs font-medium">GA4 Property ID</label>
-                <div className="flex gap-2 mt-1">
-                  <Input
-                    placeholder="e.g. 123456789"
-                    value={ga4PropertyId}
-                    onChange={e => setGa4PropertyId(e.target.value)}
-                    className="h-7 text-xs w-40"
-                  />
-                  <Input
-                    placeholder="Site domain (e.g. ugc.id)"
-                    value={ga4Site}
-                    onChange={e => setGa4Site(e.target.value)}
-                    className="h-7 text-xs"
-                  />
-                  <Button size="sm" className="h-7 text-xs" onClick={handleSaveGA4}
-                    disabled={saving === 'ga4'}>
-                    Save
-                  </Button>
+                <label className="text-xs font-medium">GA4 Properties ({ga4Properties.length})</label>
+                <div className="space-y-1.5 mt-1">
+                  {ga4Properties.map((prop, i) => (
+                    <div key={prop.property_id} className="flex items-center gap-2 p-2 bg-muted/30 rounded">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] shrink-0">#{i + 1}</Badge>
+                          <span className="text-xs font-mono">{prop.property_id}</span>
+                          {prop.name && <span className="text-xs text-muted-foreground truncate">({prop.name})</span>}
+                        </div>
+                        {prop.site && <span className="text-[10px] text-muted-foreground ml-7">{prop.site}</span>}
+                      </div>
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 shrink-0"
+                        onClick={() => removeGa4Property(prop.property_id)}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  Property ID ada di GA4 {' > '} Admin {' > '} Property Settings
-                </p>
+
+                {/* Add new property */}
+                <div className="mt-2 p-2 border border-dashed rounded space-y-1.5">
+                  <p className="text-[10px] font-medium text-muted-foreground">Tambah Property</p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Input
+                      placeholder="Property ID (e.g. 123456789)"
+                      value={newGa4PropertyId}
+                      onChange={e => setNewGa4PropertyId(e.target.value)}
+                      className="h-7 text-xs w-40"
+                    />
+                    <Input
+                      placeholder="Domain (e.g. ugc.id)"
+                      value={newGa4Site}
+                      onChange={e => setNewGa4Site(e.target.value)}
+                      className="h-7 text-xs w-36"
+                    />
+                    <Input
+                      placeholder="Label (opsional)"
+                      value={newGa4Name}
+                      onChange={e => setNewGa4Name(e.target.value)}
+                      className="h-7 text-xs w-32"
+                    />
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addGa4Property}>
+                      <Plus className="w-3 h-3 mr-1" />Add
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Property ID ada di GA4 {' > '} Admin {' > '} Property Settings
+                  </p>
+                </div>
+
+                <Button size="sm" className="h-7 text-xs mt-2" onClick={handleSaveGA4Properties}
+                  disabled={saving === 'ga4' || ga4Properties.length === 0}>
+                  {saving === 'ga4' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                  Simpan Properties ({ga4Properties.length})
+                </Button>
               </div>
             </div>
           )}
