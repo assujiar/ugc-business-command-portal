@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Search, BarChart3, Globe, Gauge, DollarSign,
-  GitCompareArrows, RefreshCcw, Settings, AlertCircle, Loader2, Lightbulb, Users
+  GitCompareArrows, RefreshCcw, Settings, AlertCircle, Loader2, Lightbulb, Users, Link2
 } from 'lucide-react'
 
 import { SummaryInsightSection } from './seo/summary-insight-section'
@@ -21,8 +21,9 @@ import AdsOverviewSection from './sem/ads-overview-section'
 import CombinedViewSection from './sem/combined-view-section'
 import SEOSEMSettings from './seo/seo-sem-settings'
 import { AudienceSection } from './seo/audience-section'
+import { AcquisitionSection } from './seo/acquisition-section'
 
-type TabValue = 'summary' | 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'audience' | 'ads' | 'combined' | 'settings'
+type TabValue = 'summary' | 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'audience' | 'acquisition' | 'ads' | 'combined' | 'settings'
 
 export default function SEOSEMDashboard() {
   // Global filters
@@ -45,6 +46,7 @@ export default function SEOSEMDashboard() {
   const [adsData, setAdsData] = useState<any>(null)
   const [combinedData, setCombinedData] = useState<any>(null)
   const [audienceData, setAudienceData] = useState<any>(null)
+  const [acquisitionData, setAcquisitionData] = useState<any>(null)
 
   // Loading states
   const [loadingOverview, setLoadingOverview] = useState(false)
@@ -54,6 +56,7 @@ export default function SEOSEMDashboard() {
   const [loadingAds, setLoadingAds] = useState(false)
   const [loadingCombined, setLoadingCombined] = useState(false)
   const [loadingAudience, setLoadingAudience] = useState(false)
+  const [loadingAcquisition, setLoadingAcquisition] = useState(false)
   const [fetchingData, setFetchingData] = useState(false)
 
   // Keyword filters
@@ -192,6 +195,22 @@ export default function SEOSEMDashboard() {
     }
   }, [dateRange, site])
 
+  // Fetch acquisition/UTM data
+  const fetchAcquisition = useCallback(async () => {
+    setLoadingAcquisition(true)
+    try {
+      const params = new URLSearchParams({ range: dateRange, site })
+      const res = await fetch(`/api/marketing/seo-sem/utm?${params}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setAcquisitionData(data)
+    } catch (err) {
+      console.error('Acquisition fetch error:', err)
+    } finally {
+      setLoadingAcquisition(false)
+    }
+  }, [dateRange, site])
+
   // Manual data fetch trigger
   const handleManualFetch = async () => {
     setFetchingData(true)
@@ -233,8 +252,9 @@ export default function SEOSEMDashboard() {
     if (activeTab === 'web_vitals') fetchVitals()
     if (activeTab === 'ads') fetchAds()
     if (activeTab === 'audience') fetchAudience()
+    if (activeTab === 'acquisition') fetchAcquisition()
     if (activeTab === 'combined') fetchCombined()
-  }, [activeTab, dateRange, site, fetchOverview, fetchKeywords, fetchPages, fetchVitals, fetchAds, fetchAudience, fetchCombined])
+  }, [activeTab, dateRange, site, fetchOverview, fetchKeywords, fetchPages, fetchVitals, fetchAds, fetchAudience, fetchAcquisition, fetchCombined])
 
   // Refetch keywords on filter change
   useEffect(() => {
@@ -345,6 +365,10 @@ export default function SEOSEMDashboard() {
             <Users className="h-3.5 w-3.5" />
             Audience
           </TabsTrigger>
+          <TabsTrigger value="acquisition" className="gap-1 text-xs sm:text-sm">
+            <Link2 className="h-3.5 w-3.5" />
+            Acquisition
+          </TabsTrigger>
           <TabsTrigger value="ads" className="gap-1 text-xs sm:text-sm">
             <DollarSign className="h-3.5 w-3.5" />
             Paid Ads
@@ -410,6 +434,13 @@ export default function SEOSEMDashboard() {
         <AudienceSection
           data={audienceData}
           loading={loadingAudience}
+        />
+      )}
+
+      {activeTab === 'acquisition' && (
+        <AcquisitionSection
+          data={acquisitionData}
+          loading={loadingAcquisition}
         />
       )}
 
