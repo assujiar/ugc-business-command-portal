@@ -460,32 +460,111 @@ export async function fetchPageSpeedData(urls?: string[]): Promise<{ success: bo
         const cruxMetrics = data.loadingExperience?.metrics || {}
         const cruxInp = cruxMetrics.INTERACTION_TO_NEXT_PAINT
         const inpMs = cruxInp?.percentile ?? null
-        const inpCategory = cruxInp?.category || null // FAST, AVERAGE, SLOW from CrUX
+        const inpCategory = cruxInp?.category || null
 
-        // Also extract CrUX values for LCP/CLS if available (more accurate than lab)
+        // CrUX values for LCP/CLS (more accurate than lab when available)
         const cruxLcp = cruxMetrics.LARGEST_CONTENTFUL_PAINT_MS
         const cruxCls = cruxMetrics.CUMULATIVE_LAYOUT_SHIFT_SCORE
+
+        // TBT - Total Blocking Time (30% weight, highest in Lighthouse!)
+        const tbtMs = audits['total-blocking-time']?.numericValue ?? null
+        const tbtRating = getVitalRating('tbt', tbtMs)
+
+        // Extract diagnostics & opportunities from audit refs
+        const perfCategory = categories.performance
+        const auditRefs = perfCategory?.auditRefs || []
+        const diagnostics: Array<{ id: string; title: string; description: string; displayValue?: string; score?: number; numericValue?: number }> = []
+        const opportunities: Array<{ id: string; title: string; description: string; displayValue?: string; overallSavingsMs?: number; overallSavingsBytes?: number; score?: number }> = []
+
+        for (const ref of auditRefs) {
+          const audit = audits[ref.id]
+          if (!audit) continue
+
+          // Diagnostics: group === 'diagnostics', score < 1 means has issues
+          if (ref.group === 'diagnostics' && audit.score !== null && audit.score < 1) {
+            diagnostics.push({
+              id: ref.id,
+              title: audit.title || ref.id,
+              description: audit.description || '',
+              displayValue: audit.displayValue || undefined,
+              score: audit.score,
+              numericValue: audit.numericValue,
+            })
+          }
+
+          // Opportunities: look for audits with details.overallSavingsMs
+          if (audit.details?.overallSavingsMs > 0 || audit.details?.overallSavingsBytes > 0) {
+            opportunities.push({
+              id: ref.id,
+              title: audit.title || ref.id,
+              description: audit.description || '',
+              displayValue: audit.displayValue || undefined,
+              overallSavingsMs: audit.details.overallSavingsMs || 0,
+              overallSavingsBytes: audit.details.overallSavingsBytes || 0,
+              score: audit.score,
+            })
+          }
+        }
+
+        // Sort opportunities by potential savings (ms) descending
+        opportunities.sort((a, b) => (b.overallSavingsMs || 0) - (a.overallSavingsMs || 0))
+
+        // Resource breakdown from resource-summary audit
+        const resourceSummary = audits['resource-summary']?.details?.items || []
+        const resources: Array<{ resourceType: string; label: string; requestCount: number; transferSize: number }> = []
+        for (const item of resourceSummary) {
+          if (item.resourceType && item.resourceType !== 'total') {
+            resources.push({
+              resourceType: item.resourceType,
+              label: item.label || item.resourceType,
+              requestCount: item.requestCount || 0,
+              transferSize: item.transferSize || 0,
+            })
+          }
+        }
+        // Total byte weight
+        const totalByteWeight = audits['total-byte-weight']?.numericValue || null
+
+        // Origin-level CrUX data (aggregated across entire domain)
+        const originCrux = data.originLoadingExperience || null
+        const originMetrics = originCrux?.metrics || {}
 
         await (admin as any).from('marketing_seo_web_vitals').upsert({
           fetch_date: today,
           page_url: url,
           strategy,
-          performance_score: (categories.performance?.score || 0) * 100,
+          performance_score: (perfCategory?.score || 0) * 100,
           lcp_ms: audits['largest-contentful-paint']?.numericValue || null,
           cls: audits['cumulative-layout-shift']?.numericValue || null,
           inp_ms: inpMs,
           fcp_ms: audits['first-contentful-paint']?.numericValue || null,
           ttfb_ms: audits['server-response-time']?.numericValue || null,
           speed_index_ms: audits['speed-index']?.numericValue || null,
+          tbt_ms: tbtMs,
+          tbt_rating: tbtRating,
           lcp_rating: cruxLcp?.category || getVitalRating('lcp', audits['largest-contentful-paint']?.numericValue),
           cls_rating: cruxCls?.category || getVitalRating('cls', audits['cumulative-layout-shift']?.numericValue),
           inp_rating: inpCategory || 'N/A',
           raw_response: {
-            categories: categories.performance,
             version: lhr.lighthouseVersion,
+            categories: perfCategory,
+            diagnostics,
+            opportunities,
+            resources,
+            totalByteWeight,
             loadingExperience: data.loadingExperience ? {
               overall_category: data.loadingExperience.overall_category,
               metrics: cruxMetrics,
+            } : null,
+            originLoadingExperience: originCrux ? {
+              overall_category: originCrux.overall_category,
+              metrics: {
+                LCP: originMetrics.LARGEST_CONTENTFUL_PAINT_MS ? { percentile: originMetrics.LARGEST_CONTENTFUL_PAINT_MS.percentile, category: originMetrics.LARGEST_CONTENTFUL_PAINT_MS.category } : null,
+                CLS: originMetrics.CUMULATIVE_LAYOUT_SHIFT_SCORE ? { percentile: originMetrics.CUMULATIVE_LAYOUT_SHIFT_SCORE.percentile, category: originMetrics.CUMULATIVE_LAYOUT_SHIFT_SCORE.category } : null,
+                INP: originMetrics.INTERACTION_TO_NEXT_PAINT ? { percentile: originMetrics.INTERACTION_TO_NEXT_PAINT.percentile, category: originMetrics.INTERACTION_TO_NEXT_PAINT.category } : null,
+                FCP: originMetrics.FIRST_CONTENTFUL_PAINT_MS ? { percentile: originMetrics.FIRST_CONTENTFUL_PAINT_MS.percentile, category: originMetrics.FIRST_CONTENTFUL_PAINT_MS.category } : null,
+                TTFB: originMetrics.EXPERIMENTAL_TIME_TO_FIRST_BYTE ? { percentile: originMetrics.EXPERIMENTAL_TIME_TO_FIRST_BYTE.percentile, category: originMetrics.EXPERIMENTAL_TIME_TO_FIRST_BYTE.category } : null,
+              },
             } : null,
           },
         }, { onConflict: 'fetch_date,page_url,strategy' })
@@ -509,6 +588,7 @@ function getVitalRating(type: string, value: number | null | undefined): string 
     case 'lcp': return value <= 2500 ? 'FAST' : value <= 4000 ? 'AVERAGE' : 'SLOW'
     case 'cls': return value <= 0.1 ? 'FAST' : value <= 0.25 ? 'AVERAGE' : 'SLOW'
     case 'inp': return value <= 200 ? 'FAST' : value <= 500 ? 'AVERAGE' : 'SLOW'
+    case 'tbt': return value <= 200 ? 'FAST' : value <= 600 ? 'AVERAGE' : 'SLOW'
     default: return 'UNKNOWN'
   }
 }
