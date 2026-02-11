@@ -698,16 +698,22 @@ async function googleAdsQuery(config: { accessToken: string; customerId: string;
   return allResults
 }
 
-export async function fetchGoogleAdsData(targetDate: string): Promise<{ success: boolean; error?: string }> {
+export async function fetchGoogleAdsData(targetDate: string, endDate?: string): Promise<{ success: boolean; error?: string }> {
   const config = await getGoogleAdsConfig()
   if (!config) return { success: false, error: 'Google Ads not configured or token expired' }
 
   const admin = createAdminClient()
+  const dateFrom = targetDate
+  const dateTo = endDate || targetDate
+  const dateFilter = dateFrom === dateTo
+    ? `segments.date = '${dateFrom}'`
+    : `segments.date BETWEEN '${dateFrom}' AND '${dateTo}'`
 
   try {
-    // 1. Fetch campaign performance for target date
+    // 1. Fetch campaign performance with segments.date for per-day breakdown
     const campaignResults = await googleAdsQuery(config, `
       SELECT
+        segments.date,
         campaign.id, campaign.name, campaign.status,
         campaign_budget.amount_micros,
         metrics.cost_micros, metrics.impressions, metrics.clicks,
@@ -715,85 +721,107 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
         metrics.conversions_value, metrics.cost_per_conversion,
         metrics.search_impression_share
       FROM campaign
-      WHERE segments.date = '${targetDate}'
+      WHERE ${dateFilter}
         AND campaign.status != 'REMOVED'
     `)
 
-    let totalSpend = 0, totalImpressions = 0, totalClicks = 0
-    let totalConversions = 0, totalConversionValue = 0
+    // Group results by date
+    const campaignsByDate = new Map<string, any[]>()
+    for (const r of campaignResults) {
+      const rowDate = r.segments?.date || dateFrom
+      if (!campaignsByDate.has(rowDate)) campaignsByDate.set(rowDate, [])
+      campaignsByDate.get(rowDate)!.push(r)
+    }
 
-    const campaigns = campaignResults.map((r: any) => {
-      const c = r.campaign || {}
-      const m = r.metrics || {}
-      const b = r.campaignBudget || {}
+    const allCampaigns: any[] = []
+    const allDailySpend: any[] = []
 
-      const spend = (m.costMicros || 0) / 1_000_000
-      const clicks = m.clicks || 0
-      const impressions = m.impressions || 0
-      const conversions = parseFloat(m.conversions || '0')
-      const convValue = parseFloat(m.conversionsValue || '0')
-      const budget = (b.amountMicros || 0) / 1_000_000
+    campaignsByDate.forEach((rows, date) => {
+      let totalSpend = 0, totalImpressions = 0, totalClicks = 0
+      let totalConversions = 0, totalConversionValue = 0
 
-      totalSpend += spend
-      totalImpressions += impressions
-      totalClicks += clicks
-      totalConversions += conversions
-      totalConversionValue += convValue
+      const campaigns = rows.map((r: any) => {
+        const c = r.campaign || {}
+        const m = r.metrics || {}
+        const b = r.campaignBudget || {}
 
-      return {
-        fetch_date: targetDate,
+        const spend = (m.costMicros || 0) / 1_000_000
+        const clicks = m.clicks || 0
+        const impressions = m.impressions || 0
+        const conversions = parseFloat(m.conversions || '0')
+        const convValue = parseFloat(m.conversionsValue || '0')
+        const budget = (b.amountMicros || 0) / 1_000_000
+
+        totalSpend += spend
+        totalImpressions += impressions
+        totalClicks += clicks
+        totalConversions += conversions
+        totalConversionValue += convValue
+
+        return {
+          fetch_date: date,
+          platform: 'google_ads',
+          campaign_id: String(c.id || ''),
+          campaign_name: c.name || '',
+          campaign_status: (c.status || '').toLowerCase(),
+          spend,
+          impressions,
+          clicks,
+          ctr: parseFloat(m.ctr || '0'),
+          avg_cpc: (m.averageCpc || 0) / 1_000_000,
+          conversions,
+          conversion_value: convValue,
+          cost_per_conversion: spend > 0 && conversions > 0 ? spend / conversions : 0,
+          roas: spend > 0 ? convValue / spend : 0,
+          impression_share: parseFloat(m.searchImpressionShare || '0'),
+          quality_score_avg: null,
+          daily_budget: budget,
+          budget_utilization: budget > 0 ? (spend / budget) * 100 : 0,
+        }
+      })
+
+      allCampaigns.push(...campaigns)
+
+      const activeCampaigns = campaigns.filter((c: any) => c.campaign_status === 'enabled').length
+      allDailySpend.push({
+        fetch_date: date,
         platform: 'google_ads',
-        campaign_id: String(c.id || ''),
-        campaign_name: c.name || '',
-        campaign_status: (c.status || '').toLowerCase(),
-        spend,
-        impressions,
-        clicks,
-        ctr: parseFloat(m.ctr || '0'),
-        avg_cpc: (m.averageCpc || 0) / 1_000_000,
-        conversions,
-        conversion_value: convValue,
-        cost_per_conversion: spend > 0 && conversions > 0 ? spend / conversions : 0,
-        roas: spend > 0 ? convValue / spend : 0,
-        impression_share: parseFloat(m.searchImpressionShare || '0'),
-        quality_score_avg: null,
-        daily_budget: budget,
-        budget_utilization: budget > 0 ? (spend / budget) * 100 : 0,
-      }
+        total_spend: totalSpend,
+        total_impressions: totalImpressions,
+        total_clicks: totalClicks,
+        total_conversions: totalConversions,
+        total_conversion_value: totalConversionValue,
+        avg_cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
+        avg_cpa: totalConversions > 0 ? totalSpend / totalConversions : 0,
+        overall_roas: totalSpend > 0 ? totalConversionValue / totalSpend : 0,
+        active_campaigns: activeCampaigns,
+      })
     })
 
-    // Upsert campaigns
-    if (campaigns.length > 0) {
-      await (admin as any).from('marketing_sem_campaigns')
+    // Upsert campaigns - delete date range first
+    if (allCampaigns.length > 0) {
+      let delQuery = (admin as any).from('marketing_sem_campaigns')
         .delete()
-        .eq('fetch_date', targetDate)
         .eq('platform', 'google_ads')
+        .gte('fetch_date', dateFrom)
+        .lte('fetch_date', dateTo)
+      await delQuery
 
-      for (let i = 0; i < campaigns.length; i += 100) {
-        await (admin as any).from('marketing_sem_campaigns').insert(campaigns.slice(i, i + 100))
+      for (let i = 0; i < allCampaigns.length; i += 100) {
+        await (admin as any).from('marketing_sem_campaigns').insert(allCampaigns.slice(i, i + 100))
       }
     }
 
-    // Upsert daily spend aggregate
-    const activeCampaigns = campaigns.filter(c => c.campaign_status === 'enabled').length
-    await (admin as any).from('marketing_sem_daily_spend').upsert({
-      fetch_date: targetDate,
-      platform: 'google_ads',
-      total_spend: totalSpend,
-      total_impressions: totalImpressions,
-      total_clicks: totalClicks,
-      total_conversions: totalConversions,
-      total_conversion_value: totalConversionValue,
-      avg_cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
-      avg_cpa: totalConversions > 0 ? totalSpend / totalConversions : 0,
-      overall_roas: totalSpend > 0 ? totalConversionValue / totalSpend : 0,
-      active_campaigns: activeCampaigns,
-    }, { onConflict: 'fetch_date,platform' })
+    // Upsert daily spend aggregates
+    for (const ds of allDailySpend) {
+      await (admin as any).from('marketing_sem_daily_spend').upsert(ds, { onConflict: 'fetch_date,platform' })
+    }
 
-    // 2. Fetch keyword performance
+    // 2. Fetch keyword performance (aggregate across date range, latest date only for keywords)
     try {
       const kwResults = await googleAdsQuery(config, `
         SELECT
+          segments.date,
           campaign.id, campaign.name,
           ad_group.id, ad_group.name,
           ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
@@ -801,7 +829,7 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
           metrics.ctr, metrics.average_cpc, metrics.conversions,
           ad_group_criterion.quality_info.quality_score
         FROM keyword_view
-        WHERE segments.date = '${targetDate}'
+        WHERE ${dateFilter}
         ORDER BY metrics.cost_micros DESC
         LIMIT 1000
       `)
@@ -811,7 +839,7 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
         const m = r.metrics || {}
         const qi = r.adGroupCriterion?.qualityInfo || {}
         return {
-          fetch_date: targetDate,
+          fetch_date: r.segments?.date || dateFrom,
           campaign_id: String(r.campaign?.id || ''),
           campaign_name: r.campaign?.name || '',
           ad_group_id: String(r.adGroup?.id || ''),
@@ -831,7 +859,8 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
       if (keywords.length > 0) {
         await (admin as any).from('marketing_sem_keywords')
           .delete()
-          .eq('fetch_date', targetDate)
+          .gte('fetch_date', dateFrom)
+          .lte('fetch_date', dateTo)
 
         for (let i = 0; i < keywords.length; i += 500) {
           await (admin as any).from('marketing_sem_keywords').insert(keywords.slice(i, i + 500))
@@ -845,13 +874,14 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
     try {
       const stResults = await googleAdsQuery(config, `
         SELECT
+          segments.date,
           search_term_view.search_term,
           campaign.name, ad_group.name,
           segments.keyword.info.text,
           metrics.impressions, metrics.clicks,
           metrics.cost_micros, metrics.conversions
         FROM search_term_view
-        WHERE segments.date = '${targetDate}'
+        WHERE ${dateFilter}
         ORDER BY metrics.impressions DESC
         LIMIT 500
       `)
@@ -859,7 +889,7 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
       const searchTerms = stResults.map((r: any) => {
         const m = r.metrics || {}
         return {
-          fetch_date: targetDate,
+          fetch_date: r.segments?.date || dateFrom,
           search_term: r.searchTermView?.searchTerm || '',
           campaign_name: r.campaign?.name || '',
           ad_group_name: r.adGroup?.name || '',
@@ -874,7 +904,8 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
       if (searchTerms.length > 0) {
         await (admin as any).from('marketing_sem_search_terms')
           .delete()
-          .eq('fetch_date', targetDate)
+          .gte('fetch_date', dateFrom)
+          .lte('fetch_date', dateTo)
 
         for (let i = 0; i < searchTerms.length; i += 500) {
           await (admin as any).from('marketing_sem_search_terms').insert(searchTerms.slice(i, i + 500))

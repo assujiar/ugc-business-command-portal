@@ -63,8 +63,10 @@ export async function POST(request: NextRequest) {
       } else if (specificService === 'pagespeed') {
         results.push({ service: 'pagespeed', ...await fetchPageSpeedData(urls) })
       } else if (specificService === 'google_ads') {
-        const date = target_date || new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0]
-        results.push({ service: 'google_ads', ...await fetchGoogleAdsData(date) })
+        const endDt = target_date || new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0]
+        // Default: fetch last 30 days for initial backfill
+        const startDt = body.start_date || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
+        results.push({ service: 'google_ads', ...await fetchGoogleAdsData(startDt, endDt) })
       } else {
         // Fetch all
         const seoRes = await runDailySEOFetch()
