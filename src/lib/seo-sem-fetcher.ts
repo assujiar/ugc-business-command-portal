@@ -676,7 +676,7 @@ async function googleAdsQuery(config: { accessToken: string; customerId: string;
   }
 
   const res = await fetch(
-    `https://googleads.googleapis.com/v18/customers/${config.customerId}/googleAds:searchStream`,
+    `https://googleads.googleapis.com/v23/customers/${config.customerId}/googleAds:searchStream`,
     {
       method: 'POST',
       headers,
