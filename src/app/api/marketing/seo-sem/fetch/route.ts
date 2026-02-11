@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
-import { runDailySEOFetch, runWeeklyVitalsFetch, fetchPageSpeedData, fetchGSCData, fetchGA4Data } from '@/lib/seo-sem-fetcher'
+import { runDailySEOFetch, runWeeklyVitalsFetch, fetchPageSpeedData, fetchGSCData, fetchGA4Data, fetchGoogleAdsData } from '@/lib/seo-sem-fetcher'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,6 +62,9 @@ export async function POST(request: NextRequest) {
         results.push({ service: 'google_analytics', ...await fetchGA4Data(date) })
       } else if (specificService === 'pagespeed') {
         results.push({ service: 'pagespeed', ...await fetchPageSpeedData(urls) })
+      } else if (specificService === 'google_ads') {
+        const date = target_date || new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0]
+        results.push({ service: 'google_ads', ...await fetchGoogleAdsData(date) })
       } else {
         // Fetch all
         const seoRes = await runDailySEOFetch()

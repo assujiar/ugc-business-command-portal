@@ -109,6 +109,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // For Google Ads, fetch accessible customers (stored after updateData is declared)
+    let detectedAdsCustomers: string[] = []
+    let existingAdsExtra: Record<string, any> = {}
+    if (service === 'google_ads') {
+      try {
+        const custRes = await fetch(
+          `https://googleads.googleapis.com/v18/customers:listAccessibleCustomers`,
+          { headers: { Authorization: `Bearer ${access_token}`, 'developer-token': process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '' } }
+        )
+        if (custRes.ok) {
+          const custData = await custRes.json()
+          detectedAdsCustomers = (custData.resourceNames || []).map((r: string) => r.replace('customers/', ''))
+          if (detectedAdsCustomers.length > 0) {
+            const { data: existingAds } = await (admin as any).from('marketing_seo_config')
+              .select('extra_config').eq('service', 'google_ads').single()
+            existingAdsExtra = existingAds?.extra_config || {}
+          }
+        }
+      } catch (e) {
+        console.error('Error listing Google Ads customers:', e)
+      }
+    }
+
     // For GSC, fetch available sites
     let gscSites: string[] = []
     if (service === 'google_search_console') {
@@ -149,6 +172,10 @@ export async function GET(request: NextRequest) {
 
     if (gscSites.length > 0) {
       updateData.extra_config = { sites: gscSites }
+    }
+
+    if (detectedAdsCustomers.length > 0) {
+      updateData.extra_config = { ...existingAdsExtra, detected_customers: detectedAdsCustomers }
     }
 
     await (admin as any)

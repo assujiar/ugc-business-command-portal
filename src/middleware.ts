@@ -39,6 +39,8 @@ export async function middleware(request: NextRequest) {
       request.nextUrl.pathname.startsWith('/login') ||
       request.nextUrl.pathname.startsWith('/auth') ||
       request.nextUrl.pathname.startsWith('/quotation-verify') ||
+      request.nextUrl.pathname.startsWith('/terms') ||
+      request.nextUrl.pathname.startsWith('/privacy') ||
       request.nextUrl.pathname.startsWith('/api/public') ||
       request.nextUrl.pathname.startsWith('/api/ticketing/customer-quotations/validate') ||
       request.nextUrl.pathname.startsWith('/api/crm/notifications/cron')
@@ -114,6 +116,8 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/login') ||
     request.nextUrl.pathname.startsWith('/auth') ||
     request.nextUrl.pathname.startsWith('/quotation-verify') ||
+    request.nextUrl.pathname.startsWith('/terms') ||
+    request.nextUrl.pathname.startsWith('/privacy') ||
     request.nextUrl.pathname.startsWith('/api/public') ||
     request.nextUrl.pathname.startsWith('/api/ticketing/customer-quotations/validate') ||
     request.nextUrl.pathname.startsWith('/api/crm/notifications/cron')
