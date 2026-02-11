@@ -109,9 +109,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // For Google Ads, we just store the token (customer_id is set separately via settings)
+    // For Google Ads, fetch accessible customers (stored after updateData is declared)
+    let detectedAdsCustomers: string[] = []
+    let existingAdsExtra: Record<string, any> = {}
     if (service === 'google_ads') {
-      // Fetch accessible customer accounts
       try {
         const custRes = await fetch(
           `https://googleads.googleapis.com/v18/customers:listAccessibleCustomers`,
@@ -119,14 +120,11 @@ export async function GET(request: NextRequest) {
         )
         if (custRes.ok) {
           const custData = await custRes.json()
-          const customerIds = (custData.resourceNames || []).map((r: string) => r.replace('customers/', ''))
-          // Store detected customer IDs in extra_config
-          if (customerIds.length > 0) {
-            // Get existing config to preserve developer_token and customer_id
+          detectedAdsCustomers = (custData.resourceNames || []).map((r: string) => r.replace('customers/', ''))
+          if (detectedAdsCustomers.length > 0) {
             const { data: existingAds } = await (admin as any).from('marketing_seo_config')
               .select('extra_config').eq('service', 'google_ads').single()
-            const existingExtra = existingAds?.extra_config || {}
-            updateData.extra_config = { ...existingExtra, detected_customers: customerIds }
+            existingAdsExtra = existingAds?.extra_config || {}
           }
         }
       } catch (e) {
@@ -174,6 +172,10 @@ export async function GET(request: NextRequest) {
 
     if (gscSites.length > 0) {
       updateData.extra_config = { sites: gscSites }
+    }
+
+    if (detectedAdsCustomers.length > 0) {
+      updateData.extra_config = { ...existingAdsExtra, detected_customers: detectedAdsCustomers }
     }
 
     await (admin as any)
