@@ -18,14 +18,21 @@ import { PagePerformanceSection } from './seo/page-performance-section'
 import WebVitalsSection from './seo/web-vitals-section'
 import AdsOverviewSection from './sem/ads-overview-section'
 import CombinedViewSection from './sem/combined-view-section'
+import SEOSEMSettings from './seo/seo-sem-settings'
 
-type TabValue = 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'ads' | 'combined'
+type TabValue = 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'ads' | 'combined' | 'settings'
 
 export default function SEOSEMDashboard() {
   // Global filters
   const [dateRange, setDateRange] = useState('30d')
   const [site, setSite] = useState('__all__')
-  const [activeTab, setActiveTab] = useState<TabValue>('seo_overview')
+  const [activeTab, setActiveTab] = useState<TabValue>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('tab') === 'settings') return 'settings'
+    }
+    return 'seo_overview'
+  })
   const [sites, setSites] = useState<string[]>([])
 
   // Data states
@@ -229,6 +236,7 @@ export default function SEOSEMDashboard() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {activeTab !== 'settings' && <>
           {/* Date Range */}
           <Select value={dateRange} onValueChange={setDateRange}>
             <SelectTrigger className="w-24 h-8 text-xs">
@@ -265,6 +273,7 @@ export default function SEOSEMDashboard() {
             {fetchingData ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCcw className="h-3 w-3 mr-1" />}
             Refresh Data
           </Button>
+          </>}
         </div>
       </div>
 
@@ -312,6 +321,10 @@ export default function SEOSEMDashboard() {
           <TabsTrigger value="combined" className="gap-1 text-xs sm:text-sm">
             <GitCompareArrows className="h-3.5 w-3.5" />
             Combined
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="gap-1 text-xs sm:text-sm">
+            <Settings className="h-3.5 w-3.5" />
+            Settings
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -365,6 +378,10 @@ export default function SEOSEMDashboard() {
           data={combinedData}
           loading={loadingCombined}
         />
+      )}
+
+      {activeTab === 'settings' && (
+        <SEOSEMSettings />
       )}
     </div>
   )
