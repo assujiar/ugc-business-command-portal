@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Privacy Policy - UGC Business Command Portal',
-  description: 'Privacy Policy for UGC Business Command Portal by PT Utama Global Indo Cargo',
+  description: 'Privacy Policy for UGC Business Command Portal by PT Utama Globalindo Cargo',
 }
 
 export default function PrivacyPolicyPage() {
@@ -16,7 +16,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-xl font-semibold mt-8 mb-3">1. Introduction</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              PT Utama Global Indo Cargo (&quot;the Company&quot;, &quot;we&quot;, &quot;us&quot;) operates the UGC Business
+              PT Utama Globalindo Cargo (&quot;the Company&quot;, &quot;we&quot;, &quot;us&quot;) operates the UGC Business
               Command Portal (&quot;the Portal&quot;). This Privacy Policy explains how we collect, use,
               store, and protect information when you use our Portal and related services.
             </p>
@@ -152,7 +152,7 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-xl font-semibold mt-8 mb-3">11. Contact Us</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
               For questions or concerns about this Privacy Policy, please contact:<br />
-              <strong>PT Utama Global Indo Cargo</strong><br />
+              <strong>PT Utama Globalindo Cargo</strong><br />
               Email: cargo.ugc@gmail.com
             </p>
           </section>
