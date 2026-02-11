@@ -42,7 +42,7 @@ CREATE POLICY revenue_actuals_select ON marketing_revenue_actuals
     EXISTS (
       SELECT 1 FROM profiles p
       WHERE p.user_id = auth.uid()
-      AND p.role IN ('super admin', 'Director', 'Marketing')
+      AND p.role IN ('super admin', 'Director', 'Marketing Manager','MACX','VDCO','Marcomm')
     )
   );
 
@@ -51,7 +51,7 @@ CREATE POLICY revenue_actuals_insert ON marketing_revenue_actuals
     EXISTS (
       SELECT 1 FROM profiles p
       WHERE p.user_id = auth.uid()
-      AND p.role IN ('super admin', 'Director', 'Marketing')
+      AND p.role IN ('super admin', 'Director', 'Marketing Manager','MACX','VDCO','Marcomm')
     )
   );
 
@@ -60,6 +60,6 @@ CREATE POLICY revenue_actuals_update ON marketing_revenue_actuals
     EXISTS (
       SELECT 1 FROM profiles p
       WHERE p.user_id = auth.uid()
-      AND p.role IN ('super admin', 'Director', 'Marketing')
+      AND p.role IN ('super admin', 'Director', 'Marketing Manager','MACX','VDCO','Marcomm')
     )
   );
