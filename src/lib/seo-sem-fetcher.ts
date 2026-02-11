@@ -455,6 +455,17 @@ export async function fetchPageSpeedData(urls?: string[]): Promise<{ success: bo
         const audits = lhr.audits || {}
         const categories = lhr.categories || {}
 
+        // INP is a field metric (real user data), not available in lab tests
+        // Extract from CrUX loadingExperience if available
+        const cruxMetrics = data.loadingExperience?.metrics || {}
+        const cruxInp = cruxMetrics.INTERACTION_TO_NEXT_PAINT
+        const inpMs = cruxInp?.percentile ?? null
+        const inpCategory = cruxInp?.category || null // FAST, AVERAGE, SLOW from CrUX
+
+        // Also extract CrUX values for LCP/CLS if available (more accurate than lab)
+        const cruxLcp = cruxMetrics.LARGEST_CONTENTFUL_PAINT_MS
+        const cruxCls = cruxMetrics.CUMULATIVE_LAYOUT_SHIFT_SCORE
+
         await (admin as any).from('marketing_seo_web_vitals').upsert({
           fetch_date: today,
           page_url: url,
@@ -462,14 +473,21 @@ export async function fetchPageSpeedData(urls?: string[]): Promise<{ success: bo
           performance_score: (categories.performance?.score || 0) * 100,
           lcp_ms: audits['largest-contentful-paint']?.numericValue || null,
           cls: audits['cumulative-layout-shift']?.numericValue || null,
-          inp_ms: audits['interaction-to-next-paint']?.numericValue || audits['experimental-interaction-to-next-paint']?.numericValue || null,
+          inp_ms: inpMs,
           fcp_ms: audits['first-contentful-paint']?.numericValue || null,
           ttfb_ms: audits['server-response-time']?.numericValue || null,
           speed_index_ms: audits['speed-index']?.numericValue || null,
-          lcp_rating: getVitalRating('lcp', audits['largest-contentful-paint']?.numericValue),
-          cls_rating: getVitalRating('cls', audits['cumulative-layout-shift']?.numericValue),
-          inp_rating: getVitalRating('inp', audits['interaction-to-next-paint']?.numericValue || audits['experimental-interaction-to-next-paint']?.numericValue),
-          raw_response: { categories: categories.performance, version: lhr.lighthouseVersion },
+          lcp_rating: cruxLcp?.category || getVitalRating('lcp', audits['largest-contentful-paint']?.numericValue),
+          cls_rating: cruxCls?.category || getVitalRating('cls', audits['cumulative-layout-shift']?.numericValue),
+          inp_rating: inpCategory || 'N/A',
+          raw_response: {
+            categories: categories.performance,
+            version: lhr.lighthouseVersion,
+            loadingExperience: data.loadingExperience ? {
+              overall_category: data.loadingExperience.overall_category,
+              metrics: cruxMetrics,
+            } : null,
+          },
         }, { onConflict: 'fetch_date,page_url,strategy' })
 
       } catch (err: any) {
