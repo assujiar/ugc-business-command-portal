@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Get latest vitals for all monitored pages
-    // First get distinct page_urls
     const { data: allVitals } = await (admin as any)
       .from('marketing_seo_web_vitals')
       .select('*')
@@ -51,9 +50,19 @@ export async function GET(request: NextRequest) {
     // Group by page_url
     const pageMap = new Map<string, { url: string; mobile: any; desktop: any }>()
     for (const v of Array.from(latestMap.values())) {
+      // Extract enriched data from raw_response
+      const raw = v.raw_response || {}
+      const enriched = {
+        ...v,
+        diagnostics: raw.diagnostics || [],
+        opportunities: raw.opportunities || [],
+        resources: raw.resources || [],
+        totalByteWeight: raw.totalByteWeight || null,
+        originCrux: raw.originLoadingExperience || null,
+      }
       const existing = pageMap.get(v.page_url) || { url: v.page_url, mobile: null, desktop: null }
-      if (v.strategy === 'mobile') existing.mobile = v
-      if (v.strategy === 'desktop') existing.desktop = v
+      if (v.strategy === 'mobile') existing.mobile = enriched
+      if (v.strategy === 'desktop') existing.desktop = enriched
       pageMap.set(v.page_url, existing)
     }
 
@@ -62,7 +71,7 @@ export async function GET(request: NextRequest) {
     // Historical trend (weekly scores for charts)
     const { data: trendData } = await (admin as any)
       .from('marketing_seo_web_vitals')
-      .select('fetch_date, page_url, strategy, performance_score, lcp_ms, cls, inp_ms')
+      .select('fetch_date, page_url, strategy, performance_score, lcp_ms, cls, inp_ms, tbt_ms')
       .order('fetch_date', { ascending: true })
       .limit(500)
 
@@ -77,6 +86,7 @@ export async function GET(request: NextRequest) {
         lcp: Number(t.lcp_ms) || 0,
         cls: Number(t.cls) || 0,
         inp: Number(t.inp_ms) || 0,
+        tbt: Number(t.tbt_ms) || 0,
       })
       trendMap.set(key, arr)
     }

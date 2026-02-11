@@ -70,6 +70,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   } else if (role === 'Marketing Manager' || role === 'MACX') {
     leadsQuery = leadsQuery.not('marketing_owner_user_id', 'is', null)
   } else if (role === 'Marcomm' || role === 'DGO' || role === 'VDCO') {
+    // Individual marketing roles see their own data
     leadsQuery = leadsQuery.or(`marketing_owner_user_id.eq.${userId},created_by.eq.${userId}`)
   } else {
     leadsQuery = leadsQuery.or(`sales_owner_user_id.eq.${userId},created_by.eq.${userId}`)
