@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Terms of Service - UGC Business Command Portal',
-  description: 'Terms of Service for UGC Business Command Portal by PT Utama Global Indo Cargo',
+  description: 'Terms of Service for UGC Business Command Portal by PT Utama Globalindo Cargo',
 }
 
 export default function TermsOfServicePage() {
@@ -17,7 +17,7 @@ export default function TermsOfServicePage() {
             <h2 className="text-xl font-semibold mt-8 mb-3">1. Acceptance of Terms</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
               By accessing and using the UGC Business Command Portal (&quot;the Portal&quot;), operated by
-              PT Utama Global Indo Cargo (&quot;the Company&quot;, &quot;we&quot;, &quot;us&quot;), you agree to be bound by
+              PT Utama Globalindo Cargo (&quot;the Company&quot;, &quot;we&quot;, &quot;us&quot;), you agree to be bound by
               these Terms of Service. If you do not agree with any part of these terms, you may
               not access or use the Portal.
             </p>
@@ -28,7 +28,7 @@ export default function TermsOfServicePage() {
             <p className="text-sm text-muted-foreground leading-relaxed">
               The Portal is an internal business management platform that provides Customer Relationship
               Management (CRM), ticketing, marketing analytics, and operational tools for authorized
-              employees and business partners of PT Utama Global Indo Cargo.
+              employees and business partners of PT Utama Globalindo Cargo.
             </p>
           </section>
 
@@ -122,7 +122,7 @@ export default function TermsOfServicePage() {
             <h2 className="text-xl font-semibold mt-8 mb-3">12. Contact</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
               For questions regarding these Terms of Service, please contact:<br />
-              <strong>PT Utama Global Indo Cargo</strong><br />
+              <strong>PT Utama Globalindo Cargo</strong><br />
               Email: cargo.ugc@gmail.com
             </p>
           </section>
