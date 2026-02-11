@@ -37,12 +37,12 @@ import { cn } from '@/lib/utils'
 
 interface SEOOverviewProps {
   kpis: {
-    totalClicks: { value: number; change: number }
-    totalImpressions: { value: number; change: number }
-    avgCtr: { value: number; change: number }
-    avgPosition: { value: number; change: number }
-    organicSessions: { value: number; change: number }
-    conversionRate: { value: number; change: number }
+    totalClicks: { value: number; change: number; yoy?: number }
+    totalImpressions: { value: number; change: number; yoy?: number }
+    avgCtr: { value: number; change: number; yoy?: number }
+    avgPosition: { value: number; change: number; yoy?: number }
+    organicSessions: { value: number; change: number; yoy?: number }
+    conversionRate: { value: number; change: number; yoy?: number }
   } | null
   dailyTrend: { date: string; clicks: number; impressions: number; sessions: number }[]
   deviceBreakdown: { desktop: number; mobile: number; tablet: number } | null
@@ -196,8 +196,11 @@ function ChangeIndicator({
   )
 }
 
-function KpiCard({ def, data }: { def: KpiCardDef; data: { value: number; change: number } }) {
+function KpiCard({ def, data }: { def: KpiCardDef; data: { value: number; change: number; yoy?: number } }) {
   const Icon = def.icon
+  const yoyVal = data.yoy || 0
+  const yoyPositive = def.invertChange ? yoyVal < 0 : yoyVal > 0
+  const yoyNegative = def.invertChange ? yoyVal > 0 : yoyVal < 0
 
   return (
     <Card>
@@ -213,7 +216,17 @@ function KpiCard({ def, data }: { def: KpiCardDef; data: { value: number; change
         <div className="text-2xl font-bold tracking-tight mb-1">
           {def.format(data.value)}
         </div>
-        <ChangeIndicator change={data.change} invertColor={def.invertChange} />
+        <div className="flex items-center gap-3">
+          <ChangeIndicator change={data.change} invertColor={def.invertChange} />
+          {yoyVal !== 0 && (
+            <span className={cn(
+              'flex items-center gap-0.5 text-xs',
+              yoyPositive ? 'text-green-600' : yoyNegative ? 'text-red-500' : 'text-muted-foreground'
+            )}>
+              {yoyVal > 0 ? '+' : ''}{yoyVal.toFixed(1)}% YoY
+            </span>
+          )}
+        </div>
       </CardContent>
     </Card>
   )

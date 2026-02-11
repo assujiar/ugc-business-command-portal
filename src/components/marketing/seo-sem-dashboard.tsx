@@ -246,6 +246,7 @@ export default function SEOSEMDashboard() {
               <SelectItem value="7d">7 Hari</SelectItem>
               <SelectItem value="30d">30 Hari</SelectItem>
               <SelectItem value="90d">90 Hari</SelectItem>
+              <SelectItem value="ytd">YTD</SelectItem>
             </SelectContent>
           </Select>
 

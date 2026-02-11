@@ -88,18 +88,20 @@ async function refreshGoogleToken(refreshToken: string, service: string): Promis
 // Google Search Console Fetcher
 // =====================================================
 
-export async function fetchGSCData(targetDate: string, sites?: string[]): Promise<{ success: boolean; error?: string }> {
+export async function fetchGSCData(targetDate: string, endDate?: string, sites?: string[]): Promise<{ success: boolean; error?: string }> {
   const tokens = await getGoogleTokens('google_search_console')
   if (!tokens) return { success: false, error: 'Google Search Console not configured or token expired' }
 
   const admin = createAdminClient()
   const configSites = sites || tokens.extraConfig.sites || ['sc-domain:ugc.id']
+  const dateFrom = targetDate
+  const dateTo = endDate || targetDate
 
   for (const siteUrl of configSites) {
     const siteName = siteUrl.replace('sc-domain:', '').replace('https://', '').replace('/', '')
 
     try {
-      // 1. Fetch daily aggregate (all devices combined)
+      // 1. Fetch daily aggregate with date dimension for range support
       const dailyRes = await fetch(
         `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
         {
@@ -109,9 +111,9 @@ export async function fetchGSCData(targetDate: string, sites?: string[]): Promis
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            startDate: targetDate,
-            endDate: targetDate,
-            dimensions: [],
+            startDate: dateFrom,
+            endDate: dateTo,
+            dimensions: ['date'],
             type: 'web',
           }),
         }
@@ -123,9 +125,8 @@ export async function fetchGSCData(targetDate: string, sites?: string[]): Promis
       }
 
       const dailyData = await dailyRes.json()
-      const row = dailyData.rows?.[0] || {}
 
-      // 2. Fetch device breakdown
+      // 2. Fetch device breakdown per date
       const deviceRes = await fetch(
         `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
         {
@@ -135,34 +136,46 @@ export async function fetchGSCData(targetDate: string, sites?: string[]): Promis
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            startDate: targetDate,
-            endDate: targetDate,
-            dimensions: ['device'],
+            startDate: dateFrom,
+            endDate: dateTo,
+            dimensions: ['date', 'device'],
             type: 'web',
           }),
         }
       )
 
       const deviceData = deviceRes.ok ? await deviceRes.json() : { rows: [] }
-      const deviceMap: Record<string, number> = {}
+      // Group device data by date
+      const deviceByDate = new Map<string, Record<string, number>>()
       for (const dr of deviceData.rows || []) {
-        deviceMap[dr.keys[0]] = dr.clicks || 0
+        const d = dr.keys[0]
+        if (!deviceByDate.has(d)) deviceByDate.set(d, {})
+        deviceByDate.get(d)![dr.keys[1]] = dr.clicks || 0
       }
 
-      // Upsert daily snapshot
-      await (admin as any).from('marketing_seo_daily_snapshot').upsert({
-        fetch_date: targetDate,
-        site: siteName,
-        gsc_total_clicks: row.clicks || 0,
-        gsc_total_impressions: row.impressions || 0,
-        gsc_avg_ctr: row.ctr || 0,
-        gsc_avg_position: row.position || 0,
-        gsc_desktop_clicks: deviceMap['DESKTOP'] || 0,
-        gsc_mobile_clicks: deviceMap['MOBILE'] || 0,
-        gsc_tablet_clicks: deviceMap['TABLET'] || 0,
-      }, { onConflict: 'fetch_date,site' })
+      // Upsert daily snapshots
+      const snapshots = (dailyData.rows || []).map((row: any) => {
+        const d = row.keys[0]
+        const dm = deviceByDate.get(d) || {}
+        return {
+          fetch_date: d,
+          site: siteName,
+          gsc_total_clicks: row.clicks || 0,
+          gsc_total_impressions: row.impressions || 0,
+          gsc_avg_ctr: row.ctr || 0,
+          gsc_avg_position: row.position || 0,
+          gsc_desktop_clicks: dm['DESKTOP'] || 0,
+          gsc_mobile_clicks: dm['MOBILE'] || 0,
+          gsc_tablet_clicks: dm['TABLET'] || 0,
+        }
+      })
 
-      // 3. Fetch keyword data (top 5000 by clicks)
+      for (let i = 0; i < snapshots.length; i += 100) {
+        await (admin as any).from('marketing_seo_daily_snapshot')
+          .upsert(snapshots.slice(i, i + 100), { onConflict: 'fetch_date,site' })
+      }
+
+      // 3. Fetch keyword data (top 5000 by clicks, aggregated across range)
       const kwRes = await fetch(
         `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
         {
@@ -172,9 +185,9 @@ export async function fetchGSCData(targetDate: string, sites?: string[]): Promis
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            startDate: targetDate,
-            endDate: targetDate,
-            dimensions: ['query'],
+            startDate: dateFrom,
+            endDate: dateTo,
+            dimensions: ['date', 'query'],
             rowLimit: 5000,
             type: 'web',
           }),
@@ -184,35 +197,35 @@ export async function fetchGSCData(targetDate: string, sites?: string[]): Promis
       if (kwRes.ok) {
         const kwData = await kwRes.json()
         const keywords = (kwData.rows || []).map((r: any) => ({
-          fetch_date: targetDate,
+          fetch_date: r.keys[0],
           site: siteName,
-          query: r.keys[0],
+          query: r.keys[1],
           clicks: r.clicks || 0,
           impressions: r.impressions || 0,
           ctr: r.ctr || 0,
           position: r.position || 0,
           device: null,
           country: null,
-          is_branded: isBrandedQuery(r.keys[0]),
+          is_branded: isBrandedQuery(r.keys[1]),
         }))
 
         if (keywords.length > 0) {
-          // Delete existing then insert (upsert with composite keys is tricky for bulk)
+          // Delete range then bulk insert
           await (admin as any).from('marketing_seo_keywords')
             .delete()
-            .eq('fetch_date', targetDate)
             .eq('site', siteName)
+            .gte('fetch_date', dateFrom)
+            .lte('fetch_date', dateTo)
             .is('device', null)
             .is('country', null)
 
-          // Insert in batches of 500
           for (let i = 0; i < keywords.length; i += 500) {
             await (admin as any).from('marketing_seo_keywords').insert(keywords.slice(i, i + 500))
           }
         }
       }
 
-      // 4. Fetch page data (top 1000)
+      // 4. Fetch page data (top 1000, aggregated across range)
       const pageRes = await fetch(
         `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
         {
@@ -222,9 +235,9 @@ export async function fetchGSCData(targetDate: string, sites?: string[]): Promis
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            startDate: targetDate,
-            endDate: targetDate,
-            dimensions: ['page'],
+            startDate: dateFrom,
+            endDate: dateTo,
+            dimensions: ['date', 'page'],
             rowLimit: 1000,
             type: 'web',
           }),
@@ -234,9 +247,9 @@ export async function fetchGSCData(targetDate: string, sites?: string[]): Promis
       if (pageRes.ok) {
         const pageData = await pageRes.json()
         const pages = (pageData.rows || []).map((r: any) => ({
-          fetch_date: targetDate,
+          fetch_date: r.keys[0],
           site: siteName,
-          page_url: r.keys[0],
+          page_url: r.keys[1],
           gsc_clicks: r.clicks || 0,
           gsc_impressions: r.impressions || 0,
           gsc_ctr: r.ctr || 0,
@@ -246,8 +259,9 @@ export async function fetchGSCData(targetDate: string, sites?: string[]): Promis
         if (pages.length > 0) {
           await (admin as any).from('marketing_seo_pages')
             .delete()
-            .eq('fetch_date', targetDate)
             .eq('site', siteName)
+            .gte('fetch_date', dateFrom)
+            .lte('fetch_date', dateTo)
 
           for (let i = 0; i < pages.length; i += 500) {
             await (admin as any).from('marketing_seo_pages').insert(pages.slice(i, i + 500))
@@ -275,14 +289,15 @@ export async function fetchGSCData(targetDate: string, sites?: string[]): Promis
 // Google Analytics 4 Fetcher
 // =====================================================
 
-export async function fetchGA4Data(targetDate: string, site?: string): Promise<{ success: boolean; error?: string }> {
+export async function fetchGA4Data(targetDate: string, endDate?: string, site?: string): Promise<{ success: boolean; error?: string }> {
   const tokens = await getGoogleTokens('google_analytics')
   if (!tokens) return { success: false, error: 'Google Analytics not configured or token expired' }
 
   const admin = createAdminClient()
+  const dateFrom = targetDate
+  const dateTo = endDate || targetDate
 
   // Support multiple properties from extra_config.properties
-  // Fallback to single property_id for backward compatibility
   const properties: Array<{ property_id: string; site: string }> = tokens.extraConfig.properties || []
   if (properties.length === 0 && tokens.propertyId) {
     properties.push({ property_id: tokens.propertyId, site: site || tokens.extraConfig.site || 'ugc.id' })
@@ -299,7 +314,7 @@ export async function fetchGA4Data(targetDate: string, site?: string): Promise<{
     const siteName = prop.site || 'ugc.id'
 
     try {
-      // 1. Fetch organic sessions aggregate
+      // 1. Fetch organic sessions with date dimension for range support
       const reportRes = await fetch(
         `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
         {
@@ -309,8 +324,8 @@ export async function fetchGA4Data(targetDate: string, site?: string): Promise<{
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            dateRanges: [{ startDate: targetDate, endDate: targetDate }],
-            dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+            dateRanges: [{ startDate: dateFrom, endDate: dateTo }],
+            dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }],
             metrics: [
               { name: 'sessions' },
               { name: 'totalUsers' },
@@ -328,6 +343,7 @@ export async function fetchGA4Data(targetDate: string, site?: string): Promise<{
                 stringFilter: { matchType: 'EXACT', value: 'Organic Search' },
               },
             },
+            limit: 10000,
           }),
         }
       )
@@ -338,12 +354,17 @@ export async function fetchGA4Data(targetDate: string, site?: string): Promise<{
       }
 
       const report = await reportRes.json()
-      const row = report.rows?.[0]
+      const snapshots: any[] = []
 
-      if (row) {
+      for (const row of report.rows || []) {
+        const rawDate = row.dimensionValues[0]?.value || '' // YYYYMMDD format
+        const fetchDate = rawDate.length === 8
+          ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+          : rawDate
         const metrics = row.metricValues || []
-        await (admin as any).from('marketing_seo_daily_snapshot').upsert({
-          fetch_date: targetDate,
+
+        snapshots.push({
+          fetch_date: fetchDate,
           site: siteName,
           ga_organic_sessions: parseInt(metrics[0]?.value || '0'),
           ga_organic_users: parseInt(metrics[1]?.value || '0'),
@@ -354,10 +375,15 @@ export async function fetchGA4Data(targetDate: string, site?: string): Promise<{
           ga_organic_bounce_rate: parseFloat(metrics[6]?.value || '0'),
           ga_organic_conversions: parseInt(metrics[7]?.value || '0'),
           ga_organic_page_views: parseInt(metrics[8]?.value || '0'),
-        }, { onConflict: 'fetch_date,site' })
+        })
       }
 
-      // 2. Fetch per-page organic data
+      for (let i = 0; i < snapshots.length; i += 100) {
+        await (admin as any).from('marketing_seo_daily_snapshot')
+          .upsert(snapshots.slice(i, i + 100), { onConflict: 'fetch_date,site' })
+      }
+
+      // 2. Fetch per-page organic data (aggregated for latest date only to avoid huge data)
       const pageReportRes = await fetch(
         `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
         {
@@ -367,7 +393,7 @@ export async function fetchGA4Data(targetDate: string, site?: string): Promise<{
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            dateRanges: [{ startDate: targetDate, endDate: targetDate }],
+            dateRanges: [{ startDate: dateFrom, endDate: dateTo }],
             dimensions: [{ name: 'pagePath' }],
             metrics: [
               { name: 'sessions' },
@@ -391,24 +417,28 @@ export async function fetchGA4Data(targetDate: string, site?: string): Promise<{
 
       if (pageReportRes.ok) {
         const pageReport = await pageReportRes.json()
+        const pages: any[] = []
         for (const pr of pageReport.rows || []) {
           const pagePath = pr.dimensionValues[0]?.value
           const m = pr.metricValues || []
           if (!pagePath) continue
 
-          const pageUrl = `https://${siteName}${pagePath}`
+          pages.push({
+            fetch_date: dateTo,
+            site: siteName,
+            page_url: `https://${siteName}${pagePath}`,
+            ga_sessions: parseInt(m[0]?.value || '0'),
+            ga_users: parseInt(m[1]?.value || '0'),
+            ga_engagement_rate: parseFloat(m[2]?.value || '0'),
+            ga_avg_session_duration: parseFloat(m[3]?.value || '0'),
+            ga_bounce_rate: parseFloat(m[4]?.value || '0'),
+            ga_conversions: parseInt(m[5]?.value || '0'),
+          })
+        }
+
+        for (let i = 0; i < pages.length; i += 100) {
           await (admin as any).from('marketing_seo_pages')
-            .upsert({
-              fetch_date: targetDate,
-              site: siteName,
-              page_url: pageUrl,
-              ga_sessions: parseInt(m[0]?.value || '0'),
-              ga_users: parseInt(m[1]?.value || '0'),
-              ga_engagement_rate: parseFloat(m[2]?.value || '0'),
-              ga_avg_session_duration: parseFloat(m[3]?.value || '0'),
-              ga_bounce_rate: parseFloat(m[4]?.value || '0'),
-              ga_conversions: parseInt(m[5]?.value || '0'),
-            }, { onConflict: 'fetch_date,site,page_url' })
+            .upsert(pages.slice(i, i + 100), { onConflict: 'fetch_date,site,page_url' })
         }
       }
     } catch (err: any) {
@@ -417,7 +447,6 @@ export async function fetchGA4Data(targetDate: string, site?: string): Promise<{
   }
 
   if (errors.length > 0 && errors.length === properties.length) {
-    // All properties failed
     await (admin as any).from('marketing_seo_config')
       .update({ last_fetch_error: errors.join('; ') })
       .eq('service', 'google_analytics')
@@ -698,16 +727,22 @@ async function googleAdsQuery(config: { accessToken: string; customerId: string;
   return allResults
 }
 
-export async function fetchGoogleAdsData(targetDate: string): Promise<{ success: boolean; error?: string }> {
+export async function fetchGoogleAdsData(targetDate: string, endDate?: string): Promise<{ success: boolean; error?: string }> {
   const config = await getGoogleAdsConfig()
   if (!config) return { success: false, error: 'Google Ads not configured or token expired' }
 
   const admin = createAdminClient()
+  const dateFrom = targetDate
+  const dateTo = endDate || targetDate
+  const dateFilter = dateFrom === dateTo
+    ? `segments.date = '${dateFrom}'`
+    : `segments.date BETWEEN '${dateFrom}' AND '${dateTo}'`
 
   try {
-    // 1. Fetch campaign performance for target date
+    // 1. Fetch campaign performance with segments.date for per-day breakdown
     const campaignResults = await googleAdsQuery(config, `
       SELECT
+        segments.date,
         campaign.id, campaign.name, campaign.status,
         campaign_budget.amount_micros,
         metrics.cost_micros, metrics.impressions, metrics.clicks,
@@ -715,85 +750,107 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
         metrics.conversions_value, metrics.cost_per_conversion,
         metrics.search_impression_share
       FROM campaign
-      WHERE segments.date = '${targetDate}'
+      WHERE ${dateFilter}
         AND campaign.status != 'REMOVED'
     `)
 
-    let totalSpend = 0, totalImpressions = 0, totalClicks = 0
-    let totalConversions = 0, totalConversionValue = 0
+    // Group results by date
+    const campaignsByDate = new Map<string, any[]>()
+    for (const r of campaignResults) {
+      const rowDate = r.segments?.date || dateFrom
+      if (!campaignsByDate.has(rowDate)) campaignsByDate.set(rowDate, [])
+      campaignsByDate.get(rowDate)!.push(r)
+    }
 
-    const campaigns = campaignResults.map((r: any) => {
-      const c = r.campaign || {}
-      const m = r.metrics || {}
-      const b = r.campaignBudget || {}
+    const allCampaigns: any[] = []
+    const allDailySpend: any[] = []
 
-      const spend = (m.costMicros || 0) / 1_000_000
-      const clicks = m.clicks || 0
-      const impressions = m.impressions || 0
-      const conversions = parseFloat(m.conversions || '0')
-      const convValue = parseFloat(m.conversionsValue || '0')
-      const budget = (b.amountMicros || 0) / 1_000_000
+    campaignsByDate.forEach((rows, date) => {
+      let totalSpend = 0, totalImpressions = 0, totalClicks = 0
+      let totalConversions = 0, totalConversionValue = 0
 
-      totalSpend += spend
-      totalImpressions += impressions
-      totalClicks += clicks
-      totalConversions += conversions
-      totalConversionValue += convValue
+      const campaigns = rows.map((r: any) => {
+        const c = r.campaign || {}
+        const m = r.metrics || {}
+        const b = r.campaignBudget || {}
 
-      return {
-        fetch_date: targetDate,
+        const spend = (m.costMicros || 0) / 1_000_000
+        const clicks = m.clicks || 0
+        const impressions = m.impressions || 0
+        const conversions = parseFloat(m.conversions || '0')
+        const convValue = parseFloat(m.conversionsValue || '0')
+        const budget = (b.amountMicros || 0) / 1_000_000
+
+        totalSpend += spend
+        totalImpressions += impressions
+        totalClicks += clicks
+        totalConversions += conversions
+        totalConversionValue += convValue
+
+        return {
+          fetch_date: date,
+          platform: 'google_ads',
+          campaign_id: String(c.id || ''),
+          campaign_name: c.name || '',
+          campaign_status: (c.status || '').toLowerCase(),
+          spend,
+          impressions,
+          clicks,
+          ctr: parseFloat(m.ctr || '0'),
+          avg_cpc: (m.averageCpc || 0) / 1_000_000,
+          conversions,
+          conversion_value: convValue,
+          cost_per_conversion: spend > 0 && conversions > 0 ? spend / conversions : 0,
+          roas: spend > 0 ? convValue / spend : 0,
+          impression_share: parseFloat(m.searchImpressionShare || '0'),
+          quality_score_avg: null,
+          daily_budget: budget,
+          budget_utilization: budget > 0 ? (spend / budget) * 100 : 0,
+        }
+      })
+
+      allCampaigns.push(...campaigns)
+
+      const activeCampaigns = campaigns.filter((c: any) => c.campaign_status === 'enabled').length
+      allDailySpend.push({
+        fetch_date: date,
         platform: 'google_ads',
-        campaign_id: String(c.id || ''),
-        campaign_name: c.name || '',
-        campaign_status: (c.status || '').toLowerCase(),
-        spend,
-        impressions,
-        clicks,
-        ctr: parseFloat(m.ctr || '0'),
-        avg_cpc: (m.averageCpc || 0) / 1_000_000,
-        conversions,
-        conversion_value: convValue,
-        cost_per_conversion: spend > 0 && conversions > 0 ? spend / conversions : 0,
-        roas: spend > 0 ? convValue / spend : 0,
-        impression_share: parseFloat(m.searchImpressionShare || '0'),
-        quality_score_avg: null,
-        daily_budget: budget,
-        budget_utilization: budget > 0 ? (spend / budget) * 100 : 0,
-      }
+        total_spend: totalSpend,
+        total_impressions: totalImpressions,
+        total_clicks: totalClicks,
+        total_conversions: totalConversions,
+        total_conversion_value: totalConversionValue,
+        avg_cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
+        avg_cpa: totalConversions > 0 ? totalSpend / totalConversions : 0,
+        overall_roas: totalSpend > 0 ? totalConversionValue / totalSpend : 0,
+        active_campaigns: activeCampaigns,
+      })
     })
 
-    // Upsert campaigns
-    if (campaigns.length > 0) {
-      await (admin as any).from('marketing_sem_campaigns')
+    // Upsert campaigns - delete date range first
+    if (allCampaigns.length > 0) {
+      let delQuery = (admin as any).from('marketing_sem_campaigns')
         .delete()
-        .eq('fetch_date', targetDate)
         .eq('platform', 'google_ads')
+        .gte('fetch_date', dateFrom)
+        .lte('fetch_date', dateTo)
+      await delQuery
 
-      for (let i = 0; i < campaigns.length; i += 100) {
-        await (admin as any).from('marketing_sem_campaigns').insert(campaigns.slice(i, i + 100))
+      for (let i = 0; i < allCampaigns.length; i += 100) {
+        await (admin as any).from('marketing_sem_campaigns').insert(allCampaigns.slice(i, i + 100))
       }
     }
 
-    // Upsert daily spend aggregate
-    const activeCampaigns = campaigns.filter(c => c.campaign_status === 'enabled').length
-    await (admin as any).from('marketing_sem_daily_spend').upsert({
-      fetch_date: targetDate,
-      platform: 'google_ads',
-      total_spend: totalSpend,
-      total_impressions: totalImpressions,
-      total_clicks: totalClicks,
-      total_conversions: totalConversions,
-      total_conversion_value: totalConversionValue,
-      avg_cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
-      avg_cpa: totalConversions > 0 ? totalSpend / totalConversions : 0,
-      overall_roas: totalSpend > 0 ? totalConversionValue / totalSpend : 0,
-      active_campaigns: activeCampaigns,
-    }, { onConflict: 'fetch_date,platform' })
+    // Upsert daily spend aggregates
+    for (const ds of allDailySpend) {
+      await (admin as any).from('marketing_sem_daily_spend').upsert(ds, { onConflict: 'fetch_date,platform' })
+    }
 
-    // 2. Fetch keyword performance
+    // 2. Fetch keyword performance (aggregate across date range, latest date only for keywords)
     try {
       const kwResults = await googleAdsQuery(config, `
         SELECT
+          segments.date,
           campaign.id, campaign.name,
           ad_group.id, ad_group.name,
           ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
@@ -801,7 +858,7 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
           metrics.ctr, metrics.average_cpc, metrics.conversions,
           ad_group_criterion.quality_info.quality_score
         FROM keyword_view
-        WHERE segments.date = '${targetDate}'
+        WHERE ${dateFilter}
         ORDER BY metrics.cost_micros DESC
         LIMIT 1000
       `)
@@ -811,7 +868,7 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
         const m = r.metrics || {}
         const qi = r.adGroupCriterion?.qualityInfo || {}
         return {
-          fetch_date: targetDate,
+          fetch_date: r.segments?.date || dateFrom,
           campaign_id: String(r.campaign?.id || ''),
           campaign_name: r.campaign?.name || '',
           ad_group_id: String(r.adGroup?.id || ''),
@@ -831,7 +888,8 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
       if (keywords.length > 0) {
         await (admin as any).from('marketing_sem_keywords')
           .delete()
-          .eq('fetch_date', targetDate)
+          .gte('fetch_date', dateFrom)
+          .lte('fetch_date', dateTo)
 
         for (let i = 0; i < keywords.length; i += 500) {
           await (admin as any).from('marketing_sem_keywords').insert(keywords.slice(i, i + 500))
@@ -845,13 +903,14 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
     try {
       const stResults = await googleAdsQuery(config, `
         SELECT
+          segments.date,
           search_term_view.search_term,
           campaign.name, ad_group.name,
           segments.keyword.info.text,
           metrics.impressions, metrics.clicks,
           metrics.cost_micros, metrics.conversions
         FROM search_term_view
-        WHERE segments.date = '${targetDate}'
+        WHERE ${dateFilter}
         ORDER BY metrics.impressions DESC
         LIMIT 500
       `)
@@ -859,7 +918,7 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
       const searchTerms = stResults.map((r: any) => {
         const m = r.metrics || {}
         return {
-          fetch_date: targetDate,
+          fetch_date: r.segments?.date || dateFrom,
           search_term: r.searchTermView?.searchTerm || '',
           campaign_name: r.campaign?.name || '',
           ad_group_name: r.adGroup?.name || '',
@@ -874,7 +933,8 @@ export async function fetchGoogleAdsData(targetDate: string): Promise<{ success:
       if (searchTerms.length > 0) {
         await (admin as any).from('marketing_sem_search_terms')
           .delete()
-          .eq('fetch_date', targetDate)
+          .gte('fetch_date', dateFrom)
+          .lte('fetch_date', dateTo)
 
         for (let i = 0; i < searchTerms.length; i += 500) {
           await (admin as any).from('marketing_sem_search_terms').insert(searchTerms.slice(i, i + 500))
