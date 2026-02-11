@@ -12,6 +12,9 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'UGC Business Command Portal - CRM',
   description: 'Customer Relationship Management Module for UGC Business Command Portal',
+  verification: {
+    google: 'cDHWdWwy-jkAx8aP6jFamYp_CVZus_F5fR5fm2CDl8M',
+  },
 }
 
 export default function RootLayout({
