@@ -40,7 +40,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Exchange authorization code for tokens
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    // Use request origin as most reliable source for redirect_uri
+    // It MUST match exactly what was used in the OAuth initiation URL
+    const requestOrigin = new URL(request.url).origin
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || requestOrigin
     const redirectUri = `${appUrl}/api/auth/google/callback`
 
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
