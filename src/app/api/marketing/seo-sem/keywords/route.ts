@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
+import { parseDateRange } from '@/lib/date-range-helper'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,6 @@ export async function GET(request: NextRequest) {
     if (!profile || !canAccessMarketingPanel(profile.role as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
-    const range = searchParams.get('range') || '30d'
     const site = searchParams.get('site') || '__all__'
     const device = searchParams.get('device') || '__all__'
     const branded = searchParams.get('branded') || '__all__'
@@ -28,20 +28,7 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit
 
     const admin = createAdminClient()
-    const days = range === '7d' ? 7 : range === '90d' ? 90 : 30
-
-    // Current period date range (GSC delay = 3 days)
-    const now = new Date()
-    const endDate = new Date(now)
-    endDate.setDate(endDate.getDate() - 3)
-    const startDate = new Date(endDate)
-    startDate.setDate(startDate.getDate() - days)
-    const prevStartDate = new Date(startDate)
-    prevStartDate.setDate(prevStartDate.getDate() - days)
-
-    const startStr = startDate.toISOString().split('T')[0]
-    const endStr = endDate.toISOString().split('T')[0]
-    const prevStartStr = prevStartDate.toISOString().split('T')[0]
+    const { startStr, endStr, prevStartStr, prevEndStr } = parseDateRange(searchParams, { gscDelay: true })
 
     // Fetch current period keywords (aggregate across dates)
     let kwQuery = (admin as any)
@@ -81,7 +68,7 @@ export async function GET(request: NextRequest) {
       .from('marketing_seo_keywords')
       .select('query, position')
       .gte('fetch_date', prevStartStr)
-      .lt('fetch_date', startStr)
+      .lte('fetch_date', prevEndStr)
 
     if (site !== '__all__') prevKwQuery = prevKwQuery.eq('site', site)
     if (device !== '__all__') prevKwQuery = prevKwQuery.eq('device', device.toUpperCase())

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
+import { parseDateRange } from '@/lib/date-range-helper'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,36 +21,13 @@ export async function GET(request: NextRequest) {
     if (!profile || !canAccessMarketingPanel(profile.role as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
-    const range = searchParams.get('range') || '30d'
     const platform = searchParams.get('platform') || '__all__'
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
     const limit = Math.min(100, parseInt(searchParams.get('limit') || '50', 10))
     const offset = (page - 1) * limit
 
     const admin = createAdminClient()
-    const days = range === '7d' ? 7 : range === '90d' ? 90 : range === 'ytd' ? 0 : 30
-    const now = new Date()
-    const endDate = new Date(now)
-    endDate.setDate(endDate.getDate() - 1)
-
-    let startDate: Date
-    if (range === 'ytd') {
-      startDate = new Date(now.getFullYear(), 0, 1) // Jan 1 this year
-    } else {
-      startDate = new Date(endDate)
-      startDate.setDate(startDate.getDate() - days)
-    }
-
-    const startStr = startDate.toISOString().split('T')[0]
-    const endStr = endDate.toISOString().split('T')[0]
-
-    // YoY: Same period last year
-    const yoyStartDate = new Date(startDate)
-    yoyStartDate.setFullYear(yoyStartDate.getFullYear() - 1)
-    const yoyEndDate = new Date(endDate)
-    yoyEndDate.setFullYear(yoyEndDate.getFullYear() - 1)
-    const yoyStartStr = yoyStartDate.toISOString().split('T')[0]
-    const yoyEndStr = yoyEndDate.toISOString().split('T')[0]
+    const { startStr, endStr, yoyStartStr, yoyEndStr } = parseDateRange(searchParams)
 
     // Current period KPIs
     let spendQuery = (admin as any)
@@ -118,16 +96,57 @@ export async function GET(request: NextRequest) {
     const { data: campData } = await campQuery
     const campaigns = campData || []
 
-    // Aggregate campaigns by campaign_id
+    // Aggregate campaigns by campaign_id — SUM metrics across all dates in range
     const campMap = new Map<string, any>()
     for (const c of campaigns) {
       const key = `${c.platform}|${c.campaign_id}`
       const existing = campMap.get(key)
-      if (!existing || c.fetch_date > existing.fetch_date) {
-        campMap.set(key, c)
+      if (!existing) {
+        campMap.set(key, {
+          platform: c.platform,
+          campaign_id: c.campaign_id,
+          campaign_name: c.campaign_name,
+          campaign_status: c.campaign_status,
+          daily_budget: Number(c.daily_budget) || 0,
+          budget_utilization: Number(c.budget_utilization) || 0,
+          fetch_date: c.fetch_date,
+          // Summed metrics
+          spend: Number(c.spend) || 0,
+          impressions: Number(c.impressions) || 0,
+          clicks: Number(c.clicks) || 0,
+          conversions: Number(c.conversions) || 0,
+          conversion_value: Number(c.conversion_value) || 0,
+        })
+      } else {
+        // Accumulate metrics across days
+        existing.spend += Number(c.spend) || 0
+        existing.impressions += Number(c.impressions) || 0
+        existing.clicks += Number(c.clicks) || 0
+        existing.conversions += Number(c.conversions) || 0
+        existing.conversion_value += Number(c.conversion_value) || 0
+        // Keep metadata from the latest date row
+        if (c.fetch_date > existing.fetch_date) {
+          existing.campaign_name = c.campaign_name
+          existing.campaign_status = c.campaign_status
+          existing.daily_budget = Number(c.daily_budget) || 0
+          existing.budget_utilization = Number(c.budget_utilization) || 0
+          existing.fetch_date = c.fetch_date
+        }
       }
     }
-    const aggregatedCampaigns = Array.from(campMap.values())
+
+    // Compute derived metrics from aggregated totals
+    const aggregatedCampaigns = Array.from(campMap.values()).map((c) => ({
+      ...c,
+      ctr: c.impressions > 0 ? c.clicks / c.impressions : 0,
+      avg_cpc: c.clicks > 0 ? c.spend / c.clicks : 0,
+      cost_per_conversion: c.conversions > 0 ? c.spend / c.conversions : 0,
+      roas: c.spend > 0 ? c.conversion_value / c.spend : 0,
+    }))
+
+    // Sort by total spend descending
+    aggregatedCampaigns.sort((a, b) => b.spend - a.spend)
+
     const total = aggregatedCampaigns.length
     const paginatedCampaigns = aggregatedCampaigns.slice(offset, offset + limit)
 
@@ -148,6 +167,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       kpis,
+      hasConversionValues: totalConversionValue > 0,
       campaigns: paginatedCampaigns,
       total,
       page,

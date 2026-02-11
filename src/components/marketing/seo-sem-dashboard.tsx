@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
 import {
   Search, BarChart3, Globe, Gauge, DollarSign,
   GitCompareArrows, RefreshCcw, Settings, AlertCircle, Loader2, Lightbulb, Users, Link2
@@ -25,9 +26,15 @@ import { AcquisitionSection } from './seo/acquisition-section'
 
 type TabValue = 'summary' | 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'audience' | 'acquisition' | 'ads' | 'combined' | 'settings'
 
+function getTodayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 export default function SEOSEMDashboard() {
   // Global filters
   const [dateRange, setDateRange] = useState('30d')
+  const [customDateFrom, setCustomDateFrom] = useState('2025-01-01')
+  const [customDateTo, setCustomDateTo] = useState(getTodayStr)
   const [site, setSite] = useState('__all__')
   const [activeTab, setActiveTab] = useState<TabValue>(() => {
     if (typeof window !== 'undefined') {
@@ -76,6 +83,10 @@ export default function SEOSEMDashboard() {
     setLoadingOverview(true)
     try {
       const params = new URLSearchParams({ range: dateRange, site })
+      if (dateRange === 'custom') {
+        params.set('date_from', customDateFrom)
+        params.set('date_to', customDateTo)
+      }
       const res = await fetch(`/api/marketing/seo-sem/overview?${params}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -86,7 +97,7 @@ export default function SEOSEMDashboard() {
     } finally {
       setLoadingOverview(false)
     }
-  }, [dateRange, site])
+  }, [dateRange, site, customDateFrom, customDateTo])
 
   // Fetch keywords
   const fetchKeywords = useCallback(async () => {
@@ -99,6 +110,10 @@ export default function SEOSEMDashboard() {
         page: String(kwFilters.page), limit: '50',
         sort: kwFilters.sort, dir: kwFilters.dir,
       })
+      if (dateRange === 'custom') {
+        params.set('date_from', customDateFrom)
+        params.set('date_to', customDateTo)
+      }
       const res = await fetch(`/api/marketing/seo-sem/keywords?${params}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -108,7 +123,7 @@ export default function SEOSEMDashboard() {
     } finally {
       setLoadingKeywords(false)
     }
-  }, [dateRange, site, kwFilters])
+  }, [dateRange, site, kwFilters, customDateFrom, customDateTo])
 
   // Fetch pages
   const fetchPages = useCallback(async () => {
@@ -120,6 +135,10 @@ export default function SEOSEMDashboard() {
         page: String(pageFilters.page), limit: '50',
         sort: pageFilters.sort, dir: pageFilters.dir,
       })
+      if (dateRange === 'custom') {
+        params.set('date_from', customDateFrom)
+        params.set('date_to', customDateTo)
+      }
       if (expandedUrl) params.set('expand_url', expandedUrl)
       const res = await fetch(`/api/marketing/seo-sem/pages?${params}`)
       const data = await res.json()
@@ -130,7 +149,7 @@ export default function SEOSEMDashboard() {
     } finally {
       setLoadingPages(false)
     }
-  }, [dateRange, site, pageFilters, expandedUrl])
+  }, [dateRange, site, pageFilters, expandedUrl, customDateFrom, customDateTo])
 
   // Fetch vitals
   const fetchVitals = useCallback(async () => {
@@ -152,6 +171,10 @@ export default function SEOSEMDashboard() {
     setLoadingAds(true)
     try {
       const params = new URLSearchParams({ range: dateRange })
+      if (dateRange === 'custom') {
+        params.set('date_from', customDateFrom)
+        params.set('date_to', customDateTo)
+      }
       const res = await fetch(`/api/marketing/seo-sem/ads?${params}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -161,13 +184,17 @@ export default function SEOSEMDashboard() {
     } finally {
       setLoadingAds(false)
     }
-  }, [dateRange])
+  }, [dateRange, customDateFrom, customDateTo])
 
   // Fetch combined
   const fetchCombined = useCallback(async () => {
     setLoadingCombined(true)
     try {
       const params = new URLSearchParams({ range: dateRange })
+      if (dateRange === 'custom') {
+        params.set('date_from', customDateFrom)
+        params.set('date_to', customDateTo)
+      }
       const res = await fetch(`/api/marketing/seo-sem/combined?${params}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -177,13 +204,17 @@ export default function SEOSEMDashboard() {
     } finally {
       setLoadingCombined(false)
     }
-  }, [dateRange])
+  }, [dateRange, customDateFrom, customDateTo])
 
   // Fetch audience demographics
   const fetchAudience = useCallback(async () => {
     setLoadingAudience(true)
     try {
       const params = new URLSearchParams({ range: dateRange, site })
+      if (dateRange === 'custom') {
+        params.set('date_from', customDateFrom)
+        params.set('date_to', customDateTo)
+      }
       const res = await fetch(`/api/marketing/seo-sem/demographics?${params}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -193,13 +224,17 @@ export default function SEOSEMDashboard() {
     } finally {
       setLoadingAudience(false)
     }
-  }, [dateRange, site])
+  }, [dateRange, site, customDateFrom, customDateTo])
 
   // Fetch acquisition/UTM data
   const fetchAcquisition = useCallback(async () => {
     setLoadingAcquisition(true)
     try {
       const params = new URLSearchParams({ range: dateRange, site })
+      if (dateRange === 'custom') {
+        params.set('date_from', customDateFrom)
+        params.set('date_to', customDateTo)
+      }
       const res = await fetch(`/api/marketing/seo-sem/utm?${params}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -209,7 +244,7 @@ export default function SEOSEMDashboard() {
     } finally {
       setLoadingAcquisition(false)
     }
-  }, [dateRange, site])
+  }, [dateRange, site, customDateFrom, customDateTo])
 
   // Manual data fetch trigger
   const handleManualFetch = async () => {
@@ -281,7 +316,7 @@ export default function SEOSEMDashboard() {
           {activeTab !== 'settings' && <>
           {/* Date Range */}
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-24 h-8 text-xs">
+            <SelectTrigger className="w-28 h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -289,8 +324,32 @@ export default function SEOSEMDashboard() {
               <SelectItem value="30d">30 Hari</SelectItem>
               <SelectItem value="90d">90 Hari</SelectItem>
               <SelectItem value="ytd">YTD</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Custom Date Range Inputs */}
+          {dateRange === 'custom' && (
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                value={customDateFrom}
+                min="2025-01-01"
+                max={customDateTo}
+                onChange={(e) => setCustomDateFrom(e.target.value)}
+                className="w-[130px] h-8 text-xs"
+              />
+              <span className="text-xs text-muted-foreground">-</span>
+              <Input
+                type="date"
+                value={customDateTo}
+                min={customDateFrom || '2025-01-01'}
+                max={getTodayStr()}
+                onChange={(e) => setCustomDateTo(e.target.value)}
+                className="w-[130px] h-8 text-xs"
+              />
+            </div>
+          )}
 
           {/* Site Filter */}
           <Select value={site} onValueChange={setSite}>

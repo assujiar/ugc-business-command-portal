@@ -39,6 +39,7 @@ interface AdsOverviewProps {
     }>
     total: number
     page: number
+    hasConversionValues?: boolean
     dailySpend: Array<{ date: string; platform: string; spend: number; clicks: number; conversions: number }>
     configs: Array<{ service: string; is_active: boolean; last_fetch_at: string | null }>
   } | null
@@ -120,12 +121,15 @@ export default function AdsOverviewSection({ data, loading }: AdsOverviewProps) 
   // Top 5 campaigns by ROAS
   const topRoas = [...campaigns].sort((a, b) => b.roas - a.roas).slice(0, 5)
 
+  const hasConvValues = data?.hasConversionValues !== false
+  const roasDisplay = hasConvValues ? `${kpis.overallRoas.value.toFixed(2)}x` : 'N/A'
+
   const kpiCards = [
     { label: 'Total Ad Spend', value: formatCurrency(kpis.totalSpend.value), yoy: kpis.totalSpend.yoy, icon: DollarSign, color: 'text-red-500', invertYoy: true, metricKey: 'totalSpend' },
     { label: 'Total Conversions', value: formatNumber(kpis.totalConversions.value), yoy: kpis.totalConversions.yoy, icon: Target, color: 'text-green-500', metricKey: 'totalConversions' },
     { label: 'Avg CPC', value: formatCurrency(kpis.avgCpc.value), yoy: kpis.avgCpc.yoy, icon: MousePointerClick, color: 'text-blue-500', invertYoy: true, metricKey: 'avgCpc' },
     { label: 'Avg CPA', value: formatCurrency(kpis.avgCpa.value), yoy: kpis.avgCpa.yoy, icon: TrendingUp, color: 'text-purple-500', invertYoy: true, metricKey: 'avgCpa' },
-    { label: 'Overall ROAS', value: `${kpis.overallRoas.value.toFixed(2)}x`, yoy: kpis.overallRoas.yoy, icon: BarChart3, color: 'text-amber-500', metricKey: 'overallRoas' },
+    { label: 'Overall ROAS', value: roasDisplay, yoy: hasConvValues ? kpis.overallRoas.yoy : 0, icon: BarChart3, color: 'text-amber-500', metricKey: 'overallRoas' },
   ]
 
   return (
@@ -239,7 +243,7 @@ export default function AdsOverviewSection({ data, loading }: AdsOverviewProps) 
                         <TableCell className="text-xs text-right">{(Number(c.ctr) * 100).toFixed(2)}%</TableCell>
                         <TableCell className="text-xs text-right">{formatCurrency(Number(c.avg_cpc))}</TableCell>
                         <TableCell className="text-xs text-right">{Number(c.conversions).toFixed(0)}</TableCell>
-                        <TableCell className="text-xs text-right font-medium">{Number(c.roas).toFixed(2)}x</TableCell>
+                        <TableCell className="text-xs text-right font-medium">{Number(c.roas) > 0 ? `${Number(c.roas).toFixed(2)}x` : <span className="text-muted-foreground">N/A</span>}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
