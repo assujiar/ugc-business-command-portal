@@ -54,18 +54,46 @@ async function getGoogleTokens(service: string): Promise<{
 
 async function refreshGoogleToken(refreshToken: string, service: string): Promise<{ access_token: string } | null> {
   try {
+    if (!refreshToken) {
+      console.error(`[seo-sem-token] No refresh_token for ${service}`)
+      return null
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+    if (!clientId || !clientSecret) {
+      console.error(`[seo-sem-token] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set`)
+      return null
+    }
+
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID || '',
-        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+        client_id: clientId,
+        client_secret: clientSecret,
         refresh_token: refreshToken,
         grant_type: 'refresh_token',
       }),
     })
-    if (!res.ok) return null
+
+    if (!res.ok) {
+      const errBody = await res.text()
+      console.error(`[seo-sem-token] Google token refresh failed for ${service} (${res.status}):`, errBody)
+      // Store error in DB so UI can show it
+      const admin = createAdminClient()
+      await (admin as any)
+        .from('marketing_seo_config')
+        .update({
+          last_fetch_error: `Token refresh failed (${res.status}): ${errBody.slice(0, 500)}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('service', service)
+      return null
+    }
+
     const data = await res.json()
+    const newExpiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString()
 
     // Update token in DB
     const admin = createAdminClient()
@@ -73,15 +101,107 @@ async function refreshGoogleToken(refreshToken: string, service: string): Promis
       .from('marketing_seo_config')
       .update({
         access_token: data.access_token,
-        token_expires_at: new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString(),
+        token_expires_at: newExpiresAt,
+        last_fetch_error: null, // clear previous errors on success
         updated_at: new Date().toISOString(),
       })
       .eq('service', service)
 
+    console.log(`[seo-sem-token] Successfully refreshed token for ${service}, expires at ${newExpiresAt}`)
     return { access_token: data.access_token }
-  } catch {
+  } catch (err) {
+    console.error(`[seo-sem-token] Refresh error for ${service}:`, err)
     return null
   }
+}
+
+// =====================================================
+// Proactive Token Refresh for all SEO-SEM services
+// Called by pg_cron every 45 minutes to keep tokens alive
+// =====================================================
+
+// Buffer: refresh 10 minutes before expiry
+const SEO_SEM_REFRESH_BUFFER_MS = 10 * 60 * 1000
+
+export interface SeoSemTokenRefreshReport {
+  service: string
+  status: 'valid' | 'refreshed' | 'failed' | 'no_token' | 'no_refresh_token' | 'no_expiry'
+  expires_at?: string
+  error?: string
+}
+
+export async function refreshAllSeoSemTokens(): Promise<SeoSemTokenRefreshReport[]> {
+  const admin = createAdminClient()
+  const reports: SeoSemTokenRefreshReport[] = []
+
+  // Only refresh Google OAuth services (GSC, GA4, Google Ads)
+  const googleServices = ['google_search_console', 'google_analytics', 'google_ads']
+
+  const { data: configs, error } = await (admin as any)
+    .from('marketing_seo_config')
+    .select('*')
+    .in('service', googleServices)
+    .eq('is_active', true)
+
+  if (error || !configs) {
+    console.error('[seo-sem-token] Failed to fetch configs:', error)
+    return [{ service: 'all', status: 'failed', error: 'Failed to fetch configs' }]
+  }
+
+  for (const config of configs) {
+    if (!config.access_token) {
+      reports.push({ service: config.service, status: 'no_token' })
+      continue
+    }
+
+    if (!config.refresh_token) {
+      reports.push({ service: config.service, status: 'no_refresh_token' })
+      continue
+    }
+
+    if (!config.token_expires_at) {
+      reports.push({ service: config.service, status: 'no_expiry' })
+      continue
+    }
+
+    // Check if token is expiring soon (within buffer)
+    const expiresAt = new Date(config.token_expires_at).getTime()
+    const now = Date.now()
+    if (expiresAt - now > SEO_SEM_REFRESH_BUFFER_MS) {
+      reports.push({
+        service: config.service,
+        status: 'valid',
+        expires_at: config.token_expires_at,
+      })
+      continue
+    }
+
+    // Token expired or expiring soon - refresh it
+    try {
+      const result = await refreshGoogleToken(config.refresh_token, config.service)
+      if (result) {
+        reports.push({
+          service: config.service,
+          status: 'refreshed',
+          expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+        })
+      } else {
+        reports.push({
+          service: config.service,
+          status: 'failed',
+          error: 'Refresh returned null - check logs for details',
+        })
+      }
+    } catch (err) {
+      reports.push({
+        service: config.service,
+        status: 'failed',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      })
+    }
+  }
+
+  return reports
 }
 
 // =====================================================
