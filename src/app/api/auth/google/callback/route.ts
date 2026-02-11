@@ -75,13 +75,13 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient()
     const expiresAt = new Date(Date.now() + (expires_in || 3600) * 1000).toISOString()
 
-    // Parse state to get service and optional property_id
+    // Parse state to get service
     let service = state
     let propertyId = ''
+    let ga4Properties: Array<{ property_id: string; site: string; name: string }> = []
 
-    // For GA4, we need to fetch available properties
+    // For GA4, fetch ALL available properties
     if (service === 'google_analytics') {
-      // Try to get GA4 properties using the new token
       try {
         const accountsRes = await fetch(
           'https://analyticsadmin.googleapis.com/v1beta/accountSummaries',
@@ -90,12 +90,16 @@ export async function GET(request: NextRequest) {
         if (accountsRes.ok) {
           const accountsData = await accountsRes.json()
           const summaries = accountsData.accountSummaries || []
-          // Pick the first property (user can change later)
           for (const acct of summaries) {
             for (const prop of acct.propertySummaries || []) {
-              if (!propertyId) {
-                // Extract numeric property ID from resource name like 'properties/12345'
-                propertyId = prop.property?.replace('properties/', '') || ''
+              const pid = prop.property?.replace('properties/', '') || ''
+              if (pid) {
+                ga4Properties.push({
+                  property_id: pid,
+                  site: prop.displayName || '',
+                  name: `${acct.displayName || ''} - ${prop.displayName || ''}`.trim().replace(/^- /, ''),
+                })
+                if (!propertyId) propertyId = pid // first as primary
               }
             }
           }
@@ -137,6 +141,10 @@ export async function GET(request: NextRequest) {
 
     if (propertyId) {
       updateData.property_id = propertyId
+    }
+
+    if (ga4Properties.length > 0) {
+      updateData.extra_config = { properties: ga4Properties, site: ga4Properties[0]?.site || '' }
     }
 
     if (gscSites.length > 0) {
