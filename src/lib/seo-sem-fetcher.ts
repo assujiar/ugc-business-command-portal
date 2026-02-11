@@ -334,7 +334,7 @@ export async function fetchGA4Data(targetDate: string, endDate?: string, site?: 
               { name: 'engagementRate' },
               { name: 'averageSessionDuration' },
               { name: 'bounceRate' },
-              { name: 'conversions' },
+              { name: 'keyEvents' },
               { name: 'screenPageViews' },
             ],
             dimensionFilter: {
@@ -401,7 +401,7 @@ export async function fetchGA4Data(targetDate: string, endDate?: string, site?: 
               { name: 'engagementRate' },
               { name: 'averageSessionDuration' },
               { name: 'bounceRate' },
-              { name: 'conversions' },
+              { name: 'keyEvents' },
             ],
             dimensionFilter: {
               filter: {
@@ -1014,7 +1014,7 @@ export async function fetchGA4Demographics(targetDate: string, endDate?: string)
                 { name: 'engagedSessions' },
                 { name: 'engagementRate' },
                 { name: 'bounceRate' },
-                { name: 'conversions' },
+                { name: 'keyEvents' },
                 { name: 'screenPageViews' },
               ],
               orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
@@ -1071,6 +1071,187 @@ export async function fetchGA4Demographics(targetDate: string, endDate?: string)
 
   if (errors.length > 0) {
     console.error('GA4 demographics partial errors:', errors.join('; '))
+  }
+
+  return { success: true }
+}
+
+// =====================================================
+// GA4 UTM Tracking & Landing Pages Fetcher
+// =====================================================
+
+export async function fetchGA4UTMData(targetDate: string, endDate?: string): Promise<{ success: boolean; error?: string }> {
+  const tokens = await getGoogleTokens('google_analytics')
+  if (!tokens) return { success: false, error: 'Google Analytics not configured or token expired' }
+
+  const admin = createAdminClient()
+  const dateFrom = targetDate
+  const dateTo = endDate || targetDate
+
+  const properties: Array<{ property_id: string; site: string }> = tokens.extraConfig.properties || []
+  if (properties.length === 0 && tokens.propertyId) {
+    properties.push({ property_id: tokens.propertyId, site: tokens.extraConfig.site || 'ugc.id' })
+  }
+
+  if (properties.length === 0) {
+    return { success: false, error: 'GA4 property_id not configured' }
+  }
+
+  const errors: string[] = []
+
+  for (const prop of properties) {
+    const propertyId = prop.property_id
+    const siteName = prop.site || 'ugc.id'
+
+    // 1. Fetch UTM/source attribution data
+    try {
+      const utmRes = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokens.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            dateRanges: [{ startDate: dateFrom, endDate: dateTo }],
+            dimensions: [
+              { name: 'sessionSource' },
+              { name: 'sessionMedium' },
+              { name: 'sessionCampaignName' },
+              { name: 'sessionDefaultChannelGroup' },
+            ],
+            metrics: [
+              { name: 'sessions' },
+              { name: 'totalUsers' },
+              { name: 'newUsers' },
+              { name: 'engagedSessions' },
+              { name: 'engagementRate' },
+              { name: 'bounceRate' },
+              { name: 'averageSessionDuration' },
+              { name: 'screenPageViews' },
+              { name: 'keyEvents' },
+            ],
+            orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+            limit: 500,
+          }),
+        }
+      )
+
+      if (utmRes.ok) {
+        const report = await utmRes.json()
+        const rows: any[] = []
+
+        for (const row of report.rows || []) {
+          const dims = row.dimensionValues || []
+          const m = row.metricValues || []
+
+          rows.push({
+            fetch_date: dateTo,
+            site: siteName,
+            source: dims[0]?.value || '(direct)',
+            medium: dims[1]?.value || '(none)',
+            campaign: dims[2]?.value || '(not set)',
+            channel_group: dims[3]?.value || null,
+            sessions: parseInt(m[0]?.value || '0'),
+            users: parseInt(m[1]?.value || '0'),
+            new_users: parseInt(m[2]?.value || '0'),
+            engaged_sessions: parseInt(m[3]?.value || '0'),
+            engagement_rate: parseFloat(m[4]?.value || '0'),
+            bounce_rate: parseFloat(m[5]?.value || '0'),
+            avg_session_duration: parseFloat(m[6]?.value || '0'),
+            page_views: parseInt(m[7]?.value || '0'),
+            conversions: parseInt(m[8]?.value || '0'),
+          })
+        }
+
+        if (rows.length > 0) {
+          await (admin as any).from('marketing_ga4_utm_tracking')
+            .delete()
+            .eq('fetch_date', dateTo)
+            .eq('site', siteName)
+
+          for (let i = 0; i < rows.length; i += 100) {
+            await (admin as any).from('marketing_ga4_utm_tracking').insert(rows.slice(i, i + 100))
+          }
+        }
+      }
+    } catch (err: any) {
+      errors.push(`UTM: ${err.message}`)
+    }
+
+    // 2. Fetch landing page performance with source/medium
+    try {
+      const lpRes = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokens.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            dateRanges: [{ startDate: dateFrom, endDate: dateTo }],
+            dimensions: [
+              { name: 'landingPage' },
+              { name: 'sessionSource' },
+              { name: 'sessionMedium' },
+            ],
+            metrics: [
+              { name: 'sessions' },
+              { name: 'totalUsers' },
+              { name: 'engagedSessions' },
+              { name: 'engagementRate' },
+              { name: 'bounceRate' },
+              { name: 'keyEvents' },
+            ],
+            orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+            limit: 500,
+          }),
+        }
+      )
+
+      if (lpRes.ok) {
+        const report = await lpRes.json()
+        const rows: any[] = []
+
+        for (const row of report.rows || []) {
+          const dims = row.dimensionValues || []
+          const m = row.metricValues || []
+
+          rows.push({
+            fetch_date: dateTo,
+            site: siteName,
+            landing_page: dims[0]?.value || '/',
+            source: dims[1]?.value || '(direct)',
+            medium: dims[2]?.value || '(none)',
+            sessions: parseInt(m[0]?.value || '0'),
+            users: parseInt(m[1]?.value || '0'),
+            engaged_sessions: parseInt(m[2]?.value || '0'),
+            engagement_rate: parseFloat(m[3]?.value || '0'),
+            bounce_rate: parseFloat(m[4]?.value || '0'),
+            conversions: parseInt(m[5]?.value || '0'),
+          })
+        }
+
+        if (rows.length > 0) {
+          await (admin as any).from('marketing_ga4_landing_pages')
+            .delete()
+            .eq('fetch_date', dateTo)
+            .eq('site', siteName)
+
+          for (let i = 0; i < rows.length; i += 100) {
+            await (admin as any).from('marketing_ga4_landing_pages').insert(rows.slice(i, i + 100))
+          }
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Landing pages: ${err.message}`)
+    }
+  }
+
+  if (errors.length > 0) {
+    console.error('GA4 UTM fetch partial errors:', errors.join('; '))
   }
 
   return { success: true }
