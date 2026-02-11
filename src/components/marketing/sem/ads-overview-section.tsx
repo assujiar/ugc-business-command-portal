@@ -40,6 +40,9 @@ interface AdsOverviewProps {
     total: number
     page: number
     hasConversionValues?: boolean
+    hasActualRevenue?: boolean
+    actualRevenue?: number
+    actualRoas?: number | null
     dailySpend: Array<{ date: string; platform: string; spend: number; clicks: number; conversions: number }>
     configs: Array<{ service: string; is_active: boolean; last_fetch_at: string | null }>
   } | null
@@ -121,15 +124,19 @@ export default function AdsOverviewSection({ data, loading }: AdsOverviewProps) 
   // Top 5 campaigns by ROAS
   const topRoas = [...campaigns].sort((a, b) => b.roas - a.roas).slice(0, 5)
 
+  // Prefer actual ROAS (from revenue table) over Google Ads ROAS
+  const hasActualRoas = data?.hasActualRevenue && data?.actualRoas != null && data.actualRoas > 0
   const hasConvValues = data?.hasConversionValues !== false
-  const roasDisplay = hasConvValues ? `${kpis.overallRoas.value.toFixed(2)}x` : 'N/A'
+  const roasValue = hasActualRoas ? data!.actualRoas! : hasConvValues ? kpis.overallRoas.value : null
+  const roasDisplay = roasValue !== null ? `${roasValue.toFixed(2)}x` : 'N/A'
+  const roasLabel = hasActualRoas ? 'Actual ROAS' : 'Overall ROAS'
 
   const kpiCards = [
     { label: 'Total Ad Spend', value: formatCurrency(kpis.totalSpend.value), yoy: kpis.totalSpend.yoy, icon: DollarSign, color: 'text-red-500', invertYoy: true, metricKey: 'totalSpend' },
     { label: 'Total Conversions', value: formatNumber(kpis.totalConversions.value), yoy: kpis.totalConversions.yoy, icon: Target, color: 'text-green-500', metricKey: 'totalConversions' },
     { label: 'Avg CPC', value: formatCurrency(kpis.avgCpc.value), yoy: kpis.avgCpc.yoy, icon: MousePointerClick, color: 'text-blue-500', invertYoy: true, metricKey: 'avgCpc' },
     { label: 'Avg CPA', value: formatCurrency(kpis.avgCpa.value), yoy: kpis.avgCpa.yoy, icon: TrendingUp, color: 'text-purple-500', invertYoy: true, metricKey: 'avgCpa' },
-    { label: 'Overall ROAS', value: roasDisplay, yoy: hasConvValues ? kpis.overallRoas.yoy : 0, icon: BarChart3, color: 'text-amber-500', metricKey: 'overallRoas' },
+    { label: roasLabel, value: roasDisplay, yoy: hasConvValues ? kpis.overallRoas.yoy : 0, icon: BarChart3, color: 'text-amber-500', metricKey: 'overallRoas' },
   ]
 
   return (

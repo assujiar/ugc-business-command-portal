@@ -566,7 +566,9 @@ export function SummaryInsightSection({
   const totalConversions = adsKpis?.totalConversions?.value ?? 0
   const avgCpc = adsKpis?.avgCpc?.value ?? 0
   const avgCpa = adsKpis?.avgCpa?.value ?? 0
-  const roas = adsKpis?.overallRoas?.value ?? 0
+  // Prefer actual ROAS (from revenue table) over Google Ads ROAS
+  const hasActualRoas = adsData?.hasActualRevenue && adsData?.actualRoas != null && adsData.actualRoas > 0
+  const roas = hasActualRoas ? adsData.actualRoas : (adsKpis?.overallRoas?.value ?? 0)
   const spendYoy = adsKpis?.totalSpend?.yoy ?? 0
   const roasYoy = adsKpis?.overallRoas?.yoy ?? 0
 
