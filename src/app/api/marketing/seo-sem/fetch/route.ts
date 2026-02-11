@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessMarketingPanel } from '@/lib/permissions'
-import { runDailySEOFetch, runWeeklyVitalsFetch, fetchPageSpeedData, fetchGSCData, fetchGA4Data, fetchGoogleAdsData } from '@/lib/seo-sem-fetcher'
+import { runDailySEOFetch, runWeeklyVitalsFetch, fetchPageSpeedData, fetchGSCData, fetchGA4Data, fetchGoogleAdsData, fetchGA4Demographics } from '@/lib/seo-sem-fetcher'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,6 +70,9 @@ export async function POST(request: NextRequest) {
       } else if (specificService === 'google_ads') {
         const endDt = target_date || new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0]
         results.push({ service: 'google_ads', ...await fetchGoogleAdsData(startDt, endDt) })
+      } else if (specificService === 'ga4_demographics') {
+        const endDt = target_date || new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0]
+        results.push({ service: 'ga4_demographics', ...await fetchGA4Demographics(startDt, endDt) })
       } else {
         // Fetch all services with backfill
         const gscEnd = new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]
@@ -78,6 +81,7 @@ export async function POST(request: NextRequest) {
         results.push({ service: 'google_analytics', ...await fetchGA4Data(startDt, adsEnd) })
         results.push({ service: 'google_ads', ...await fetchGoogleAdsData(startDt, adsEnd) })
         results.push({ service: 'pagespeed', ...await fetchPageSpeedData() })
+        results.push({ service: 'ga4_demographics', ...await fetchGA4Demographics(startDt, adsEnd) })
       }
     }
 

@@ -30,6 +30,7 @@ import {
   ArrowDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MetricInfoButton, METRIC_DESCRIPTIONS } from '../shared/metric-info-dialog'
 
 // =====================================================
 // Types
@@ -82,6 +83,7 @@ interface KpiCardDef {
   icon: React.ElementType
   format: (v: number) => string
   invertChange?: boolean
+  metricKey?: string
 }
 
 const KPI_CARDS: KpiCardDef[] = [
@@ -90,18 +92,21 @@ const KPI_CARDS: KpiCardDef[] = [
     label: 'Total Organic Clicks',
     icon: MousePointerClick,
     format: formatNumber,
+    metricKey: 'totalClicks',
   },
   {
     key: 'totalImpressions',
     label: 'Total Impressions',
     icon: Eye,
     format: formatNumber,
+    metricKey: 'totalImpressions',
   },
   {
     key: 'avgCtr',
     label: 'Average CTR',
     icon: Target,
     format: formatPercent,
+    metricKey: 'avgCtr',
   },
   {
     key: 'avgPosition',
@@ -109,18 +114,21 @@ const KPI_CARDS: KpiCardDef[] = [
     icon: BarChart3,
     format: formatPosition,
     invertChange: true,
+    metricKey: 'avgPosition',
   },
   {
     key: 'organicSessions',
     label: 'Organic Sessions',
     icon: Users,
     format: formatNumber,
+    metricKey: 'organicSessions',
   },
   {
     key: 'conversionRate',
     label: 'Conversion Rate',
     icon: TrendingUp,
     format: formatPercent,
+    metricKey: 'conversionRate',
   },
 ]
 
@@ -198,6 +206,7 @@ function ChangeIndicator({
 
 function KpiCard({ def, data }: { def: KpiCardDef; data: { value: number; change: number; yoy?: number } }) {
   const Icon = def.icon
+  const info = def.metricKey ? METRIC_DESCRIPTIONS[def.metricKey] : undefined
   const yoyVal = data.yoy || 0
   const yoyPositive = def.invertChange ? yoyVal < 0 : yoyVal > 0
   const yoyNegative = def.invertChange ? yoyVal > 0 : yoyVal < 0
@@ -206,9 +215,18 @@ function KpiCard({ def, data }: { def: KpiCardDef; data: { value: number; change
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-medium text-muted-foreground truncate pr-2">
-            {def.label}
-          </span>
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="text-xs font-medium text-muted-foreground truncate">
+              {def.label}
+            </span>
+            {info && (
+              <MetricInfoButton title={info.title}>
+                <p>{info.description}</p>
+                {info.formula && <p className="mt-2 font-mono text-xs">{info.formula}</p>}
+                {info.tip && <p className="mt-2 text-xs font-medium">{info.tip}</p>}
+              </MetricInfoButton>
+            )}
+          </div>
           <div className="flex-shrink-0 rounded-md bg-muted p-1.5">
             <Icon className="h-4 w-4 text-muted-foreground" />
           </div>

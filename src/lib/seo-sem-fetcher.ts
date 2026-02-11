@@ -959,6 +959,124 @@ export async function fetchGoogleAdsData(targetDate: string, endDate?: string): 
 }
 
 // =====================================================
+// GA4 Demographics Fetcher
+// =====================================================
+
+export async function fetchGA4Demographics(targetDate: string, endDate?: string): Promise<{ success: boolean; error?: string }> {
+  const tokens = await getGoogleTokens('google_analytics')
+  if (!tokens) return { success: false, error: 'Google Analytics not configured or token expired' }
+
+  const admin = createAdminClient()
+  const dateFrom = targetDate
+  const dateTo = endDate || targetDate
+
+  const properties: Array<{ property_id: string; site: string }> = tokens.extraConfig.properties || []
+  if (properties.length === 0 && tokens.propertyId) {
+    properties.push({ property_id: tokens.propertyId, site: tokens.extraConfig.site || 'ugc.id' })
+  }
+
+  if (properties.length === 0) {
+    return { success: false, error: 'GA4 property_id not configured' }
+  }
+
+  const errors: string[] = []
+
+  const dimensionConfigs = [
+    { name: 'userAgeBracket', type: 'age' },
+    { name: 'userGender', type: 'gender' },
+    { name: 'country', type: 'country' },
+    { name: 'city', type: 'city' },
+    { name: 'newVsReturning', type: 'new_returning' },
+    { name: 'language', type: 'language' },
+  ]
+
+  for (const prop of properties) {
+    const propertyId = prop.property_id
+    const siteName = prop.site || 'ugc.id'
+
+    for (const dimConfig of dimensionConfigs) {
+      try {
+        const reportRes = await fetch(
+          `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${tokens.accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              dateRanges: [{ startDate: dateFrom, endDate: dateTo }],
+              dimensions: [{ name: dimConfig.name }],
+              metrics: [
+                { name: 'sessions' },
+                { name: 'totalUsers' },
+                { name: 'newUsers' },
+                { name: 'engagedSessions' },
+                { name: 'engagementRate' },
+                { name: 'bounceRate' },
+                { name: 'conversions' },
+                { name: 'screenPageViews' },
+              ],
+              orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+              limit: dimConfig.type === 'city' ? 50 : dimConfig.type === 'country' ? 30 : 100,
+            }),
+          }
+        )
+
+        if (!reportRes.ok) {
+          const err = await reportRes.text()
+          console.error(`GA4 demographics (${dimConfig.type}) failed:`, err)
+          continue
+        }
+
+        const report = await reportRes.json()
+        const rows: any[] = []
+
+        for (const row of report.rows || []) {
+          const dimValue = row.dimensionValues[0]?.value || '(unknown)'
+          const m = row.metricValues || []
+
+          rows.push({
+            fetch_date: dateTo,
+            site: siteName,
+            dimension_type: dimConfig.type,
+            dimension_value: dimValue,
+            sessions: parseInt(m[0]?.value || '0'),
+            users: parseInt(m[1]?.value || '0'),
+            new_users: parseInt(m[2]?.value || '0'),
+            engaged_sessions: parseInt(m[3]?.value || '0'),
+            engagement_rate: parseFloat(m[4]?.value || '0'),
+            bounce_rate: parseFloat(m[5]?.value || '0'),
+            conversions: parseInt(m[6]?.value || '0'),
+            page_views: parseInt(m[7]?.value || '0'),
+          })
+        }
+
+        if (rows.length > 0) {
+          await (admin as any).from('marketing_ga4_demographics')
+            .delete()
+            .eq('fetch_date', dateTo)
+            .eq('site', siteName)
+            .eq('dimension_type', dimConfig.type)
+
+          for (let i = 0; i < rows.length; i += 100) {
+            await (admin as any).from('marketing_ga4_demographics').insert(rows.slice(i, i + 100))
+          }
+        }
+      } catch (err: any) {
+        errors.push(`${dimConfig.type}: ${err.message}`)
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    console.error('GA4 demographics partial errors:', errors.join('; '))
+  }
+
+  return { success: true }
+}
+
+// =====================================================
 // Orchestrator: run all fetchers
 // =====================================================
 

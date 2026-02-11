@@ -9,9 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Search, BarChart3, Globe, Gauge, DollarSign,
-  GitCompareArrows, RefreshCcw, Settings, AlertCircle, Loader2
+  GitCompareArrows, RefreshCcw, Settings, AlertCircle, Loader2, Lightbulb, Users
 } from 'lucide-react'
 
+import { SummaryInsightSection } from './seo/summary-insight-section'
 import { SEOOverviewSection } from './seo/seo-overview-section'
 import { KeywordPerformanceSection } from './seo/keyword-performance-section'
 import { PagePerformanceSection } from './seo/page-performance-section'
@@ -19,8 +20,9 @@ import WebVitalsSection from './seo/web-vitals-section'
 import AdsOverviewSection from './sem/ads-overview-section'
 import CombinedViewSection from './sem/combined-view-section'
 import SEOSEMSettings from './seo/seo-sem-settings'
+import { AudienceSection } from './seo/audience-section'
 
-type TabValue = 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'ads' | 'combined' | 'settings'
+type TabValue = 'summary' | 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'audience' | 'ads' | 'combined' | 'settings'
 
 export default function SEOSEMDashboard() {
   // Global filters
@@ -31,7 +33,7 @@ export default function SEOSEMDashboard() {
       const params = new URLSearchParams(window.location.search)
       if (params.get('tab') === 'settings') return 'settings'
     }
-    return 'seo_overview'
+    return 'summary'
   })
   const [sites, setSites] = useState<string[]>([])
 
@@ -42,6 +44,7 @@ export default function SEOSEMDashboard() {
   const [vitalsData, setVitalsData] = useState<any>(null)
   const [adsData, setAdsData] = useState<any>(null)
   const [combinedData, setCombinedData] = useState<any>(null)
+  const [audienceData, setAudienceData] = useState<any>(null)
 
   // Loading states
   const [loadingOverview, setLoadingOverview] = useState(false)
@@ -50,6 +53,7 @@ export default function SEOSEMDashboard() {
   const [loadingVitals, setLoadingVitals] = useState(false)
   const [loadingAds, setLoadingAds] = useState(false)
   const [loadingCombined, setLoadingCombined] = useState(false)
+  const [loadingAudience, setLoadingAudience] = useState(false)
   const [fetchingData, setFetchingData] = useState(false)
 
   // Keyword filters
@@ -172,6 +176,22 @@ export default function SEOSEMDashboard() {
     }
   }, [dateRange])
 
+  // Fetch audience demographics
+  const fetchAudience = useCallback(async () => {
+    setLoadingAudience(true)
+    try {
+      const params = new URLSearchParams({ range: dateRange, site })
+      const res = await fetch(`/api/marketing/seo-sem/demographics?${params}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setAudienceData(data)
+    } catch (err) {
+      console.error('Audience fetch error:', err)
+    } finally {
+      setLoadingAudience(false)
+    }
+  }, [dateRange, site])
+
   // Manual data fetch trigger
   const handleManualFetch = async () => {
     setFetchingData(true)
@@ -206,13 +226,15 @@ export default function SEOSEMDashboard() {
 
   // Load data on tab change
   useEffect(() => {
+    if (activeTab === 'summary') { fetchOverview(); fetchAds() }
     if (activeTab === 'seo_overview') fetchOverview()
     if (activeTab === 'keywords') fetchKeywords()
     if (activeTab === 'pages') fetchPages()
     if (activeTab === 'web_vitals') fetchVitals()
     if (activeTab === 'ads') fetchAds()
+    if (activeTab === 'audience') fetchAudience()
     if (activeTab === 'combined') fetchCombined()
-  }, [activeTab, dateRange, site, fetchOverview, fetchKeywords, fetchPages, fetchVitals, fetchAds, fetchCombined])
+  }, [activeTab, dateRange, site, fetchOverview, fetchKeywords, fetchPages, fetchVitals, fetchAds, fetchAudience, fetchCombined])
 
   // Refetch keywords on filter change
   useEffect(() => {
@@ -299,6 +321,10 @@ export default function SEOSEMDashboard() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
         <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="summary" className="gap-1 text-xs sm:text-sm">
+            <Lightbulb className="h-3.5 w-3.5" />
+            Summary & Insight
+          </TabsTrigger>
           <TabsTrigger value="seo_overview" className="gap-1 text-xs sm:text-sm">
             <BarChart3 className="h-3.5 w-3.5" />
             SEO Overview
@@ -314,6 +340,10 @@ export default function SEOSEMDashboard() {
           <TabsTrigger value="web_vitals" className="gap-1 text-xs sm:text-sm">
             <Gauge className="h-3.5 w-3.5" />
             Web Vitals
+          </TabsTrigger>
+          <TabsTrigger value="audience" className="gap-1 text-xs sm:text-sm">
+            <Users className="h-3.5 w-3.5" />
+            Audience
           </TabsTrigger>
           <TabsTrigger value="ads" className="gap-1 text-xs sm:text-sm">
             <DollarSign className="h-3.5 w-3.5" />
@@ -331,6 +361,15 @@ export default function SEOSEMDashboard() {
       </Tabs>
 
       {/* Tab Content */}
+      {activeTab === 'summary' && (
+        <SummaryInsightSection
+          seoData={overviewData}
+          adsData={adsData}
+          dateRange={dateRange}
+          loading={loadingOverview || loadingAds}
+        />
+      )}
+
       {activeTab === 'seo_overview' && (
         <SEOOverviewSection
           kpis={overviewData?.kpis || null}
@@ -364,6 +403,13 @@ export default function SEOSEMDashboard() {
         <WebVitalsSection
           data={vitalsData}
           loading={loadingVitals}
+        />
+      )}
+
+      {activeTab === 'audience' && (
+        <AudienceSection
+          data={audienceData}
+          loading={loadingAudience}
         />
       )}
 
