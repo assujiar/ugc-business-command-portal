@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { canAccessMarketingPanel, isAdmin } from '@/lib/permissions'
+import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -109,10 +109,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Only admin/director can modify settings
-    if (!isAdmin(profile.role as any)) {
-      return NextResponse.json({ error: 'Only Director/Super Admin can modify settings' }, { status: 403 })
-    }
+    // All marketing roles can modify settings
+    // (canAccessMarketingPanel already checks: Director, super admin, Marketing Manager, Marcomm, DGO, MACX, VDCO)
 
     const body = await request.json()
     const { action, service, data } = body
