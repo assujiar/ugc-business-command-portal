@@ -63,7 +63,7 @@ async function getUsersByDepartmentRole(department: string): Promise<UserProfile
 
   // Map department codes to roles
   const deptRoleMap: Record<string, UserRole[]> = {
-    'MKT': ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'],
+    'MKT': ['Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'],
     'SAL': ['sales manager', 'salesperson', 'sales support'],
     'DOM': ['domestics Ops'],
     'EXI': ['EXIM Ops'],

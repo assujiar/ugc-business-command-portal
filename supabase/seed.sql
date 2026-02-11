@@ -22,7 +22,7 @@ INSERT INTO profiles (user_id, email, name, role, department, is_active) VALUES
 ('a49378cf-775d-48a6-ad5b-fea2f4b56a95', 'marcomm@example.com', 'Mike Marcomm', 'Marcomm', 'Marketing', true),
 ('79d7c2d9-e542-4ad5-87a1-483c380c75c4', 'dgo@example.com', 'Diana DGO', 'DGO', 'Marketing', true),
 ('44587e03-8582-464f-a088-8efcb0079533', 'macx@example.com', 'Max MACX', 'MACX', 'Marketing', true),
-('0ab48580-fd10-4ee3-823f-b05e2592dcb7', 'vsdo@example.com', 'Victor VSDO', 'VSDO', 'Marketing', true),
+('0ab48580-fd10-4ee3-823f-b05e2592dcb7', 'vsdo@example.com', 'Victor VDCO', 'VDCO', 'Marketing', true),
 -- Sales Team (4 roles)
 ('f46cfab2-4b61-4204-ab29-efcb2b3e5c5d', 'sales.manager@example.com', 'Steve Sales', 'sales manager', 'Sales', true),
 ('3a673e5b-c28f-45fd-98f5-adf04a1dacc0', 'sales.person@example.com', 'Sam Salesperson', 'salesperson', 'Sales', true),
@@ -189,7 +189,7 @@ BEGIN
     RAISE NOTICE '- marcomm@example.com (Marcomm)';
     RAISE NOTICE '- dgo@example.com (DGO)';
     RAISE NOTICE '- macx@example.com (MACX)';
-    RAISE NOTICE '- vsdo@example.com (VSDO)';
+    RAISE NOTICE '- vsdo@example.com (VDCO)';
     RAISE NOTICE '-- Sales Team --';
     RAISE NOTICE '- sales.manager@example.com (sales manager)';
     RAISE NOTICE '- sales.person@example.com (salesperson)';

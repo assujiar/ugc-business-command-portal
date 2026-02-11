@@ -251,7 +251,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 | MACX | `MACX` | Marketing | Same as Marketing Manager (all marketing dept data) |
 | Marcomm | `Marcomm` | Marketing | Own leads only |
 | DGO | `DGO` | Marketing | Own leads only |
-| VSDO | `VSDO` | Marketing | Own leads only |
+| VDCO | `VDCO` | Marketing | Own leads only |
 | Sales Manager | `sales manager` | Sales | All sales team data |
 | Sales Support | `sales support` | Sales | All sales team data (view), own data (edit) |
 | Salesperson | `salesperson` | Sales | Own leads, pipeline, quotations |
@@ -263,7 +263,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 
 ### Permission Matrix
 
-| Action | Director | Admin | Mkt Mgr/MACX | Sales Mgr | Sales Support | Salesperson | Marcomm/DGO/VSDO | Ops | Finance |
+| Action | Director | Admin | Mkt Mgr/MACX | Sales Mgr | Sales Support | Salesperson | Marcomm/DGO/VDCO | Ops | Finance |
 |--------|----------|-------|-------------|-----------|---------------|-------------|-------------------|-----|---------|
 | View Lead Inbox | ✓ | ✓ | ✓ | - | - | - | ✓ | - | - |
 | Triage Leads | ✓ | ✓ | ✓ | - | - | - | ✓ | - | - |
@@ -292,7 +292,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 | Role | Default Redirect |
 |------|-----------------|
 | Sales (salesperson, sales manager, sales support) | `/overview-crm` |
-| Marketing (Marketing Manager, Marcomm, DGO, MACX, VSDO) | `/marketing/overview` |
+| Marketing (Marketing Manager, Marcomm, DGO, MACX, VDCO) | `/marketing/overview` |
 | Ops (EXIM Ops, domestics Ops, Import DTD Ops, traffic & warehous) | `/overview-ticket` |
 | Finance | `/overview-crm` (DSO coming soon) |
 | Director / super admin | `/overview-crm` |
@@ -306,7 +306,7 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
 | Sales Support | All sales data | Sales department |
 | Salesperson | Own data only | Own tickets only |
 | Marketing Manager / MACX | Marketing-created leads | Marketing department |
-| Marcomm / DGO / VSDO | Own leads only | Own tickets only |
+| Marcomm / DGO / VDCO | Own leads only | Own tickets only |
 | Ops roles | Own data only (CRM hidden in sidebar) | Own department |
 | Finance | DSO/AR overview (coming soon) | No access |
 

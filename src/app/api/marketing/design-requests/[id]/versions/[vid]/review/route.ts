@@ -23,8 +23,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { review_status, review_comment } = body
 
     // RBAC: VDCO cannot review designs they produce
-    if (profile.role === 'VSDO') {
-      return NextResponse.json({ error: 'VSDO tidak bisa mereview design yang mereka produksi' }, { status: 403 })
+    if (profile.role === 'VDCO') {
+      return NextResponse.json({ error: 'VDCO tidak bisa mereview design yang mereka produksi' }, { status: 403 })
     }
 
     if (!review_status || !['approved', 'revision_requested'].includes(review_status)) {

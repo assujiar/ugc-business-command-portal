@@ -45,7 +45,7 @@ Menyediakan tool terintegrasi untuk **merencanakan, mengelola, dan memantau** ko
 | Marcomm | Create & edit own content, view all |
 | DGO (Digital Graphic Officer) | Create & edit own content, view all |
 | MACX | Create & edit own content, view all |
-| VSDO (Video & Social Director Officer) | Create & edit own content, view all |
+| VDCO (Video & Social Director Officer) | Create & edit own content, view all |
 
 ---
 
@@ -560,7 +560,7 @@ CREATE POLICY content_plans_select ON marketing_content_plans
       SELECT 1 FROM profiles
       WHERE profiles.user_id = auth.uid()
       AND profiles.role IN ('super admin', 'Director', 'Marketing Manager',
-                            'Marcomm', 'DGO', 'MACX', 'VSDO')
+                            'Marcomm', 'DGO', 'MACX', 'VDCO')
     )
   );
 
@@ -572,7 +572,7 @@ CREATE POLICY content_plans_insert ON marketing_content_plans
       SELECT 1 FROM profiles
       WHERE profiles.user_id = auth.uid()
       AND profiles.role IN ('super admin', 'Director', 'Marketing Manager',
-                            'Marcomm', 'DGO', 'MACX', 'VSDO')
+                            'Marcomm', 'DGO', 'MACX', 'VDCO')
     )
   );
 

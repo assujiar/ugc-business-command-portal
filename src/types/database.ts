@@ -54,7 +54,7 @@ export type UserRole =
   | 'Marcomm'
   | 'DGO'
   | 'MACX'
-  | 'VSDO'
+  | 'VDCO'
   | 'sales manager'
   | 'salesperson'
   | 'sales support'

@@ -1,5 +1,5 @@
 -- Migration 159: Marketing Design Requests (VDCO Module)
--- Enables marketing roles to request visual design production from VSDO
+-- Enables marketing roles to request visual design production from VDCO
 
 -- 1. Design Requests (main table)
 CREATE TABLE IF NOT EXISTS marketing_design_requests (
@@ -42,7 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_design_requests_deadline ON marketing_design_requ
 CREATE INDEX IF NOT EXISTS idx_design_requests_type ON marketing_design_requests(design_type);
 CREATE INDEX IF NOT EXISTS idx_design_requests_priority ON marketing_design_requests(priority);
 
--- 2. Design Versions (each delivery from VSDO)
+-- 2. Design Versions (each delivery from VDCO)
 CREATE TABLE IF NOT EXISTS marketing_design_versions (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   request_id UUID NOT NULL REFERENCES marketing_design_requests(id) ON DELETE CASCADE,
@@ -108,7 +108,7 @@ BEGIN
   RETURN EXISTS (
     SELECT 1 FROM profiles
     WHERE user_id = auth.uid()
-    AND role IN ('Director', 'super admin', 'VSDO')
+    AND role IN ('Director', 'super admin', 'VDCO')
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
@@ -129,7 +129,7 @@ ALTER TABLE marketing_design_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE marketing_design_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE marketing_design_comments ENABLE ROW LEVEL SECURITY;
 
--- Requests: marketing + VSDO can see all, marketing can insert, update own drafts
+-- Requests: marketing + VDCO can see all, marketing can insert, update own drafts
 CREATE POLICY design_requests_select ON marketing_design_requests
   FOR SELECT USING (fn_is_marketing_user() OR fn_is_design_producer());
 
@@ -148,7 +148,7 @@ CREATE POLICY design_requests_delete ON marketing_design_requests
     OR fn_is_design_approver()
   );
 
--- Versions: all marketing + VSDO can see, VSDO can insert
+-- Versions: all marketing + VDCO can see, VDCO can insert
 CREATE POLICY design_versions_select ON marketing_design_versions
   FOR SELECT USING (fn_is_marketing_user() OR fn_is_design_producer());
 
@@ -158,7 +158,7 @@ CREATE POLICY design_versions_insert ON marketing_design_versions
 CREATE POLICY design_versions_update ON marketing_design_versions
   FOR UPDATE USING (fn_is_marketing_user() OR fn_is_design_producer());
 
--- Comments: all marketing + VSDO can see and insert
+-- Comments: all marketing + VDCO can see and insert
 CREATE POLICY design_comments_select ON marketing_design_comments
   FOR SELECT USING (fn_is_marketing_user() OR fn_is_design_producer());
 

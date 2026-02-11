@@ -62,7 +62,7 @@ SELECT
   CASE
     WHEN COALESCE(creator.department, lead_creator.department) IS NOT NULL
          AND LOWER(COALESCE(creator.department, lead_creator.department)) LIKE '%marketing%' THEN TRUE
-    WHEN COALESCE(creator.role::text, lead_creator.role::text) IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO') THEN TRUE
+    WHEN COALESCE(creator.role::text, lead_creator.role::text) IN ('Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO') THEN TRUE
     ELSE FALSE
   END AS original_creator_is_marketing,
   (SELECT COUNT(*) FROM pipeline_updates pu WHERE pu.opportunity_id = o.opportunity_id) AS update_count,

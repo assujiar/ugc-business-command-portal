@@ -2,7 +2,7 @@
 
 ## Overview
 
-Marketing Panel adalah modul baru di sidebar yang hanya bisa diakses oleh user di department marketing (Marketing Manager, Marcomm, DGO, MACX, VSDO) dan admin (Director, super admin).
+Marketing Panel adalah modul baru di sidebar yang hanya bisa diakses oleh user di department marketing (Marketing Manager, Marcomm, DGO, MACX, VDCO) dan admin (Director, super admin).
 
 ### Sub-menu:
 1. **Overview** - Dashboard landing page untuk Marketing Panel

@@ -29,7 +29,7 @@ BEGIN
         WHEN p_role IN ('EXIM Ops', 'domestics Ops', 'Import DTD Ops', 'traffic & warehous') THEN 'Ops'
         WHEN p_role IN ('salesperson', 'sales manager', 'sales support') THEN 'Sales'
         WHEN p_role IN ('Marcomm', 'Marketing Manager', 'MACX') THEN 'Marketing'
-        WHEN p_role IN ('DGO', 'VSDO') THEN 'Operations Support'
+        WHEN p_role IN ('DGO', 'VDCO') THEN 'Operations Support'
         WHEN p_role IN ('finance') THEN 'Finance'
         WHEN p_role IN ('Director', 'super admin') THEN 'Management'
         ELSE 'Other'

@@ -107,7 +107,7 @@ CREATE POLICY "marketing_content_select" ON marketing_social_media_content
       WHERE profiles.user_id = auth.uid()
       AND profiles.role IN (
         'Director', 'super admin',
-        'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'
+        'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'
       )
     )
   );
@@ -119,7 +119,7 @@ CREATE POLICY "marketing_content_history_select" ON marketing_social_media_conte
       WHERE profiles.user_id = auth.uid()
       AND profiles.role IN (
         'Director', 'super admin',
-        'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VSDO'
+        'Marketing Manager', 'Marcomm', 'DGO', 'MACX', 'VDCO'
       )
     )
   );

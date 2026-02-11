@@ -104,7 +104,7 @@ CREATE TYPE user_role AS ENUM (
   'Marcomm',
   'DGO',
   'MACX',
-  'VSDO',
+  'VDCO',
   'sales manager',
   'salesperson',
   'sales support',
