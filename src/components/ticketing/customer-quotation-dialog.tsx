@@ -283,13 +283,13 @@ export function CustomerQuotationDialog({
 
   // Support both legacy and new prop patterns
   const ticketId = ticket?.id || legacyTicketId || ''
-  const ticketData = ticket ? {
+  const ticketData = useMemo(() => ticket ? {
     ticket_code: ticket.ticket_code,
     subject: ticket.subject,
     rfq_data: ticket.rfq_data,
     account: ticket.account,
     contact: ticket.contact,
-  } : legacyTicketData || { ticket_code: '', subject: '' }
+  } : legacyTicketData || { ticket_code: '', subject: '' }, [ticket, legacyTicketData])
 
   // Get reference info for header
   const referenceInfo = lead
@@ -307,7 +307,7 @@ export function CustomerQuotationDialog({
   const [activeSection, setActiveSection] = useState<string>('customer')
 
   // Multi-shipment support
-  const allShipments = lead?.shipments || (lead?.shipment_details ? [lead.shipment_details] : [])
+  const allShipments = useMemo(() => lead?.shipments || (lead?.shipment_details ? [lead.shipment_details] : []), [lead?.shipments, lead?.shipment_details])
   const [selectedShipmentIndex, setSelectedShipmentIndex] = useState(0)
   const hasMultipleShipments = allShipments.length > 1
 
