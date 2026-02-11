@@ -127,7 +127,7 @@ export default function LoginPage() {
               <Shield className="w-6 h-6 text-brand" />
             </div>
             <div>
-              <h2 className="text-white font-bold text-lg">UGC Logistics</h2>
+              <h2 className="text-white font-bold text-lg">UGC Business Command Portal</h2>
               <p className="text-slate-400 text-sm">Integrated Dashboard</p>
             </div>
           </div>
@@ -189,8 +189,8 @@ export default function LoginPage() {
                 <Shield className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="font-bold">UGC Logistics</h2>
-                <p className="text-muted-foreground text-xs">Business Command Portal</p>
+                <h2 className="font-bold">UGC Business Command Portal</h2>
+                <p className="text-muted-foreground text-xs">Integrated Dashboard</p>
               </div>
             </div>
 
@@ -285,8 +285,13 @@ export default function LoginPage() {
         </div>
 
         {/* Footer */}
-        <div className="text-center py-6 text-muted-foreground text-sm border-t border-border">
-          &copy; 2026 UGC Logistics. All rights reserved.
+        <div className="text-center py-6 text-muted-foreground text-sm border-t border-border space-y-1">
+          <div>&copy; 2026 UGC Business Command Portal. All rights reserved.</div>
+          <div>
+            <a href="/privacy" className="hover:text-foreground transition-colors underline">Privacy Policy</a>
+            {' · '}
+            <a href="/terms" className="hover:text-foreground transition-colors underline">Terms of Service</a>
+          </div>
         </div>
       </div>
     </div>
