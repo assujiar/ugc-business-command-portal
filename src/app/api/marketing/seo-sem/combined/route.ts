@@ -31,17 +31,18 @@ export async function GET(request: NextRequest) {
     const organicSessions = seoRows.reduce((s: number, r: any) => s + (Number(r.ga_organic_sessions) || 0), 0)
     const organicConversions = seoRows.reduce((s: number, r: any) => s + (Number(r.ga_organic_conversions) || 0), 0)
 
-    // Paid data
-    const { data: semData } = await (admin as any)
-      .from('marketing_sem_daily_spend')
-      .select('fetch_date, platform, total_spend, total_clicks, total_conversions, total_conversion_value')
+    // Paid data - use marketing_sem_campaigns (individual rows) instead of
+    // marketing_sem_daily_spend (aggregated totals may have string-concatenation bugs)
+    const { data: semCampData } = await (admin as any)
+      .from('marketing_sem_campaigns')
+      .select('fetch_date, platform, spend, clicks, conversions, conversion_value')
       .gte('fetch_date', startStr)
       .lte('fetch_date', endStr)
 
-    const semRows = semData || []
-    const totalAdSpend = semRows.reduce((s: number, r: any) => s + (Number(r.total_spend) || 0), 0)
-    const paidConversions = semRows.reduce((s: number, r: any) => s + (Number(r.total_conversions) || 0), 0)
-    const paidSessions = semRows.reduce((s: number, r: any) => s + (Number(r.total_clicks) || 0), 0)
+    const semRows = semCampData || []
+    const totalAdSpend = semRows.reduce((s: number, r: any) => s + (Number(r.spend) || 0), 0)
+    const paidConversions = semRows.reduce((s: number, r: any) => s + (Number(r.conversions) || 0), 0)
+    const paidSessions = semRows.reduce((s: number, r: any) => s + (Number(r.clicks) || 0), 0)
 
     const totalSessions = organicSessions + paidSessions
 
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
     for (const r of semRows) {
       const month = r.fetch_date.substring(0, 7)
       const existing = monthlyMap.get(month) || { month, organic: 0, paid: 0 }
-      existing.paid += Number(r.total_clicks) || 0
+      existing.paid += Number(r.clicks) || 0
       monthlyMap.set(month, existing)
     }
     const monthlyTrend = Array.from(monthlyMap.values()).sort((a, b) => a.month.localeCompare(b.month))
