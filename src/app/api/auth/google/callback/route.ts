@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
     if (service === 'google_ads') {
       try {
         const custRes = await fetch(
-          `https://googleads.googleapis.com/v18/customers:listAccessibleCustomers`,
+          `https://googleads.googleapis.com/v23/customers:listAccessibleCustomers`,
           { headers: { Authorization: `Bearer ${access_token}`, 'developer-token': process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '' } }
         )
         if (custRes.ok) {
