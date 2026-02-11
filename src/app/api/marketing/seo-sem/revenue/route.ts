@@ -42,9 +42,11 @@ export async function GET(request: NextRequest) {
         .select('*')
         .order('month', { ascending: false })
         .order('channel', { ascending: true }),
+      // Use marketing_sem_campaigns (individual rows) instead of daily_spend
+      // because daily_spend aggregate totals may be corrupted (string concatenation bug)
       (admin as any)
-        .from('marketing_sem_daily_spend')
-        .select('fetch_date, platform, total_spend, total_clicks, total_conversions'),
+        .from('marketing_sem_campaigns')
+        .select('fetch_date, platform, spend, clicks, conversions'),
       (admin as any)
         .from('leads')
         .select('lead_id, source, source_detail, created_at, potential_revenue'),
@@ -100,15 +102,15 @@ export async function GET(request: NextRequest) {
       crmDealsByChannelMonth.set(key, existing)
     }
 
-    // --- Ad Spend: Aggregate by month + platform ---
+    // --- Ad Spend: Aggregate by month + platform (from individual campaign rows) ---
     const spendByMonthChannel = new Map<string, { spend: number; clicks: number; conversions: number }>()
     for (const r of (spendData || [])) {
       const month = r.fetch_date.substring(0, 7)
       const key = `${r.platform}|${month}`
       const existing = spendByMonthChannel.get(key) || { spend: 0, clicks: 0, conversions: 0 }
-      existing.spend += Number(r.total_spend) || 0
-      existing.clicks += Number(r.total_clicks) || 0
-      existing.conversions += Number(r.total_conversions) || 0
+      existing.spend += Number(r.spend) || 0
+      existing.clicks += Number(r.clicks) || 0
+      existing.conversions += Number(r.conversions) || 0
       spendByMonthChannel.set(key, existing)
     }
 

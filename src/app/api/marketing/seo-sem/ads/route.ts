@@ -11,6 +11,11 @@ function pctChange(curr: number, prev: number): number {
   return curr > 0 ? 100 : 0
 }
 
+// Sum a numeric field from campaign rows with explicit Number() conversion
+function sumCampField(rows: any[], field: string): number {
+  return rows.reduce((s: number, r: any) => s + (Number(r[field]) || 0), 0)
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -29,49 +34,82 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient()
     const { startStr, endStr, yoyStartStr, yoyEndStr } = parseDateRange(searchParams)
 
-    // Current period KPIs
+    // Fetch campaign data for CURRENT period (used for both KPIs and campaign list)
+    // NOTE: KPIs are computed from individual campaign rows (marketing_sem_campaigns),
+    // NOT from marketing_sem_daily_spend, because daily_spend aggregate totals for
+    // clicks/impressions may have been corrupted by a string-concatenation bug in the
+    // fetcher (Google Ads REST API returns int64 as strings).
+    let campQuery = (admin as any)
+      .from('marketing_sem_campaigns')
+      .select('*')
+      .gte('fetch_date', startStr)
+      .lte('fetch_date', endStr)
+      .order('spend', { ascending: false })
+
+    if (platform !== '__all__') campQuery = campQuery.eq('platform', platform)
+
+    // Fetch campaign data for YoY period
+    let yoyCampQuery = (admin as any)
+      .from('marketing_sem_campaigns')
+      .select('spend, impressions, clicks, conversions, conversion_value')
+      .gte('fetch_date', yoyStartStr)
+      .lte('fetch_date', yoyEndStr)
+
+    if (platform !== '__all__') yoyCampQuery = yoyCampQuery.eq('platform', platform)
+
+    // Fetch daily spend for trend chart (spend values are correct)
     let spendQuery = (admin as any)
       .from('marketing_sem_daily_spend')
-      .select('*')
+      .select('fetch_date, platform, total_spend')
       .gte('fetch_date', startStr)
       .lte('fetch_date', endStr)
 
     if (platform !== '__all__') spendQuery = spendQuery.eq('platform', platform)
 
-    const { data: spendData } = await spendQuery
-    const spendRows = spendData || []
+    // Parallel fetch: current campaigns, YoY campaigns, daily spend, configs, revenue
+    const [
+      { data: campData },
+      { data: yoyCampData },
+      { data: spendData },
+      { data: configs },
+      { data: revenueData },
+    ] = await Promise.all([
+      campQuery,
+      yoyCampQuery,
+      spendQuery,
+      (admin as any)
+        .from('marketing_seo_config')
+        .select('service, is_active, last_fetch_at, last_fetch_error')
+        .in('service', ['google_ads', 'meta_ads']),
+      (admin as any)
+        .from('marketing_revenue_actuals')
+        .select('channel, month, revenue'),
+    ])
 
-    const totalSpend = spendRows.reduce((s: number, r: any) => s + (Number(r.total_spend) || 0), 0)
-    const totalClicks = spendRows.reduce((s: number, r: any) => s + (Number(r.total_clicks) || 0), 0)
-    const totalConversions = spendRows.reduce((s: number, r: any) => s + (Number(r.total_conversions) || 0), 0)
-    const totalConversionValue = spendRows.reduce((s: number, r: any) => s + (Number(r.total_conversion_value) || 0), 0)
-    const totalImpressions = spendRows.reduce((s: number, r: any) => s + (Number(r.total_impressions) || 0), 0)
+    const campaigns = campData || []
+    const yoyCampaigns = yoyCampData || []
 
-    // YoY period KPIs
-    let yoyQuery = (admin as any)
-      .from('marketing_sem_daily_spend')
-      .select('*')
-      .gte('fetch_date', yoyStartStr)
-      .lte('fetch_date', yoyEndStr)
-
-    if (platform !== '__all__') yoyQuery = yoyQuery.eq('platform', platform)
-
-    const { data: yoyData } = await yoyQuery
-    const yoyRows = yoyData || []
-
-    const yoySpend = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_spend) || 0), 0)
-    const yoyClicks = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_clicks) || 0), 0)
-    const yoyConversions = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_conversions) || 0), 0)
-    const yoyConversionValue = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_conversion_value) || 0), 0)
-    const yoyImpressions = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_impressions) || 0), 0)
-
-    const yoyCpc = yoyClicks > 0 ? yoySpend / yoyClicks : 0
-    const yoyCpa = yoyConversions > 0 ? yoySpend / yoyConversions : 0
-    const yoyRoas = yoySpend > 0 ? yoyConversionValue / yoySpend : 0
+    // --- Current period KPIs from individual campaign rows ---
+    const totalSpend = sumCampField(campaigns, 'spend')
+    const totalClicks = sumCampField(campaigns, 'clicks')
+    const totalImpressions = sumCampField(campaigns, 'impressions')
+    const totalConversions = sumCampField(campaigns, 'conversions')
+    const totalConversionValue = sumCampField(campaigns, 'conversion_value')
 
     const currCpc = totalClicks > 0 ? totalSpend / totalClicks : 0
     const currCpa = totalConversions > 0 ? totalSpend / totalConversions : 0
     const currRoas = totalSpend > 0 ? totalConversionValue / totalSpend : 0
+
+    // --- YoY period KPIs from individual campaign rows ---
+    const yoySpend = sumCampField(yoyCampaigns, 'spend')
+    const yoyClicks = sumCampField(yoyCampaigns, 'clicks')
+    const yoyImpressions = sumCampField(yoyCampaigns, 'impressions')
+    const yoyConversions = sumCampField(yoyCampaigns, 'conversions')
+    const yoyConversionValue = sumCampField(yoyCampaigns, 'conversion_value')
+
+    const yoyCpc = yoyClicks > 0 ? yoySpend / yoyClicks : 0
+    const yoyCpa = yoyConversions > 0 ? yoySpend / yoyConversions : 0
+    const yoyRoas = yoySpend > 0 ? yoyConversionValue / yoySpend : 0
 
     const kpis = {
       totalSpend: { value: totalSpend, yoy: pctChange(totalSpend, yoySpend) },
@@ -83,20 +121,7 @@ export async function GET(request: NextRequest) {
       totalClicks: { value: totalClicks, yoy: pctChange(totalClicks, yoyClicks) },
     }
 
-    // Campaign data
-    let campQuery = (admin as any)
-      .from('marketing_sem_campaigns')
-      .select('*')
-      .gte('fetch_date', startStr)
-      .lte('fetch_date', endStr)
-      .order('spend', { ascending: false })
-
-    if (platform !== '__all__') campQuery = campQuery.eq('platform', platform)
-
-    const { data: campData } = await campQuery
-    const campaigns = campData || []
-
-    // Aggregate campaigns by campaign_id — SUM metrics across all dates in range
+    // --- Aggregate campaigns by campaign_id for display ---
     const campMap = new Map<string, any>()
     for (const c of campaigns) {
       const key = `${c.platform}|${c.campaign_id}`
@@ -110,7 +135,6 @@ export async function GET(request: NextRequest) {
           daily_budget: Number(c.daily_budget) || 0,
           budget_utilization: Number(c.budget_utilization) || 0,
           fetch_date: c.fetch_date,
-          // Summed metrics
           spend: Number(c.spend) || 0,
           impressions: Number(c.impressions) || 0,
           clicks: Number(c.clicks) || 0,
@@ -118,13 +142,11 @@ export async function GET(request: NextRequest) {
           conversion_value: Number(c.conversion_value) || 0,
         })
       } else {
-        // Accumulate metrics across days
         existing.spend += Number(c.spend) || 0
         existing.impressions += Number(c.impressions) || 0
         existing.clicks += Number(c.clicks) || 0
         existing.conversions += Number(c.conversions) || 0
         existing.conversion_value += Number(c.conversion_value) || 0
-        // Keep metadata from the latest date row
         if (c.fetch_date > existing.fetch_date) {
           existing.campaign_name = c.campaign_name
           existing.campaign_status = c.campaign_status
@@ -135,7 +157,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Compute derived metrics from aggregated totals
     const aggregatedCampaigns = Array.from(campMap.values()).map((c) => ({
       ...c,
       ctr: c.impressions > 0 ? c.clicks / c.impressions : 0,
@@ -144,33 +165,22 @@ export async function GET(request: NextRequest) {
       roas: c.spend > 0 ? c.conversion_value / c.spend : 0,
     }))
 
-    // Sort by total spend descending
     aggregatedCampaigns.sort((a, b) => b.spend - a.spend)
 
     const total = aggregatedCampaigns.length
     const paginatedCampaigns = aggregatedCampaigns.slice(offset, offset + limit)
 
-    // Daily spend trend
+    // Daily spend trend (only total_spend from daily_spend, which is correct)
+    const spendRows = spendData || []
     const dailySpend = spendRows.map((r: any) => ({
       date: r.fetch_date,
       platform: r.platform,
       spend: Number(r.total_spend) || 0,
-      clicks: Number(r.total_clicks) || 0,
-      conversions: Number(r.total_conversions) || 0,
+      clicks: 0,
+      conversions: 0,
     }))
 
-    // Config status
-    const { data: configs } = await (admin as any)
-      .from('marketing_seo_config')
-      .select('service, is_active, last_fetch_at, last_fetch_error')
-      .in('service', ['google_ads', 'meta_ads'])
-
-    // Fetch actual revenue for ROAS calculation
-    const { data: revenueData } = await (admin as any)
-      .from('marketing_revenue_actuals')
-      .select('channel, month, revenue')
-
-    // Aggregate actual revenue for the current period's months
+    // Aggregate actual revenue for ROAS calculation
     let actualRevenue = 0
     const startMonth = startStr.substring(0, 7)
     const endMonth = endStr.substring(0, 7)

@@ -774,12 +774,14 @@ export async function fetchGoogleAdsData(targetDate: string, endDate?: string): 
         const m = r.metrics || {}
         const b = r.campaignBudget || {}
 
-        const spend = (m.costMicros || 0) / 1_000_000
-        const clicks = m.clicks || 0
-        const impressions = m.impressions || 0
+        // Google Ads REST API returns int64 fields as strings in JSON
+        // Must explicitly convert to Number to avoid string concatenation bugs
+        const spend = Number(m.costMicros || 0) / 1_000_000
+        const clicks = Number(m.clicks) || 0
+        const impressions = Number(m.impressions) || 0
         const conversions = parseFloat(m.conversions || '0')
         const convValue = parseFloat(m.conversionsValue || '0')
-        const budget = (b.amountMicros || 0) / 1_000_000
+        const budget = Number(b.amountMicros || 0) / 1_000_000
 
         totalSpend += spend
         totalImpressions += impressions
@@ -796,13 +798,13 @@ export async function fetchGoogleAdsData(targetDate: string, endDate?: string): 
           spend,
           impressions,
           clicks,
-          ctr: parseFloat(m.ctr || '0'),
-          avg_cpc: (m.averageCpc || 0) / 1_000_000,
+          ctr: Number(m.ctr) || 0,
+          avg_cpc: Number(m.averageCpc || 0) / 1_000_000,
           conversions,
           conversion_value: convValue,
           cost_per_conversion: spend > 0 && conversions > 0 ? spend / conversions : 0,
           roas: spend > 0 ? convValue / spend : 0,
-          impression_share: parseFloat(m.searchImpressionShare || '0'),
+          impression_share: Number(m.searchImpressionShare) || 0,
           quality_score_avg: null,
           daily_budget: budget,
           budget_utilization: budget > 0 ? (spend / budget) * 100 : 0,
@@ -875,11 +877,11 @@ export async function fetchGoogleAdsData(targetDate: string, endDate?: string): 
           ad_group_name: r.adGroup?.name || '',
           keyword_text: kw.text || '',
           match_type: (kw.matchType || '').toLowerCase(),
-          spend: (m.costMicros || 0) / 1_000_000,
-          impressions: m.impressions || 0,
-          clicks: m.clicks || 0,
-          ctr: parseFloat(m.ctr || '0'),
-          avg_cpc: (m.averageCpc || 0) / 1_000_000,
+          spend: Number(m.costMicros || 0) / 1_000_000,
+          impressions: Number(m.impressions) || 0,
+          clicks: Number(m.clicks) || 0,
+          ctr: Number(m.ctr) || 0,
+          avg_cpc: Number(m.averageCpc || 0) / 1_000_000,
           conversions: parseFloat(m.conversions || '0'),
           quality_score: qi.qualityScore || null,
         }
@@ -923,9 +925,9 @@ export async function fetchGoogleAdsData(targetDate: string, endDate?: string): 
           campaign_name: r.campaign?.name || '',
           ad_group_name: r.adGroup?.name || '',
           keyword_text: r.segments?.keyword?.info?.text || '',
-          impressions: m.impressions || 0,
-          clicks: m.clicks || 0,
-          spend: (m.costMicros || 0) / 1_000_000,
+          impressions: Number(m.impressions) || 0,
+          clicks: Number(m.clicks) || 0,
+          spend: Number(m.costMicros || 0) / 1_000_000,
           conversions: parseFloat(m.conversions || '0'),
         }
       })
