@@ -10,19 +10,24 @@ import {
 } from 'recharts'
 import {
   DollarSign, MousePointerClick, Target, TrendingUp,
-  BarChart3, Eye, AlertCircle
+  BarChart3, Eye, AlertCircle, ArrowUpRight, ArrowDownRight
 } from 'lucide-react'
+
+interface KpiValue {
+  value: number
+  yoy: number
+}
 
 interface AdsOverviewProps {
   data: {
     kpis: {
-      totalSpend: number
-      totalConversions: number
-      avgCpc: number
-      avgCpa: number
-      overallRoas: number
-      totalImpressions: number
-      totalClicks: number
+      totalSpend: KpiValue
+      totalConversions: KpiValue
+      avgCpc: KpiValue
+      avgCpa: KpiValue
+      overallRoas: KpiValue
+      totalImpressions: KpiValue
+      totalClicks: KpiValue
     }
     campaigns: Array<{
       platform: string; campaign_id: string; campaign_name: string
@@ -115,28 +120,39 @@ export default function AdsOverviewSection({ data, loading }: AdsOverviewProps) 
   const topRoas = [...campaigns].sort((a, b) => b.roas - a.roas).slice(0, 5)
 
   const kpiCards = [
-    { label: 'Total Ad Spend', value: formatCurrency(kpis.totalSpend), icon: DollarSign, color: 'text-red-500' },
-    { label: 'Total Conversions', value: formatNumber(kpis.totalConversions), icon: Target, color: 'text-green-500' },
-    { label: 'Avg CPC', value: formatCurrency(kpis.avgCpc), icon: MousePointerClick, color: 'text-blue-500' },
-    { label: 'Avg CPA', value: formatCurrency(kpis.avgCpa), icon: TrendingUp, color: 'text-purple-500' },
-    { label: 'Overall ROAS', value: `${kpis.overallRoas.toFixed(2)}x`, icon: BarChart3, color: 'text-amber-500' },
+    { label: 'Total Ad Spend', value: formatCurrency(kpis.totalSpend.value), yoy: kpis.totalSpend.yoy, icon: DollarSign, color: 'text-red-500', invertYoy: true },
+    { label: 'Total Conversions', value: formatNumber(kpis.totalConversions.value), yoy: kpis.totalConversions.yoy, icon: Target, color: 'text-green-500' },
+    { label: 'Avg CPC', value: formatCurrency(kpis.avgCpc.value), yoy: kpis.avgCpc.yoy, icon: MousePointerClick, color: 'text-blue-500', invertYoy: true },
+    { label: 'Avg CPA', value: formatCurrency(kpis.avgCpa.value), yoy: kpis.avgCpa.yoy, icon: TrendingUp, color: 'text-purple-500', invertYoy: true },
+    { label: 'Overall ROAS', value: `${kpis.overallRoas.value.toFixed(2)}x`, yoy: kpis.overallRoas.yoy, icon: BarChart3, color: 'text-amber-500' },
   ]
 
   return (
     <div className="space-y-4">
       {/* KPI Cards */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
-        {kpiCards.map((kpi, i) => (
-          <Card key={i}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
-              </div>
-              <p className="text-xl font-bold">{kpi.value}</p>
-            </CardContent>
-          </Card>
-        ))}
+        {kpiCards.map((kpi, i) => {
+          const yoyVal = kpi.yoy || 0
+          const isPositive = kpi.invertYoy ? yoyVal < 0 : yoyVal > 0
+          const isNegative = kpi.invertYoy ? yoyVal > 0 : yoyVal < 0
+          return (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">{kpi.label}</span>
+                  <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
+                </div>
+                <p className="text-xl font-bold">{kpi.value}</p>
+                {yoyVal !== 0 && (
+                  <div className={`flex items-center gap-1 mt-1 text-xs ${isPositive ? 'text-green-600' : isNegative ? 'text-red-500' : 'text-muted-foreground'}`}>
+                    {yoyVal > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                    <span>{yoyVal > 0 ? '+' : ''}{yoyVal.toFixed(1)}% YoY</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {/* Spend Trend Chart */}

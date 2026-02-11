@@ -5,6 +5,11 @@ import { canAccessMarketingPanel } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
 
+function pctChange(curr: number, prev: number): number {
+  if (prev > 0) return ((curr - prev) / prev) * 100
+  return curr > 0 ? 100 : 0
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -22,17 +27,31 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit
 
     const admin = createAdminClient()
-    const days = range === '7d' ? 7 : range === '90d' ? 90 : 30
+    const days = range === '7d' ? 7 : range === '90d' ? 90 : range === 'ytd' ? 0 : 30
     const now = new Date()
     const endDate = new Date(now)
     endDate.setDate(endDate.getDate() - 1)
-    const startDate = new Date(endDate)
-    startDate.setDate(startDate.getDate() - days)
+
+    let startDate: Date
+    if (range === 'ytd') {
+      startDate = new Date(now.getFullYear(), 0, 1) // Jan 1 this year
+    } else {
+      startDate = new Date(endDate)
+      startDate.setDate(startDate.getDate() - days)
+    }
 
     const startStr = startDate.toISOString().split('T')[0]
     const endStr = endDate.toISOString().split('T')[0]
 
-    // KPIs from daily spend
+    // YoY: Same period last year
+    const yoyStartDate = new Date(startDate)
+    yoyStartDate.setFullYear(yoyStartDate.getFullYear() - 1)
+    const yoyEndDate = new Date(endDate)
+    yoyEndDate.setFullYear(yoyEndDate.getFullYear() - 1)
+    const yoyStartStr = yoyStartDate.toISOString().split('T')[0]
+    const yoyEndStr = yoyEndDate.toISOString().split('T')[0]
+
+    // Current period KPIs
     let spendQuery = (admin as any)
       .from('marketing_sem_daily_spend')
       .select('*')
@@ -50,14 +69,40 @@ export async function GET(request: NextRequest) {
     const totalConversionValue = spendRows.reduce((s: number, r: any) => s + (Number(r.total_conversion_value) || 0), 0)
     const totalImpressions = spendRows.reduce((s: number, r: any) => s + (Number(r.total_impressions) || 0), 0)
 
+    // YoY period KPIs
+    let yoyQuery = (admin as any)
+      .from('marketing_sem_daily_spend')
+      .select('*')
+      .gte('fetch_date', yoyStartStr)
+      .lte('fetch_date', yoyEndStr)
+
+    if (platform !== '__all__') yoyQuery = yoyQuery.eq('platform', platform)
+
+    const { data: yoyData } = await yoyQuery
+    const yoyRows = yoyData || []
+
+    const yoySpend = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_spend) || 0), 0)
+    const yoyClicks = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_clicks) || 0), 0)
+    const yoyConversions = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_conversions) || 0), 0)
+    const yoyConversionValue = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_conversion_value) || 0), 0)
+    const yoyImpressions = yoyRows.reduce((s: number, r: any) => s + (Number(r.total_impressions) || 0), 0)
+
+    const yoyCpc = yoyClicks > 0 ? yoySpend / yoyClicks : 0
+    const yoyCpa = yoyConversions > 0 ? yoySpend / yoyConversions : 0
+    const yoyRoas = yoySpend > 0 ? yoyConversionValue / yoySpend : 0
+
+    const currCpc = totalClicks > 0 ? totalSpend / totalClicks : 0
+    const currCpa = totalConversions > 0 ? totalSpend / totalConversions : 0
+    const currRoas = totalSpend > 0 ? totalConversionValue / totalSpend : 0
+
     const kpis = {
-      totalSpend,
-      totalConversions,
-      avgCpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
-      avgCpa: totalConversions > 0 ? totalSpend / totalConversions : 0,
-      overallRoas: totalSpend > 0 ? totalConversionValue / totalSpend : 0,
-      totalImpressions,
-      totalClicks,
+      totalSpend: { value: totalSpend, yoy: pctChange(totalSpend, yoySpend) },
+      totalConversions: { value: totalConversions, yoy: pctChange(totalConversions, yoyConversions) },
+      avgCpc: { value: currCpc, yoy: pctChange(currCpc, yoyCpc) },
+      avgCpa: { value: currCpa, yoy: pctChange(currCpa, yoyCpa) },
+      overallRoas: { value: currRoas, yoy: pctChange(currRoas, yoyRoas) },
+      totalImpressions: { value: totalImpressions, yoy: pctChange(totalImpressions, yoyImpressions) },
+      totalClicks: { value: totalClicks, yoy: pctChange(totalClicks, yoyClicks) },
     }
 
     // Campaign data
@@ -108,6 +153,8 @@ export async function GET(request: NextRequest) {
       page,
       dailySpend,
       configs: configs || [],
+      dateRange: { start: startStr, end: endStr },
+      yoyDateRange: { start: yoyStartStr, end: yoyEndStr },
     })
   } catch (error) {
     console.error('SEM ads error:', error)

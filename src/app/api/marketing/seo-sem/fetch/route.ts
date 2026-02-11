@@ -5,6 +5,9 @@ import { runDailySEOFetch, runWeeklyVitalsFetch, fetchPageSpeedData, fetchGSCDat
 
 export const dynamic = 'force-dynamic'
 
+// Default backfill start date for YoY support
+const BACKFILL_START = '2025-01-01'
+
 export async function POST(request: NextRequest) {
   try {
     // Auth: service_role key OR authenticated marketing user
@@ -53,26 +56,28 @@ export async function POST(request: NextRequest) {
     }
 
     if (type === 'manual') {
-      // Manual fetch for specific service
+      const startDt = body.start_date || BACKFILL_START
+
       if (specificService === 'google_search_console') {
-        const date = target_date || new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]
-        results.push({ service: 'google_search_console', ...await fetchGSCData(date) })
+        // GSC data delayed 2-3 days
+        const endDt = target_date || new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]
+        results.push({ service: 'google_search_console', ...await fetchGSCData(startDt, endDt) })
       } else if (specificService === 'google_analytics') {
-        const date = target_date || new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]
-        results.push({ service: 'google_analytics', ...await fetchGA4Data(date) })
+        const endDt = target_date || new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0]
+        results.push({ service: 'google_analytics', ...await fetchGA4Data(startDt, endDt) })
       } else if (specificService === 'pagespeed') {
         results.push({ service: 'pagespeed', ...await fetchPageSpeedData(urls) })
       } else if (specificService === 'google_ads') {
         const endDt = target_date || new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0]
-        // Default: fetch last 30 days for initial backfill
-        const startDt = body.start_date || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
         results.push({ service: 'google_ads', ...await fetchGoogleAdsData(startDt, endDt) })
       } else {
-        // Fetch all
-        const seoRes = await runDailySEOFetch()
-        results.push(...seoRes.results)
-        const vitalsRes = await runWeeklyVitalsFetch()
-        results.push(...vitalsRes.results)
+        // Fetch all services with backfill
+        const gscEnd = new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]
+        const adsEnd = new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0]
+        results.push({ service: 'google_search_console', ...await fetchGSCData(startDt, gscEnd) })
+        results.push({ service: 'google_analytics', ...await fetchGA4Data(startDt, adsEnd) })
+        results.push({ service: 'google_ads', ...await fetchGoogleAdsData(startDt, adsEnd) })
+        results.push({ service: 'pagespeed', ...await fetchPageSpeedData() })
       }
     }
 

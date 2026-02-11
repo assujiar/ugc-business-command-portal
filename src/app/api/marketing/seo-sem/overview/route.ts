@@ -19,12 +19,19 @@ export async function GET(request: NextRequest) {
     const site = searchParams.get('site') || '__all__'
 
     const admin = createAdminClient()
-    const days = range === '7d' ? 7 : range === '90d' ? 90 : 30
+    const days = range === '7d' ? 7 : range === '90d' ? 90 : range === 'ytd' ? 0 : 30
     const now = new Date()
     const endDate = new Date(now)
     endDate.setDate(endDate.getDate() - 3) // GSC data delay
-    const startDate = new Date(endDate)
-    startDate.setDate(startDate.getDate() - days)
+
+    let startDate: Date
+    if (range === 'ytd') {
+      startDate = new Date(now.getFullYear(), 0, 1)
+    } else {
+      startDate = new Date(endDate)
+      startDate.setDate(startDate.getDate() - days)
+    }
+
     const prevStartDate = new Date(startDate)
     prevStartDate.setDate(prevStartDate.getDate() - days)
 
@@ -32,6 +39,14 @@ export async function GET(request: NextRequest) {
     const endStr = endDate.toISOString().split('T')[0]
     const prevStartStr = prevStartDate.toISOString().split('T')[0]
     const prevEndStr = startStr
+
+    // YoY: Same period last year
+    const yoyStartDate = new Date(startDate)
+    yoyStartDate.setFullYear(yoyStartDate.getFullYear() - 1)
+    const yoyEndDate = new Date(endDate)
+    yoyEndDate.setFullYear(yoyEndDate.getFullYear() - 1)
+    const yoyStartStr = yoyStartDate.toISOString().split('T')[0]
+    const yoyEndStr = yoyEndDate.toISOString().split('T')[0]
 
     // Current period
     let currentQuery = (admin as any)
@@ -59,6 +74,18 @@ export async function GET(request: NextRequest) {
     const current = currentData || []
     const prev = prevData || []
 
+    // YoY period
+    let yoyQuery = (admin as any)
+      .from('marketing_seo_daily_snapshot')
+      .select('*')
+      .gte('fetch_date', yoyStartStr)
+      .lte('fetch_date', yoyEndStr)
+
+    if (site !== '__all__') yoyQuery = yoyQuery.eq('site', site)
+
+    const { data: yoyData } = await yoyQuery
+    const yoy = yoyData || []
+
     // Aggregate KPIs
     const sumField = (arr: any[], field: string) => arr.reduce((s, r) => s + (Number(r[field]) || 0), 0)
     const avgField = (arr: any[], field: string) => {
@@ -82,15 +109,24 @@ export async function GET(request: NextRequest) {
     const prevOrganicConversions = sumField(prev, 'ga_organic_conversions')
     const prevConversionRate = prevOrganicSessions > 0 ? prevOrganicConversions / prevOrganicSessions : 0
 
+    // YoY aggregates
+    const yoyTotalClicks = sumField(yoy, 'gsc_total_clicks')
+    const yoyTotalImpressions = sumField(yoy, 'gsc_total_impressions')
+    const yoyAvgCtr = yoyTotalImpressions > 0 ? yoyTotalClicks / yoyTotalImpressions : 0
+    const yoyAvgPosition = avgField(yoy, 'gsc_avg_position')
+    const yoyOrganicSessions = sumField(yoy, 'ga_organic_sessions')
+    const yoyOrganicConversions = sumField(yoy, 'ga_organic_conversions')
+    const yoyConversionRate = yoyOrganicSessions > 0 ? yoyOrganicConversions / yoyOrganicSessions : 0
+
     const pctChange = (curr: number, prev: number) => prev > 0 ? ((curr - prev) / prev) * 100 : curr > 0 ? 100 : 0
 
     const kpis = {
-      totalClicks: { value: totalClicks, change: pctChange(totalClicks, prevTotalClicks) },
-      totalImpressions: { value: totalImpressions, change: pctChange(totalImpressions, prevTotalImpressions) },
-      avgCtr: { value: avgCtr, change: pctChange(avgCtr, prevAvgCtr) },
-      avgPosition: { value: avgPosition, change: pctChange(avgPosition, prevAvgPosition) },
-      organicSessions: { value: organicSessions, change: pctChange(organicSessions, prevOrganicSessions) },
-      conversionRate: { value: conversionRate, change: pctChange(conversionRate, prevConversionRate) },
+      totalClicks: { value: totalClicks, change: pctChange(totalClicks, prevTotalClicks), yoy: pctChange(totalClicks, yoyTotalClicks) },
+      totalImpressions: { value: totalImpressions, change: pctChange(totalImpressions, prevTotalImpressions), yoy: pctChange(totalImpressions, yoyTotalImpressions) },
+      avgCtr: { value: avgCtr, change: pctChange(avgCtr, prevAvgCtr), yoy: pctChange(avgCtr, yoyAvgCtr) },
+      avgPosition: { value: avgPosition, change: pctChange(avgPosition, prevAvgPosition), yoy: pctChange(avgPosition, yoyAvgPosition) },
+      organicSessions: { value: organicSessions, change: pctChange(organicSessions, prevOrganicSessions), yoy: pctChange(organicSessions, yoyOrganicSessions) },
+      conversionRate: { value: conversionRate, change: pctChange(conversionRate, prevConversionRate), yoy: pctChange(conversionRate, yoyConversionRate) },
     }
 
     // Daily trend data (aggregate by date if multi-site)
