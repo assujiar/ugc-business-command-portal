@@ -601,7 +601,7 @@ export function CustomerQuotationDialog({
 
     // Fetch term templates
     fetchTermTemplates()
-  }, [open, ticketData, operationalCost, lead, opportunity, selectedShipmentIndex, allShipments.length])
+  }, [open, ticketData, operationalCost, lead, opportunity, selectedShipmentIndex, allShipments, operationalCosts, targetMarginPercent])
 
   // Fetch term templates
   const fetchTermTemplates = async () => {

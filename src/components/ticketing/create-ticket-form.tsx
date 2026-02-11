@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { useForm } from 'react-hook-form'
@@ -137,8 +137,13 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
   // Check if user is ops (hide account linking for ops users)
   const isOpsUser = isOps(profile.role)
 
+  const supabase = createBrowserClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
   // Fetch contacts when account is selected
-  const handleAccountSelect = async (accountId: string) => {
+  const handleAccountSelect = useCallback(async (accountId: string) => {
     setSelectedAccountId(accountId)
     setValue('account_id', accountId)
 
@@ -196,15 +201,10 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     } finally {
       setLoadingContacts(false)
     }
-  }
+  }, [supabase, setValue, toast])
 
   // Shipments state (multi-shipment support)
   const [shipments, setShipments] = useState<ShipmentDetail[]>([createEmptyShipment(1)])
-
-  const supabase = createBrowserClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
 
   // Store URL params for later use (after accounts are loaded)
   const [pendingAccountId, setPendingAccountId] = useState<string | null>(null)
@@ -265,7 +265,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
       }
     }
     fetchAccounts()
-  }, [debouncedAccountSearch])
+  }, [debouncedAccountSearch, supabase])
 
   // Load more accounts (pagination)
   const loadMoreAccounts = async () => {
@@ -343,7 +343,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     }
 
     applyPendingAccount()
-  }, [pendingAccountId, accounts, setValue])
+  }, [pendingAccountId, accounts, setValue, handleAccountSelect, supabase])
 
   // Resolve account_id from opportunity_id if not directly provided
   useEffect(() => {
@@ -370,7 +370,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
     }
 
     resolveAccountFromOpportunity()
-  }, [searchParams, selectedAccountId])
+  }, [searchParams, selectedAccountId, supabase])
 
   // Check sessionStorage for prefilled shipment data from lead/pipeline
   // Supports both single shipment (prefill_ticket_shipment) and multi-shipment (prefill_ticket_shipments)
@@ -467,7 +467,7 @@ export function CreateTicketForm({ profile }: CreateTicketFormProps) {
         setValue('ticket_type', 'RFQ')
       }
     }
-  }, [])
+  }, [setValue])
 
   // Get first shipment for service type checks and department auto-mapping
   const firstShipment = shipments[0]

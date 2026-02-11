@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -174,7 +174,7 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
   }
 
   // Fetch customer quotations
-  const fetchQuotations = async () => {
+  const fetchQuotations = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -207,11 +207,11 @@ export function CustomerQuotationsDashboard({ profile }: CustomerQuotationsDashb
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter, searchQuery])
 
   useEffect(() => {
     fetchQuotations()
-  }, [statusFilter, searchQuery])
+  }, [fetchQuotations])
 
   // Format date
   const formatDate = (dateString: string) => {

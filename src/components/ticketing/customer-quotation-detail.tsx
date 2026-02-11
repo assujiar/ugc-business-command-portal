@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -127,7 +127,7 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
   const [pipelineUpdateLoading, setPipelineUpdateLoading] = useState(false)
 
   // Fetch quotation
-  const fetchQuotation = async () => {
+  const fetchQuotation = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -145,11 +145,11 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
     } finally {
       setLoading(false)
     }
-  }
+  }, [quotationId])
 
   useEffect(() => {
     fetchQuotation()
-  }, [quotationId])
+  }, [fetchQuotation])
 
   // Format date
   const formatDate = (dateString: string) => {

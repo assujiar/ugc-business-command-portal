@@ -514,7 +514,7 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
     } finally {
       setLoading(false)
     }
-  }, [ticket.id, canAssign, supabase, fetchSLADetails])
+  }, [ticket.id, canAssign, supabase, fetchSLADetails, costShipmentId, ticket.lead_id, ticket.opportunity_id, ticket.shipments_data])
 
   useEffect(() => {
     fetchData()

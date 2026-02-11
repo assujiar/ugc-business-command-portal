@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   RefreshCw,
   XCircle,
@@ -73,7 +73,7 @@ export function RejectionAnalyticsSection({ profile }: RejectionAnalyticsSection
   const [costAnalytics, setCostAnalytics] = useState<CostRejectionAnalytics[]>([])
 
   // Fetch rejection analytics from views
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     setLoading(true)
     try {
       // Fetch quotation rejection analytics
@@ -103,11 +103,11 @@ export function RejectionAnalyticsSection({ profile }: RejectionAnalyticsSection
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     fetchAnalytics()
-  }, [])
+  }, [fetchAnalytics])
 
   // Define aggregation types
   type QuotationAggregation = {

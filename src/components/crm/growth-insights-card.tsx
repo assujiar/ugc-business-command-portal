@@ -32,10 +32,12 @@ import type { InsightFilters, InsightOutput, InsightResponse, Recommendation, Su
 
 interface GrowthInsightsCardProps {
   filters: InsightFilters
+  periodLabel?: string | null
+  periodType?: string
   className?: string
 }
 
-export function GrowthInsightsCard({ filters, className }: GrowthInsightsCardProps) {
+export function GrowthInsightsCard({ filters, periodLabel, periodType, className }: GrowthInsightsCardProps) {
   const [insight, setInsight] = useState<InsightResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [regenerating, setRegenerating] = useState(false)
@@ -85,6 +87,10 @@ export function GrowthInsightsCard({ filters, className }: GrowthInsightsCardPro
           endDate: filters.endDate,
           salespersonId: filters.salespersonId,
           source: filters.source,
+          otherFilters: {
+            period: periodType || 'default',
+            periodLabel: periodLabel || null,
+          },
         }),
       })
 
@@ -147,13 +153,21 @@ export function GrowthInsightsCard({ filters, className }: GrowthInsightsCardPro
             >
               <RefreshCw className={`h-4 w-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} />
               {regenerating ? 'Generating...' : hasInsight ? 'Regenerate' : 'Generate Insight'}
+              {periodLabel && !regenerating && <span className="ml-1 opacity-70">({periodLabel})</span>}
             </Button>
           </div>
         </div>
         {hasInsight && insight.generated_at && (
-          <CardDescription className="flex items-center gap-1 text-xs">
-            <Clock className="h-3 w-3" />
-            Generated {formatRelativeTime(insight.generated_at)}
+          <CardDescription className="flex items-center gap-2 text-xs">
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Generated {formatRelativeTime(insight.generated_at)}
+            </span>
+            {insight.filters?.period && insight.filters.period !== 'default' && (
+              <Badge variant="secondary" className="text-[10px] h-4">
+                {(insight.filters as any).periodLabel || insight.filters.period}
+              </Badge>
+            )}
           </CardDescription>
         )}
       </CardHeader>

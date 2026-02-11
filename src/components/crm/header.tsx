@@ -2,6 +2,7 @@
 // CRM Header
 // SOURCE: PDF - App Structure
 // Mobile-responsive with hamburger menu trigger
+// Dynamic title based on active module
 // =====================================================
 
 'use client'
@@ -20,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -30,9 +31,30 @@ interface HeaderProps {
   onMenuClick?: () => void
 }
 
+// Route-to-module mapping
+const TICKETING_PATHS = ['/overview-ticket', '/tickets', '/operational-costs', '/customer-quotations', '/performance']
+const MARKETING_PATHS = ['/marketing']
+const DSO_PATHS = ['/dso']
+
+function getActiveModuleTitle(pathname: string): string {
+  if (TICKETING_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+    return 'Ticketing Module'
+  }
+  if (MARKETING_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+    return 'Marketing Panel'
+  }
+  if (DSO_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+    return 'DSO/AR Module'
+  }
+  return 'CRM Module'
+}
+
 export function Header({ profile, onMenuClick }: HeaderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
+
+  const moduleTitle = getActiveModuleTitle(pathname)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -56,7 +78,7 @@ export function Header({ profile, onMenuClick }: HeaderProps) {
           </Button>
         )}
         <div className="min-w-0">
-          <h2 className="text-base lg:text-lg font-semibold truncate">CRM Dashboard</h2>
+          <h2 className="text-base lg:text-lg font-semibold truncate">{moduleTitle}</h2>
         </div>
       </div>
 
