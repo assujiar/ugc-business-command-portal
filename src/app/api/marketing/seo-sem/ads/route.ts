@@ -165,9 +165,29 @@ export async function GET(request: NextRequest) {
       .select('service, is_active, last_fetch_at, last_fetch_error')
       .in('service', ['google_ads', 'meta_ads'])
 
+    // Fetch actual revenue for ROAS calculation
+    const { data: revenueData } = await (admin as any)
+      .from('marketing_revenue_actuals')
+      .select('channel, month, revenue')
+
+    // Aggregate actual revenue for the current period's months
+    let actualRevenue = 0
+    const startMonth = startStr.substring(0, 7)
+    const endMonth = endStr.substring(0, 7)
+    for (const rev of (revenueData || [])) {
+      if (rev.month >= startMonth && rev.month <= endMonth && (platform === '__all__' || rev.channel === platform)) {
+        actualRevenue += Number(rev.revenue) || 0
+      }
+    }
+    const hasActualRevenue = actualRevenue > 0
+    const actualRoas = totalSpend > 0 && hasActualRevenue ? actualRevenue / totalSpend : null
+
     return NextResponse.json({
       kpis,
       hasConversionValues: totalConversionValue > 0,
+      hasActualRevenue,
+      actualRevenue,
+      actualRoas,
       campaigns: paginatedCampaigns,
       total,
       page,

@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import {
   Search, BarChart3, Globe, Gauge, DollarSign,
-  GitCompareArrows, RefreshCcw, Settings, AlertCircle, Loader2, Lightbulb, Users, Link2
+  GitCompareArrows, RefreshCcw, Settings, AlertCircle, Loader2, Lightbulb, Users, Link2, Receipt
 } from 'lucide-react'
 
 import { SummaryInsightSection } from './seo/summary-insight-section'
@@ -23,8 +23,9 @@ import CombinedViewSection from './sem/combined-view-section'
 import SEOSEMSettings from './seo/seo-sem-settings'
 import { AudienceSection } from './seo/audience-section'
 import { AcquisitionSection } from './seo/acquisition-section'
+import RevenueActualsSection from './sem/revenue-actuals-section'
 
-type TabValue = 'summary' | 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'audience' | 'acquisition' | 'ads' | 'combined' | 'settings'
+type TabValue = 'summary' | 'seo_overview' | 'keywords' | 'pages' | 'web_vitals' | 'audience' | 'acquisition' | 'ads' | 'revenue' | 'combined' | 'settings'
 
 function getTodayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -432,6 +433,10 @@ export default function SEOSEMDashboard() {
             <DollarSign className="h-3.5 w-3.5" />
             Paid Ads
           </TabsTrigger>
+          <TabsTrigger value="revenue" className="gap-1 text-xs sm:text-sm">
+            <Receipt className="h-3.5 w-3.5" />
+            Revenue
+          </TabsTrigger>
           <TabsTrigger value="combined" className="gap-1 text-xs sm:text-sm">
             <GitCompareArrows className="h-3.5 w-3.5" />
             Combined
@@ -508,6 +513,10 @@ export default function SEOSEMDashboard() {
           data={adsData}
           loading={loadingAds}
         />
+      )}
+
+      {activeTab === 'revenue' && (
+        <RevenueActualsSection />
       )}
 
       {activeTab === 'combined' && (
