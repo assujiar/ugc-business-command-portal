@@ -77,6 +77,48 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
+    // Fetch linked customer quotation details if available
+    if (cost.customer_quotation_id) {
+      const { data: quotation } = await (supabase as any)
+        .from('customer_quotations')
+        .select('id, quotation_number, status, rejection_reason, rejected_at, sent_at, accepted_at, total_selling_rate, currency')
+        .eq('id', cost.customer_quotation_id)
+        .single()
+
+      if (quotation) {
+        cost.customer_quotation = quotation
+
+        // Fetch rejection details if quotation is rejected
+        if (quotation.status === 'rejected') {
+          const { createAdminClient } = await import('@/lib/supabase/admin')
+          const adminClient = createAdminClient()
+          const { data: rejectionReasons } = await (adminClient as any)
+            .from('quotation_rejection_reasons')
+            .select('*')
+            .eq('quotation_id', cost.customer_quotation_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+
+          if (rejectionReasons && rejectionReasons.length > 0) {
+            cost.rejection_details = rejectionReasons[0]
+          }
+        }
+      }
+    }
+
+    // Fetch opportunity details if available
+    if (cost.opportunity_id) {
+      const { data: opportunity } = await (supabase as any)
+        .from('opportunities')
+        .select('opportunity_id, name, stage, probability, estimated_value, competitor, competitor_price, customer_budget')
+        .eq('opportunity_id', cost.opportunity_id)
+        .single()
+
+      if (opportunity) {
+        cost.opportunity = opportunity
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: cost,

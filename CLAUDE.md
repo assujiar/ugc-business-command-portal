@@ -33,10 +33,14 @@
 
 - **accounts column name**: The column is `account_status` (NOT `status`). Migration 159 regressed from correct `account_status` (migration 136) to wrong `status`. This caused mark_accepted to fail silently, rolling back the entire transaction. Fix: use `sync_opportunity_to_account(opp_id, 'won')` instead of direct UPDATE. Migration 172.
 - **Nested BEGIN..EXCEPTION for non-critical operations**: Wrap account sync, SLA updates, and similar non-critical operations in nested `BEGIN..EXCEPTION` blocks within RPCs. This prevents failures in peripheral operations from rolling back the entire quotation lifecycle transaction.
+- **RLS blocks SECURITY DEFINER SELECT when auth.uid() IS NULL**: RLS policies that check `auth.uid()` or role functions return FALSE when auth.uid() is NULL (service_role calls). Migration 099 added `opp_update_service` (FOR UPDATE, auth.uid() IS NULL) but NOT the SELECT counterpart. Fix: Add `_service` policies `USING (auth.uid() IS NULL)` on ALL tables accessed by RPCs. Migration 174.
+- **Always add matching service policies for all DML types**: When adding a service RLS policy for UPDATE, also add ones for SELECT and INSERT. RPCs typically need SELECT → UPDATE → INSERT.
+- **SECURITY DEFINER triggers also need service policies**: Triggers marked SECURITY DEFINER still evaluate RLS on the tables they access. If a trigger fires from a service_role context (auth.uid() IS NULL), it needs service policies on EVERY table it reads/writes. Key examples: mirror trigger reads profiles/tickets, account sync triggers read/write accounts, SLA triggers write to ticket_response_exchanges.
 
 ## Key Files
 - **mark_sent vs mark_rejected opportunity derivation**: mark_rejected starts with `v_effective_opportunity_id := v_quotation.opportunity_id` (correct). mark_sent relied ONLY on fn_resolve_or_create_opportunity result (broken). Migration 150 adds fallback to quotation.opportunity_id.
-- Latest RPC definitions: Check highest-numbered migration (currently 147 for mark_won/mark_lost, 148 for sync_opportunity_to_account, 173 for mark_sent/mark_rejected/mark_accepted, also fn_stage_config)
+- Latest RPC definitions: Check highest-numbered migration (currently 147 for mark_won/mark_lost, 148 for sync_opportunity_to_account, 174 for mark_sent/mark_rejected/mark_accepted, also fn_stage_config)
+- RLS service policies: migration 174 (RPCs) + migration 175 (triggers — comprehensive coverage for ALL tables)
 - Stage history auto-fill: migration 149 (trg_autofill_stage_history on opportunity_stage_history)
 - Account status lifecycle: migration 148 (sync_opportunity_to_account, trigger, aging function, view)
 - RLS policies: `036_ticketing_rls_policies.sql` (base) + 145 (tickets/events/comments - LATEST)
