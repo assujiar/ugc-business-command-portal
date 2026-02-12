@@ -54,6 +54,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           department,
           ticket_type,
           rfq_data,
+          show_sender_to_ops,
           created_at,
           account:accounts!tickets_account_id_fkey(account_id, company_name, address, city, country),
           contact:contacts!tickets_contact_id_fkey(contact_id, first_name, last_name, email, phone),

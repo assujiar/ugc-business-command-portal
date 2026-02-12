@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { canCreateOperationalCosts } from '@/lib/permissions'
+import { canCreateOperationalCosts, isOps } from '@/lib/permissions'
 import type { Database } from '@/types/database'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -199,6 +199,8 @@ export function OperationalCostDetail({ costId, profile }: OperationalCostDetail
   const ticket = cost.ticket
   const account = ticket?.account
   const contact = ticket?.contact
+  const isOpsUser = isOps(profile.role)
+  const canSeeSenderInfo = !isOpsUser || ticket?.show_sender_to_ops !== false
 
   return (
     <div className="space-y-6">
@@ -389,7 +391,7 @@ export function OperationalCostDetail({ costId, profile }: OperationalCostDetail
                         {cost.customer_quotation.status}
                       </Badge>
                     </div>
-                    {cost.customer_quotation.total_selling_rate && (
+                    {!isOpsUser && cost.customer_quotation.total_selling_rate && (
                       <p className="text-sm">Selling Rate: {formatCurrency(cost.customer_quotation.total_selling_rate, cost.customer_quotation.currency || 'IDR')}</p>
                     )}
                     {cost.customer_quotation.rejection_reason && (
@@ -440,8 +442,8 @@ export function OperationalCostDetail({ costId, profile }: OperationalCostDetail
               </>
             )}
 
-            {/* Pipeline/Opportunity Info */}
-            {cost.opportunity && (
+            {/* Pipeline/Opportunity Info - hidden for Ops if show_sender_to_ops is false */}
+            {canSeeSenderInfo && cost.opportunity && (
               <>
                 <Separator />
                 <div>
@@ -516,8 +518,8 @@ export function OperationalCostDetail({ costId, profile }: OperationalCostDetail
             </CardContent>
           </Card>
 
-          {/* Account */}
-          {account && (
+          {/* Account - hidden for Ops if show_sender_to_ops is false */}
+          {canSeeSenderInfo && account && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -546,8 +548,8 @@ export function OperationalCostDetail({ costId, profile }: OperationalCostDetail
             </Card>
           )}
 
-          {/* Contact */}
-          {contact && (
+          {/* Contact - hidden for Ops if show_sender_to_ops is false */}
+          {canSeeSenderInfo && contact && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
