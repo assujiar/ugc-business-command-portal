@@ -612,7 +612,7 @@ BEGIN
         -- FIX (migration 181): Use .id IS NOT NULL
         IF v_ticket.id IS NOT NULL AND v_ticket.status NOT IN ('closed', 'resolved') THEN
             UPDATE public.tickets t_upd
-            SET status = 'waiting_customer'::ticket_status, pending_response_from = 'customer', updated_at = NOW()
+            SET status = 'waiting_customer'::ticket_status, pending_response_from = 'creator', updated_at = NOW()
             WHERE t_upd.id = v_saved_ticket_id RETURNING * INTO v_ticket;
             v_return_ticket_status := v_ticket.status::TEXT;
 
