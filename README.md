@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 2.1.3 | Last Updated: 2026-02-12
+> Version: 2.1.4 | Last Updated: 2026-02-12
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -1173,7 +1173,30 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v2.1.3 (Current)
+### v2.1.4 (Current)
+- **Comprehensive RLS Service Policies for Triggers (Migration 175)**: Full audit of all 67 triggers vs RLS policies to ensure no trigger is blocked
+  - **Problem**: Migration 174 added service policies for tables accessed by RPCs, but many tables accessed by SECURITY DEFINER triggers still lacked service policies. These triggers could silently fail when firing in service_role context.
+  - **Critical tables fixed** (had NO service policies at all):
+    - `ticket_responses`: SELECT + INSERT + UPDATE — used by mirror trigger, auto_record_response
+    - `ticket_response_exchanges`: SELECT + INSERT — used by mirror trigger, SLA tracking triggers
+    - `ticket_response_metrics`: SELECT + INSERT + UPDATE — used by quote metrics trigger
+    - `profiles`: SELECT — used by mirror trigger, ticket department triggers
+    - `accounts`: SELECT + UPDATE — used by account sync triggers, sync_opportunity_to_account()
+    - `contacts`: SELECT + UPDATE — used by account PIC sync trigger
+  - **Partial gaps completed** (had some but not all operations):
+    - `opportunity_stage_history`: added SELECT (had only INSERT from 174)
+    - `opportunities`: added INSERT (had only SELECT + UPDATE from 174)
+    - `ticket_comments`: added UPDATE
+    - `ticket_events`: added UPDATE
+    - `customer_quotations`: added INSERT
+    - `pipeline_updates`: added UPDATE
+    - `activities`: added UPDATE
+    - `leads`: added INSERT
+    - `ticket_rate_quotes`: added INSERT
+  - **Additional tables covered**: sla_business_hours, sla_holidays, ticket_rate_quote_items, customer_quotation_items, customer_quotation_sequences, operational_cost_rejection_reasons, quotation_term_templates, ticket_assignments, ticket_attachments, tickets (INSERT)
+  - Verification: migration logs total service policy count via RAISE WARNING
+
+### v2.1.3
 - **Fix RLS Service Policies Blocking RPC SELECT (Migration 174)**: ROOT CAUSE of all RPC bugs - opportunities and tickets tables had no RLS SELECT service policies
   - **Root Cause**: RLS policies on `opportunities` (`opp_select`) and `tickets` (`tickets_select_policy`) use `auth.uid()` and role-checking functions. When SECURITY DEFINER RPCs run via service_role, `auth.uid()` is NULL, causing ALL role checks to return FALSE. Migration 099 added `opp_update_service` for UPDATE (allowing `auth.uid() IS NULL`), but there was NO corresponding SELECT service policy. The RPCs could UPDATE these tables but not SELECT from them, causing `SELECT INTO` to return NULL and skipping all opportunity/ticket logic.
   - **Fix**: Added comprehensive `_service` RLS policies across ALL tables accessed by RPCs:
@@ -1446,6 +1469,7 @@ npx tsc --noEmit # TypeScript check
   - Migration 172: Fix accepted account column name — sync_opportunity_to_account, nested exception
   - Migration 173: Fix probability/next_step on stage change — fn_stage_config, all 3 RPCs rewritten
   - Migration 174: Fix RLS service policies — opp_select_service, tickets_select/update_service, drop+recreate all RPCs
+  - Migration 175: Comprehensive trigger RLS audit — service policies for ticket_responses, profiles, accounts, contacts, + all partial gaps
 
 ### v1.6.3
 - **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error
