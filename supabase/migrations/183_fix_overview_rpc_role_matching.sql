@@ -558,7 +558,8 @@ BEGIN
             'submitted', (SELECT COUNT(*) FROM ops_data WHERE status = 'submitted'),
             'sent_to_customer', (SELECT COUNT(*) FROM ops_data WHERE status = 'sent_to_customer'),
             'accepted', (SELECT COUNT(*) FROM ops_data WHERE status = 'accepted'),
-            'rejected', (SELECT COUNT(*) FROM ops_data WHERE status = 'rejected')
+            'rejected', (SELECT COUNT(*) FROM ops_data WHERE status = 'rejected'),
+            'revise_requested', (SELECT COUNT(*) FROM ops_data WHERE status = 'revise_requested')
         ),
         'value', jsonb_build_object(
             'total', COALESCE((SELECT SUM(amount) FROM ops_data), 0),

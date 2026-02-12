@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Database } from '@/types/database'
+import { isOps } from '@/lib/permissions'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -421,6 +422,7 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
 
   const isDirectorScope = meta.scope === 'all'
   const isDepartmentScope = meta.scope === 'department'
+  const isOpsUser = isOps(profile.role)
 
   return (
     <div className="space-y-6">
@@ -725,149 +727,151 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
         </Card>
       </div>
 
-      {/* Section 4: Quotation Analytics (Sales/Marketing) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-brand" />
-            Quotation Analytics
-          </CardTitle>
-          <CardDescription>Customer quotation performance</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="summary">
-            <TabsList className="mb-4">
-              <TabsTrigger value="summary">Summary</TabsTrigger>
-              <TabsTrigger value="rejection">Rejection Analysis</TabsTrigger>
-            </TabsList>
-            <TabsContent value="summary" className="space-y-4">
-              {/* Status Breakdown */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <MetricCard
-                  title="Draft"
-                  value={quotationAnalytics.summary?.draft || 0}
-                  icon={FileText}
-                  bgColor="bg-gray-50 dark:bg-gray-950/30"
-                />
-                <MetricCard
-                  title="Sent"
-                  value={quotationAnalytics.summary?.sent || 0}
-                  icon={ArrowRight}
-                  color="text-blue-600"
-                  bgColor="bg-blue-50 dark:bg-blue-950/30"
-                />
-                <MetricCard
-                  title="Accepted"
-                  value={quotationAnalytics.summary?.accepted || 0}
-                  icon={CheckCircle2}
-                  color="text-green-600"
-                  bgColor="bg-green-50 dark:bg-green-950/30"
-                />
-                <MetricCard
-                  title="Rejected"
-                  value={quotationAnalytics.summary?.rejected || 0}
-                  icon={XCircle}
-                  color="text-red-600"
-                  bgColor="bg-red-50 dark:bg-red-950/30"
-                />
-                <MetricCard
-                  title="Expired"
-                  value={quotationAnalytics.summary?.expired || 0}
-                  icon={Hourglass}
-                  color="text-orange-600"
-                  bgColor="bg-orange-50 dark:bg-orange-950/30"
-                />
-              </div>
+      {/* Section 4: Quotation Analytics (Sales/Marketing) - Hidden for Ops users */}
+      {!isOpsUser && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-brand" />
+              Quotation Analytics
+            </CardTitle>
+            <CardDescription>Customer quotation performance</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="summary">
+              <TabsList className="mb-4">
+                <TabsTrigger value="summary">Summary</TabsTrigger>
+                <TabsTrigger value="rejection">Rejection Analysis</TabsTrigger>
+              </TabsList>
+              <TabsContent value="summary" className="space-y-4">
+                {/* Status Breakdown */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <MetricCard
+                    title="Draft"
+                    value={quotationAnalytics.summary?.draft || 0}
+                    icon={FileText}
+                    bgColor="bg-gray-50 dark:bg-gray-950/30"
+                  />
+                  <MetricCard
+                    title="Sent"
+                    value={quotationAnalytics.summary?.sent || 0}
+                    icon={ArrowRight}
+                    color="text-blue-600"
+                    bgColor="bg-blue-50 dark:bg-blue-950/30"
+                  />
+                  <MetricCard
+                    title="Accepted"
+                    value={quotationAnalytics.summary?.accepted || 0}
+                    icon={CheckCircle2}
+                    color="text-green-600"
+                    bgColor="bg-green-50 dark:bg-green-950/30"
+                  />
+                  <MetricCard
+                    title="Rejected"
+                    value={quotationAnalytics.summary?.rejected || 0}
+                    icon={XCircle}
+                    color="text-red-600"
+                    bgColor="bg-red-50 dark:bg-red-950/30"
+                  />
+                  <MetricCard
+                    title="Expired"
+                    value={quotationAnalytics.summary?.expired || 0}
+                    icon={Hourglass}
+                    color="text-orange-600"
+                    bgColor="bg-orange-50 dark:bg-orange-950/30"
+                  />
+                </div>
 
-              {/* Value & Conversion */}
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Total Value</p>
-                  <p className="text-xl font-bold">{formatCurrency(quotationAnalytics.value?.total)}</p>
-                </div>
-                <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950/30">
-                  <p className="text-sm text-muted-foreground">Accepted Value</p>
-                  <p className="text-xl font-bold text-green-600">{formatCurrency(quotationAnalytics.value?.accepted)}</p>
-                </div>
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Win Rate</p>
-                  <p className="text-xl font-bold">{quotationAnalytics.conversion?.total_win_rate || 0}%</p>
-                  <Progress value={quotationAnalytics.conversion?.total_win_rate || 0} className="h-2 mt-2" />
-                </div>
-              </div>
-
-              {/* By Type Breakdown */}
-              {quotationAnalytics.by_type && (
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg border border-blue-200 dark:border-blue-900">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="default">RFQ</Badge>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Total</p>
-                        <p className="font-medium">{quotationAnalytics.by_type.RFQ?.total || 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Accepted</p>
-                        <p className="font-medium text-green-600">{quotationAnalytics.by_type.RFQ?.accepted || 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Value</p>
-                        <p className="font-medium">{formatCurrency(quotationAnalytics.by_type.RFQ?.value_accepted)}</p>
-                      </div>
-                    </div>
+                {/* Value & Conversion */}
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">Total Value</p>
+                    <p className="text-xl font-bold">{formatCurrency(quotationAnalytics.value?.total)}</p>
                   </div>
-                  <div className="p-4 rounded-lg border border-purple-200 dark:border-purple-900">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="secondary">GEN</Badge>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Total</p>
-                        <p className="font-medium">{quotationAnalytics.by_type.GEN?.total || 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Accepted</p>
-                        <p className="font-medium text-green-600">{quotationAnalytics.by_type.GEN?.accepted || 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Value</p>
-                        <p className="font-medium">{formatCurrency(quotationAnalytics.by_type.GEN?.value_accepted)}</p>
-                      </div>
-                    </div>
+                  <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950/30">
+                    <p className="text-sm text-muted-foreground">Accepted Value</p>
+                    <p className="text-xl font-bold text-green-600">{formatCurrency(quotationAnalytics.value?.accepted)}</p>
+                  </div>
+                  <div className="p-4 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">Win Rate</p>
+                    <p className="text-xl font-bold">{quotationAnalytics.conversion?.total_win_rate || 0}%</p>
+                    <Progress value={quotationAnalytics.conversion?.total_win_rate || 0} className="h-2 mt-2" />
                   </div>
                 </div>
-              )}
-            </TabsContent>
-            <TabsContent value="rejection" className="space-y-4">
-              {/* Rejection Reasons */}
-              {quotationAnalytics.rejection_reasons && Object.keys(quotationAnalytics.rejection_reasons).length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Rejection Reasons</p>
-                  {Object.entries(quotationAnalytics.rejection_reasons).map(([reason, count]) => {
-                    const total = Object.values(quotationAnalytics.rejection_reasons as Record<string, number>).reduce((a, b) => a + b, 0)
-                    const percentage = total > 0 ? Math.round(((count as number) / total) * 100) : 0
-                    return (
-                      <div key={reason} className="flex items-center gap-3">
-                        <div className="flex-1">
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>{rejectionReasonLabels[reason] || reason}</span>
-                            <span className="font-medium">{count as number} ({percentage}%)</span>
-                          </div>
-                          <Progress value={percentage} className="h-2 [&>div]:bg-red-500" />
+
+                {/* By Type Breakdown */}
+                {quotationAnalytics.by_type && (
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-lg border border-blue-200 dark:border-blue-900">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="default">RFQ</Badge>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Total</p>
+                          <p className="font-medium">{quotationAnalytics.by_type.RFQ?.total || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Accepted</p>
+                          <p className="font-medium text-green-600">{quotationAnalytics.by_type.RFQ?.accepted || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Value</p>
+                          <p className="font-medium">{formatCurrency(quotationAnalytics.by_type.RFQ?.value_accepted)}</p>
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-center py-4">Tidak ada rejection dalam periode ini</p>
-              )}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+                    </div>
+                    <div className="p-4 rounded-lg border border-purple-200 dark:border-purple-900">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary">GEN</Badge>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Total</p>
+                          <p className="font-medium">{quotationAnalytics.by_type.GEN?.total || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Accepted</p>
+                          <p className="font-medium text-green-600">{quotationAnalytics.by_type.GEN?.accepted || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Value</p>
+                          <p className="font-medium">{formatCurrency(quotationAnalytics.by_type.GEN?.value_accepted)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+              <TabsContent value="rejection" className="space-y-4">
+                {/* Rejection Reasons */}
+                {quotationAnalytics.rejection_reasons && Object.keys(quotationAnalytics.rejection_reasons).length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Rejection Reasons</p>
+                    {Object.entries(quotationAnalytics.rejection_reasons).map(([reason, count]) => {
+                      const total = Object.values(quotationAnalytics.rejection_reasons as Record<string, number>).reduce((a, b) => a + b, 0)
+                      const percentage = total > 0 ? Math.round(((count as number) / total) * 100) : 0
+                      return (
+                        <div key={reason} className="flex items-center gap-3">
+                          <div className="flex-1">
+                            <div className="flex justify-between text-sm mb-1">
+                              <span>{rejectionReasonLabels[reason] || reason}</span>
+                              <span className="font-medium">{count as number} ({percentage}%)</span>
+                            </div>
+                            <Progress value={percentage} className="h-2 [&>div]:bg-red-500" />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-center py-4">Tidak ada rejection dalam periode ini</p>
+                )}
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Section 5: Ops Cost Analytics */}
       <Card>
@@ -886,7 +890,7 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
             </TabsList>
             <TabsContent value="summary" className="space-y-4">
               {/* Status Breakdown */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 <MetricCard
                   title="Draft"
                   value={opsCostAnalytics.summary?.draft || 0}
@@ -917,6 +921,13 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                   icon={XCircle}
                   color="text-red-600"
                   bgColor="bg-red-50 dark:bg-red-950/30"
+                />
+                <MetricCard
+                  title="Revise Requested"
+                  value={opsCostAnalytics.summary?.revise_requested || 0}
+                  icon={AlertTriangle}
+                  color="text-amber-600"
+                  bgColor="bg-amber-50 dark:bg-amber-950/30"
                 />
               </div>
 
