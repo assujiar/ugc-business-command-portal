@@ -295,7 +295,7 @@ BEGIN
                     'quotation_number', v_quotation.quotation_number, 'quotation_status', 'rejected',
                     'rejection_reason', p_reason_type::TEXT, 'competitor_name', p_competitor_name,
                     'competitor_amount', p_competitor_amount, 'customer_budget', p_customer_budget,
-                    'correlation_id', v_correlation_id),
+                    'currency', p_currency, 'correlation_id', v_correlation_id),
                 '[' || v_correlation_id || '] Quotation ' || v_quotation.quotation_number || ' rejected. Reason: ' || p_reason_type::TEXT, NOW());
             v_ticket_events_created := v_ticket_events_created + 1;
 
