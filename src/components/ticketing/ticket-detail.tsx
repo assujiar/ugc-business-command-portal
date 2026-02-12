@@ -1034,6 +1034,35 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
       }
     }
 
+    // Rule 8: Same user, exact same second → group as one response
+    // Exception: cost items (showing amounts) are always kept separate
+    const EXACT_SECOND_MS = 1000
+    // Badge priority: higher number = higher priority (kept when merging)
+    const BADGE_PRIORITY: Record<string, number> = {
+      'comment': 1, 'internal': 2, 'assigned': 3, 'status': 4,
+      'adjustment': 5, 'cost': 99, 'attachment': 5, 'created': 6, 'resolved': 7,
+      'closed': 8, 'reopened': 9, 'priority': 10, 'quotation': 11,
+      'sent_to_customer': 12, 'quotation_sent': 13, 'accepted': 14, 'rejected': 15,
+      'won': 16, 'lost': 17,
+    }
+    for (let i = 0; i < sorted.length; i++) {
+      if (removedIds.has(sorted[i].id) || sorted[i].type === 'cost') continue
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (removedIds.has(sorted[j].id) || sorted[j].type === 'cost') continue
+        if (ts(sorted[j]) - ts(sorted[i]) > EXACT_SECOND_MS) break
+        // Same user, exact same second, different badge types
+        if (sorted[i].user_id === sorted[j].user_id && sorted[i].badge_type !== sorted[j].badge_type) {
+          const priI = BADGE_PRIORITY[sorted[i].badge_type] || 0
+          const priJ = BADGE_PRIORITY[sorted[j].badge_type] || 0
+          if (priJ >= priI) {
+            removedIds.add(sorted[i].id)
+          } else {
+            removedIds.add(sorted[j].id)
+          }
+        }
+      }
+    }
+
     return items.filter((item) => !removedIds.has(item.id))
   }
 
