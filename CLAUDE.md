@@ -30,6 +30,7 @@
 - **Pipeline update API double-updates**: If trigger already handles account_status sync, don't also do it directly in API route (causes double-update conflicts).
 - **AFTER UPDATE trigger interference with RPCs (RESOLVED)**: `trg_quotation_status_sync` (migration 071) was an AFTER UPDATE trigger on `customer_quotations` that competed with RPCs to update opportunity stage. The GUC flag mechanism (migration 151) was insufficient: the trigger could still race and change opportunity.stage BEFORE the RPC read it, causing all logging (pipeline_updates, activities, stage_history) to be skipped. Fix: migration 180 DROPPED the trigger entirely. RPCs are now the SOLE controller of quotation lifecycle transitions. Do NOT recreate this trigger.
 - **GUC flags for trigger control**: Use `set_config('app.key', 'value', true)` (transaction-local) before UPDATE to signal AFTER triggers to skip. Read with `current_setting('app.key', true)`. The `true` param in current_setting makes it return NULL instead of error if not set.
+- **RECORD IS NOT NULL composite type gotcha**: In PostgreSQL, `v_record IS NOT NULL` for RECORD types returns TRUE only if ALL fields are non-NULL. If any column is NULL (competitor, notes, etc.), it returns FALSE even though the record was populated by SELECT INTO. This silently skips entire code blocks. Fix: use `v_record.primary_key IS NOT NULL` instead (e.g., `v_opportunity.opportunity_id IS NOT NULL`, `v_ticket.id IS NOT NULL`). Note: `v_record IS NULL` is safe for "not found" checks because unassigned records have ALL fields NULL. Migration 181.
 
 - **accounts column name**: The column is `account_status` (NOT `status`). Migration 159 regressed from correct `account_status` (migration 136) to wrong `status`. This caused mark_accepted to fail silently, rolling back the entire transaction. Fix: use `sync_opportunity_to_account(opp_id, 'won')` instead of direct UPDATE. Migration 172.
 - **Nested BEGIN..EXCEPTION for non-critical operations**: Wrap account sync, SLA updates, and similar non-critical operations in nested `BEGIN..EXCEPTION` blocks within RPCs. This prevents failures in peripheral operations from rolling back the entire quotation lifecycle transaction.
@@ -39,7 +40,8 @@
 
 ## Key Files
 - **mark_sent vs mark_rejected opportunity derivation**: mark_rejected starts with `v_effective_opportunity_id := v_quotation.opportunity_id` (correct). mark_sent relied ONLY on fn_resolve_or_create_opportunity result (broken). Migration 150 adds fallback to quotation.opportunity_id.
-- Latest RPC definitions: mark_rejected in migration 180 (clean production, dropped trigger), mark_sent in migration 177, mark_accepted in migration 177, mark_won/mark_lost in 147, sync_opportunity_to_account in 148, fn_stage_config in 174
+- Latest RPC definitions: mark_rejected in migration 181, mark_sent in migration 181, mark_accepted in migration 181, mark_won/mark_lost in 147, sync_opportunity_to_account in 148, fn_stage_config in 174
+- **Composite type NULL fix**: migration 181 (fixed IS NOT NULL checks in mark_rejected, mark_sent, mark_accepted)
 - RLS service policies: migration 174 (RPCs) + migration 175 (triggers — comprehensive coverage for ALL tables)
 - Stage history auto-fill: migration 149 (trg_autofill_stage_history on opportunity_stage_history)
 - Account status lifecycle: migration 148 (sync_opportunity_to_account, trigger, aging function, view)
