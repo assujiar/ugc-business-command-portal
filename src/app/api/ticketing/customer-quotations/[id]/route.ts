@@ -70,6 +70,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       quotation.items.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
     }
 
+    // Fetch rejection details if quotation is rejected
+    if (quotation.status === 'rejected') {
+      const adminClient = createAdminClient()
+      const { data: rejectionReasons } = await (adminClient as any)
+        .from('quotation_rejection_reasons')
+        .select('*')
+        .eq('quotation_id', id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (rejectionReasons && rejectionReasons.length > 0) {
+        quotation.rejection_details = rejectionReasons[0]
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: quotation,
