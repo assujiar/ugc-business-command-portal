@@ -563,7 +563,10 @@ BEGIN
             next_step = COALESCE(v_stage_next_step, opp_upd.next_step),
             next_step_due_date = CASE WHEN v_stage_days > 0 AND v_old_opp_stage IS DISTINCT FROM v_new_opp_stage
                 THEN CURRENT_DATE + v_stage_days ELSE opp_upd.next_step_due_date END,
-            estimated_value = COALESCE(v_quotation.total_selling_rate, opp_upd.estimated_value),
+            -- Only set estimated_value on first quotation sent (no prior rejections); keep original pipeline/lead value for 2nd+ quotation
+            estimated_value = CASE WHEN v_previous_rejected_count = 0
+                THEN COALESCE(v_quotation.total_selling_rate, opp_upd.estimated_value)
+                ELSE opp_upd.estimated_value END,
             updated_at = NOW()
         WHERE opp_upd.opportunity_id = v_effective_opportunity_id;
 
@@ -784,7 +787,7 @@ BEGIN
             probability = COALESCE(v_stage_prob, opp_upd.probability),
             next_step = COALESCE(v_stage_next_step, opp_upd.next_step),
             next_step_due_date = CASE WHEN v_stage_days > 0 THEN CURRENT_DATE + v_stage_days ELSE opp_upd.next_step_due_date END,
-            estimated_value = COALESCE(v_quotation.total_selling_rate, opp_upd.estimated_value),
+            -- estimated_value stays as original pipeline/lead value; deal_value comes from accepted quotation
             deal_value = COALESCE(v_quotation.total_selling_rate, opp_upd.deal_value),
             closed_at = NOW(), outcome = 'won', updated_at = NOW()
         WHERE opp_upd.opportunity_id = v_effective_opportunity_id;
