@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 2.1.0 | Last Updated: 2026-02-12
+> Version: 2.1.1 | Last Updated: 2026-02-12
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -139,7 +139,7 @@ ugc-business-command-portal/
 │   └── types/                        # TypeScript definitions
 │
 ├── supabase/
-│   └── migrations/                   # 171 SQL migrations
+│   └── migrations/                   # 172 SQL migrations
 │       ├── 001-034                   # Core CRM tables
 │       ├── 035-060                   # Ticketing system
 │       ├── 061-090                   # Quotation system
@@ -153,7 +153,8 @@ ugc-business-command-portal/
 │       ├── 153                       # Countries reference table
 │       ├── 154-157                   # Marketing module (social media, content plan, token refresh)
 │       ├── 158-159                   # Fix accepted/rejected pipeline_updates columns
-│       └── 171                       # Fix accepted UUID type, activity subjects, link trigger, lead_id derivation
+│       ├── 171                       # Fix accepted UUID type, activity subjects, link trigger, lead_id derivation
+│       └── 172                       # Fix accepted account column name (status→account_status via sync_opportunity_to_account)
 │
 └── public/
     └── logo/                         # Brand assets
@@ -951,7 +952,7 @@ ACTION:
   2. UPDATE opportunity.stage = 'Closed Won', estimated_value, closed_at
   3. UPDATE ticket.status = 'closed' (close_outcome = 'won')
   4. UPDATE ALL costs.status = 'accepted' (single + multi-shipment)
-  5. UPDATE account.account_status = 'active_account'
+  5. CALL sync_opportunity_to_account(opp_id, 'won') → account_status lifecycle [Migration 172]
   6. UPDATE lead.quotation_status = 'accepted'
   7. INSERT opportunity_stage_history (from_stage, to_stage, old_stage, new_stage — all 4 columns)
   8. INSERT pipeline_updates (approach_method='Email', old_stage, new_stage)
@@ -1147,7 +1148,7 @@ cp .env.example .env.local
 # Edit .env.local with your values
 
 # 3. Run migrations (in Supabase SQL Editor)
-# Execute migrations 001-171 in order
+# Execute migrations 001-172 in order
 
 # 4. Start development
 npm run dev
@@ -1166,7 +1167,20 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v2.1.0 (Current)
+### v2.1.1 (Current)
+- **Fix mark_accepted Total Rollback (Migration 172)**: Fixed all 4 acceptance bugs caused by ONE root cause — wrong column name `status` instead of `account_status` in `UPDATE accounts`
+  - **Root Cause**: Migration 159 changed the correct column reference `account_status` (from migration 136) to `status` (wrong). This was hidden because the UUID type bug prevented reaching that code. Migration 171 fixed the UUID bug, exposing this column-name bug. The `EXCEPTION WHEN OTHERS` handler caught the "column status does not exist" error and **rolled back the entire transaction** — reverting quotation status, opportunity stage, activity, pipeline_updates, and preventing ticket closure.
+  - **Bug #1 (Account)**: Account didn't change from `calon_account` → `new_account` on first accepted quotation
+  - **Bug #2 (Pipeline)**: Pipeline didn't move to `Closed Won` (UPDATE rolled back by exception)
+  - **Bug #3 (Activity)**: No activity/pipeline_updates/stage_history created (INSERT rolled back by exception)
+  - **Bug #4 (Ticket)**: Ticket didn't auto-close (code AFTER the account UPDATE was never reached)
+  - **Fix**: Replaced broken direct `UPDATE accounts SET status = 'active_account'` with `sync_opportunity_to_account(opportunity_id, 'won')` which:
+    - Uses correct column name `account_status`
+    - Handles full lifecycle: `calon_account` → `new_account` (first deal), `failed/passive/lost` → `new_account` (reactivation)
+    - Sets `first_transaction_date` and `last_transaction_date` properly
+    - Wrapped in nested `BEGIN..EXCEPTION` block to prevent any future account-related issues from cascading to the main transaction
+
+### v2.1.0
 - **Fix mark_accepted UUID Type Error (Migration 171, Bug #7)**: Fixed `"invalid input syntax for type uuid: \"OPP2026021268704A\""` when accepting a customer quotation
   - **Root Cause**: Migration 159 re-introduced `v_derived_opportunity_id UUID` and `v_effective_opportunity_id UUID` declarations in `rpc_customer_quotation_mark_accepted`. Since `opportunity_id` is TEXT type (values like "OPP2026021268704A"), PostgreSQL fails on assignment. Migration 135 had fixed this to TEXT, but 159 regressed it.
   - **Fix**: Changed both variable declarations from `UUID` to `TEXT` in migration 171.
@@ -1384,6 +1398,7 @@ npx tsc --noEmit # TypeScript check
   - Migration 154-157: Marketing module
   - Migration 158-159: Fix accepted/rejected pipeline_updates columns
   - Migration 171: Comprehensive fix — UUID→TEXT, activity subjects, link trigger, lead_id derivation
+  - Migration 172: Fix accepted account column name — sync_opportunity_to_account, nested exception
 
 ### v1.6.3
 - **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error

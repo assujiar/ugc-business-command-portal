@@ -31,9 +31,12 @@
 - **AFTER UPDATE trigger interference with RPCs**: `trg_quotation_status_sync` (migration 071) fires AFTER UPDATE on `customer_quotations` when status changes to 'rejected'/'sent'/'accepted'. It calls `sync_quotation_to_all` → `sync_quotation_to_ticket` which duplicates ALL the work the RPC does (update ticket, create events, update opportunity). The trigger's EXCEPTION handler can roll back its own operations, leaving RPC in corrupted state. Fix: use GUC flag `set_config('app.in_quotation_rpc', 'true', true)` in RPCs + check in trigger to skip. Also check `service_role` JWT. Migration 151.
 - **GUC flags for trigger control**: Use `set_config('app.key', 'value', true)` (transaction-local) before UPDATE to signal AFTER triggers to skip. Read with `current_setting('app.key', true)`. The `true` param in current_setting makes it return NULL instead of error if not set.
 
+- **accounts column name**: The column is `account_status` (NOT `status`). Migration 159 regressed from correct `account_status` (migration 136) to wrong `status`. This caused mark_accepted to fail silently, rolling back the entire transaction. Fix: use `sync_opportunity_to_account(opp_id, 'won')` instead of direct UPDATE. Migration 172.
+- **Nested BEGIN..EXCEPTION for non-critical operations**: Wrap account sync, SLA updates, and similar non-critical operations in nested `BEGIN..EXCEPTION` blocks within RPCs. This prevents failures in peripheral operations from rolling back the entire quotation lifecycle transaction.
+
 ## Key Files
 - **mark_sent vs mark_rejected opportunity derivation**: mark_rejected starts with `v_effective_opportunity_id := v_quotation.opportunity_id` (correct). mark_sent relied ONLY on fn_resolve_or_create_opportunity result (broken). Migration 150 adds fallback to quotation.opportunity_id.
-- Latest RPC definitions: Check highest-numbered migration (currently 147 for mark_won/mark_lost, 148 for sync_opportunity_to_account, 150 for mark_sent, 151 for mark_rejected)
+- Latest RPC definitions: Check highest-numbered migration (currently 147 for mark_won/mark_lost, 148 for sync_opportunity_to_account, 150 for mark_sent, 171 for mark_rejected, 172 for mark_accepted)
 - Stage history auto-fill: migration 149 (trg_autofill_stage_history on opportunity_stage_history)
 - Account status lifecycle: migration 148 (sync_opportunity_to_account, trigger, aging function, view)
 - RLS policies: `036_ticketing_rls_policies.sql` (base) + 145 (tickets/events/comments - LATEST)
