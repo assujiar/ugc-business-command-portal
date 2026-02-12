@@ -1069,23 +1069,25 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
   const buildUnifiedTimeline = (): TimelineItem[] => {
     const items: TimelineItem[] = []
 
-    // Add comments
-    comments.forEach((comment) => {
-      const isCreatorComment = comment.user_id === ticket.created_by
-      items.push({
-        id: `comment-${comment.id}`,
-        type: 'comment',
-        created_at: comment.created_at,
-        user_id: comment.user_id,
-        user_name: comment.user?.name || 'Unknown',
-        user_initials: getInitials(comment.user?.name || 'U'),
-        is_creator: isCreatorComment,
-        content: comment.content,
-        badge_type: comment.is_internal ? 'internal' : 'comment',
-        badge_label: comment.is_internal ? 'Internal' : 'Comment',
-        extra_data: { is_internal: comment.is_internal },
+    // Add comments (exclude auto-generated internal comments to match creator view)
+    comments
+      .filter((comment) => !(comment.is_internal && comment.content?.startsWith('[Auto]')))
+      .forEach((comment) => {
+        const isCreatorComment = comment.user_id === ticket.created_by
+        items.push({
+          id: `comment-${comment.id}`,
+          type: 'comment',
+          created_at: comment.created_at,
+          user_id: comment.user_id,
+          user_name: comment.user?.name || 'Unknown',
+          user_initials: getInitials(comment.user?.name || 'U'),
+          is_creator: isCreatorComment,
+          content: comment.content,
+          badge_type: comment.is_internal ? 'internal' : 'comment',
+          badge_label: comment.is_internal ? 'Internal' : 'Comment',
+          extra_data: { is_internal: comment.is_internal },
+        })
       })
-    })
 
     // Add operational costs - sorted by created_at to get correct sequence
     const sortedCosts = [...costs].sort((a, b) =>
