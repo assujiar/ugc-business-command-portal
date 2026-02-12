@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 2.0.0 | Last Updated: 2026-02-10
+> Version: 2.1.0 | Last Updated: 2026-02-12
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -139,7 +139,7 @@ ugc-business-command-portal/
 │   └── types/                        # TypeScript definitions
 │
 ├── supabase/
-│   └── migrations/                   # 158+ SQL migrations
+│   └── migrations/                   # 171 SQL migrations
 │       ├── 001-034                   # Core CRM tables
 │       ├── 035-060                   # Ticketing system
 │       ├── 061-090                   # Quotation system
@@ -152,7 +152,8 @@ ugc-business-command-portal/
 │       ├── 150-152                   # Fix mark_sent fallback, trigger interference, ambiguous opp
 │       ├── 153                       # Countries reference table
 │       ├── 154-157                   # Marketing module (social media, content plan, token refresh)
-│       └── 158                       # Fix accepted quotation pipeline_updates columns
+│       ├── 158-159                   # Fix accepted/rejected pipeline_updates columns
+│       └── 171                       # Fix accepted UUID type, activity subjects, link trigger, lead_id derivation
 │
 └── public/
     └── logo/                         # Brand assets
@@ -215,19 +216,24 @@ Browser → Next.js App Router → API Route → Supabase RPC/Query → PostgreS
                                                └──────────────────┘
 ```
 
-### Data Directional Flow
+### Data Directional Flow & Cardinality
 
 ```
 1. LEAD CREATION (Marketing)
    └─→ lead_handover_pool (auto on qualify)
-       └─→ ACCOUNT (auto on claim)
-           └─→ OPPORTUNITY (auto on claim/convert)
-               └─→ TICKET (RFQ linked)
-                   ├─→ SHIPMENT_DETAILS (1:N)
-                   ├─→ OPERATIONAL_COST (internal quote)
+       └─→ ACCOUNT (auto on claim)                        [1 Lead → 1 Account]
+           └─→ OPPORTUNITY (auto on claim/convert)        [1 Account → N Opportunities]
+               └─→ TICKET (RFQ linked)                    [1 Opportunity → 1 Ticket]
+                   ├─→ SHIPMENT_DETAILS (1:N)              [1 Ticket → N Shipments]
+                   ├─→ OPERATIONAL_COST (internal quote)   [1 Shipment → 1 Active Cost (is_current)]
                    │   └─→ COST_ITEMS (if breakdown)
-                   └─→ CUSTOMER_QUOTATION (external quote)
-                       └─→ QUOTATION_ITEMS (if breakdown)
+                   └─→ CUSTOMER_QUOTATION (external quote) [1 Cost → 1 Customer Quotation]
+                       └─→ QUOTATION_ITEMS (if breakdown)  [N Costs → 1 Quotation (multi-shipment)]
+
+   Bidirectional linking:
+   - customer_quotations.operational_cost_id ← single cost reference
+   - customer_quotations.operational_cost_ids ← UUID[] array for multi-shipment
+   - ticket_rate_quotes.customer_quotation_id ← back-reference (set by link trigger)
 
 2. STATUS SYNC (Bidirectional)
    QUOTATION.sent → OPPORTUNITY.stage = 'Quote Sent'
@@ -927,12 +933,17 @@ ACTION:
 ```sql
 -- rpc_customer_quotation_mark_sent
 ACTION:
-  1. UPDATE quotation.status = 'sent'
-  2. UPDATE opportunity.stage = 'Quote Sent'
-  3. UPDATE ticket.status = 'waiting_customer'
-  4. UPDATE ALL costs.status = 'sent_to_customer'
-  5. INSERT ticket_event
-  6. INSERT activity
+  1. SET GUC flag 'app.in_quotation_rpc' = 'true' (prevents trigger interference) [Migration 171]
+  2. UPDATE quotation.status = 'sent'
+  3. Resolve/create opportunity via fn_resolve_or_create_opportunity (fallback to quotation.opportunity_id)
+  4. UPDATE opportunity.stage = 'Quote Sent' (first send, no rejections) or 'Negotiation' (after rejection)
+  5. UPDATE ticket.status = 'waiting_customer'
+  6. UPDATE ALL costs.status = 'sent_to_customer' (single + multi-shipment)
+  7. UPDATE lead.quotation_status = 'sent', quotation_count++
+  8. INSERT opportunity_stage_history (from_stage, to_stage, old_stage, new_stage — all 4 columns)
+  9. INSERT pipeline_updates (approach_method='Email', old_stage, new_stage)
+  10. INSERT ticket_events (customer_quotation_sent) + ticket_comments (is_internal=FALSE)
+  11. INSERT activity (subject='Pipeline Update: {old} → {new}', activity_type_v2='Email', related_lead_id=derived) [Migration 171]
 
 -- rpc_customer_quotation_mark_accepted
 ACTION:
@@ -942,11 +953,12 @@ ACTION:
   4. UPDATE ALL costs.status = 'accepted' (single + multi-shipment)
   5. UPDATE account.account_status = 'active_account'
   6. UPDATE lead.quotation_status = 'accepted'
-  7. INSERT opportunity_stage_history (old_stage, new_stage, changed_by)
+  7. INSERT opportunity_stage_history (from_stage, to_stage, old_stage, new_stage — all 4 columns)
   8. INSERT pipeline_updates (approach_method='Email', old_stage, new_stage)
-  9. INSERT activity (activity_type_v2='Email')
+  9. INSERT activity (subject='Pipeline Update: {old} → Closed Won', activity_type_v2='Email', related_lead_id=derived) [Migration 171]
   10. UPDATE ticket_sla_tracking.resolution_at
   11. INSERT ticket_events (status_changed + closed)
+  NOTE: opportunity_id variables are TEXT type (not UUID) — "OPP2026021268704A" format [Migration 171]
 
 -- rpc_customer_quotation_mark_rejected
 ACTION:
@@ -956,11 +968,11 @@ ACTION:
   4. UPDATE ticket.status = 'need_adjustment', pending_response_from = 'assignee'
   5. UPDATE ALL costs.status = 'revise_requested' (single + multi-shipment)
   6. UPDATE lead.quotation_status = 'rejected'
-  7. INSERT opportunity_stage_history (old_stage, new_stage, changed_by)
+  7. INSERT opportunity_stage_history (from_stage, to_stage, old_stage, new_stage — all 4 columns)
   8. INSERT pipeline_updates (approach_method='Email', old_stage, new_stage)
   9. INSERT ticket_events (customer_quotation_rejected + request_adjustment)
   10. INSERT ticket_comments (is_internal=FALSE, visible to all users) [Migration 143]
-  11. INSERT activity (activity_type_v2='Email')
+  11. INSERT activity (subject='Pipeline Update: {old} → {new}', activity_type_v2='Email', related_lead_id=derived) [Migration 171]
 ```
 
 #### 4. Cost Supersession
@@ -987,15 +999,17 @@ ACTION:
   2. Calculate resolution_met based on SLA config
 ```
 
-### Multi-Shipment Sync (v1.6.0+)
+### Multi-Shipment Sync (v1.6.0+, fixed in v2.1.0)
 
 When a quotation with multiple shipments is created/updated:
 
 ```sql
 -- Creating quotation with operational_cost_ids = [cost_A, cost_B]
+-- Trigger: link_quotation_to_operational_cost (AFTER INSERT on customer_quotations)
 ACTION:
-  1. UPDATE cost_A.customer_quotation_id = quotation.id
-  2. UPDATE cost_B.customer_quotation_id = quotation.id
+  1. UPDATE cost_A.customer_quotation_id = quotation.id  (via operational_cost_id — single)
+  2. UPDATE cost_A.customer_quotation_id = quotation.id  (via operational_cost_ids array — multi-shipment) [Migration 171]
+  3. UPDATE cost_B.customer_quotation_id = quotation.id  (via operational_cost_ids array — multi-shipment) [Migration 171]
 
 -- When quotation is sent/accepted/rejected
 ACTION:
@@ -1003,6 +1017,8 @@ ACTION:
   2. UPDATE cost_B.status = new_status
   -- Both costs updated atomically in same transaction
 ```
+
+**Important (Migration 171)**: Prior to v2.1.0, the `link_quotation_to_operational_cost` trigger only handled `operational_cost_id` (single). Multi-shipment quotations using `operational_cost_ids` array had `customer_quotation_id = NULL` in their `ticket_rate_quotes`. Migration 171 fixes this and includes a backfill query.
 
 ---
 
@@ -1131,7 +1147,7 @@ cp .env.example .env.local
 # Edit .env.local with your values
 
 # 3. Run migrations (in Supabase SQL Editor)
-# Execute migrations 001-153 in order
+# Execute migrations 001-171 in order
 
 # 4. Start development
 npm run dev
@@ -1150,7 +1166,32 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v2.0.0 (Current)
+### v2.1.0 (Current)
+- **Fix mark_accepted UUID Type Error (Migration 171, Bug #7)**: Fixed `"invalid input syntax for type uuid: \"OPP2026021268704A\""` when accepting a customer quotation
+  - **Root Cause**: Migration 159 re-introduced `v_derived_opportunity_id UUID` and `v_effective_opportunity_id UUID` declarations in `rpc_customer_quotation_mark_accepted`. Since `opportunity_id` is TEXT type (values like "OPP2026021268704A"), PostgreSQL fails on assignment. Migration 135 had fixed this to TEXT, but 159 regressed it.
+  - **Fix**: Changed both variable declarations from `UUID` to `TEXT` in migration 171.
+- **Fix Activity Subject Format (Migration 171, Bug #1)**: Activity records from quotation lifecycle events now use standardized "Pipeline Update: {old_stage} → {new_stage}" subject format
+  - **Before**: "1st Quotation Rejected → Stage moved to Negotiation"
+  - **After**: "Pipeline Update: Quote Sent → Negotiation"
+  - Applied to all three RPCs: `mark_rejected`, `mark_accepted`, `mark_sent`
+  - When stage does not change (e.g., already at Negotiation), falls back to "{nth} Quotation Rejected" format
+- **Fix Multi-Shipment Link Trigger (Migration 171, Bug #2)**: `link_quotation_to_operational_cost` trigger now handles `operational_cost_ids` array for multi-shipment quotations
+  - **Root Cause**: Trigger only checked `NEW.operational_cost_id` (single), not `NEW.operational_cost_ids` (UUID array for multi-shipment). Multi-shipment quotations had `customer_quotation_id = NULL` in their `ticket_rate_quotes`.
+  - **Fix**: Added array handling block to trigger function. Includes backfill query for existing data.
+- **Fix Pipeline Auto-Update for Quotations from Pipeline (Bug #3)**: PATCH endpoint now syncs `total_selling_rate` to `opportunity.estimated_value` when rate data changes
+  - Ensures quotations created from the opportunity/pipeline menu correctly update the pipeline when edited
+  - Only syncs to non-terminal opportunities (excludes Closed Won/Closed Lost)
+- **Fix lead_id Derivation (Migration 171, Bug #4-5)**: All RPCs now derive `lead_id` via priority chain: `quotation.lead_id` → `opportunity.source_lead_id` → `ticket.lead_id`
+  - Ensures activity records have correct `related_lead_id` even for pipeline-originated quotations where `quotation.lead_id` is NULL
+  - Returns `lead_id` in RPC response JSONB for traceability
+- **Fix Timeline Duplicate Grouping (Bug #6)**: Added Rule 8 to `deduplicateTimelineItems` — events from same user within same second are grouped into one response
+  - Exception: cost items (showing amounts) are always kept separate
+  - Uses badge type priority to keep the most meaningful event when collapsing duplicates
+- **Fix mark_sent Missing GUC Flag (Migration 171)**: Added `set_config('app.in_quotation_rpc', 'true', true)` to `rpc_customer_quotation_mark_sent` which was missing from migration 150
+  - Prevents AFTER UPDATE trigger `trg_quotation_status_sync` from interfering with the RPC's atomic operations
+- **mark_sent Stage History Fix**: Stage history INSERT now uses all 4 columns (from_stage, to_stage, old_stage, new_stage) for full compatibility
+
+### v2.0.0
 - **Comprehensive CRM Dashboard Overhaul**: Complete redesign of `/overview-crm` with role-based analytics
   - **My Performance Summary**: 4 KPI cards (Pipeline Value, Won+Deal Value, Win Rate, Avg Sales Cycle)
   - **Pipeline Funnel**: Stage breakdown with interactive drill-down, count and percentage display
@@ -1335,6 +1376,14 @@ npx tsc --noEmit # TypeScript check
   - Migration 146: Fix mark_won/mark_lost type mismatch — `v_old_stage TEXT` → `opportunity_stage`, explicit casts
   - Migration 147: Fix mark_won/mark_lost to_stage NOT NULL — removed redundant manual INSERT, trigger handles it
   - Migration 148: Account status lifecycle — aging function, sync guards, failed→calon trigger, view fix
+  - Migration 149: Stage history auto-fill trigger (trg_autofill_stage_history)
+  - Migration 150: Fix mark_sent opportunity fallback
+  - Migration 151: Fix rejection trigger interference (GUC flag pattern)
+  - Migration 152: Fix ambiguous opportunity + mark_sent trigger interference
+  - Migration 153: Countries reference table
+  - Migration 154-157: Marketing module
+  - Migration 158-159: Fix accepted/rejected pipeline_updates columns
+  - Migration 171: Comprehensive fix — UUID→TEXT, activity subjects, link trigger, lead_id derivation
 
 ### v1.6.3
 - **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error
@@ -1477,6 +1526,46 @@ CREATE TABLE countries (
   is_active BOOLEAN DEFAULT TRUE
 );
 ```
+
+### Lead ID Derivation in RPCs (Migration 171)
+
+All three quotation RPCs (`mark_sent`, `mark_rejected`, `mark_accepted`) derive `related_lead_id` for activity records using a priority chain:
+
+```
+1. quotation.lead_id          ← Direct lead reference (set for lead/ticket-originated quotations)
+2. opportunity.source_lead_id ← Original lead that created the opportunity (set for pipeline-originated)
+3. ticket.lead_id             ← Ticket's lead reference (fallback)
+```
+
+This ensures activity records always have a `related_lead_id` even when quotations are created from the pipeline/opportunity menu where `quotation.lead_id` is NULL.
+
+### Activity Subject Format (Migration 171)
+
+All quotation lifecycle activities use a standardized subject format:
+
+| Scenario | Subject Format |
+|----------|---------------|
+| Stage changes | `Pipeline Update: {old_stage} → {new_stage}` |
+| No stage change (rejection, already Negotiation) | `{nth} Quotation Rejected` |
+| No stage change (sent, already at Quote Sent) | `{nth} Quotation Sent` |
+| Accepted | `Pipeline Update: {old_stage} → Closed Won` |
+
+### Timeline Deduplication Rules
+
+The `deduplicateTimelineItems` function in `ticket-detail.tsx` uses 8 rules to reduce noise:
+
+| Rule | Window | Description |
+|------|--------|-------------|
+| 1 | 30s | Same user, related badge types → keep higher-priority badge |
+| 2 | 30s | Same type pair (e.g., two status_changed) → keep latest |
+| 3 | 30s | Assignment + status_changed same actor → keep assignment |
+| 4 | 30s | Created + assigned same actor → keep created |
+| 5 | 30s | Lifecycle (rejected/accepted/sent) absorbs status_changed |
+| 6 | 30s | Lifecycle absorbs auto-generated events (assigned/adjustment) |
+| 7 | 30s | Consecutive status_changed same user → keep latest |
+| 8 | 1s | Same user, exact same second → group as one response (except cost items) |
+
+Rule 8 (added in v2.1.0) uses a badge priority system to determine which event to keep when collapsing exact-second duplicates.
 
 ### Multi-Shipment Data Structure
 

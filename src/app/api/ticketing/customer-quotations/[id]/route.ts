@@ -225,6 +225,27 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Sync rate changes to opportunity (Bug #3: quotations from pipeline should auto-update opportunity)
+    if (rate_data && updatedQuotation.opportunity_id) {
+      const newSellingRate = rate_data.total_selling_rate ?? updatedQuotation.total_selling_rate
+      if (newSellingRate !== undefined && newSellingRate !== null) {
+        const { error: oppSyncError } = await (adminClient as any)
+          .from('opportunities')
+          .update({
+            estimated_value: newSellingRate,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('opportunity_id', updatedQuotation.opportunity_id)
+          .not('stage', 'in', '("Closed Won","Closed Lost")')
+
+        if (oppSyncError) {
+          console.error('[CustomerQuotations PATCH] Error syncing rate to opportunity:', oppSyncError)
+        } else {
+          console.log('[CustomerQuotations PATCH] Synced estimated_value to opportunity:', updatedQuotation.opportunity_id)
+        }
+      }
+    }
+
     // Update items if provided
     if (items && Array.isArray(items)) {
       // Delete existing items
