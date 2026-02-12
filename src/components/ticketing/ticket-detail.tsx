@@ -2814,6 +2814,22 @@ export function TicketDetail({ ticket: initialTicket, profile }: TicketDetailPro
                                 <p className="text-sm whitespace-pre-wrap">{item.content}</p>
                               )}
 
+                              {item.extra_data?.event_type === 'customer_quotation_rejected' && item.extra_data?.new_value && (
+                                (item.extra_data.new_value.competitor_name || item.extra_data.new_value.competitor_amount || item.extra_data.new_value.customer_budget) && (
+                                  <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
+                                    {item.extra_data.new_value.competitor_name && (
+                                      <p>Kompetitor: <span className="text-foreground">{item.extra_data.new_value.competitor_name}</span></p>
+                                    )}
+                                    {item.extra_data.new_value.competitor_amount && (
+                                      <p>Harga kompetitor: <span className="text-foreground">{item.extra_data.new_value.currency || 'IDR'} {Number(item.extra_data.new_value.competitor_amount).toLocaleString('id-ID')}</span></p>
+                                    )}
+                                    {item.extra_data.new_value.customer_budget && (
+                                      <p>Budget customer: <span className="text-foreground">{item.extra_data.new_value.currency || 'IDR'} {Number(item.extra_data.new_value.customer_budget).toLocaleString('id-ID')}</span></p>
+                                    )}
+                                  </div>
+                                )
+                              )}
+
                               {item.type === 'cost' && item.extra_data?.terms && (
                                 <p className="text-xs text-muted-foreground mt-2">{item.extra_data.terms}</p>
                               )}
