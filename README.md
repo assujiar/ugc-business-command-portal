@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 2.1.2 | Last Updated: 2026-02-12
+> Version: 2.1.3 | Last Updated: 2026-02-12
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -139,7 +139,7 @@ ugc-business-command-portal/
 │   └── types/                        # TypeScript definitions
 │
 ├── supabase/
-│   └── migrations/                   # 173 SQL migrations
+│   └── migrations/                   # 174 SQL migrations
 │       ├── 001-034                   # Core CRM tables
 │       ├── 035-060                   # Ticketing system
 │       ├── 061-090                   # Quotation system
@@ -155,7 +155,8 @@ ugc-business-command-portal/
 │       ├── 158-159                   # Fix accepted/rejected pipeline_updates columns
 │       ├── 171                       # Fix accepted UUID type, activity subjects, link trigger, lead_id derivation
 │       ├── 172                       # Fix accepted account column name (status→account_status via sync_opportunity_to_account)
-│       └── 173                       # Fix probability/next_step on stage change, UI fixes for multi-shipment/rejection/activity
+│       ├── 173                       # Fix probability/next_step on stage change, UI fixes for multi-shipment/rejection/activity
+│       └── 174                       # Fix RLS service policies for RPC SELECT on opportunities/tickets
 │
 └── public/
     └── logo/                         # Brand assets
@@ -1153,7 +1154,7 @@ cp .env.example .env.local
 # Edit .env.local with your values
 
 # 3. Run migrations (in Supabase SQL Editor)
-# Execute migrations 001-173 in order
+# Execute migrations 001-174 in order
 
 # 4. Start development
 npm run dev
@@ -1172,7 +1173,25 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v2.1.2 (Current)
+### v2.1.3 (Current)
+- **Fix RLS Service Policies Blocking RPC SELECT (Migration 174)**: ROOT CAUSE of all RPC bugs - opportunities and tickets tables had no RLS SELECT service policies
+  - **Root Cause**: RLS policies on `opportunities` (`opp_select`) and `tickets` (`tickets_select_policy`) use `auth.uid()` and role-checking functions. When SECURITY DEFINER RPCs run via service_role, `auth.uid()` is NULL, causing ALL role checks to return FALSE. Migration 099 added `opp_update_service` for UPDATE (allowing `auth.uid() IS NULL`), but there was NO corresponding SELECT service policy. The RPCs could UPDATE these tables but not SELECT from them, causing `SELECT INTO` to return NULL and skipping all opportunity/ticket logic.
+  - **Fix**: Added comprehensive `_service` RLS policies across ALL tables accessed by RPCs:
+    - `opp_select_service` ON opportunities FOR SELECT
+    - `tickets_select_service` ON tickets FOR SELECT
+    - `tickets_update_service` ON tickets FOR UPDATE
+    - Plus service policies for ticket_events, ticket_comments, pipeline_updates, activities, opportunity_stage_history, customer_quotations, leads, quotation_rejection_reasons, ticket_rate_quotes
+  - All 3 RPCs (mark_rejected/sent/accepted) dropped and recreated cleanly from scratch
+  - Added `NOTIFY pgrst, 'reload schema'` for PostgREST cache refresh
+  - Added diagnostic output (`_debug_opp_found`, `_debug_ticket_found`, `_debug_current_user`) to RPC responses
+- **Fix Operational Cost Detail Missing Info (API + UI)**: GET endpoint now fetches linked customer quotation + rejection details + opportunity
+  - API: Fetches customer_quotation (number, status, selling rate), rejection_details (reason, competitor, budget), opportunity (name, stage, probability)
+  - UI: Displays customer quotation card, rejection details card, pipeline card in cost detail page
+- **Fix Quotation Detail Opportunity Field Mismatch (UI)**: `opportunity.name` vs `opportunity_name` and `estimated_value` vs `expected_revenue`
+  - The FK join returns `name` and `estimated_value` but UI accessed `opportunity_name` and `expected_revenue`
+  - Fixed to use correct field names with fallback for backward compatibility
+
+### v2.1.2
 - **Fix Probability/Next Step Not Updated on Stage Change (Migration 173)**: RPCs now update `probability`, `next_step`, and `next_step_due_date` when changing opportunity stage
   - **Root Cause**: All 3 RPCs (`mark_rejected`, `mark_sent`, `mark_accepted`) only updated `stage` on the opportunity, but never `probability`, `next_step`, or `next_step_due_date`. These fields stayed at their initial values (e.g., probability=10 from Prospecting even after moving to Negotiation where it should be 75).
   - **Fix**: Created `fn_stage_config(opportunity_stage)` SQL helper function that mirrors `PIPELINE_STAGE_CONFIG` from `constants.ts`:
@@ -1426,6 +1445,7 @@ npx tsc --noEmit # TypeScript check
   - Migration 171: Comprehensive fix — UUID→TEXT, activity subjects, link trigger, lead_id derivation
   - Migration 172: Fix accepted account column name — sync_opportunity_to_account, nested exception
   - Migration 173: Fix probability/next_step on stage change — fn_stage_config, all 3 RPCs rewritten
+  - Migration 174: Fix RLS service policies — opp_select_service, tickets_select/update_service, drop+recreate all RPCs
 
 ### v1.6.3
 - **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error

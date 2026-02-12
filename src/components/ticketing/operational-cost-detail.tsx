@@ -374,6 +374,96 @@ export function OperationalCostDetail({ costId, profile }: OperationalCostDetail
               </>
             )}
 
+            {/* Customer Quotation */}
+            {cost.customer_quotation && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Linked Customer Quotation</p>
+                  <div className="p-3 border rounded-lg bg-muted/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Link href={`/customer-quotations/${cost.customer_quotation.id}`} className="text-brand hover:underline font-mono font-medium">
+                        {cost.customer_quotation.quotation_number}
+                      </Link>
+                      <Badge variant={cost.customer_quotation.status === 'rejected' ? 'destructive' : cost.customer_quotation.status === 'accepted' ? 'secondary' : 'outline'}>
+                        {cost.customer_quotation.status}
+                      </Badge>
+                    </div>
+                    {cost.customer_quotation.total_selling_rate && (
+                      <p className="text-sm">Selling Rate: {formatCurrency(cost.customer_quotation.total_selling_rate, cost.customer_quotation.currency || 'IDR')}</p>
+                    )}
+                    {cost.customer_quotation.rejection_reason && (
+                      <p className="text-sm text-destructive">Rejection: {cost.customer_quotation.rejection_reason.replace(/_/g, ' ')}</p>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Rejection Details */}
+            {cost.rejection_details && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-sm font-medium text-destructive mb-2">Rejection Details</p>
+                  <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Reason</span>
+                      <span className="font-medium capitalize">{(cost.rejection_details.reason_type || '').replace(/_/g, ' ')}</span>
+                    </div>
+                    {cost.rejection_details.competitor_name && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Competitor</span>
+                        <span className="font-medium">{cost.rejection_details.competitor_name}</span>
+                      </div>
+                    )}
+                    {cost.rejection_details.competitor_amount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Competitor Price</span>
+                        <span className="font-medium">{formatCurrency(cost.rejection_details.competitor_amount, cost.rejection_details.currency || 'IDR')}</span>
+                      </div>
+                    )}
+                    {cost.rejection_details.customer_budget > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Customer Budget</span>
+                        <span className="font-medium">{formatCurrency(cost.rejection_details.customer_budget, cost.rejection_details.currency || 'IDR')}</span>
+                      </div>
+                    )}
+                    {cost.rejection_details.notes && (
+                      <div>
+                        <span className="text-muted-foreground">Notes: </span>
+                        <span>{cost.rejection_details.notes}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Pipeline/Opportunity Info */}
+            {cost.opportunity && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Pipeline</p>
+                  <div className="p-3 border rounded-lg bg-muted/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Link href={`/opportunities/${cost.opportunity.opportunity_id}`} className="text-brand hover:underline font-medium">
+                        {cost.opportunity.name || cost.opportunity.opportunity_id}
+                      </Link>
+                      <Badge variant="secondary">{cost.opportunity.stage}</Badge>
+                    </div>
+                    {cost.opportunity.probability != null && (
+                      <p className="text-sm text-muted-foreground">Probability: {cost.opportunity.probability}%</p>
+                    )}
+                    {cost.opportunity.competitor && (
+                      <p className="text-sm text-muted-foreground">Competitor: {cost.opportunity.competitor}</p>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
             {/* Created By */}
             <Separator />
             <div>

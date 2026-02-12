@@ -1722,21 +1722,21 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 <div className="space-y-3">
                   <div>
                     <p className="text-sm text-muted-foreground">Opportunity Name</p>
-                    <p className="font-medium">{quotation.opportunity.opportunity_name || '—'}</p>
+                    <p className="font-medium">{quotation.opportunity.name || quotation.opportunity.opportunity_name || '—'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Stage</p>
                     <Badge variant="secondary">{quotation.opportunity.stage || '—'}</Badge>
                   </div>
-                  {quotation.opportunity.expected_revenue && (
+                  {(quotation.opportunity.estimated_value || quotation.opportunity.expected_revenue) && (
                     <div>
                       <p className="text-sm text-muted-foreground">Expected Revenue</p>
                       <p className="font-medium text-green-600">
-                        {formatCurrency(quotation.opportunity.expected_revenue, 'IDR')}
+                        {formatCurrency(quotation.opportunity.estimated_value || quotation.opportunity.expected_revenue, 'IDR')}
                       </p>
                     </div>
                   )}
-                  {quotation.opportunity.probability && (
+                  {quotation.opportunity.probability != null && quotation.opportunity.probability > 0 && (
                     <div>
                       <p className="text-sm text-muted-foreground">Probability</p>
                       <p className="font-medium">{quotation.opportunity.probability}%</p>
