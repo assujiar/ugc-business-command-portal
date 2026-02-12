@@ -276,13 +276,13 @@ function buildTimeline(
   })
 
   // Add quotation-related activities from activities table
-  // These have rich subjects like "1st Quotation Rejected → Stage moved to Negotiation"
   if (data.activities && data.activities.length > 0) {
     data.activities.forEach(activity => {
-      // Only include quotation-related activities (check subject for keywords)
+      // Include quotation-related and pipeline update activities
       const isQuotationActivity = activity.subject &&
         (activity.subject.includes('Quotation') ||
          activity.subject.includes('quotation') ||
+         activity.subject.includes('Pipeline Update') ||
          activity.subject.includes('Deal Won') ||
          activity.subject.includes('Deal Lost'))
 
@@ -290,8 +290,15 @@ function buildTimeline(
         // Determine which stage this activity relates to based on subject
         let activityStage: OpportunityStage = 'Negotiation'
 
-        // Check for "(Negotiation in progress)" first - these stay in Negotiation stage
-        if (activity.subject.includes('Negotiation in progress')) {
+        // Handle "Pipeline Update: X → Y" format (migration 171+)
+        if (activity.subject.startsWith('Pipeline Update:')) {
+          if (activity.subject.includes('Closed Won')) activityStage = 'Closed Won'
+          else if (activity.subject.includes('Closed Lost')) activityStage = 'Closed Lost'
+          else if (activity.subject.includes('Negotiation')) activityStage = 'Negotiation'
+          else if (activity.subject.includes('Quote Sent')) activityStage = 'Quote Sent'
+          else if (activity.subject.includes('Discovery')) activityStage = 'Discovery'
+        // Legacy format: "1st Quotation Rejected → Stage moved to Negotiation"
+        } else if (activity.subject.includes('Negotiation in progress')) {
           activityStage = 'Negotiation'
         } else if (activity.subject.includes('→ Stage moved to Quote Sent') ||
                    (activity.subject.includes('Quotation Sent') && !activity.subject.includes('Rejected'))) {
@@ -1381,6 +1388,41 @@ export function PipelineDetailDialog({
                   )}
                 </CardContent>
               </Card>
+
+              {/* Competitor/Budget Info (Negotiation - from rejection data) */}
+              {data.stage === 'Negotiation' && (data.competitor || (data.competitor_price != null && data.competitor_price > 0) || (data.customer_budget != null && data.customer_budget > 0)) && (
+                <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+                  <CardContent className="p-4">
+                    <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-3">Rejection Insights</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      {data.competitor && (
+                        <div>
+                          <p className="text-xs text-amber-600 dark:text-amber-500">Competitor</p>
+                          <p className="font-medium text-amber-800 dark:text-amber-300">
+                            {data.competitor}
+                          </p>
+                        </div>
+                      )}
+                      {data.competitor_price != null && data.competitor_price > 0 && (
+                        <div>
+                          <p className="text-xs text-amber-600 dark:text-amber-500">Competitor Price</p>
+                          <p className="font-medium text-amber-800 dark:text-amber-300">
+                            {formatCurrency(data.competitor_price)}
+                          </p>
+                        </div>
+                      )}
+                      {data.customer_budget != null && data.customer_budget > 0 && (
+                        <div>
+                          <p className="text-xs text-amber-600 dark:text-amber-500">Customer Budget</p>
+                          <p className="font-medium text-amber-800 dark:text-amber-300">
+                            {formatCurrency(data.customer_budget)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Lost Info (if applicable) */}
               {data.stage === 'Closed Lost' && (

@@ -36,7 +36,7 @@
 
 ## Key Files
 - **mark_sent vs mark_rejected opportunity derivation**: mark_rejected starts with `v_effective_opportunity_id := v_quotation.opportunity_id` (correct). mark_sent relied ONLY on fn_resolve_or_create_opportunity result (broken). Migration 150 adds fallback to quotation.opportunity_id.
-- Latest RPC definitions: Check highest-numbered migration (currently 147 for mark_won/mark_lost, 148 for sync_opportunity_to_account, 150 for mark_sent, 171 for mark_rejected, 172 for mark_accepted)
+- Latest RPC definitions: Check highest-numbered migration (currently 147 for mark_won/mark_lost, 148 for sync_opportunity_to_account, 173 for mark_sent/mark_rejected/mark_accepted, also fn_stage_config)
 - Stage history auto-fill: migration 149 (trg_autofill_stage_history on opportunity_stage_history)
 - Account status lifecycle: migration 148 (sync_opportunity_to_account, trigger, aging function, view)
 - RLS policies: `036_ticketing_rls_policies.sql` (base) + 145 (tickets/events/comments - LATEST)

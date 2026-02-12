@@ -1533,12 +1533,49 @@ export function CustomerQuotationDetail({ quotationId, profile }: CustomerQuotat
                 </div>
               )}
               {quotation.status === 'rejected' && quotation.rejected_at && (
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Rejected At</p>
-                  <div className="flex items-center gap-2">
-                    <XCircle className="h-4 w-4 text-destructive" />
-                    <span className="text-destructive font-medium">{formatDateTime(quotation.rejected_at)}</span>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Rejected At</p>
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-destructive" />
+                      <span className="text-destructive font-medium">{formatDateTime(quotation.rejected_at)}</span>
+                    </div>
                   </div>
+                  {quotation.rejection_details && (
+                    <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20 space-y-2">
+                      <p className="text-sm font-medium text-destructive">Rejection Details</p>
+                      <div className="grid gap-2 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Reason: </span>
+                          <span className="font-medium capitalize">{(quotation.rejection_details.reason_type || quotation.rejection_reason || '-').replace(/_/g, ' ')}</span>
+                        </div>
+                        {quotation.rejection_details.competitor_name && (
+                          <div>
+                            <span className="text-muted-foreground">Competitor: </span>
+                            <span className="font-medium">{quotation.rejection_details.competitor_name}</span>
+                          </div>
+                        )}
+                        {quotation.rejection_details.competitor_amount != null && quotation.rejection_details.competitor_amount > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Competitor Price: </span>
+                            <span className="font-medium">{formatCurrency(quotation.rejection_details.competitor_amount, quotation.rejection_details.currency || quotation.currency)}</span>
+                          </div>
+                        )}
+                        {quotation.rejection_details.customer_budget != null && quotation.rejection_details.customer_budget > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Customer Budget: </span>
+                            <span className="font-medium">{formatCurrency(quotation.rejection_details.customer_budget, quotation.rejection_details.currency || quotation.currency)}</span>
+                          </div>
+                        )}
+                        {quotation.rejection_details.notes && (
+                          <div>
+                            <span className="text-muted-foreground">Notes: </span>
+                            <span>{quotation.rejection_details.notes}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

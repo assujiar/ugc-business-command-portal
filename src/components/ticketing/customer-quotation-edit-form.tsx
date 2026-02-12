@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -633,9 +634,29 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
             <CardTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
               Service & Cargo Details
+              {shipments.length > 1 && (
+                <Badge variant="secondary" className="ml-2">{shipments.length} Shipments</Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Multi-shipment service summary */}
+            {shipments.length > 1 && (
+              <div className="p-3 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 mb-4">
+                <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-2">Multi-Shipment Services</p>
+                <div className="space-y-1">
+                  {shipments.map((s: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs">
+                      <span className="font-medium">{s.shipment_label || `Shipment ${idx + 1}`}:</span>
+                      <span>{s.service_type_code || '-'}</span>
+                      {s.fleet_type && <span className="text-muted-foreground">({s.fleet_type} x{s.fleet_quantity || 1})</span>}
+                      <span className="text-muted-foreground">|</span>
+                      <span className="text-muted-foreground">{s.origin_city} → {s.destination_city}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="service-type">Service Type</Label>
@@ -750,12 +771,52 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5" />
               Route
+              {shipments.length > 1 && (
+                <Badge variant="secondary" className="ml-2">{shipments.length} Shipments</Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {shipments.length > 1 ? (
+              /* Multi-shipment: show each shipment's route info */
+              <div className="space-y-4">
+                {shipments.map((shipment: any, idx: number) => (
+                  <div key={shipment.shipment_detail_id || idx} className="p-3 rounded-lg border bg-muted/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">{shipment.shipment_label || `Shipment ${idx + 1}`}</span>
+                      {shipment.service_type_code && (
+                        <Badge variant="outline" className="text-xs">{shipment.service_type_code}</Badge>
+                      )}
+                      {shipment.fleet_type && (
+                        <Badge variant="secondary" className="text-xs">{shipment.fleet_type}</Badge>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-green-600 font-medium">Origin</p>
+                        <p>{shipment.origin_city || '-'}{shipment.origin_country ? `, ${shipment.origin_country}` : ''}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-red-600 font-medium">Destination</p>
+                        <p>{shipment.destination_city || '-'}{shipment.destination_country ? `, ${shipment.destination_country}` : ''}</p>
+                      </div>
+                    </div>
+                    {(shipment.cargo_category || shipment.weight_total_kg || shipment.volume_total_cbm) && (
+                      <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                        {shipment.cargo_category && <span>Cargo: {shipment.cargo_category}</span>}
+                        {shipment.weight_total_kg && <span>Weight: {shipment.weight_total_kg} kg</span>}
+                        {shipment.volume_total_cbm && <span>Volume: {shipment.volume_total_cbm} CBM</span>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground">Multi-shipment routes are managed from the ticket. Edit individual fields below to override the primary route on the quotation document.</p>
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-3">
-                <p className="text-sm font-medium text-green-600">Origin</p>
+                <p className="text-sm font-medium text-green-600">{shipments.length > 1 ? 'Primary Origin (Quotation)' : 'Origin'}</p>
                 <Input
                   value={originCity}
                   onChange={(e) => setOriginCity(e.target.value)}
@@ -768,7 +829,7 @@ export function CustomerQuotationEditForm({ quotationId, profile }: CustomerQuot
                 />
               </div>
               <div className="space-y-3">
-                <p className="text-sm font-medium text-red-600">Destination</p>
+                <p className="text-sm font-medium text-red-600">{shipments.length > 1 ? 'Primary Destination (Quotation)' : 'Destination'}</p>
                 <Input
                   value={destinationCity}
                   onChange={(e) => setDestinationCity(e.target.value)}

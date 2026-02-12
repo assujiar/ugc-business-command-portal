@@ -1,7 +1,7 @@
 # UGC Business Command Portal
 
 > **Single Source of Truth (SSOT) Documentation**
-> Version: 2.1.1 | Last Updated: 2026-02-12
+> Version: 2.1.2 | Last Updated: 2026-02-12
 
 A comprehensive Business Command Portal for **PT. Utama Global Indo Cargo (UGC Logistics)** integrating CRM, Ticketing, and Quotation management into a unified platform for freight forwarding operations.
 
@@ -139,7 +139,7 @@ ugc-business-command-portal/
 │   └── types/                        # TypeScript definitions
 │
 ├── supabase/
-│   └── migrations/                   # 172 SQL migrations
+│   └── migrations/                   # 173 SQL migrations
 │       ├── 001-034                   # Core CRM tables
 │       ├── 035-060                   # Ticketing system
 │       ├── 061-090                   # Quotation system
@@ -154,7 +154,8 @@ ugc-business-command-portal/
 │       ├── 154-157                   # Marketing module (social media, content plan, token refresh)
 │       ├── 158-159                   # Fix accepted/rejected pipeline_updates columns
 │       ├── 171                       # Fix accepted UUID type, activity subjects, link trigger, lead_id derivation
-│       └── 172                       # Fix accepted account column name (status→account_status via sync_opportunity_to_account)
+│       ├── 172                       # Fix accepted account column name (status→account_status via sync_opportunity_to_account)
+│       └── 173                       # Fix probability/next_step on stage change, UI fixes for multi-shipment/rejection/activity
 │
 └── public/
     └── logo/                         # Brand assets
@@ -938,6 +939,7 @@ ACTION:
   2. UPDATE quotation.status = 'sent'
   3. Resolve/create opportunity via fn_resolve_or_create_opportunity (fallback to quotation.opportunity_id)
   4. UPDATE opportunity.stage = 'Quote Sent' (first send, no rejections) or 'Negotiation' (after rejection)
+  4b. UPDATE opportunity.probability, next_step, next_step_due_date via fn_stage_config() [Migration 173]
   5. UPDATE ticket.status = 'waiting_customer'
   6. UPDATE ALL costs.status = 'sent_to_customer' (single + multi-shipment)
   7. UPDATE lead.quotation_status = 'sent', quotation_count++
@@ -949,7 +951,8 @@ ACTION:
 -- rpc_customer_quotation_mark_accepted
 ACTION:
   1. UPDATE quotation.status = 'accepted', accepted_at = NOW()
-  2. UPDATE opportunity.stage = 'Closed Won', estimated_value, closed_at
+  2. UPDATE opportunity.stage = 'Closed Won', estimated_value, deal_value, closed_at
+  2b. UPDATE opportunity.probability=100, next_step=NULL via fn_stage_config() [Migration 173]
   3. UPDATE ticket.status = 'closed' (close_outcome = 'won')
   4. UPDATE ALL costs.status = 'accepted' (single + multi-shipment)
   5. CALL sync_opportunity_to_account(opp_id, 'won') → account_status lifecycle [Migration 172]
@@ -966,6 +969,8 @@ ACTION:
   1. UPDATE quotation.status = 'rejected', rejected_at = NOW()
   2. INSERT quotation_rejection_reasons (with competitor/budget data)
   3. UPDATE opportunity.stage = 'Negotiation'
+  3b. UPDATE opportunity.probability=75, next_step='Close Deal', next_step_due_date via fn_stage_config() [Migration 173]
+  3c. UPDATE opportunity.competitor, competitor_price, customer_budget from rejection data
   4. UPDATE ticket.status = 'need_adjustment', pending_response_from = 'assignee'
   5. UPDATE ALL costs.status = 'revise_requested' (single + multi-shipment)
   6. UPDATE lead.quotation_status = 'rejected'
@@ -1148,7 +1153,7 @@ cp .env.example .env.local
 # Edit .env.local with your values
 
 # 3. Run migrations (in Supabase SQL Editor)
-# Execute migrations 001-172 in order
+# Execute migrations 001-173 in order
 
 # 4. Start development
 npm run dev
@@ -1167,7 +1172,28 @@ npx tsc --noEmit # TypeScript check
 
 ## Version History
 
-### v2.1.1 (Current)
+### v2.1.2 (Current)
+- **Fix Probability/Next Step Not Updated on Stage Change (Migration 173)**: RPCs now update `probability`, `next_step`, and `next_step_due_date` when changing opportunity stage
+  - **Root Cause**: All 3 RPCs (`mark_rejected`, `mark_sent`, `mark_accepted`) only updated `stage` on the opportunity, but never `probability`, `next_step`, or `next_step_due_date`. These fields stayed at their initial values (e.g., probability=10 from Prospecting even after moving to Negotiation where it should be 75).
+  - **Fix**: Created `fn_stage_config(opportunity_stage)` SQL helper function that mirrors `PIPELINE_STAGE_CONFIG` from `constants.ts`:
+    - Prospecting: 10%, Discovery: 25%, Quote Sent: 50%, Negotiation: 75%, Closed Won: 100%, Closed Lost: 0%
+  - All 3 RPCs now call `fn_stage_config()` and update probability/next_step/next_step_due_date alongside the stage change
+  - `mark_accepted` also now sets `deal_value` from quotation's `total_selling_rate`
+  - Migration 173 consolidates all fixes from 171+172 into the 3 RPCs
+- **Fix Pipeline Activity Not Showing After Rejection (UI)**: Activities with "Pipeline Update:" subject were filtered out by the UI
+  - **Root Cause**: Migration 171 changed activity subject to "Pipeline Update: Quote Sent → Negotiation" format, but `pipeline-detail-dialog.tsx` only checked for "Quotation" keyword in subjects → activities invisible
+  - **Fix**: Added "Pipeline Update" to the activity filter, added "Pipeline Update:" prefix handling for stage detection
+- **Fix Rejection Details Not Displayed (UI + API)**: Quotation detail page now shows rejection reason, competitor info, and customer budget
+  - **API Fix**: GET `/api/ticketing/customer-quotations/[id]` now fetches from `quotation_rejection_reasons` table via adminClient and merges as `rejection_details`
+  - **UI Fix**: `customer-quotation-detail.tsx` displays reason_type, competitor_name, competitor_amount, customer_budget, notes in a destructive-styled card
+- **Fix Competitor/Budget Not Shown for Negotiation Stage (UI)**: Pipeline detail dialog now shows an amber "Rejection Insights" card for Negotiation stage
+  - Previously, competitor/budget info was only displayed for "Closed Lost" stage
+- **Fix Multi-Shipment Not Displayed on Edit Page (UI)**: Edit quotation form now shows multi-shipment data
+  - Route section: per-shipment cards with service code, fleet type, origin/destination, cargo details
+  - Service section: summary banner showing all shipment routes
+  - Original single-route fields preserved below for quotation document overrides
+
+### v2.1.1
 - **Fix mark_accepted Total Rollback (Migration 172)**: Fixed all 4 acceptance bugs caused by ONE root cause — wrong column name `status` instead of `account_status` in `UPDATE accounts`
   - **Root Cause**: Migration 159 changed the correct column reference `account_status` (from migration 136) to `status` (wrong). This was hidden because the UUID type bug prevented reaching that code. Migration 171 fixed the UUID bug, exposing this column-name bug. The `EXCEPTION WHEN OTHERS` handler caught the "column status does not exist" error and **rolled back the entire transaction** — reverting quotation status, opportunity stage, activity, pipeline_updates, and preventing ticket closure.
   - **Bug #1 (Account)**: Account didn't change from `calon_account` → `new_account` on first accepted quotation
@@ -1399,6 +1425,7 @@ npx tsc --noEmit # TypeScript check
   - Migration 158-159: Fix accepted/rejected pipeline_updates columns
   - Migration 171: Comprehensive fix — UUID→TEXT, activity subjects, link trigger, lead_id derivation
   - Migration 172: Fix accepted account column name — sync_opportunity_to_account, nested exception
+  - Migration 173: Fix probability/next_step on stage change — fn_stage_config, all 3 RPCs rewritten
 
 ### v1.6.3
 - **Schema Fix (Migration 136)**: Definitively fixed "column accepted_at/rejected_at does not exist" error
