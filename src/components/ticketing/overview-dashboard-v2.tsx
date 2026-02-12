@@ -890,7 +890,7 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
             </TabsList>
             <TabsContent value="summary" className="space-y-4">
               {/* Status Breakdown */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <MetricCard
                   title="Draft"
                   value={opsCostAnalytics.summary?.draft || 0}
@@ -917,17 +917,10 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                 />
                 <MetricCard
                   title="Rejected"
-                  value={opsCostAnalytics.summary?.rejected || 0}
+                  value={(opsCostAnalytics.summary?.rejected || 0) + (opsCostAnalytics.summary?.revise_requested || 0)}
                   icon={XCircle}
                   color="text-red-600"
                   bgColor="bg-red-50 dark:bg-red-950/30"
-                />
-                <MetricCard
-                  title="Revise Requested"
-                  value={opsCostAnalytics.summary?.revise_requested || 0}
-                  icon={AlertTriangle}
-                  color="text-amber-600"
-                  bgColor="bg-amber-50 dark:bg-amber-950/30"
                 />
               </div>
 

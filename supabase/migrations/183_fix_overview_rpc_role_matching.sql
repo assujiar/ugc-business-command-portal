@@ -531,25 +531,56 @@ BEGIN
         )
     ),
     cost_rejection_reasons AS (
-        SELECT
-            ocrr.reason_type::TEXT as reason,
-            COUNT(*) as count
-        FROM public.operational_cost_rejection_reasons ocrr
-        JOIN public.ticket_rate_quotes trq ON trq.id = ocrr.operational_cost_id
-        WHERE trq.created_at >= v_start_date
-        AND (
-            v_scope = 'all'
-            OR (v_scope = 'department' AND EXISTS (
-                SELECT 1 FROM public.profiles p
-                WHERE p.user_id = trq.created_by
-                AND p.department = v_user_department
-            ))
-            OR (v_scope = 'user' AND (
-                trq.created_by = v_user_id
-                OR EXISTS (SELECT 1 FROM public.tickets t2 WHERE t2.id = trq.ticket_id AND (t2.assigned_to = v_user_id OR t2.created_by = v_user_id))
-            ))
-        )
-        GROUP BY ocrr.reason_type
+        SELECT reason, SUM(cnt)::BIGINT as count
+        FROM (
+            -- Direct ops cost rejections
+            SELECT
+                ocrr.reason_type::TEXT as reason,
+                1 as cnt
+            FROM public.operational_cost_rejection_reasons ocrr
+            JOIN public.ticket_rate_quotes trq ON trq.id = ocrr.operational_cost_id
+            WHERE trq.created_at >= v_start_date
+            AND (
+                v_scope = 'all'
+                OR (v_scope = 'department' AND EXISTS (
+                    SELECT 1 FROM public.profiles p
+                    WHERE p.user_id = trq.created_by
+                    AND p.department = v_user_department
+                ))
+                OR (v_scope = 'user' AND (
+                    trq.created_by = v_user_id
+                    OR EXISTS (SELECT 1 FROM public.tickets t2 WHERE t2.id = trq.ticket_id AND (t2.assigned_to = v_user_id OR t2.created_by = v_user_id))
+                ))
+            )
+
+            UNION ALL
+
+            -- Quotation rejections that caused revise_requested on ops costs
+            SELECT
+                qrr.reason_type::TEXT as reason,
+                1 as cnt
+            FROM public.quotation_rejection_reasons qrr
+            JOIN public.customer_quotations cq ON cq.id = qrr.quotation_id
+            JOIN public.ticket_rate_quotes trq ON (
+                trq.id = cq.operational_cost_id
+                OR (cq.operational_cost_ids IS NOT NULL AND trq.id = ANY(cq.operational_cost_ids))
+            )
+            WHERE trq.status = 'revise_requested'
+            AND trq.created_at >= v_start_date
+            AND (
+                v_scope = 'all'
+                OR (v_scope = 'department' AND EXISTS (
+                    SELECT 1 FROM public.profiles p
+                    WHERE p.user_id = trq.created_by
+                    AND p.department = v_user_department
+                ))
+                OR (v_scope = 'user' AND (
+                    trq.created_by = v_user_id
+                    OR EXISTS (SELECT 1 FROM public.tickets t2 WHERE t2.id = trq.ticket_id AND (t2.assigned_to = v_user_id OR t2.created_by = v_user_id))
+                ))
+            )
+        ) combined
+        GROUP BY reason
     )
     SELECT jsonb_build_object(
         'summary', jsonb_build_object(
@@ -592,8 +623,8 @@ BEGIN
         ),
         'approval_rate', (
             SELECT CASE
-                WHEN COUNT(*) FILTER (WHERE status IN ('submitted', 'sent_to_customer', 'accepted', 'rejected')) > 0
-                THEN ROUND((COUNT(*) FILTER (WHERE status IN ('submitted', 'sent_to_customer', 'accepted'))::NUMERIC / COUNT(*) FILTER (WHERE status IN ('submitted', 'sent_to_customer', 'accepted', 'rejected'))) * 100, 1)
+                WHEN COUNT(*) FILTER (WHERE status IN ('submitted', 'sent_to_customer', 'accepted', 'rejected', 'revise_requested')) > 0
+                THEN ROUND((COUNT(*) FILTER (WHERE status IN ('submitted', 'sent_to_customer', 'accepted'))::NUMERIC / COUNT(*) FILTER (WHERE status IN ('submitted', 'sent_to_customer', 'accepted', 'rejected', 'revise_requested'))) * 100, 1)
                 ELSE 0
             END
             FROM ops_data
