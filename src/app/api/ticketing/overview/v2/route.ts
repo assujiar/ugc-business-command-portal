@@ -55,13 +55,15 @@ export async function GET(request: NextRequest) {
     // Get query params
     const { searchParams } = new URL(request.url)
     const period = parseInt(searchParams.get('period') || '30', 10)
+    const viewMode = searchParams.get('view_mode') || null // 'received', 'created', or null
 
     // Call the comprehensive RPC
     const { data, error } = await (supabase as any).rpc('rpc_ticketing_overview_v2', {
       p_period_days: period,
       p_user_id: profile.user_id,
       p_department: profile.department,
-      p_role: profile.role
+      p_role: profile.role,
+      p_view_mode: viewMode
     })
 
     if (error) {

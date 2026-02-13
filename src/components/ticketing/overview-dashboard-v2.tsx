@@ -24,6 +24,8 @@ import {
   ChevronRight,
   AlertTriangle,
   Hourglass,
+  Inbox,
+  PenLine,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -355,6 +357,7 @@ function SLAGauge({
 export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
   const [period, setPeriod] = useState('30')
   const [ticketTypeFilter, setTicketTypeFilter] = useState<'TOTAL' | 'RFQ' | 'GEN'>('TOTAL')
+  const [viewMode, setViewMode] = useState<'received' | 'created'>('received')
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<any>(null)
 
@@ -370,7 +373,7 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/ticketing/overview/v2?period=${period}`)
+      const res = await fetch(`/api/ticketing/overview/v2?period=${period}&view_mode=${viewMode}`)
       const json = await res.json()
       if (json.success) {
         setData(json.data)
@@ -380,7 +383,7 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
     } finally {
       setLoading(false)
     }
-  }, [period])
+  }, [period, viewMode])
 
   useEffect(() => {
     fetchData()
@@ -431,7 +434,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Overview Ticketing</h1>
           <p className="text-muted-foreground">
-            Dashboard performa {meta.scope === 'all' ? 'semua departemen' : meta.scope === 'department' ? `departemen ${departmentLabels[meta.department] || meta.department}` : 'tiket Anda'}
+            {viewMode === 'received' ? 'Tiket yang diterima' : 'Tiket yang dibuat'}
+            {meta.scope === 'all' ? ' — semua departemen' : meta.scope === 'department' ? ` — ${departmentLabels[meta.department] || meta.department}` : ''}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -458,6 +462,34 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
           <Button variant="outline" size="icon" onClick={fetchData}>
             <RefreshCw className="h-4 w-4" />
           </Button>
+        </div>
+      </div>
+
+      {/* Ticket Received / Ticket Created Tabs */}
+      <div className="flex">
+        <div className="inline-flex h-10 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
+          <button
+            onClick={() => setViewMode('received')}
+            className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-all ${
+              viewMode === 'received'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'hover:text-foreground'
+            }`}
+          >
+            <Inbox className="h-4 w-4" />
+            Ticket Received
+          </button>
+          <button
+            onClick={() => setViewMode('created')}
+            className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-all ${
+              viewMode === 'created'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'hover:text-foreground'
+            }`}
+          >
+            <PenLine className="h-4 w-4" />
+            Ticket Created
+          </button>
         </div>
       </div>
 
