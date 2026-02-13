@@ -422,7 +422,7 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
 
   const isDirectorScope = meta.scope === 'all'
   const isDepartmentScope = meta.scope === 'department'
-  const isOpsUser = isOps(profile.role)
+  const isOpsUser = isOps(profile.role) || meta.is_ops === true
 
   return (
     <div className="space-y-6">

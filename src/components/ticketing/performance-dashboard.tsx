@@ -66,6 +66,14 @@ const roleLabels: Record<string, string> = {
   marketing: 'Marketing',
 }
 
+// Helper to format seconds as human readable
+function formatSeconds(seconds: number): string {
+  if (seconds <= 0) return '0h'
+  const hours = seconds / 3600
+  if (hours < 1) return `${Math.round(seconds / 60)}m`
+  return `${Math.round(hours * 10) / 10}h`
+}
+
 export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
   const [period, setPeriod] = useState('30')
   const [department, setDepartment] = useState<string>('all')
@@ -137,6 +145,20 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
     )
   }
 
+  // Convert departments object to array for rendering
+  const deptArray: any[] = deptPerformance?.departments
+    ? Object.entries(deptPerformance.departments)
+        .filter(([_, d]: [string, any]) => d.total_tickets > 0)
+        .map(([key, d]: [string, any]) => ({ department: key, ...d }))
+    : []
+
+  const totalDepartments = deptArray.length
+
+  // Helper to get user's assignee tickets data safely
+  const getUserTickets = (user: any) => user?.as_assignee?.tickets || {}
+  const getUserSla = (user: any) => user?.as_assignee?.sla || {}
+  const getUserWinLoss = (user: any) => user?.as_assignee?.win_loss || {}
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -206,7 +228,7 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold">
-                      {userPerformance.users?.reduce((sum: number, u: any) => sum + (u.tickets?.assigned || 0), 0) || 0}
+                      {userPerformance.users?.reduce((sum: number, u: any) => sum + (getUserTickets(u).assigned || 0), 0) || 0}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">Tickets across team</p>
                   </CardContent>
@@ -219,7 +241,7 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                     <div className="text-3xl font-bold">
                       {userPerformance.users?.length > 0
                         ? Math.round(
-                            userPerformance.users.reduce((sum: number, u: any) => sum + (u.tickets?.completion_rate || 0), 0) /
+                            userPerformance.users.reduce((sum: number, u: any) => sum + (getUserTickets(u).completion_rate || 0), 0) /
                             userPerformance.users.length
                           )
                         : 0}%
@@ -236,11 +258,11 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                       {userPerformance.users?.length > 0
                         ? Math.round(
                             userPerformance.users.reduce(
-                              (sum: number, u: any) => sum + (u.sla?.first_response?.compliance_rate || 100),
+                              (sum: number, u: any) => sum + (getUserSla(u).first_response?.compliance_rate || 0),
                               0
                             ) / userPerformance.users.length
                           )
-                        : 100}%
+                        : 0}%
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">First response</p>
                   </CardContent>
@@ -280,46 +302,51 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        userPerformance.users?.map((user: any) => (
-                          <TableRow key={user.user_id}>
-                            <TableCell className="font-medium">{user.name}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs">
-                                {roleLabels[user.role] || user.role}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center">{user.tickets?.assigned || 0}</TableCell>
-                            <TableCell className="text-center">{user.tickets?.active || 0}</TableCell>
-                            <TableCell className="text-center">
-                              {(user.tickets?.resolved || 0) + (user.tickets?.closed || 0)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <span>{user.tickets?.completion_rate || 0}%</span>
-                                <Progress
-                                  value={user.tickets?.completion_rate || 0}
-                                  className="w-12 h-1.5"
-                                />
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className={user.sla?.first_response?.compliance_rate < 90 ? 'text-destructive' : ''}>
-                                {user.sla?.first_response?.compliance_rate || 100}%
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className={user.sla?.resolution?.compliance_rate < 90 ? 'text-destructive' : ''}>
-                                {user.sla?.resolution?.compliance_rate || 100}%
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {user.win_loss?.win_rate || 0}%
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {user.avg_resolution_hours || 0}h
-                            </TableCell>
-                          </TableRow>
-                        ))
+                        userPerformance.users?.map((user: any) => {
+                          const tickets = getUserTickets(user)
+                          const sla = getUserSla(user)
+                          const winLoss = getUserWinLoss(user)
+                          return (
+                            <TableRow key={user.user_id}>
+                              <TableCell className="font-medium">{user.name}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">
+                                  {roleLabels[user.role] || user.role}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">{tickets.assigned || 0}</TableCell>
+                              <TableCell className="text-center">{tickets.active || 0}</TableCell>
+                              <TableCell className="text-center">
+                                {(tickets.resolved || 0) + (tickets.closed || 0)}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <span>{tickets.completion_rate || 0}%</span>
+                                  <Progress
+                                    value={tickets.completion_rate || 0}
+                                    className="w-12 h-1.5"
+                                  />
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className={(sla.first_response?.compliance_rate || 0) < 90 ? 'text-destructive' : ''}>
+                                  {sla.first_response?.compliance_rate || 0}%
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className={(sla.resolution?.compliance_rate || 0) < 90 ? 'text-destructive' : ''}>
+                                  {sla.resolution?.compliance_rate || 0}%
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {winLoss.win_rate || 0}%
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {user.as_assignee?.avg_resolution_hours || 0}h
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
                       )}
                     </TableBody>
                   </Table>
@@ -340,7 +367,7 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                     <CardTitle className="text-sm font-medium">Total Departments</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-bold">{deptPerformance.total_departments || 0}</div>
+                    <div className="text-3xl font-bold">{totalDepartments}</div>
                     <p className="text-xs text-muted-foreground mt-1">With active tickets</p>
                   </CardContent>
                 </Card>
@@ -349,13 +376,13 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                     <CardTitle className="text-sm font-medium">Best Performing</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {deptPerformance.rankings?.best_sla_compliance?.[0] ? (
+                    {deptPerformance.rankings?.by_sla_compliance?.[0] ? (
                       <div>
                         <div className="text-xl font-bold">
-                          {departmentLabels[deptPerformance.rankings.best_sla_compliance[0].department]}
+                          {departmentLabels[deptPerformance.rankings.by_sla_compliance[0].department]}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {deptPerformance.rankings.best_sla_compliance[0].overall_sla_compliance}% SLA Compliance
+                          {deptPerformance.rankings.by_sla_compliance[0].rate}% SLA Compliance
                         </p>
                       </div>
                     ) : (
@@ -368,13 +395,13 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                     <CardTitle className="text-sm font-medium">Highest Win Rate</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {deptPerformance.rankings?.highest_win_rate?.[0] ? (
+                    {deptPerformance.rankings?.by_win_rate?.[0] ? (
                       <div>
                         <div className="text-xl font-bold">
-                          {departmentLabels[deptPerformance.rankings.highest_win_rate[0].department]}
+                          {departmentLabels[deptPerformance.rankings.by_win_rate[0].department]}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {deptPerformance.rankings.highest_win_rate[0].win_loss?.win_rate || 0}% Win Rate
+                          {deptPerformance.rankings.by_win_rate[0].rate || 0}% Win Rate
                         </p>
                       </div>
                     ) : (
@@ -386,27 +413,27 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
 
               {/* Department Cards */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {deptPerformance.departments?.map((dept: any) => (
+                {deptArray.map((dept: any) => (
                   <Card key={dept.department}>
                     <CardHeader>
                       <CardTitle className="flex items-center justify-between">
                         <span>{departmentLabels[dept.department] || dept.department}</span>
-                        <Badge variant="outline">{dept.tickets?.assigned || 0} tickets</Badge>
+                        <Badge variant="outline">{dept.total_tickets || 0} tickets</Badge>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       {/* Ticket Stats */}
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div className="p-2 bg-muted rounded">
-                          <p className="text-lg font-bold">{dept.tickets?.active || 0}</p>
+                          <p className="text-lg font-bold">{dept.active_tickets || 0}</p>
                           <p className="text-xs text-muted-foreground">Active</p>
                         </div>
                         <div className="p-2 bg-muted rounded">
-                          <p className="text-lg font-bold">{dept.tickets?.resolved || 0}</p>
+                          <p className="text-lg font-bold">{dept.by_status?.resolved || 0}</p>
                           <p className="text-xs text-muted-foreground">Resolved</p>
                         </div>
                         <div className="p-2 bg-muted rounded">
-                          <p className="text-lg font-bold">{dept.tickets?.closed || 0}</p>
+                          <p className="text-lg font-bold">{dept.by_status?.closed || 0}</p>
                           <p className="text-xs text-muted-foreground">Closed</p>
                         </div>
                       </div>
@@ -416,20 +443,20 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                         <div>
                           <div className="flex justify-between text-sm mb-1">
                             <span>First Response SLA</span>
-                            <span className={dept.sla?.first_response?.compliance_rate < 90 ? 'text-destructive' : ''}>
-                              {dept.sla?.first_response?.compliance_rate || 100}%
+                            <span className={(dept.sla?.first_response?.compliance_rate || 0) < 90 ? 'text-destructive' : ''}>
+                              {dept.sla?.first_response?.compliance_rate || 0}%
                             </span>
                           </div>
-                          <Progress value={dept.sla?.first_response?.compliance_rate || 100} className="h-1.5" />
+                          <Progress value={dept.sla?.first_response?.compliance_rate || 0} className="h-1.5" />
                         </div>
                         <div>
                           <div className="flex justify-between text-sm mb-1">
                             <span>Resolution SLA</span>
-                            <span className={dept.sla?.resolution?.compliance_rate < 90 ? 'text-destructive' : ''}>
-                              {dept.sla?.resolution?.compliance_rate || 100}%
+                            <span className={(dept.sla?.resolution?.compliance_rate || 0) < 90 ? 'text-destructive' : ''}>
+                              {dept.sla?.resolution?.compliance_rate || 0}%
                             </span>
                           </div>
-                          <Progress value={dept.sla?.resolution?.compliance_rate || 100} className="h-1.5" />
+                          <Progress value={dept.sla?.resolution?.compliance_rate || 0} className="h-1.5" />
                         </div>
                       </div>
 
@@ -446,6 +473,14 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                     </CardContent>
                   </Card>
                 ))}
+                {deptArray.length === 0 && (
+                  <Card className="col-span-full">
+                    <CardContent className="py-16 text-center">
+                      <Building2 className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-muted-foreground">No department data available for this period</p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </>
           )}
@@ -465,6 +500,9 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
+                    {userPerformance.leaderboard?.most_tickets?.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+                    )}
                     {userPerformance.leaderboard?.most_tickets?.map((user: any, idx: number) => (
                       <div key={user.user_id} className="flex items-center justify-between py-2 border-b last:border-0">
                         <div className="flex items-center gap-3">
@@ -482,7 +520,7 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-bold">{user.tickets?.assigned || 0}</p>
+                          <p className="text-lg font-bold">{getUserTickets(user).assigned || 0}</p>
                           <p className="text-xs text-muted-foreground">tickets</p>
                         </div>
                       </div>
@@ -501,6 +539,9 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
+                    {userPerformance.leaderboard?.highest_completion_rate?.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+                    )}
                     {userPerformance.leaderboard?.highest_completion_rate?.map((user: any, idx: number) => (
                       <div key={user.user_id} className="flex items-center justify-between py-2 border-b last:border-0">
                         <div className="flex items-center gap-3">
@@ -514,11 +555,11 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                           </div>
                           <div>
                             <p className="font-medium">{user.name}</p>
-                            <p className="text-xs text-muted-foreground">{user.tickets?.assigned || 0} tickets</p>
+                            <p className="text-xs text-muted-foreground">{getUserTickets(user).assigned || 0} tickets</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-bold">{user.tickets?.completion_rate || 0}%</p>
+                          <p className="text-lg font-bold">{getUserTickets(user).completion_rate || 0}%</p>
                           <p className="text-xs text-muted-foreground">completion</p>
                         </div>
                       </div>
@@ -537,69 +578,81 @@ export function PerformanceDashboard({ profile }: PerformanceDashboardProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {userPerformance.leaderboard?.best_sla_compliance?.map((user: any, idx: number) => (
-                      <div key={user.user_id} className="flex items-center justify-between py-2 border-b last:border-0">
-                        <div className="flex items-center gap-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                            idx === 0 ? 'bg-blue-100 text-blue-600' :
-                            idx === 1 ? 'bg-gray-100 text-gray-600' :
-                            idx === 2 ? 'bg-orange-100 text-orange-600' :
-                            'bg-muted text-muted-foreground'
-                          }`}>
-                            {idx < 3 ? <Target className="h-4 w-4" /> : <span className="text-sm">#{idx + 1}</span>}
+                    {userPerformance.leaderboard?.best_sla_compliance?.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+                    )}
+                    {userPerformance.leaderboard?.best_sla_compliance?.map((user: any, idx: number) => {
+                      const sla = getUserSla(user)
+                      return (
+                        <div key={user.user_id} className="flex items-center justify-between py-2 border-b last:border-0">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                              idx === 0 ? 'bg-blue-100 text-blue-600' :
+                              idx === 1 ? 'bg-gray-100 text-gray-600' :
+                              idx === 2 ? 'bg-orange-100 text-orange-600' :
+                              'bg-muted text-muted-foreground'
+                            }`}>
+                              {idx < 3 ? <Target className="h-4 w-4" /> : <span className="text-sm">#{idx + 1}</span>}
+                            </div>
+                            <div>
+                              <p className="font-medium">{user.name}</p>
+                              <p className="text-xs text-muted-foreground">{getUserTickets(user).assigned || 0} tickets</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium">{user.name}</p>
-                            <p className="text-xs text-muted-foreground">{user.tickets?.assigned || 0} tickets</p>
+                          <div className="text-right">
+                            <p className="text-lg font-bold">
+                              {Math.round(
+                                ((sla.first_response?.compliance_rate || 0) +
+                                (sla.resolution?.compliance_rate || 0)) / 2
+                              )}%
+                            </p>
+                            <p className="text-xs text-muted-foreground">avg SLA</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold">
-                            {Math.round(
-                              ((user.sla?.first_response?.compliance_rate || 100) +
-                              (user.sla?.resolution?.compliance_rate || 100)) / 2
-                            )}%
-                          </p>
-                          <p className="text-xs text-muted-foreground">avg SLA</p>
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Fastest Response */}
+              {/* Fastest First Response */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Timer className="h-5 w-5 text-purple-500" />
-                    Fastest Average Response
+                    Fastest First Response
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {userPerformance.leaderboard?.fastest_response?.map((user: any, idx: number) => (
-                      <div key={user.user_id} className="flex items-center justify-between py-2 border-b last:border-0">
-                        <div className="flex items-center gap-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                            idx === 0 ? 'bg-purple-100 text-purple-600' :
-                            idx === 1 ? 'bg-gray-100 text-gray-600' :
-                            idx === 2 ? 'bg-orange-100 text-orange-600' :
-                            'bg-muted text-muted-foreground'
-                          }`}>
-                            {idx < 3 ? <Timer className="h-4 w-4" /> : <span className="text-sm">#{idx + 1}</span>}
+                    {userPerformance.leaderboard?.fastest_first_response?.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+                    )}
+                    {userPerformance.leaderboard?.fastest_first_response?.map((user: any, idx: number) => {
+                      const firstResponse = user.as_assignee?.first_response
+                      return (
+                        <div key={user.user_id} className="flex items-center justify-between py-2 border-b last:border-0">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                              idx === 0 ? 'bg-purple-100 text-purple-600' :
+                              idx === 1 ? 'bg-gray-100 text-gray-600' :
+                              idx === 2 ? 'bg-orange-100 text-orange-600' :
+                              'bg-muted text-muted-foreground'
+                            }`}>
+                              {idx < 3 ? <Timer className="h-4 w-4" /> : <span className="text-sm">#{idx + 1}</span>}
+                            </div>
+                            <div>
+                              <p className="font-medium">{user.name}</p>
+                              <p className="text-xs text-muted-foreground">{firstResponse?.count || 0} responses</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium">{user.name}</p>
-                            <p className="text-xs text-muted-foreground">{user.response?.total_responses || 0} responses</p>
+                          <div className="text-right">
+                            <p className="text-lg font-bold">{formatSeconds(firstResponse?.avg_seconds || 0)}</p>
+                            <p className="text-xs text-muted-foreground">avg time</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold">{user.response?.avg_response_hours || 0}h</p>
-                          <p className="text-xs text-muted-foreground">avg time</p>
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </CardContent>
               </Card>
