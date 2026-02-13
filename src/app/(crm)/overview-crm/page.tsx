@@ -46,7 +46,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   // =====================================================
 
   let leadsQuery = (adminClient as any).from('leads').select('lead_id, company_name, source, triage_status, sales_owner_user_id, marketing_owner_user_id, created_by, opportunity_id, account_id, created_at, handed_over_at, claimed_at')
-  let opportunitiesQuery = (adminClient as any).from('opportunities').select('opportunity_id, name, account_id, stage, estimated_value, owner_user_id, original_creator_id, created_at, closed_at, lost_reason')
+  let opportunitiesQuery = (adminClient as any).from('opportunities').select('opportunity_id, name, account_id, stage, estimated_value, owner_user_id, original_creator_id, created_at, closed_at, lost_reason, service_codes')
   let accountsQuery = (adminClient as any).from('accounts').select('account_id, company_name, account_status, industry, owner_user_id, original_creator_id, created_at, first_transaction_date, last_transaction_date')
   let salesPlansQuery = (adminClient as any).from('sales_plans').select('plan_id, plan_type, status, potential_status, owner_user_id, source_account_id, created_at')
   let pipelineUpdatesQuery = (adminClient as any).from('pipeline_updates').select('update_id, opportunity_id, approach_method, updated_by, created_at, updated_at')
@@ -225,6 +225,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       created_at: o.created_at,
       closed_at: o.closed_at,
       lost_reason: o.lost_reason,
+      service_codes: o.service_codes || [],
     })),
     accounts: filteredAccounts.map((a: any) => ({
       account_id: a.account_id,
@@ -310,6 +311,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       created_at: o.created_at,
       closed_at: o.closed_at,
       lost_reason: o.lost_reason,
+      service_codes: o.service_codes || [],
     })),
     allAccounts: (accounts || []).map((a: any) => ({
       account_id: a.account_id,

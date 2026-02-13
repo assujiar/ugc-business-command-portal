@@ -35,6 +35,7 @@ import {
   BarChart, Bar, Cell, PieChart as RechartPieChart, Pie,
 } from 'recharts'
 import { isAdmin, isSales, isMarketing } from '@/lib/permissions'
+import { getServiceTypeDisplayLabel } from '@/lib/constants'
 import type { UserRole } from '@/types/database'
 
 // =====================================================
@@ -52,6 +53,7 @@ interface OpportunityData {
   created_at: string
   closed_at: string | null
   lost_reason: string | null
+  service_codes: string[]
 }
 
 interface AccountData {
@@ -526,13 +528,15 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       industryBreakdown[ind] = (industryBreakdown[ind] || 0) + 1
     })
 
-    // Service type breakdown from customer quotations
+    // Service type breakdown from customer quotations (value = accepted only)
     const serviceBreakdown: Record<string, { count: number; value: number }> = {}
     data.customerQuotations.forEach(q => {
       const svc = q.service_type || 'Unknown'
       if (!serviceBreakdown[svc]) serviceBreakdown[svc] = { count: 0, value: 0 }
       serviceBreakdown[svc].count++
-      serviceBreakdown[svc].value += q.total_selling_rate
+      if (q.status === 'accepted') {
+        serviceBreakdown[svc].value += q.total_selling_rate
+      }
     })
 
     // Service type by status
@@ -541,6 +545,25 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       const svc = q.service_type || 'Unknown'
       if (!serviceByStatus[svc]) serviceByStatus[svc] = {}
       serviceByStatus[svc][q.status] = (serviceByStatus[svc][q.status] || 0) + 1
+    })
+
+    // Pipeline service breakdown from opportunities (using service_codes)
+    const pipelineServiceBreakdown: Record<string, { count: number; value: number }> = {}
+    opps.forEach(o => {
+      const codes = o.service_codes || []
+      if (codes.length === 0) {
+        const svc = 'Belum Diisi'
+        if (!pipelineServiceBreakdown[svc]) pipelineServiceBreakdown[svc] = { count: 0, value: 0 }
+        pipelineServiceBreakdown[svc].count++
+        pipelineServiceBreakdown[svc].value += o.estimated_value
+      } else {
+        codes.forEach((code: string) => {
+          const svc = getServiceTypeDisplayLabel(code)
+          if (!pipelineServiceBreakdown[svc]) pipelineServiceBreakdown[svc] = { count: 0, value: 0 }
+          pipelineServiceBreakdown[svc].count++
+          pipelineServiceBreakdown[svc].value += o.estimated_value
+        })
+      }
     })
 
     // Unified activity count (matching Activities page: sales_plans + pipeline_updates + activities deduplicated)
@@ -643,7 +666,7 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
       leads, leadsBySource, leadsByStatus,
       plansByType, plansByStatus, huntingPotential, plans,
       accountsByStatus, oppByStage, acceptedQ, lostReasons,
-      industryBreakdown, serviceBreakdown, serviceByStatus,
+      industryBreakdown, serviceBreakdown, serviceByStatus, pipelineServiceBreakdown,
       rfqByService, rfqByRoute, rfqByCargo, unifiedActivity,
       mqlTimeCategories, avgMqlTimeHours, totalMqlLeads, mqlConversion,
     }
@@ -1906,62 +1929,69 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
         </>
       )}
 
-      {/* ============ SERVICE ANALYTICS (Customer Quotation) ============ */}
-      {Object.keys(calc.serviceBreakdown).length > 0 && (() => {
-        const svcData = Object.entries(calc.serviceBreakdown)
-          .sort((a, b) => b[1].count - a[1].count)
-          .map(([svc, d]) => ({ service: svc, count: d.count, value: d.value }))
+      {/* ============ SERVICE ANALYTICS ============ */}
+      {(Object.keys(calc.pipelineServiceBreakdown).length > 0 || Object.keys(calc.serviceBreakdown).length > 0) && (() => {
         const SVC_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#14b8a6', '#6366f1']
+
+        // Pipeline service data
+        const pipelineSvcData = Object.entries(calc.pipelineServiceBreakdown)
+          .sort((a, b) => b[1].value - a[1].value)
+          .map(([svc, d]) => ({ service: svc, count: d.count, value: d.value }))
+        const pipelineTotalValue = pipelineSvcData.reduce((s, d) => s + d.value, 0)
+        const pipelineTotalCount = pipelineSvcData.reduce((s, d) => s + d.count, 0)
+
+        // Customer quotation service data
+        const svcData = Object.entries(calc.serviceBreakdown)
+          .sort((a, b) => b[1].value - a[1].value)
+          .map(([svc, d]) => ({ service: svc, count: d.count, value: d.value }))
+        const acceptedQuotations = data.customerQuotations.filter(q => q.status === 'accepted')
+        const quotationTotalAcceptedValue = acceptedQuotations.reduce((s, q) => s + q.total_selling_rate, 0)
+
         return (
           <>
             <SectionDivider title="Service Analytics" icon={<Layers className="h-4 w-4 text-blue-500" />} />
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base lg:text-lg flex items-center gap-2">
-                  <Layers className="h-5 w-5 text-blue-500" />
-                  Service Type - Customer Quotation ({data.customerQuotations.length} quotations)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {/* Pie Chart */}
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartPieChart>
-                        <Pie data={svcData} dataKey="count" nameKey="service" cx="50%" cy="50%"
-                          outerRadius={90} innerRadius={40} paddingAngle={2} label={({ service, percent }) => `${service} ${(percent * 100).toFixed(0)}%`}
-                          labelLine={{ strokeWidth: 1 }} fontSize={10}>
-                          {svcData.map((_, i) => <Cell key={i} fill={SVC_COLORS[i % SVC_COLORS.length]} />)}
-                        </Pie>
-                        <Tooltip formatter={(val: number, name: string, props: any) => {
-                          const totalCount = data.customerQuotations.length
-                          const totalValue = data.customerQuotations.reduce((s, q) => s + q.total_selling_rate, 0)
-                          return [`${val} (${pct(val, totalCount)}) - ${formatCurrency(props.payload.value)} (${pct(props.payload.value, totalValue)})`, name]
-                        }} />
-                      </RechartPieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  {/* Detail table with status breakdown */}
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {svcData.map((item, i) => {
-                      const statusData = calc.serviceByStatus[item.service] || {}
-                      return (
+
+            {/* Pipeline Service Breakdown */}
+            {pipelineSvcData.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-indigo-500" />
+                    Service Type - Pipeline ({pipelineTotalCount} pipelines)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartPieChart>
+                          <Pie data={pipelineSvcData} dataKey="value" nameKey="service" cx="50%" cy="50%"
+                            outerRadius={90} innerRadius={40} paddingAngle={2} label={({ service, percent }) => `${service} ${(percent * 100).toFixed(0)}%`}
+                            labelLine={{ strokeWidth: 1 }} fontSize={10}>
+                            {pipelineSvcData.map((_, i) => <Cell key={i} fill={SVC_COLORS[i % SVC_COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip formatter={(val: number, name: string) => [formatCurrency(val), name]} />
+                        </RechartPieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {pipelineSvcData.map((item, i) => (
                         <div key={item.service}
                           className="p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                           onClick={() => {
-                            const items = data.customerQuotations.filter(q => (q.service_type || 'Unknown') === item.service)
-                            openDrill(`Service: ${item.service}`, items, [
-                              { key: 'opportunity_id', label: 'Pipeline', format: resolveOpp },
-                              { key: 'status', label: 'Status' },
-                              { key: 'total_selling_rate', label: 'Value', format: fmtCurrency },
-                              { key: 'created_by', label: 'Created By', format: resolveUser },
+                            const items = data.opportunities.filter(o => {
+                              if (item.service === 'Belum Diisi') return !o.service_codes || o.service_codes.length === 0
+                              return (o.service_codes || []).some((c: string) => getServiceTypeDisplayLabel(c) === item.service)
+                            })
+                            openDrill(`Pipeline Service: ${item.service}`, items, [
+                              { key: 'name', label: 'Pipeline' },
+                              { key: 'stage', label: 'Stage' },
+                              { key: 'estimated_value', label: 'Est. Value', format: fmtCurrency },
+                              { key: 'owner_user_id', label: 'Owner', format: resolveUser },
                               { key: 'created_at', label: 'Date', format: fmtDate },
                             ], [
-                              { label: 'Total', value: `${items.length} quotations` },
-                              { label: 'Total Value', value: formatCurrency(items.reduce((s, q) => s + q.total_selling_rate, 0)) },
-                              { label: 'Accepted', value: String(items.filter(q => q.status === 'accepted').length) },
-                              { label: 'Sent', value: String(items.filter(q => q.status === 'sent').length) },
-                              { label: 'Rejected', value: String(items.filter(q => q.status === 'rejected').length) },
+                              { label: 'Total', value: `${items.length} pipelines` },
+                              { label: 'Total Value', value: formatCurrency(items.reduce((s, o) => s + o.estimated_value, 0)) },
                             ])
                           }}>
                           <div className="flex items-center justify-between mb-1">
@@ -1970,22 +2000,89 @@ export function CRMDashboardContent({ data }: { data: DashboardDataProps }) {
                               <span className="text-sm font-medium">{item.service}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-mono">{formatCurrency(item.value)} ({pct(item.value, svcData.reduce((s, d) => s + d.value, 0))})</span>
-                              <Badge variant="outline" className="text-xs">{item.count} ({pct(item.count, data.customerQuotations.length)})</Badge>
+                              <span className="text-xs font-mono">{formatCurrency(item.value)} ({pct(item.value, pipelineTotalValue)})</span>
+                              <Badge variant="outline" className="text-xs">{item.count} ({pct(item.count, pipelineTotalCount)})</Badge>
                             </div>
                           </div>
-                          <div className="flex gap-2 ml-5">
-                            {statusData.accepted && <Badge className="bg-green-100 text-green-800 text-[10px]">Accepted: {statusData.accepted}</Badge>}
-                            {statusData.sent && <Badge className="bg-blue-100 text-blue-800 text-[10px]">Sent: {statusData.sent}</Badge>}
-                            {statusData.rejected && <Badge className="bg-red-100 text-red-800 text-[10px]">Rejected: {statusData.rejected}</Badge>}
-                          </div>
                         </div>
-                      )
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Customer Quotation Service Breakdown */}
+            {svcData.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base lg:text-lg flex items-center gap-2">
+                    <Layers className="h-5 w-5 text-blue-500" />
+                    Service Type - Customer Quotation ({data.customerQuotations.length} quotations)
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">Value berdasarkan quotation accepted</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartPieChart>
+                          <Pie data={svcData} dataKey="value" nameKey="service" cx="50%" cy="50%"
+                            outerRadius={90} innerRadius={40} paddingAngle={2} label={({ service, percent }) => `${service} ${(percent * 100).toFixed(0)}%`}
+                            labelLine={{ strokeWidth: 1 }} fontSize={10}>
+                            {svcData.map((_, i) => <Cell key={i} fill={SVC_COLORS[i % SVC_COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip formatter={(val: number, name: string, props: any) => {
+                            return [`${formatCurrency(val)} (${pct(val, quotationTotalAcceptedValue)}) - ${props.payload.count} quotations`, name]
+                          }} />
+                        </RechartPieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {svcData.map((item, i) => {
+                        const statusData = calc.serviceByStatus[item.service] || {}
+                        return (
+                          <div key={item.service}
+                            className="p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                            onClick={() => {
+                              const items = data.customerQuotations.filter(q => (q.service_type || 'Unknown') === item.service)
+                              openDrill(`Service: ${item.service}`, items, [
+                                { key: 'opportunity_id', label: 'Pipeline', format: resolveOpp },
+                                { key: 'status', label: 'Status' },
+                                { key: 'total_selling_rate', label: 'Value', format: fmtCurrency },
+                                { key: 'created_by', label: 'Created By', format: resolveUser },
+                                { key: 'created_at', label: 'Date', format: fmtDate },
+                              ], [
+                                { label: 'Total', value: `${items.length} quotations` },
+                                { label: 'Accepted Value', value: formatCurrency(items.filter(q => q.status === 'accepted').reduce((s, q) => s + q.total_selling_rate, 0)) },
+                                { label: 'Accepted', value: String(items.filter(q => q.status === 'accepted').length) },
+                                { label: 'Sent', value: String(items.filter(q => q.status === 'sent').length) },
+                                { label: 'Rejected', value: String(items.filter(q => q.status === 'rejected').length) },
+                              ])
+                            }}>
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: SVC_COLORS[i % SVC_COLORS.length] }} />
+                                <span className="text-sm font-medium">{item.service}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono">{formatCurrency(item.value)} ({pct(item.value, quotationTotalAcceptedValue)})</span>
+                                <Badge variant="outline" className="text-xs">{item.count} ({pct(item.count, data.customerQuotations.length)})</Badge>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 ml-5">
+                              {statusData.accepted && <Badge className="bg-green-100 text-green-800 text-[10px]">Accepted: {statusData.accepted}</Badge>}
+                              {statusData.sent && <Badge className="bg-blue-100 text-blue-800 text-[10px]">Sent: {statusData.sent}</Badge>}
+                              {statusData.rejected && <Badge className="bg-red-100 text-red-800 text-[10px]">Rejected: {statusData.rejected}</Badge>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </>
         )
       })()}
