@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - periodDays)
 
-    // Fetch ALL tickets (we need both creator and assignee info)
+    // Fetch tickets with assignee info for performance metrics
     let ticketQuery = (supabase as any)
       .from('tickets')
       .select(`
@@ -127,8 +127,8 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
-    // TRACK USERS WITH SEPARATED METRICS:
-    // as_creator vs as_assignee
+    // TRACK USERS AS ASSIGNEE ONLY
+    // Performance page shows tickets received (assigned to user)
     //
     // STAGE RESPONSE CALCULATION (per user request):
     // 1. Per tiket: avg = sum(response_times) / count(responses)
@@ -146,13 +146,6 @@ export async function GET(request: NextRequest) {
       name: string
       role: string
       is_ops: boolean
-
-      // ========== AS CREATOR (tiket yang dia BUAT) ==========
-      as_creator: {
-        tickets_created: number
-        // Stage response per ticket (untuk hitung avg of avgs)
-        stage_response_per_ticket: PerTicketResponse[]
-      }
 
       // ========== AS ASSIGNEE (tiket yang di-ASSIGN ke dia) ==========
       as_assignee: {
@@ -209,10 +202,6 @@ export async function GET(request: NextRequest) {
       name,
       role,
       is_ops: isOps,
-      as_creator: {
-        tickets_created: 0,
-        stage_response_per_ticket: [],
-      },
       as_assignee: {
         tickets_assigned: 0,
         tickets_resolved: 0,
@@ -268,26 +257,10 @@ export async function GET(request: NextRequest) {
       ticketLookup[ticket.id] = ticket
     }
 
-    // Process tickets
+    // Process tickets — only track ASSIGNEE metrics
     for (const ticket of tickets || []) {
       const assigneeId = ticket.assigned_to
-      const creatorId = ticket.created_by
       const ticketType = ticket.ticket_type as 'RFQ' | 'GEN'
-
-      // ========== Track CREATOR metrics ==========
-      if (creatorId && ticket.creator) {
-        // Check if creator is OPS based on their role
-        const isCreatorOps = isOps(ticket.creator?.role as UserRole)
-        if (!userMetrics[creatorId]) {
-          userMetrics[creatorId] = initUserMetrics(
-            creatorId,
-            ticket.creator?.name || 'Unknown',
-            ticket.creator?.role || 'Unknown',
-            isCreatorOps
-          )
-        }
-        userMetrics[creatorId].as_creator.tickets_created++
-      }
 
       // ========== Track ASSIGNEE metrics ==========
       if (assigneeId && ticket.assignee) {
@@ -383,8 +356,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
-    // Process COMMENTS for response metrics
-    // SEPARATED by as_creator vs as_assignee
+    // Process COMMENTS for assignee response metrics
     // ============================================
     const outboundComments = (comments || []).filter((c: any) => c.response_direction === 'outbound')
 
@@ -412,10 +384,8 @@ export async function GET(request: NextRequest) {
 
       for (const comment of ticketComments) {
         const userId = comment.user_id
-        const ticketCreatorId = comment.ticket?.created_by || ticket?.created_by
         const ticketAssigneeId = comment.ticket?.assigned_to || ticket?.assigned_to
         const isAssignee = userId === ticketAssigneeId
-        const isCreator = userId === ticketCreatorId
         const responseSeconds = comment.response_time_seconds || 0
 
         // Ensure user exists in metrics
@@ -432,10 +402,8 @@ export async function GET(request: NextRequest) {
 
         if (!userMetrics[userId]) continue
 
-        // ========== Assign response to correct category ==========
-        // Stage response = gap waktu antara respon (berlaku untuk KEDUA creator dan assignee)
+        // ========== Only track ASSIGNEE responses ==========
         if (isAssignee) {
-          // User is ASSIGNEE of this ticket
           if (!foundFirstAssigneeResponse) {
             // First Response (assignee's first response on this ticket)
             addPerTicketResponse(userMetrics[userId].as_assignee.first_response_per_ticket, ticketId, responseSeconds)
@@ -444,12 +412,7 @@ export async function GET(request: NextRequest) {
             // Stage Response (assignee's subsequent responses)
             addPerTicketResponse(userMetrics[userId].as_assignee.stage_response_per_ticket, ticketId, responseSeconds)
           }
-        } else if (isCreator) {
-          // User is CREATOR of this ticket (all their responses are stage responses)
-          // Stage response = waktu respon creator ke assignee (tektokan)
-          addPerTicketResponse(userMetrics[userId].as_creator.stage_response_per_ticket, ticketId, responseSeconds)
         }
-        // If user is neither creator nor assignee, we skip (shouldn't happen normally)
       }
     }
 
@@ -462,8 +425,8 @@ export async function GET(request: NextRequest) {
 
     const userPerformance = Object.values(userMetrics)
       .filter(metrics => {
-        // Include if user has assigned tickets OR created tickets
-        if (!(metrics.as_assignee.tickets_assigned > 0 || metrics.as_creator.tickets_created > 0)) {
+        // Only include users with assigned tickets
+        if (metrics.as_assignee.tickets_assigned <= 0) {
           return false
         }
 
@@ -478,11 +441,9 @@ export async function GET(request: NextRequest) {
       })
       .map((metrics) => {
         const assignee = metrics.as_assignee
-        const creator = metrics.as_creator
         const completedTickets = assignee.tickets_resolved + assignee.tickets_closed
 
         // Calculate avg-of-avgs for response times (per user request)
-        const creatorStageResponse = calcAvgOfAvgs(creator.stage_response_per_ticket)
         const assigneeFirstResponse = calcAvgOfAvgs(assignee.first_response_per_ticket)
         const assigneeStageResponse = calcAvgOfAvgs(assignee.stage_response_per_ticket)
 
@@ -547,17 +508,6 @@ export async function GET(request: NextRequest) {
           name: metrics.name,
           role: metrics.role,
           is_ops: metrics.is_ops,
-
-          // ========== AS CREATOR (tiket yang dia BUAT) ==========
-          as_creator: {
-            tickets_created: creator.tickets_created,
-            // Stage response: avg of per-ticket avgs (tektokan creator ke assignee)
-            stage_response: {
-              count: creatorStageResponse.count,
-              tickets_count: creator.stage_response_per_ticket.length,
-              avg_seconds: creatorStageResponse.avgSeconds,
-            },
-          },
 
           // ========== AS ASSIGNEE (tiket yang di-ASSIGN ke dia) ==========
           as_assignee: {
@@ -624,12 +574,9 @@ export async function GET(request: NextRequest) {
         }
       })
 
-    // Sort by assigned tickets (primary) then created tickets (secondary)
+    // Sort by assigned tickets (descending)
     userPerformance.sort((a, b) => {
-      const aAssigned = a.as_assignee.tickets.assigned
-      const bAssigned = b.as_assignee.tickets.assigned
-      if (bAssigned !== aAssigned) return bAssigned - aAssigned
-      return b.as_creator.tickets_created - a.as_creator.tickets_created
+      return (b.as_assignee.tickets.assigned || 0) - (a.as_assignee.tickets.assigned || 0)
     })
 
     // Check if user can view rankings
