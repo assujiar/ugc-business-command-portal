@@ -59,13 +59,20 @@ interface ColumnMapping {
 const ENTITY_FIELDS: Record<EntityType, { field: string; label: string; required: boolean }[]> = {
   leads: [
     { field: 'company_name', label: 'Company Name', required: true },
-    { field: 'pic_name', label: 'PIC Name', required: false },
-    { field: 'pic_email', label: 'PIC Email', required: false },
-    { field: 'pic_phone', label: 'PIC Phone', required: false },
+    { field: 'contact_name', label: 'Contact Name', required: false },
+    { field: 'contact_email', label: 'Contact Email', required: false },
+    { field: 'contact_phone', label: 'Contact Phone', required: false },
+    { field: 'contact_mobile', label: 'Contact Mobile', required: false },
+    { field: 'job_title', label: 'Job Title', required: false },
     { field: 'industry', label: 'Industry', required: false },
     { field: 'source', label: 'Source', required: false },
     { field: 'source_detail', label: 'Source Detail', required: false },
     { field: 'priority', label: 'Priority (1-4)', required: false },
+    { field: 'service_description', label: 'Service Description', required: false },
+    { field: 'route', label: 'Route', required: false },
+    { field: 'origin', label: 'Origin', required: false },
+    { field: 'destination', label: 'Destination', required: false },
+    { field: 'volume_estimate', label: 'Volume Estimate', required: false },
     { field: 'inquiry_text', label: 'Inquiry / Notes', required: false },
   ],
   accounts: [
@@ -300,10 +307,20 @@ export function ImportWizard({ entityType: initialEntityType, onComplete }: Impo
     const exampleRow = fields.map((f) => {
       if (f.field === 'company_name') return 'PT Example'
       if (f.field === 'first_name') return 'John'
-      if (f.field === 'pic_name') return 'Jane Doe'
-      if (f.field === 'pic_email' || f.field === 'email') return 'example@email.com'
-      if (f.field === 'pic_phone' || f.field === 'phone') return '+62 812 3456 7890'
+      if (f.field === 'contact_name' || f.field === 'pic_name') return 'Jane Doe'
+      if (f.field === 'contact_email' || f.field === 'pic_email' || f.field === 'email') return 'jane@example.com'
+      if (f.field === 'contact_phone' || f.field === 'pic_phone' || f.field === 'phone') return '+62 21 1234567'
+      if (f.field === 'contact_mobile') return '+62 812 3456 7890'
+      if (f.field === 'job_title') return 'Procurement Manager'
       if (f.field === 'priority') return '2'
+      if (f.field === 'industry') return 'Manufacturing'
+      if (f.field === 'source') return 'Webform (SEM)'
+      if (f.field === 'service_description') return 'Sea Freight FCL'
+      if (f.field === 'route') return 'Import'
+      if (f.field === 'origin') return 'Shanghai'
+      if (f.field === 'destination') return 'Jakarta'
+      if (f.field === 'volume_estimate') return '2x40HC/month'
+      if (f.field === 'inquiry_text') return 'Interested in regular import service'
       return ''
     }).join(',')
 
@@ -382,11 +399,19 @@ export function ImportWizard({ entityType: initialEntityType, onComplete }: Impo
           )}
 
           {/* Download template */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-4 w-4 mr-2" />
               Download Template
             </Button>
+            {entityType === 'leads' && (
+              <Button variant="ghost" size="sm" asChild>
+                <a href="/templates/leads_import_template.csv" download>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Template with Sample Data (4 rows)
+                </a>
+              </Button>
+            )}
             <span className="text-sm text-muted-foreground">
               Use this template as a starting point
             </span>
@@ -425,6 +450,15 @@ export function ImportWizard({ entityType: initialEntityType, onComplete }: Impo
             <div className="flex items-center gap-2 text-destructive bg-destructive/10 p-3 rounded-md">
               <AlertCircle className="h-4 w-4" />
               <span className="text-sm">{parseError}</span>
+            </div>
+          )}
+
+          {entityType === 'leads' && (
+            <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-md space-y-1">
+              <p className="font-medium">Tips for leads import:</p>
+              <p><strong>Source</strong> values: Webform (SEM), Webform (Organic), Instagram, TikTok, Facebook, Event, Referral, Outbound, Lainnya</p>
+              <p><strong>Priority</strong>: 1 (High), 2 (Medium), 3 (Low), 4 (Minimal) — defaults to 2 if not specified</p>
+              <p>Only <strong>Company Name</strong> is required. All other fields are optional.</p>
             </div>
           )}
         </div>
