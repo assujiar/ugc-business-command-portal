@@ -148,6 +148,7 @@ function DrilldownModal({
   metric,
   ticketType,
   period,
+  viewMode,
 }: {
   open: boolean
   onClose: () => void
@@ -156,6 +157,7 @@ function DrilldownModal({
   metric: string
   ticketType: string
   period: number
+  viewMode: string
 }) {
   const [loading, setLoading] = useState(false)
   const [tickets, setTickets] = useState<DrilldownTicket[]>([])
@@ -168,6 +170,7 @@ function DrilldownModal({
         metric,
         ticket_type: ticketType,
         period: period.toString(),
+        view_mode: viewMode,
         limit: '50',
       })
       const res = await fetch(`/api/ticketing/overview/drilldown?${params}`)
@@ -181,7 +184,7 @@ function DrilldownModal({
     } finally {
       setLoading(false)
     }
-  }, [metric, ticketType, period])
+  }, [metric, ticketType, period, viewMode])
 
   useEffect(() => {
     if (open && metric) {
@@ -417,7 +420,22 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
     ? data.status_cards?.by_status || {}
     : data.status_cards?.by_status_and_type?.[ticketTypeFilter] || {}
   const responseMetrics = data.response_time_metrics?.[ticketTypeFilter] || {}
-  const slaCompliance = data.sla_compliance?.[ticketTypeFilter] || {}
+  // Fix: TOTAL section in RPC doesn't include 'pending' — compute from RFQ + GEN
+  const slaComplianceRaw = data.sla_compliance?.[ticketTypeFilter] || {}
+  const slaCompliance = ticketTypeFilter === 'TOTAL' ? {
+    ...slaComplianceRaw,
+    first_response: {
+      ...slaComplianceRaw.first_response,
+      pending: slaComplianceRaw.first_response?.pending ??
+        ((data.sla_compliance?.RFQ?.first_response?.pending || 0) + (data.sla_compliance?.GEN?.first_response?.pending || 0)),
+    },
+    resolution: {
+      ...slaComplianceRaw.resolution,
+      pending: slaComplianceRaw.resolution?.pending ??
+        ((data.sla_compliance?.RFQ?.resolution?.pending || 0) + (data.sla_compliance?.GEN?.resolution?.pending || 0)),
+    },
+    first_quote_pending: slaComplianceRaw.first_quote_pending ?? (data.sla_compliance?.RFQ?.first_quote_pending || 0),
+  } : slaComplianceRaw
   const quotationAnalytics = data.quotation_analytics || {}
   const opsCostAnalytics = data.ops_cost_analytics || {}
   const leaderboards = data.leaderboards || {}
@@ -493,21 +511,30 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
         </div>
       </div>
 
-      {/* Section 1: Ticket Distribution */}
+      {/* Section 1: Ticket Distribution — All clickable for drilldown */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card
+          className="cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+          onClick={() => openDrilldown('total', 'Semua Tiket', 'Daftar semua tiket dalam periode ini')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Tiket</CardTitle>
             <Ticket className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{counts.total || 0}</div>
-            <p className="text-xs text-muted-foreground">
+            <button
+              onClick={(e) => { e.stopPropagation(); openDrilldown('today_created', 'Dibuat Hari Ini', 'Tiket yang dibuat hari ini') }}
+              className="text-xs text-primary hover:underline"
+            >
               {counts.created_today || 0} dibuat hari ini
-            </p>
+            </button>
           </CardContent>
         </Card>
-        <Card className="border-orange-200 dark:border-orange-900">
+        <Card
+          className="border-orange-200 dark:border-orange-900 cursor-pointer hover:ring-2 hover:ring-orange-500/50 transition-all"
+          onClick={() => openDrilldown('active', 'Tiket Aktif', 'Tiket yang belum resolved/closed')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Aktif</CardTitle>
             <AlertCircle className="h-4 w-4 text-orange-500" />
@@ -519,19 +546,28 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
             </p>
           </CardContent>
         </Card>
-        <Card className="border-green-200 dark:border-green-900">
+        <Card
+          className="border-green-200 dark:border-green-900 cursor-pointer hover:ring-2 hover:ring-green-500/50 transition-all"
+          onClick={() => openDrilldown('completed', 'Tiket Selesai', 'Tiket resolved/closed')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Selesai</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{counts.completed || 0}</div>
-            <p className="text-xs text-muted-foreground">
+            <button
+              onClick={(e) => { e.stopPropagation(); openDrilldown('today_resolved', 'Diselesaikan Hari Ini', 'Tiket yang diselesaikan hari ini') }}
+              className="text-xs text-primary hover:underline"
+            >
               {counts.resolved_today || 0} diselesaikan hari ini
-            </p>
+            </button>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+          onClick={() => openDrilldown('completed', 'Tiket Selesai', 'Tiket resolved/closed (resolution rate)')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Resolution Rate</CardTitle>
             <TrendingUp className="h-4 w-4 text-brand" />
@@ -601,8 +637,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {Object.entries(statusCards).map(([status, count]) => {
-              const config = statusConfig[status] || { label: status, color: '', bgColor: 'bg-muted/50' }
+            {Object.entries(statusConfig).map(([status, config]) => {
+              const count = (statusCards[status] as number) || 0
               return (
                 <button
                   key={status}
@@ -613,7 +649,7 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                   )}
                   className={`p-4 rounded-lg ${config.bgColor} text-left hover:ring-2 hover:ring-primary/50 transition-all`}
                 >
-                  <p className={`text-2xl font-bold ${config.color}`}>{count as number}</p>
+                  <p className={`text-2xl font-bold ${config.color}`}>{count}</p>
                   <p className="text-xs text-muted-foreground">{config.label}</p>
                   <p className="text-xs text-primary mt-1 flex items-center gap-1">
                     Lihat <ArrowRight className="h-3 w-3" />
@@ -690,6 +726,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                 icon={Clock}
                 color="text-blue-600"
                 bgColor="bg-blue-50 dark:bg-blue-950/30"
+                clickable
+                onClick={() => openDrilldown('first_response_met', 'Tiket dengan First Response', 'Tiket yang sudah ada first response')}
               />
               <MetricCard
                 title="Assignee Avg Response"
@@ -698,6 +736,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                 icon={Clock}
                 color="text-purple-600"
                 bgColor="bg-purple-50 dark:bg-purple-950/30"
+                clickable
+                onClick={() => openDrilldown('active', 'Tiket Aktif', 'Tiket dengan stage response metrics')}
               />
               <MetricCard
                 title="Creator Avg Response"
@@ -706,6 +746,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                 icon={Clock}
                 color="text-green-600"
                 bgColor="bg-green-50 dark:bg-green-950/30"
+                clickable
+                onClick={() => openDrilldown('total', 'Semua Tiket', 'Tiket dengan creator response metrics')}
               />
               <MetricCard
                 title="Avg Resolution Time"
@@ -714,6 +756,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                 icon={CheckCircle2}
                 color="text-emerald-600"
                 bgColor="bg-emerald-50 dark:bg-emerald-950/30"
+                clickable
+                onClick={() => openDrilldown('completed', 'Tiket Selesai', 'Tiket yang sudah resolved/closed')}
               />
             </div>
 
@@ -722,22 +766,34 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
               <div className="mt-4 pt-4 border-t">
                 <p className="text-sm font-medium mb-3">First Response Distribution</p>
                 <div className="grid grid-cols-4 gap-2 text-xs">
-                  <div className="p-2 rounded bg-green-50 dark:bg-green-950/30 text-center">
+                  <button
+                    onClick={() => openDrilldown('response_under_1h', 'First Response < 1 Jam', 'Tiket dengan first response di bawah 1 jam')}
+                    className="p-2 rounded bg-green-50 dark:bg-green-950/30 text-center hover:ring-2 hover:ring-green-500/50 transition-all"
+                  >
                     <p className="font-bold text-green-600">{responseMetrics.distribution.under_1_hour || 0}</p>
                     <p className="text-muted-foreground">&lt;1 jam</p>
-                  </div>
-                  <div className="p-2 rounded bg-yellow-50 dark:bg-yellow-950/30 text-center">
+                  </button>
+                  <button
+                    onClick={() => openDrilldown('response_1_to_4h', 'First Response 1-4 Jam', 'Tiket dengan first response 1-4 jam')}
+                    className="p-2 rounded bg-yellow-50 dark:bg-yellow-950/30 text-center hover:ring-2 hover:ring-yellow-500/50 transition-all"
+                  >
                     <p className="font-bold text-yellow-600">{responseMetrics.distribution.from_1_to_4_hours || 0}</p>
                     <p className="text-muted-foreground">1-4 jam</p>
-                  </div>
-                  <div className="p-2 rounded bg-orange-50 dark:bg-orange-950/30 text-center">
+                  </button>
+                  <button
+                    onClick={() => openDrilldown('response_4_to_24h', 'First Response 4-24 Jam', 'Tiket dengan first response 4-24 jam')}
+                    className="p-2 rounded bg-orange-50 dark:bg-orange-950/30 text-center hover:ring-2 hover:ring-orange-500/50 transition-all"
+                  >
                     <p className="font-bold text-orange-600">{responseMetrics.distribution.from_4_to_24_hours || 0}</p>
                     <p className="text-muted-foreground">4-24 jam</p>
-                  </div>
-                  <div className="p-2 rounded bg-red-50 dark:bg-red-950/30 text-center">
+                  </button>
+                  <button
+                    onClick={() => openDrilldown('response_over_24h', 'First Response > 24 Jam', 'Tiket dengan first response lebih dari 24 jam')}
+                    className="p-2 rounded bg-red-50 dark:bg-red-950/30 text-center hover:ring-2 hover:ring-red-500/50 transition-all"
+                  >
                     <p className="font-bold text-red-600">{responseMetrics.distribution.over_24_hours || 0}</p>
                     <p className="text-muted-foreground">&gt;24 jam</p>
-                  </div>
+                  </button>
                 </div>
               </div>
             )}
@@ -776,13 +832,15 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                 <TabsTrigger value="rejection">Rejection Analysis</TabsTrigger>
               </TabsList>
               <TabsContent value="summary" className="space-y-4">
-                {/* Status Breakdown */}
+                {/* Status Breakdown — All clickable */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                   <MetricCard
                     title="Draft"
                     value={quotationAnalytics.summary?.draft || 0}
                     icon={FileText}
                     bgColor="bg-gray-50 dark:bg-gray-950/30"
+                    clickable
+                    onClick={() => openDrilldown('quotation_draft', 'Quotation Draft', 'Tiket dengan quotation draft')}
                   />
                   <MetricCard
                     title="Sent"
@@ -790,6 +848,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                     icon={ArrowRight}
                     color="text-blue-600"
                     bgColor="bg-blue-50 dark:bg-blue-950/30"
+                    clickable
+                    onClick={() => openDrilldown('quotation_sent', 'Quotation Sent', 'Tiket dengan quotation yang sudah dikirim')}
                   />
                   <MetricCard
                     title="Accepted"
@@ -797,6 +857,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                     icon={CheckCircle2}
                     color="text-green-600"
                     bgColor="bg-green-50 dark:bg-green-950/30"
+                    clickable
+                    onClick={() => openDrilldown('quotation_accepted', 'Quotation Accepted', 'Tiket dengan quotation yang diterima')}
                   />
                   <MetricCard
                     title="Rejected"
@@ -804,6 +866,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                     icon={XCircle}
                     color="text-red-600"
                     bgColor="bg-red-50 dark:bg-red-950/30"
+                    clickable
+                    onClick={() => openDrilldown('quotation_rejected', 'Quotation Rejected', 'Tiket dengan quotation yang ditolak')}
                   />
                   <MetricCard
                     title="Expired"
@@ -811,6 +875,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                     icon={Hourglass}
                     color="text-orange-600"
                     bgColor="bg-orange-50 dark:bg-orange-950/30"
+                    clickable
+                    onClick={() => openDrilldown('quotation_expired', 'Quotation Expired', 'Tiket dengan quotation yang expired')}
                   />
                 </div>
 
@@ -927,18 +993,24 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                   title="Draft"
                   value={opsCostAnalytics.summary?.draft || 0}
                   bgColor="bg-gray-50 dark:bg-gray-950/30"
+                  clickable
+                  onClick={() => openDrilldown('ops_cost_draft', 'Ops Cost Draft', 'Tiket dengan operational cost draft')}
                 />
                 <MetricCard
                   title="Submitted"
                   value={opsCostAnalytics.summary?.submitted || 0}
                   color="text-blue-600"
                   bgColor="bg-blue-50 dark:bg-blue-950/30"
+                  clickable
+                  onClick={() => openDrilldown('ops_cost_submitted', 'Ops Cost Submitted', 'Tiket dengan operational cost yang sudah disubmit')}
                 />
                 <MetricCard
                   title="Sent to Customer"
                   value={opsCostAnalytics.summary?.sent_to_customer || 0}
                   color="text-purple-600"
                   bgColor="bg-purple-50 dark:bg-purple-950/30"
+                  clickable
+                  onClick={() => openDrilldown('ops_cost_sent_to_customer', 'Ops Cost Sent to Customer', 'Tiket dengan operational cost yang sudah dikirim ke customer')}
                 />
                 <MetricCard
                   title="Accepted"
@@ -946,6 +1018,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                   icon={CheckCircle2}
                   color="text-green-600"
                   bgColor="bg-green-50 dark:bg-green-950/30"
+                  clickable
+                  onClick={() => openDrilldown('ops_cost_accepted', 'Ops Cost Accepted', 'Tiket dengan operational cost yang diterima')}
                 />
                 <MetricCard
                   title="Rejected"
@@ -953,6 +1027,8 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
                   icon={XCircle}
                   color="text-red-600"
                   bgColor="bg-red-50 dark:bg-red-950/30"
+                  clickable
+                  onClick={() => openDrilldown('ops_cost_rejected', 'Ops Cost Rejected', 'Tiket dengan operational cost yang ditolak')}
                 />
               </div>
 
@@ -1084,6 +1160,7 @@ export function OverviewDashboardV2({ profile }: OverviewDashboardV2Props) {
         metric={drilldownConfig.metric}
         ticketType={ticketTypeFilter}
         period={parseInt(period)}
+        viewMode={viewMode}
       />
     </div>
   )
