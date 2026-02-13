@@ -21,6 +21,11 @@
 -- FIX 3: Add trigger on tickets to auto-populate resolution_met
 --         when status changes to resolved/closed
 --
+-- FIX 4: Ops cost rejection reasons double counting. UNION ALL between
+--         operational_cost_rejection_reasons and quotation_rejection_reasons
+--         counts same reason 2x (both tables store it for revise_requested).
+--         Fix: only use operational_cost_rejection_reasons.
+--
 -- =====================================================
 
 -- =====================================================
@@ -660,59 +665,31 @@ BEGIN
             OR (v_view_mode = 'created' AND t.created_by = v_user_id)
         )
     ),
+    -- FIX: Only use operational_cost_rejection_reasons (not UNION ALL with
+    -- quotation_rejection_reasons). Both tables store the same reason for
+    -- revise_requested ops costs, causing double counting (4 instead of 2).
     cost_rejection_reasons AS (
-        SELECT reason, SUM(cnt)::BIGINT as count
-        FROM (
-            SELECT
-                ocrr.reason_type::TEXT as reason,
-                1 as cnt
-            FROM public.operational_cost_rejection_reasons ocrr
-            JOIN public.ticket_rate_quotes trq ON trq.id = ocrr.operational_cost_id
-            JOIN public.tickets t ON t.id = trq.ticket_id
-            WHERE trq.created_at >= v_start_date
-            AND (
-                v_scope = 'all'
-                OR (v_scope = 'department' AND t.department = v_user_department)
-                OR (v_scope = 'user' AND (
-                    trq.created_by = v_user_id
-                    OR (t.assigned_to = v_user_id OR t.created_by = v_user_id)
-                ))
-            )
-            AND (
-                v_view_mode = 'all'
-                OR (v_view_mode = 'received' AND t.assigned_to = v_user_id)
-                OR (v_view_mode = 'created' AND t.created_by = v_user_id)
-            )
-
-            UNION ALL
-
-            SELECT
-                qrr.reason_type::TEXT as reason,
-                1 as cnt
-            FROM public.quotation_rejection_reasons qrr
-            JOIN public.customer_quotations cq ON cq.id = qrr.quotation_id
-            JOIN public.ticket_rate_quotes trq ON (
-                trq.id = cq.operational_cost_id
-                OR (cq.operational_cost_ids IS NOT NULL AND trq.id = ANY(cq.operational_cost_ids))
-            )
-            JOIN public.tickets t ON t.id = trq.ticket_id
-            WHERE trq.status = 'revise_requested'::quote_status
-            AND trq.created_at >= v_start_date
-            AND (
-                v_scope = 'all'
-                OR (v_scope = 'department' AND t.department = v_user_department)
-                OR (v_scope = 'user' AND (
-                    trq.created_by = v_user_id
-                    OR (t.assigned_to = v_user_id OR t.created_by = v_user_id)
-                ))
-            )
-            AND (
-                v_view_mode = 'all'
-                OR (v_view_mode = 'received' AND t.assigned_to = v_user_id)
-                OR (v_view_mode = 'created' AND t.created_by = v_user_id)
-            )
-        ) combined
-        GROUP BY reason
+        SELECT
+            ocrr.reason_type::TEXT as reason,
+            COUNT(*) as count
+        FROM public.operational_cost_rejection_reasons ocrr
+        JOIN public.ticket_rate_quotes trq ON trq.id = ocrr.operational_cost_id
+        JOIN public.tickets t ON t.id = trq.ticket_id
+        WHERE trq.created_at >= v_start_date
+        AND (
+            v_scope = 'all'
+            OR (v_scope = 'department' AND t.department = v_user_department)
+            OR (v_scope = 'user' AND (
+                trq.created_by = v_user_id
+                OR (t.assigned_to = v_user_id OR t.created_by = v_user_id)
+            ))
+        )
+        AND (
+            v_view_mode = 'all'
+            OR (v_view_mode = 'received' AND t.assigned_to = v_user_id)
+            OR (v_view_mode = 'created' AND t.created_by = v_user_id)
+        )
+        GROUP BY ocrr.reason_type
     )
     SELECT jsonb_build_object(
         'summary', jsonb_build_object(
