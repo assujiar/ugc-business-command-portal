@@ -52,7 +52,7 @@ const UGC_INFO = {
 }
 
 // Production base URL
-const PRODUCTION_URL = 'https://ugc-business-command-portal.vercel.app'
+const PRODUCTION_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://bcp.ugc.id'
 
 // Sales Manager Email for CC (can be configured via environment variable)
 const SALES_MANAGER_EMAIL = process.env.SALES_MANAGER_EMAIL || ''

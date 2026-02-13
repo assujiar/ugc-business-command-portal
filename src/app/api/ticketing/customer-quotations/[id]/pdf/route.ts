@@ -6,6 +6,8 @@ import type { UserRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://bcp.ugc.id'
+
 interface RouteParams {
   params: Promise<{ id: string }>
 }
@@ -327,7 +329,7 @@ const generateQuotationHTML = (quotation: any, profile: ProfileData, validationU
     <!-- Header -->
     <div class="hdr">
       <div class="logo">
-        <img src="https://ugc-business-command-portal.vercel.app/logo/logougctaglinewhite.png" alt="UGC">
+        <img src="${BASE_URL}/logo/logougctaglinewhite.png" alt="UGC">
         <div>
           <h1>${UGC_INFO.shortName}</h1>
           <p>${UGC_INFO.address}<br>Tel: ${UGC_INFO.phone} | Email: ${UGC_INFO.email} | Web: ${UGC_INFO.web}</p>
@@ -505,8 +507,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Use creator's profile for PDF, fallback to current user
     const creatorProfile: ProfileData = quotation.creator || profileData
 
-    const baseUrl = 'https://ugc-business-command-portal.vercel.app'
-    const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
+    const validationUrl = `${BASE_URL}/quotation-verify/${quotation.validation_code}`
     const html = generateQuotationHTML(quotation, creatorProfile, validationUrl, printDate)
 
     return NextResponse.json({
@@ -565,8 +566,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Use creator's profile for PDF, fallback to current user
     const creatorProfile: ProfileData = quotation.creator || profileData
 
-    const baseUrl = 'https://ugc-business-command-portal.vercel.app'
-    const validationUrl = `${baseUrl}/quotation-verify/${quotation.validation_code}`
+    const validationUrl = `${BASE_URL}/quotation-verify/${quotation.validation_code}`
     const html = generateQuotationHTML(quotation, creatorProfile, validationUrl, printDate)
 
     return new NextResponse(html, {
