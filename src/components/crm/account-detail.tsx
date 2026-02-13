@@ -22,6 +22,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ArrowLeft,
   Building2,
   User,
@@ -39,6 +46,7 @@ import {
   Trash2,
   Loader2,
   Smartphone,
+  Save,
 } from 'lucide-react'
 import type { UserRole, AccountStatus, OpportunityStage } from '@/types/database'
 import { format } from 'date-fns'
@@ -74,6 +82,35 @@ const MANAGE_CONTACTS_ROLES: UserRole[] = [
   'salesperson', 'sales support', 'sales manager',
   'super admin', 'MACX', 'Marketing Manager', 'Director',
 ]
+
+// Roles that can edit account info
+const EDIT_ACCOUNT_ROLES: UserRole[] = [
+  'sales support', 'sales manager',
+  'super admin', 'MACX', 'Marketing Manager', 'Director',
+]
+
+interface SalesUser {
+  user_id: string
+  name: string
+  role: string
+}
+
+const EMPTY_EDIT_FORM = {
+  company_name: '',
+  domain: '',
+  npwp: '',
+  industry: '',
+  address: '',
+  city: '',
+  province: '',
+  country: '',
+  postal_code: '',
+  phone: '',
+  pic_name: '',
+  pic_email: '',
+  pic_phone: '',
+  owner_user_id: '',
+}
 
 interface Opportunity {
   opportunity_id: string
@@ -121,6 +158,7 @@ interface Account {
   domain: string | null
   phone: string | null
   npwp: string | null
+  postal_code: string | null
   notes: string | null
   account_status: AccountStatus | null
   activity_status: string | null
@@ -202,6 +240,90 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
   const [contactError, setContactError] = useState<string | null>(null)
 
   const canManageContacts = MANAGE_CONTACTS_ROLES.includes(profile.role)
+  const canEditAccount = EDIT_ACCOUNT_ROLES.includes(profile.role)
+
+  // Edit account state
+  const [showEditAccountModal, setShowEditAccountModal] = useState(false)
+  const [editFormData, setEditFormData] = useState(EMPTY_EDIT_FORM)
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [salesUsers, setSalesUsers] = useState<SalesUser[]>([])
+
+  const handleOpenEditAccount = async () => {
+    try {
+      // Fetch fresh account data
+      const response = await fetch(`/api/crm/accounts/${account.account_id}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        alert('Failed to fetch account data')
+        return
+      }
+
+      const fresh = result.data
+      setEditFormData({
+        company_name: fresh.company_name || '',
+        domain: fresh.domain || '',
+        npwp: fresh.npwp || '',
+        industry: fresh.industry || '',
+        address: fresh.address || '',
+        city: fresh.city || '',
+        province: fresh.province || '',
+        country: fresh.country || '',
+        postal_code: fresh.postal_code || '',
+        phone: fresh.phone || '',
+        pic_name: fresh.pic_name || '',
+        pic_email: fresh.pic_email || '',
+        pic_phone: fresh.pic_phone || '',
+        owner_user_id: fresh.owner_user_id || '',
+      })
+      setEditError(null)
+      setShowEditAccountModal(true)
+
+      // Fetch sales users for owner dropdown
+      if (salesUsers.length === 0) {
+        fetch('/api/crm/users/sales')
+          .then(res => res.json())
+          .then(data => {
+            if (data.data) setSalesUsers(data.data)
+          })
+          .catch(err => console.error('Error fetching sales users:', err))
+      }
+    } catch {
+      alert('Failed to load account data')
+    }
+  }
+
+  const handleSubmitEditAccount = async () => {
+    if (!editFormData.company_name.trim()) {
+      setEditError('Company name is required')
+      return
+    }
+
+    setIsEditSubmitting(true)
+    setEditError(null)
+
+    try {
+      const response = await fetch(`/api/crm/accounts/${account.account_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editFormData),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setShowEditAccountModal(false)
+        window.location.reload()
+      } else {
+        setEditError(result.error || 'Failed to update account')
+      }
+    } catch {
+      setEditError('An error occurred')
+    } finally {
+      setIsEditSubmitting(false)
+    }
+  }
 
   const handleOpenAddContact = () => {
     setEditingContact(null)
@@ -365,6 +487,12 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
             </p>
           </div>
         </div>
+        {canEditAccount && (
+          <Button variant="outline" size="sm" onClick={handleOpenEditAccount}>
+            <Pencil className="h-4 w-4 mr-1" />
+            Edit Account
+          </Button>
+        )}
       </div>
 
       {/* Quick Stats */}
@@ -926,6 +1054,201 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
                 </>
               ) : (
                 editingContact ? 'Save Changes' : 'Add Contact'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Account Modal */}
+      <Dialog open={showEditAccountModal} onOpenChange={setShowEditAccountModal}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Edit Account
+            </DialogTitle>
+            <DialogDescription>
+              Update account information.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {editError && (
+              <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
+                {editError}
+              </div>
+            )}
+
+            {/* Company Information */}
+            <div>
+              <h4 className="font-medium mb-3 text-sm text-muted-foreground">Company Information</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label htmlFor="edit_company_name">Company Name *</Label>
+                  <Input
+                    id="edit_company_name"
+                    value={editFormData.company_name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, company_name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_domain">Domain</Label>
+                  <Input
+                    id="edit_domain"
+                    value={editFormData.domain}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, domain: e.target.value }))}
+                    placeholder="example.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_npwp">NPWP</Label>
+                  <Input
+                    id="edit_npwp"
+                    value={editFormData.npwp}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, npwp: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_industry">Industry</Label>
+                  <Input
+                    id="edit_industry"
+                    value={editFormData.industry}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, industry: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_phone">Phone</Label>
+                  <Input
+                    id="edit_phone"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Address Information */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3 text-sm text-muted-foreground">Address</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label htmlFor="edit_address">Address</Label>
+                  <Input
+                    id="edit_address"
+                    value={editFormData.address}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, address: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_city">City</Label>
+                  <Input
+                    id="edit_city"
+                    value={editFormData.city}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_province">Province</Label>
+                  <Input
+                    id="edit_province"
+                    value={editFormData.province}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, province: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_country">Country</Label>
+                  <Input
+                    id="edit_country"
+                    value={editFormData.country}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, country: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_postal_code">Postal Code</Label>
+                  <Input
+                    id="edit_postal_code"
+                    value={editFormData.postal_code}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, postal_code: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* PIC Information */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3 text-sm text-muted-foreground">PIC Information</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit_pic_name">PIC Name</Label>
+                  <Input
+                    id="edit_pic_name"
+                    value={editFormData.pic_name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, pic_name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_pic_email">PIC Email</Label>
+                  <Input
+                    id="edit_pic_email"
+                    type="email"
+                    value={editFormData.pic_email}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, pic_email: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_pic_phone">PIC Phone</Label>
+                  <Input
+                    id="edit_pic_phone"
+                    value={editFormData.pic_phone}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, pic_phone: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Owner Assignment */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3 text-sm text-muted-foreground">Account Owner</h4>
+              <div>
+                <Label htmlFor="edit_owner">Owner (Sales)</Label>
+                <Select
+                  value={editFormData.owner_user_id}
+                  onValueChange={(value) => setEditFormData(prev => ({ ...prev, owner_user_id: value }))}
+                >
+                  <SelectTrigger id="edit_owner">
+                    <SelectValue placeholder="Select owner..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {salesUsers.map((user) => (
+                      <SelectItem key={user.user_id} value={user.user_id}>
+                        {user.name} ({user.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Change owner when a sales person resigns and the account needs to be reassigned.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditAccountModal(false)} disabled={isEditSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitEditAccount} disabled={isEditSubmitting || !editFormData.company_name.trim()}>
+              {isEditSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
+                </>
               )}
             </Button>
           </DialogFooter>

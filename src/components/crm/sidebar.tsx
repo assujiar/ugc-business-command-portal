@@ -37,6 +37,7 @@ import {
   DollarSign,
   PanelLeftClose,
   PanelLeftOpen,
+  Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -44,6 +45,7 @@ import {
   canAccessSalesInbox,
   canAccessPipeline,
   canImportData,
+  isAdmin,
   canAccessSalesPlan,
   canAccessActivities,
   canAccessTicketing,
@@ -88,6 +90,7 @@ export function Sidebar({ profile, isOpen = false, onClose, isCollapsed = false,
   // Role checks
   const isOpsUser = isOps(profile.role)
   const isFinanceUser = isFinance(profile.role)
+  const isAdminUser = isAdmin(profile.role)
   const showCRM = canAccessCRM(profile.role)
   const showTicketing = canAccessTicketing(profile.role)
   const showMarketing = canAccessMarketingPanel(profile.role)
@@ -263,6 +266,13 @@ export function Sidebar({ profile, isOpen = false, onClose, isCollapsed = false,
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Admin: User Management (standalone link, not in a module group) */}
+        {isAdminUser && (
+          <div className="mt-2 pt-2 border-t border-border">
+            {renderNavLink('/user-management', Shield, 'User Management', pathname === '/user-management', collapsed)}
           </div>
         )}
       </nav>
