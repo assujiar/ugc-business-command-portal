@@ -13,7 +13,7 @@ import type { UserRole } from '@/types/database'
 export const dynamic = 'force-dynamic'
 
 // Roles that can edit account data
-const EDIT_ACCOUNT_ROLES: UserRole[] = ['sales support', 'super admin', 'MACX', 'Director']
+const EDIT_ACCOUNT_ROLES: UserRole[] = ['sales support', 'sales manager', 'super admin', 'MACX', 'Marketing Manager', 'Director']
 
 // GET /api/crm/accounts/[id] - Get single account
 export async function GET(

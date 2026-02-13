@@ -112,7 +112,7 @@ interface AccountsClientProps {
 }
 
 // Roles that can edit accounts
-const EDIT_ACCOUNT_ROLES: UserRole[] = ['sales support', 'super admin', 'MACX', 'Director']
+const EDIT_ACCOUNT_ROLES: UserRole[] = ['sales support', 'sales manager', 'super admin', 'MACX', 'Marketing Manager', 'Director']
 
 // Status configurations
 const ACCOUNT_STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
