@@ -394,3 +394,32 @@ SET search_path = public, pg_temp;
 
 GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_rejected(UUID, quotation_rejection_reason_type, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_customer_quotation_mark_rejected(UUID, quotation_rejection_reason_type, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, UUID, TEXT) TO service_role;
+
+-- =====================================================
+-- BACKFILL: 2 existing revise_requested costs without rejection reasons
+-- Source: QUO-202602-0001 (quotation_id = 01555238-98d9-4436-bdae-13d6ef8e4169)
+-- Both costs from same quotation rejection with reason budget_customer_tidak_cukup
+-- =====================================================
+INSERT INTO public.operational_cost_rejection_reasons (
+    operational_cost_id, reason_type, competitor_name, competitor_amount, customer_budget,
+    suggested_amount, currency, notes, created_by
+)
+SELECT
+    trq.id,
+    'budget_customer_tidak_cukup'::operational_cost_rejection_reason_type,
+    NULL,
+    NULL,
+    3500000.00,
+    3500000.00,
+    'IDR',
+    '[backfill-185] Auto from quotation QUO-202602-0001 rejection',
+    '3a673e5b-c28f-45fd-98f5-adf04a1dacc0'::UUID
+FROM public.ticket_rate_quotes trq
+WHERE trq.id IN (
+    '1433f12e-0d4c-4a7e-8414-b5c7e8b4490f'::UUID,
+    'f463b779-bcb1-4641-81ae-d638724b8429'::UUID
+)
+AND NOT EXISTS (
+    SELECT 1 FROM public.operational_cost_rejection_reasons ocrr
+    WHERE ocrr.operational_cost_id = trq.id
+);
