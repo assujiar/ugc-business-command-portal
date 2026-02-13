@@ -11,6 +11,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   ArrowLeft,
   Building2,
@@ -19,13 +29,16 @@ import {
   Phone,
   MapPin,
   Globe,
-  Calendar,
   Ticket,
   FileText,
   Activity,
   Users,
   DollarSign,
   Plus,
+  Pencil,
+  Trash2,
+  Loader2,
+  Smartphone,
 } from 'lucide-react'
 import type { UserRole, AccountStatus, OpportunityStage } from '@/types/database'
 import { format } from 'date-fns'
@@ -37,9 +50,30 @@ interface Contact {
   last_name: string | null
   email: string | null
   phone: string | null
+  mobile: string | null
   job_title: string | null
+  department: string | null
   is_primary: boolean
+  notes: string | null
 }
+
+const EMPTY_CONTACT_FORM = {
+  first_name: '',
+  last_name: '',
+  email: '',
+  phone: '',
+  mobile: '',
+  job_title: '',
+  department: '',
+  is_primary: false,
+  notes: '',
+}
+
+// Roles that can manage contacts
+const MANAGE_CONTACTS_ROLES: UserRole[] = [
+  'salesperson', 'sales support', 'sales manager',
+  'super admin', 'MACX', 'Marketing Manager', 'Director',
+]
 
 interface Opportunity {
   opportunity_id: string
@@ -159,6 +193,122 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('overview')
 
+  // Contacts CRUD state
+  const [contacts, setContacts] = useState<Contact[]>(account.contacts || [])
+  const [showContactModal, setShowContactModal] = useState(false)
+  const [editingContact, setEditingContact] = useState<Contact | null>(null)
+  const [contactForm, setContactForm] = useState(EMPTY_CONTACT_FORM)
+  const [isContactSubmitting, setIsContactSubmitting] = useState(false)
+  const [contactError, setContactError] = useState<string | null>(null)
+
+  const canManageContacts = MANAGE_CONTACTS_ROLES.includes(profile.role)
+
+  const handleOpenAddContact = () => {
+    setEditingContact(null)
+    setContactForm(EMPTY_CONTACT_FORM)
+    setContactError(null)
+    setShowContactModal(true)
+  }
+
+  const handleOpenEditContact = (contact: Contact) => {
+    setEditingContact(contact)
+    setContactForm({
+      first_name: contact.first_name,
+      last_name: contact.last_name || '',
+      email: contact.email || '',
+      phone: contact.phone || '',
+      mobile: contact.mobile || '',
+      job_title: contact.job_title || '',
+      department: contact.department || '',
+      is_primary: contact.is_primary,
+      notes: contact.notes || '',
+    })
+    setContactError(null)
+    setShowContactModal(true)
+  }
+
+  const handleSubmitContact = async () => {
+    if (!contactForm.first_name.trim()) {
+      setContactError('First name is required')
+      return
+    }
+
+    setIsContactSubmitting(true)
+    setContactError(null)
+
+    try {
+      const method = editingContact ? 'PATCH' : 'POST'
+      const payload: Record<string, unknown> = { ...contactForm }
+      if (editingContact) {
+        payload.contact_id = editingContact.contact_id
+      }
+
+      const response = await fetch(`/api/crm/accounts/${account.account_id}/contacts`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        setContactError(result.error || 'Failed to save contact')
+        return
+      }
+
+      // Update local state
+      if (editingContact) {
+        if (contactForm.is_primary && !editingContact.is_primary) {
+          // If new primary, unset others locally
+          setContacts((prev: Contact[]) => prev.map((c: Contact) =>
+            c.contact_id === editingContact.contact_id
+              ? result.data
+              : { ...c, is_primary: false }
+          ))
+        } else {
+          setContacts((prev: Contact[]) => prev.map((c: Contact) =>
+            c.contact_id === editingContact.contact_id ? result.data : c
+          ))
+        }
+      } else {
+        if (contactForm.is_primary) {
+          setContacts((prev: Contact[]) => [...prev.map((c: Contact) => ({ ...c, is_primary: false })), result.data])
+        } else {
+          setContacts((prev: Contact[]) => [...prev, result.data])
+        }
+      }
+
+      setShowContactModal(false)
+    } catch {
+      setContactError('An error occurred')
+    } finally {
+      setIsContactSubmitting(false)
+    }
+  }
+
+  const handleDeleteContact = async (contact: Contact) => {
+    if (!confirm(`Delete contact "${contact.first_name} ${contact.last_name || ''}"?`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `/api/crm/accounts/${account.account_id}/contacts?contact_id=${contact.contact_id}`,
+        { method: 'DELETE' }
+      )
+
+      if (!response.ok) {
+        const result = await response.json()
+        alert(result.error || 'Failed to delete contact')
+        return
+      }
+
+      setContacts((prev: Contact[]) => prev.filter((c: Contact) => c.contact_id !== contact.contact_id))
+    } catch {
+      alert('An error occurred')
+    }
+  }
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
     try {
@@ -177,7 +327,7 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
     }).format(value)
   }
 
-  const primaryContact = account.contacts?.find(c => c.is_primary) || account.contacts?.[0]
+  const primaryContact = contacts.find((c: Contact) => c.is_primary) || contacts[0]
 
   // Calculate both estimated and deal values
   const totalEstimatedValue = account.opportunities?.reduce((sum, opp) =>
@@ -225,7 +375,7 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
               <Users className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Contacts</span>
             </div>
-            <p className="text-2xl font-bold mt-1">{account.contacts?.length || 0}</p>
+            <p className="text-2xl font-bold mt-1">{contacts.length}</p>
           </CardContent>
         </Card>
         <Card>
@@ -400,14 +550,22 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
         {/* Contacts Tab */}
         <TabsContent value="contacts">
           <Card>
-            <CardHeader>
-              <CardTitle>Contacts ({account.contacts?.length || 0})</CardTitle>
-              <CardDescription>People associated with this account</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Contacts ({contacts.length})</CardTitle>
+                <CardDescription>People associated with this account</CardDescription>
+              </div>
+              {canManageContacts && (
+                <Button size="sm" onClick={handleOpenAddContact}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Contact
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
-              {account.contacts && account.contacts.length > 0 ? (
+              {contacts.length > 0 ? (
                 <div className="space-y-4">
-                  {account.contacts.map((contact) => (
+                  {contacts.map((contact) => (
                     <div
                       key={contact.contact_id}
                       className="flex items-start justify-between p-3 border rounded-lg"
@@ -425,8 +583,12 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
                               <Badge variant="secondary" className="text-xs">Primary</Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground">{contact.job_title || 'No title'}</p>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                          {(contact.job_title || contact.department) && (
+                            <p className="text-sm text-muted-foreground">
+                              {[contact.job_title, contact.department].filter(Boolean).join(' - ')}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-4 mt-1 text-sm text-muted-foreground">
                             {contact.email && (
                               <a href={`mailto:${contact.email}`} className="flex items-center gap-1 hover:text-foreground">
                                 <Mail className="h-3 w-3" />
@@ -439,16 +601,50 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
                                 {contact.phone}
                               </a>
                             )}
+                            {contact.mobile && (
+                              <a href={`tel:${contact.mobile}`} className="flex items-center gap-1 hover:text-foreground">
+                                <Smartphone className="h-3 w-3" />
+                                {contact.mobile}
+                              </a>
+                            )}
                           </div>
                         </div>
                       </div>
+                      {canManageContacts && (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleOpenEditContact(contact)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteContact(contact)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No contacts found for this account
-                </p>
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    No contacts found for this account
+                  </p>
+                  {canManageContacts && (
+                    <Button variant="outline" size="sm" onClick={handleOpenAddContact}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add First Contact
+                    </Button>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -609,6 +805,132 @@ export function AccountDetail({ account, activities, tickets, profile }: Account
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Contact Add/Edit Modal */}
+      <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {editingContact ? <Pencil className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+              {editingContact ? 'Edit Contact' : 'Add Contact'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingContact ? 'Update contact information.' : 'Add a new contact to this account.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {contactError && (
+              <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
+                {contactError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="contact_first_name">First Name *</Label>
+                <Input
+                  id="contact_first_name"
+                  value={contactForm.first_name}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, first_name: e.target.value }))}
+                  placeholder="John"
+                />
+              </div>
+              <div>
+                <Label htmlFor="contact_last_name">Last Name</Label>
+                <Input
+                  id="contact_last_name"
+                  value={contactForm.last_name}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, last_name: e.target.value }))}
+                  placeholder="Doe"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="contact_job_title">Job Title</Label>
+                <Input
+                  id="contact_job_title"
+                  value={contactForm.job_title}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, job_title: e.target.value }))}
+                  placeholder="Manager"
+                />
+              </div>
+              <div>
+                <Label htmlFor="contact_department">Department</Label>
+                <Input
+                  id="contact_department"
+                  value={contactForm.department}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, department: e.target.value }))}
+                  placeholder="Logistics"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="contact_email">Email</Label>
+              <Input
+                id="contact_email"
+                type="email"
+                value={contactForm.email}
+                onChange={(e) => setContactForm(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="john@example.com"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="contact_phone">Phone</Label>
+                <Input
+                  id="contact_phone"
+                  value={contactForm.phone}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="021-1234567"
+                />
+              </div>
+              <div>
+                <Label htmlFor="contact_mobile">Mobile</Label>
+                <Input
+                  id="contact_mobile"
+                  value={contactForm.mobile}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, mobile: e.target.value }))}
+                  placeholder="0812-3456-7890"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="contact_is_primary"
+                checked={contactForm.is_primary}
+                onChange={(e) => setContactForm(prev => ({ ...prev, is_primary: e.target.checked }))}
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="contact_is_primary" className="font-normal">
+                Set as primary contact (will sync to account PIC)
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowContactModal(false)} disabled={isContactSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitContact} disabled={isContactSubmitting || !contactForm.first_name.trim()}>
+              {isContactSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                editingContact ? 'Save Changes' : 'Add Contact'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

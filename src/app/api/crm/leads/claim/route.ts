@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       // Fetch lead data separately - include shipment data for prefilling opportunity
       const { data: leadData, error: leadError } = await (adminClient as any)
         .from('leads')
-        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status, created_by, origin, destination, route, service_code, volume_estimate')
+        .select('lead_id, company_name, contact_name, contact_email, contact_phone, contact_mobile, job_title, industry, potential_revenue, claim_status, created_by, origin, destination, route, service_code, volume_estimate')
         .eq('lead_id', poolEntry.lead_id)
         .single()
 
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       // Fetch lead directly by lead_id - include shipment data for prefilling opportunity
       const { data: leadData, error: leadError } = await (adminClient as any)
         .from('leads')
-        .select('lead_id, company_name, contact_name, contact_email, contact_phone, industry, potential_revenue, claim_status, created_by, origin, destination, route, service_code, volume_estimate')
+        .select('lead_id, company_name, contact_name, contact_email, contact_phone, contact_mobile, job_title, industry, potential_revenue, claim_status, created_by, origin, destination, route, service_code, volume_estimate')
         .eq('lead_id', lead_id)
         .single()
 
@@ -172,6 +172,26 @@ export async function POST(request: NextRequest) {
         }
       } else {
         accountId = newAccount?.account_id
+
+        // Enrich the auto-created primary contact with mobile/job_title from lead
+        // The trg_sync_account_pic_to_contact trigger already created the contact,
+        // but it only has name/email/phone. We add mobile and job_title here.
+        if (accountId && (lead.contact_mobile || lead.job_title)) {
+          const { error: contactEnrichError } = await (adminClient as any)
+            .from('contacts')
+            .update({
+              mobile: lead.contact_mobile || null,
+              job_title: lead.job_title || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('account_id', accountId)
+            .eq('is_primary', true)
+
+          if (contactEnrichError) {
+            console.error('Error enriching contact with mobile/job_title:', contactEnrichError)
+            // Non-critical, continue
+          }
+        }
       }
     }
 
