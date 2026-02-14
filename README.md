@@ -482,7 +482,7 @@ AGING-BASED (time-driven, computed on API read + cron):
 
 #### Implementation Details
 
-**Opportunity-Based Transitions** (handled by `sync_opportunity_to_account` + triggers):
+**Opportunity-Based Transitions** (handled by RPCs calling `sync_opportunity_to_account` + `trg_reset_failed_on_new_opportunity` trigger):
 - **WON**: `calon/failed/passive/lost` → `new_account` (sets transaction dates)
 - **WON** (new/active): Only updates `last_transaction_date` (no status change)
 - **LOST**: `calon` → `failed` **ONLY IF**: (1) no Closed Won opps exist, (2) no open opps remain

@@ -897,14 +897,16 @@ BEGIN
     THEN 'PASS' ELSE 'FAIL' END,
     'Profile updated_at trigger (BEFORE UPDATE: auto-refresh timestamp)';
 
-  -- R16.12: Account sync trigger on opportunities (sync account_status on opp changes)
+  -- R16.12: Quotation sync trigger on opportunity close (won/lost)
+  -- Note: Account sync on stage change is handled by RPCs (sync_opportunity_to_account),
+  -- NOT by trigger. trg_sync_account_on_opportunity_create was DROPPED in migration 148.
   RETURN QUERY
   SELECT 'R16.12',
     CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
       WHERE event_object_table='opportunities'
-        AND (trigger_name LIKE '%sync_account%' OR trigger_name LIKE '%account%'))
+        AND trigger_name = 'trg_sync_quotation_on_opportunity_close')
     THEN 'PASS' ELSE 'FAIL' END,
-    'Account sync trigger on opportunities (auto-sync account_status on opp stage change)';
+    'trg_sync_quotation_on_opportunity_close on opportunities (syncs quotation on won/lost)';
 
   -- R16.13: Complete trigger inventory count
   RETURN QUERY
