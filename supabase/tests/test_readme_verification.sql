@@ -66,13 +66,13 @@ BEGIN
     THEN 'PASS' ELSE 'FAIL' END,
     'lead_handover_pool table (auto-created on qualify)';
 
-  -- R2.3: trg_lead_auto_handover trigger exists
+  -- R2.3: Lead handover via RPC (README §11.1 - BFF pattern, not trigger)
   RETURN QUERY
   SELECT 'R2.3',
-    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
-      WHERE trigger_name='trg_lead_auto_handover')
+    CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname='rpc_lead_handover_to_sales_pool'
+      AND pronamespace='public'::regnamespace)
     THEN 'PASS' ELSE 'FAIL' END,
-    'trg_lead_auto_handover trigger (README §11.1)';
+    'rpc_lead_handover_to_sales_pool() (README §11.1: handover via RPC + API route)';
 
   -- R2.4: Lead key columns from README interface
   RETURN QUERY
@@ -184,7 +184,7 @@ BEGIN
     COALESCE('Missing: ' || string_agg(CASE WHEN e2.enumlabel IS NULL THEN r.st END, ', '), 'All present')
   FROM (VALUES ('calon_account'),('new_account'),('failed_account'),
     ('active_account'),('passive_account'),('lost_account')) AS r(st)
-  LEFT JOIN (SELECT e3.enumlabel FROM pg_enum e3 JOIN pg_type t3 ON e3.enumtypid = t3.oid WHERE t3.typname = 'account_status_type') e2
+  LEFT JOIN (SELECT e3.enumlabel FROM pg_enum e3 JOIN pg_type t3 ON e3.enumtypid = t3.oid WHERE t3.typname = 'account_status') e2
     ON e2.enumlabel = r.st;
 
   -- R4.2: sync_opportunity_to_account function exists (README §6)
@@ -264,12 +264,13 @@ BEGIN
     ON e2.enumlabel = r.st;
 
   -- R5.3: shipment_details table exists with key columns (README §8 Multi-Shipment)
+  -- Note: shipment_details links via lead_id (FK), NOT ticket_id. Tickets link via opportunity/quotation.
   RETURN QUERY
   SELECT 'R5.3',
     CASE WHEN COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) = 8 THEN 'PASS' ELSE 'FAIL' END,
     'shipment_details columns: ' || COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) || '/8. ' ||
     COALESCE('Missing: ' || string_agg(CASE WHEN c.column_name IS NULL THEN e.col END, ', '), 'All present')
-  FROM (VALUES ('shipment_detail_id'),('ticket_id'),('shipment_order'),('shipment_label'),
+  FROM (VALUES ('shipment_detail_id'),('lead_id'),('shipment_order'),('shipment_label'),
     ('service_type_code'),('origin_city'),('destination_city'),('cargo_description')) AS e(col)
   LEFT JOIN information_schema.columns c
     ON c.table_schema='public' AND c.table_name='shipment_details' AND c.column_name = e.col;
@@ -294,12 +295,13 @@ BEGIN
     'tickets.department column (README: DOM/EXI/DTD routing)';
 
   -- R5.6: SLA tracking tables (README §8)
+  -- Note: SLA config table is ticketing_sla_config (Migration 035), NOT ticket_sla_configs
   RETURN QUERY
   SELECT 'R5.6',
     CASE WHEN COUNT(*) FILTER (WHERE t.table_name IS NOT NULL) = 4 THEN 'PASS' ELSE 'FAIL' END,
     'SLA tables: ' || COUNT(*) FILTER (WHERE t.table_name IS NOT NULL) || '/4. ' ||
     COALESCE('Missing: ' || string_agg(CASE WHEN t.table_name IS NULL THEN e.tbl END, ', '), 'All present')
-  FROM (VALUES ('ticket_sla_tracking'),('ticket_sla_configs'),
+  FROM (VALUES ('ticket_sla_tracking'),('ticketing_sla_config'),
     ('sla_business_hours'),('sla_holidays')) AS e(tbl)
   LEFT JOIN information_schema.tables t
     ON t.table_schema='public' AND t.table_name = e.tbl;
@@ -321,14 +323,14 @@ BEGIN
   LEFT JOIN information_schema.columns c
     ON c.table_schema='public' AND c.table_name='customer_quotations' AND c.column_name = e.col;
 
-  -- R6.2: quote_status enum (5 values from README)
+  -- R6.2: quote_status enum (4 stored values; expired is computed via valid_until < NOW())
   RETURN QUERY
   SELECT 'R6.2',
-    CASE WHEN COUNT(*) FILTER (WHERE e2.enumlabel IS NOT NULL) = 5 THEN 'PASS' ELSE 'FAIL' END,
+    CASE WHEN COUNT(*) FILTER (WHERE e2.enumlabel IS NOT NULL) = 4 THEN 'PASS' ELSE 'FAIL' END,
     'quote_status enum: ' ||
     COALESCE(string_agg(e2.enumlabel, ', ' ORDER BY e2.enumlabel), 'NONE') ||
-    ' (need: draft,sent,accepted,rejected,expired)'
-  FROM (VALUES ('draft'),('sent'),('accepted'),('rejected'),('expired')) AS r(qs)
+    ' (need: draft,sent,accepted,rejected; expired=computed via valid_until)'
+  FROM (VALUES ('draft'),('sent'),('accepted'),('rejected')) AS r(qs)
   LEFT JOIN (SELECT e3.enumlabel FROM pg_enum e3 JOIN pg_type t3 ON e3.enumtypid = t3.oid WHERE t3.typname = 'quote_status') e2
     ON e2.enumlabel = r.qs;
 
@@ -338,7 +340,7 @@ BEGIN
     CASE WHEN COUNT(*) FILTER (WHERE t.table_name IS NOT NULL) = 4 THEN 'PASS' ELSE 'FAIL' END,
     'Quotation tables: ' || COUNT(*) FILTER (WHERE t.table_name IS NOT NULL) || '/4. ' ||
     COALESCE('Missing: ' || string_agg(CASE WHEN t.table_name IS NULL THEN e.tbl END, ', '), 'All present')
-  FROM (VALUES ('customer_quotation_items'),('customer_quotation_rejection_reasons'),
+  FROM (VALUES ('customer_quotation_items'),('quotation_rejection_reasons'),
     ('quotation_term_templates'),('customer_quotation_sequences')) AS e(tbl)
   LEFT JOIN information_schema.tables t
     ON t.table_schema='public' AND t.table_name = e.tbl;
@@ -422,13 +424,13 @@ BEGIN
   FROM (VALUES ('rpc_ticket_mark_won'),('rpc_ticket_mark_lost')) AS e(fn)
   LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
 
-  -- R7.4: Lead management RPCs exist
+  -- R7.4: Lead management RPCs exist (claim is via API route, handover is RPC)
   RETURN QUERY
   SELECT 'R7.4',
     CASE WHEN COUNT(*) FILTER (WHERE p.proname IS NOT NULL) = 3 THEN 'PASS' ELSE 'FAIL' END,
     'Lead RPCs: ' || COUNT(*) FILTER (WHERE p.proname IS NOT NULL) || '/3. ' ||
     COALESCE('Missing: ' || string_agg(CASE WHEN p.proname IS NULL THEN e.fn END, ', '), 'All present')
-  FROM (VALUES ('rpc_lead_triage'),('rpc_lead_claim'),('rpc_lead_convert')) AS e(fn)
+  FROM (VALUES ('rpc_lead_triage'),('rpc_lead_handover_to_sales_pool'),('rpc_lead_convert')) AS e(fn)
   LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
 
   -- R7.5: Quotation creation RPCs from README §9 creation paths
@@ -709,9 +711,363 @@ BEGIN
     'Quotation tables: ' || COUNT(*) FILTER (WHERE t.table_name IS NOT NULL) || '/4. ' ||
     COALESCE('Missing: ' || string_agg(CASE WHEN t.table_name IS NULL THEN e.tbl END, ', '), 'All present')
   FROM (VALUES ('customer_quotations'),('customer_quotation_items'),
-    ('customer_quotation_rejection_reasons'),('quotation_term_templates')) AS e(tbl)
+    ('quotation_rejection_reasons'),('quotation_term_templates')) AS e(tbl)
   LEFT JOIN information_schema.tables t
     ON t.table_schema='public' AND t.table_name = e.tbl;
+
+  -- ============================================================
+  -- SECTION R15: RPC FLOW VERIFICATION (README §10 - Workflows)
+  -- Verifies all quotation lifecycle RPCs are SECURITY DEFINER
+  -- and have correct return types for atomic operations
+  -- ============================================================
+
+  -- R15.1: All 3 quotation RPCs are SECURITY DEFINER (bypass RLS for INSERT/UPDATE)
+  RETURN QUERY
+  SELECT 'R15.1',
+    CASE WHEN COUNT(*) FILTER (WHERE p.prosecdef) = 3 THEN 'PASS' ELSE 'FAIL' END,
+    'Quotation RPCs SECURITY DEFINER: ' ||
+    COUNT(*) FILTER (WHERE p.prosecdef) || '/3. ' ||
+    COALESCE(string_agg(e.fn || '=' || COALESCE(p.prosecdef::TEXT, 'NOT_FOUND'), ', '), 'NONE')
+  FROM (VALUES ('rpc_customer_quotation_mark_sent'),('rpc_customer_quotation_mark_rejected'),
+    ('rpc_customer_quotation_mark_accepted')) AS e(fn)
+  LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
+
+  -- R15.2: mark_won and mark_lost RPCs are SECURITY DEFINER
+  RETURN QUERY
+  SELECT 'R15.2',
+    CASE WHEN COUNT(*) FILTER (WHERE p.prosecdef) = 2 THEN 'PASS' ELSE 'FAIL' END,
+    'Ticket RPCs SECURITY DEFINER: ' ||
+    COUNT(*) FILTER (WHERE p.prosecdef) || '/2. ' ||
+    COALESCE(string_agg(e.fn || '=' || COALESCE(p.prosecdef::TEXT, 'NOT_FOUND'), ', '), 'NONE')
+  FROM (VALUES ('rpc_ticket_mark_won'),('rpc_ticket_mark_lost')) AS e(fn)
+  LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
+
+  -- R15.3: sync_opportunity_to_account is SECURITY DEFINER (README §6 Account Lifecycle)
+  RETURN QUERY
+  SELECT 'R15.3',
+    CASE WHEN EXISTS (SELECT 1 FROM pg_proc
+      WHERE proname='sync_opportunity_to_account' AND prosecdef = TRUE
+      AND pronamespace='public'::regnamespace)
+    THEN 'PASS' ELSE 'FAIL' END,
+    'sync_opportunity_to_account() is SECURITY DEFINER (bypasses RLS for account updates)';
+
+  -- R15.4: fn_resolve_or_create_opportunity is SECURITY DEFINER (README §10.3)
+  RETURN QUERY
+  SELECT 'R15.4',
+    CASE WHEN EXISTS (SELECT 1 FROM pg_proc
+      WHERE proname='fn_resolve_or_create_opportunity' AND prosecdef = TRUE
+      AND pronamespace='public'::regnamespace)
+    THEN 'PASS' ELSE 'FAIL' END,
+    'fn_resolve_or_create_opportunity() is SECURITY DEFINER (6-step resolution)';
+
+  -- R15.5: fn_stage_config exists and returns composite type with probability + next_step
+  RETURN QUERY
+  SELECT 'R15.5',
+    CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname='fn_stage_config'
+      AND pronamespace='public'::regnamespace)
+    THEN 'PASS' ELSE 'FAIL' END,
+    'fn_stage_config() exists (README: returns probability, next_step, next_step_due_date)';
+
+  -- R15.6: Lead management RPCs are SECURITY DEFINER
+  RETURN QUERY
+  SELECT 'R15.6',
+    CASE WHEN COUNT(*) FILTER (WHERE p.prosecdef) = 3 THEN 'PASS' ELSE 'FAIL' END,
+    'Lead RPCs SECURITY DEFINER: ' ||
+    COUNT(*) FILTER (WHERE p.prosecdef) || '/3. ' ||
+    COALESCE(string_agg(e.fn || '=' || COALESCE(p.prosecdef::TEXT, 'NOT_FOUND'), ', '), 'NONE')
+  FROM (VALUES ('rpc_lead_triage'),('rpc_lead_handover_to_sales_pool'),('rpc_lead_convert')) AS e(fn)
+  LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
+
+  -- R15.7: quotation_rejection_reason_type enum exists with values (README §10.3 mark_rejected)
+  RETURN QUERY
+  SELECT 'R15.7',
+    CASE WHEN COUNT(*) >= 1 THEN 'PASS' ELSE 'FAIL' END,
+    'quotation_rejection_reason_type enum: ' || COUNT(*) || ' values. ' ||
+    COALESCE(string_agg(e.enumlabel, ', ' ORDER BY e.enumsortorder), 'NOT FOUND')
+  FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'quotation_rejection_reason_type';
+
+  -- R15.8: valid_until column exists for computed expiry (README §9)
+  RETURN QUERY
+  SELECT 'R15.8',
+    CASE WHEN COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) = 2 THEN 'PASS' ELSE 'FAIL' END,
+    'Computed expiry columns: ' || COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) || '/2. ' ||
+    COALESCE('Missing: ' || string_agg(CASE WHEN c.column_name IS NULL THEN e.tbl || '.' || e.col END, ', '), 'All present')
+  FROM (VALUES ('customer_quotations', 'valid_until'),('ticket_rate_quotes', 'valid_until')) AS e(tbl, col)
+  LEFT JOIN information_schema.columns c
+    ON c.table_schema='public' AND c.table_name = e.tbl AND c.column_name = e.col;
+
+  -- ============================================================
+  -- SECTION R16: AUTO-UPDATE TRIGGER INVENTORY (README §11)
+  -- Comprehensive check of all documented triggers
+  -- ============================================================
+
+  -- R16.1: trg_lead_id (BEFORE INSERT on leads — auto-generate lead_id + dedupe_key)
+  RETURN QUERY
+  SELECT 'R16.1',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE event_object_table='leads' AND trigger_name = 'trg_lead_id')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'trg_lead_id on leads (BEFORE INSERT: auto-generate lead_id + dedupe_key)';
+
+  -- R16.2: Mirror trigger on ticket_events (auto-comments + ticket_responses)
+  RETURN QUERY
+  SELECT 'R16.2',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE event_object_table='ticket_events' AND trigger_name LIKE '%mirror%')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'Mirror trigger on ticket_events (creates auto-comments + ticket_responses, Migration 144)';
+
+  -- R16.3: trg_log_stage_change on opportunities (AFTER UPDATE — stage history)
+  RETURN QUERY
+  SELECT 'R16.3',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE event_object_table='opportunities' AND trigger_name LIKE '%log_stage%'
+        AND event_manipulation='UPDATE')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'trg_log_stage_change AFTER UPDATE on opportunities (README §11.2)';
+
+  -- R16.4: trg_autofill_stage_history (BEFORE INSERT — 4-column auto-fill)
+  RETURN QUERY
+  SELECT 'R16.4',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE event_object_table='opportunity_stage_history'
+        AND trigger_name LIKE '%autofill%'
+        AND action_timing='BEFORE')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'trg_autofill_stage_history BEFORE INSERT on opportunity_stage_history (Migration 149)';
+
+  -- R16.5: Cost supersede trigger (is_current management)
+  RETURN QUERY
+  SELECT 'R16.5',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE trigger_name LIKE '%cost_supersede%' OR trigger_name LIKE '%supersede%')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'trg_cost_supersede_per_shipment (README §11.4: sets is_current=FALSE for old costs)';
+
+  -- R16.6: Link quotation to operational cost trigger
+  RETURN QUERY
+  SELECT 'R16.6',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE trigger_name LIKE '%link_quotation%'
+        AND event_object_table='customer_quotations')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'link_quotation_to_operational_cost on customer_quotations (README §11 Multi-Shipment)';
+
+  -- R16.7: PIC → Contact sync trigger (accounts INSERT/UPDATE)
+  RETURN QUERY
+  SELECT 'R16.7',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE trigger_name = 'trg_sync_account_pic_to_contact'
+        AND event_object_table='accounts')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'trg_sync_account_pic_to_contact on accounts (auto-create/update primary contact)';
+
+  -- R16.8: Reset failed account on new opportunity trigger
+  RETURN QUERY
+  SELECT 'R16.8',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE trigger_name LIKE '%reset_failed%' OR trigger_name LIKE '%failed_on_new%')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'trg_reset_failed_on_new_opportunity (README §6: failed_account → calon_account)';
+
+  -- R16.9: SLA tracking triggers exist (on ticket_rate_quotes and/or tickets)
+  RETURN QUERY
+  SELECT 'R16.9',
+    CASE WHEN (SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_name LIKE '%sla%') >= 1
+    THEN 'PASS' ELSE 'FAIL' END,
+    'SLA triggers: ' || (SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_name LIKE '%sla%') ||
+    ' found. Names: ' || COALESCE(
+      (SELECT string_agg(DISTINCT trigger_name, ', ' ORDER BY trigger_name)
+       FROM information_schema.triggers WHERE trigger_name LIKE '%sla%'), 'NONE');
+
+  -- R16.10: trg_quotation_status_sync MUST NOT exist (DROPPED in Migration 180)
+  -- This trigger was removed because RPCs are sole controller of quotation lifecycle
+  RETURN QUERY
+  SELECT 'R16.10',
+    CASE WHEN NOT EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE trigger_name = 'trg_quotation_status_sync')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'trg_quotation_status_sync DROPPED (Migration 180: RPCs are sole controller)';
+
+  -- R16.11: Profile updated_at auto-refresh trigger
+  RETURN QUERY
+  SELECT 'R16.11',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE event_object_table='profiles' AND action_timing='BEFORE' AND event_manipulation='UPDATE')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'Profile updated_at trigger (BEFORE UPDATE: auto-refresh timestamp)';
+
+  -- R16.12: Account sync trigger on opportunities (sync account_status on opp changes)
+  RETURN QUERY
+  SELECT 'R16.12',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.triggers
+      WHERE event_object_table='opportunities'
+        AND (trigger_name LIKE '%sync_account%' OR trigger_name LIKE '%account%'))
+    THEN 'PASS' ELSE 'FAIL' END,
+    'Account sync trigger on opportunities (auto-sync account_status on opp stage change)';
+
+  -- R16.13: Complete trigger inventory count
+  RETURN QUERY
+  SELECT 'R16.13', 'INFO',
+    'Total triggers in public schema: ' ||
+    (SELECT COUNT(DISTINCT trigger_name) FROM information_schema.triggers
+     WHERE trigger_schema = 'public') ||
+    '. Tables with triggers: ' ||
+    (SELECT COUNT(DISTINCT event_object_table) FROM information_schema.triggers
+     WHERE trigger_schema = 'public');
+
+  -- ============================================================
+  -- SECTION R17: RPC COMPLETE INVENTORY (README §10, §11, §12)
+  -- All RPC functions that power the application
+  -- ============================================================
+
+  -- R17.1: Quotation lifecycle RPCs (mark_sent, mark_rejected, mark_accepted)
+  RETURN QUERY
+  SELECT 'R17.1',
+    CASE WHEN COUNT(*) FILTER (WHERE p.proname IS NOT NULL) = 3 THEN 'PASS' ELSE 'FAIL' END,
+    'Quotation lifecycle RPCs: ' || COUNT(*) FILTER (WHERE p.proname IS NOT NULL) || '/3. ' ||
+    COALESCE(string_agg(CASE WHEN p.proname IS NOT NULL THEN e.fn ELSE 'MISSING:' || e.fn END, ', '), 'NONE')
+  FROM (VALUES ('rpc_customer_quotation_mark_sent'),('rpc_customer_quotation_mark_rejected'),
+    ('rpc_customer_quotation_mark_accepted')) AS e(fn)
+  LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
+
+  -- R17.2: Ticket lifecycle RPCs (mark_won, mark_lost)
+  RETURN QUERY
+  SELECT 'R17.2',
+    CASE WHEN COUNT(*) FILTER (WHERE p.proname IS NOT NULL) = 2 THEN 'PASS' ELSE 'FAIL' END,
+    'Ticket lifecycle RPCs: ' || COUNT(*) FILTER (WHERE p.proname IS NOT NULL) || '/2. ' ||
+    COALESCE(string_agg(CASE WHEN p.proname IS NOT NULL THEN e.fn ELSE 'MISSING:' || e.fn END, ', '), 'NONE')
+  FROM (VALUES ('rpc_ticket_mark_won'),('rpc_ticket_mark_lost')) AS e(fn)
+  LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
+
+  -- R17.3: Lead management RPCs (triage, handover, convert)
+  RETURN QUERY
+  SELECT 'R17.3',
+    CASE WHEN COUNT(*) FILTER (WHERE p.proname IS NOT NULL) = 3 THEN 'PASS' ELSE 'FAIL' END,
+    'Lead management RPCs: ' || COUNT(*) FILTER (WHERE p.proname IS NOT NULL) || '/3. ' ||
+    COALESCE(string_agg(CASE WHEN p.proname IS NOT NULL THEN e.fn ELSE 'MISSING:' || e.fn END, ', '), 'NONE')
+  FROM (VALUES ('rpc_lead_triage'),('rpc_lead_handover_to_sales_pool'),('rpc_lead_convert')) AS e(fn)
+  LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
+
+  -- R17.4: Account lifecycle functions (sync, aging compute, bulk update)
+  RETURN QUERY
+  SELECT 'R17.4',
+    CASE WHEN COUNT(*) FILTER (WHERE p.proname IS NOT NULL) = 3 THEN 'PASS' ELSE 'FAIL' END,
+    'Account lifecycle functions: ' || COUNT(*) FILTER (WHERE p.proname IS NOT NULL) || '/3. ' ||
+    COALESCE(string_agg(CASE WHEN p.proname IS NOT NULL THEN e.fn ELSE 'MISSING:' || e.fn END, ', '), 'NONE')
+  FROM (VALUES ('sync_opportunity_to_account'),('fn_compute_effective_account_status'),
+    ('fn_bulk_update_account_aging')) AS e(fn)
+  LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
+
+  -- R17.5: Opportunity resolution functions
+  RETURN QUERY
+  SELECT 'R17.5',
+    CASE WHEN COUNT(*) FILTER (WHERE p.proname IS NOT NULL) = 2 THEN 'PASS' ELSE 'FAIL' END,
+    'Opportunity resolution functions: ' || COUNT(*) FILTER (WHERE p.proname IS NOT NULL) || '/2. ' ||
+    COALESCE(string_agg(CASE WHEN p.proname IS NOT NULL THEN e.fn ELSE 'MISSING:' || e.fn END, ', '), 'NONE')
+  FROM (VALUES ('fn_resolve_or_create_opportunity'),('fn_stage_config')) AS e(fn)
+  LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
+
+  -- R17.6: Operational cost helper functions
+  RETURN QUERY
+  SELECT 'R17.6',
+    CASE WHEN EXISTS (SELECT 1 FROM pg_proc
+      WHERE proname='fn_resolve_latest_operational_cost'
+      AND pronamespace='public'::regnamespace)
+    THEN 'PASS' ELSE 'FAIL' END,
+    'fn_resolve_latest_operational_cost() (README §9: mandatory for RFQ quotation creation)';
+
+  -- R17.7: RLS helper functions inventory
+  RETURN QUERY
+  SELECT 'R17.7',
+    CASE WHEN COUNT(*) FILTER (WHERE p.proname IS NOT NULL) = 4 THEN 'PASS' ELSE 'FAIL' END,
+    'RLS helper functions: ' || COUNT(*) FILTER (WHERE p.proname IS NOT NULL) || '/4. ' ||
+    COALESCE(string_agg(CASE WHEN p.proname IS NOT NULL THEN e.fn ELSE 'MISSING:' || e.fn END, ', '), 'NONE')
+  FROM (VALUES ('is_admin'),('is_sales'),('get_user_role'),('is_quotation_creator_for_ticket')) AS e(fn)
+  LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
+
+  -- R17.8: Ticketing overview RPC (README §8 Dashboard)
+  RETURN QUERY
+  SELECT 'R17.8',
+    CASE WHEN EXISTS (SELECT 1 FROM pg_proc
+      WHERE proname LIKE 'rpc_ticketing_overview%'
+      AND pronamespace='public'::regnamespace)
+    THEN 'PASS' ELSE 'FAIL' END,
+    'rpc_ticketing_overview function exists (README §8: ticketing dashboard data)';
+
+  -- ============================================================
+  -- SECTION R18: QUOTATION STATUS SYNC FLOW (README §4, §10)
+  -- Verify all tables involved in status sync have required columns
+  -- ============================================================
+
+  -- R18.1: customer_quotations → opportunity sync columns
+  RETURN QUERY
+  SELECT 'R18.1',
+    CASE WHEN COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) = 4 THEN 'PASS' ELSE 'FAIL' END,
+    'Quotation→Opportunity sync columns: ' ||
+    COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) || '/4. ' ||
+    COALESCE('Missing: ' || string_agg(CASE WHEN c.column_name IS NULL THEN e.col END, ', '), 'All present')
+  FROM (VALUES ('opportunity_id'),('ticket_id'),('status'),('lead_id')) AS e(col)
+  LEFT JOIN information_schema.columns c
+    ON c.table_schema='public' AND c.table_name='customer_quotations' AND c.column_name = e.col;
+
+  -- R18.2: opportunities has all columns updated by quotation RPCs
+  RETURN QUERY
+  SELECT 'R18.2',
+    CASE WHEN COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) = 6 THEN 'PASS' ELSE 'FAIL' END,
+    'Opportunity RPC-updated columns: ' ||
+    COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) || '/6. ' ||
+    COALESCE('Missing: ' || string_agg(CASE WHEN c.column_name IS NULL THEN e.col END, ', '), 'All present')
+  FROM (VALUES ('stage'),('probability'),('next_step'),('next_step_due_date'),
+    ('estimated_value'),('closed_at')) AS e(col)
+  LEFT JOIN information_schema.columns c
+    ON c.table_schema='public' AND c.table_name='opportunities' AND c.column_name = e.col;
+
+  -- R18.3: tickets has all columns updated by quotation RPCs
+  RETURN QUERY
+  SELECT 'R18.3',
+    CASE WHEN COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) = 3 THEN 'PASS' ELSE 'FAIL' END,
+    'Ticket RPC-updated columns: ' ||
+    COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) || '/3. ' ||
+    COALESCE('Missing: ' || string_agg(CASE WHEN c.column_name IS NULL THEN e.col END, ', '), 'All present')
+  FROM (VALUES ('status'),('close_outcome'),('pending_response_from')) AS e(col)
+  LEFT JOIN information_schema.columns c
+    ON c.table_schema='public' AND c.table_name='tickets' AND c.column_name = e.col;
+
+  -- R18.4: ticket_rate_quotes has customer_quotation_id for back-reference (link trigger)
+  RETURN QUERY
+  SELECT 'R18.4',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_name='ticket_rate_quotes' AND column_name='customer_quotation_id')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'ticket_rate_quotes.customer_quotation_id (back-reference set by link trigger)';
+
+  -- R18.5: leads has quotation_status and quotation_count for RPC updates
+  RETURN QUERY
+  SELECT 'R18.5',
+    CASE WHEN COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) = 2 THEN 'PASS' ELSE 'FAIL' END,
+    'Lead quotation tracking: ' ||
+    COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) || '/2. ' ||
+    COALESCE('Missing: ' || string_agg(CASE WHEN c.column_name IS NULL THEN e.col END, ', '), 'All present')
+  FROM (VALUES ('quotation_status'),('quotation_count')) AS e(col)
+  LEFT JOIN information_schema.columns c
+    ON c.table_schema='public' AND c.table_name='leads' AND c.column_name = e.col;
+
+  -- R18.6: accounts.account_status column exists (NOT 'status' — Migration 172 fix)
+  RETURN QUERY
+  SELECT 'R18.6',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_name='accounts' AND column_name='account_status')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'accounts.account_status column (NOT status — Migration 172 regression fix)';
+
+  -- R18.7: operational_cost_rejection_reasons table exists (mark_rejected creates entries)
+  RETURN QUERY
+  SELECT 'R18.7',
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables
+      WHERE table_schema='public' AND table_name='operational_cost_rejection_reasons')
+    THEN 'PASS' ELSE 'FAIL' END,
+    'operational_cost_rejection_reasons table (mark_rejected inserts rejection data)';
 
   -- ============================================================
   -- SECTION R14: SUMMARY

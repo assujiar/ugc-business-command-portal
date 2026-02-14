@@ -734,7 +734,7 @@ interface CustomerQuotation {
   operational_cost_ids: string[] // Array of linked costs
 
   // Status & Timestamps
-  status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired'
+  status: 'draft' | 'sent' | 'accepted' | 'rejected'  // 'expired' is computed via valid_until < NOW()
   sent_via: 'email' | 'whatsapp' | 'manual'
   sent_at: Date
   accepted_at: Date | null    // Set when accepted (Migration 136)
@@ -861,9 +861,10 @@ CRITICAL: cost_amount must NEVER appear in:
         accepts        rejects       expires
               │             │             │
               ▼             ▼             ▼
-        ┌──────────┐  ┌──────────┐  ┌─────────┐
-        │ ACCEPTED │  │ REJECTED │  │ EXPIRED │
-        └──────────┘  └──────────┘  └─────────┘
+        ┌──────────┐  ┌──────────┐  ┌─────────────────────┐
+        │ ACCEPTED │  │ REJECTED │  │ EXPIRED (computed)  │
+        └──────────┘  └──────────┘  │ valid_until < NOW() │
+                                    └─────────────────────┘
              │
              │ (terminal - can create new quotation)
 ```
@@ -905,7 +906,9 @@ CRITICAL: cost_amount must NEVER appear in:
 #### 1. Lead Handover (on qualify)
 ```sql
 -- When lead status changes to 'Qualified'
-TRIGGER: trg_lead_auto_handover
+-- Implemented via RPC + API route (BFF pattern), NOT a trigger
+RPC: rpc_lead_handover_to_sales_pool (Migration 018)
+API: POST /api/crm/leads/[id]/handover
 ACTION:
   1. Set handover_eligible = TRUE
   2. Create lead_handover_pool entry
@@ -1101,7 +1104,7 @@ ACTION:
 | `ticket_rate_quotes` | Operational costs | id, ticket_id, amount, status |
 | `ticket_rate_quote_items` | Cost breakdown | quote_id, component_type, cost_amount |
 | `ticket_sla_tracking` | SLA metrics | ticket_id, first_response_at |
-| `shipment_details` | Multi-shipment | shipment_detail_id, ticket_id |
+| `shipment_details` | Multi-shipment | shipment_detail_id, lead_id, opportunity_id |
 
 ### Quotation Tables
 
@@ -1109,7 +1112,7 @@ ACTION:
 |-------|-------------|------------|
 | `customer_quotations` | Customer quotes | id, quotation_number, status |
 | `customer_quotation_items` | Quote breakdown | quotation_id, selling_rate |
-| `customer_quotation_rejection_reasons` | Rejection details | quotation_id, reason_type |
+| `quotation_rejection_reasons` | Rejection details | quotation_id, reason_type |
 | `quotation_term_templates` | Terms library | term_type, term_text |
 
 ---
