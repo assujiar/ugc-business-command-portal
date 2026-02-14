@@ -113,6 +113,59 @@ async function saveContentItems(
   }
 }
 
+// Auto-seed platform configs from environment variables
+// Called when fetch runs but config table is empty
+async function autoSeedConfigsFromEnv(adminClient: any) {
+  const seeds = [
+    {
+      platform: 'facebook',
+      account_id: process.env.FACEBOOK_PAGE_ID || null,
+      access_token: process.env.FACEBOOK_PAGE_ACCESS_TOKEN || null,
+      api_base_url: 'https://graph.facebook.com/v21.0',
+      is_active: !!process.env.FACEBOOK_PAGE_ACCESS_TOKEN,
+    },
+    {
+      platform: 'instagram',
+      account_id: null,
+      access_token: null,
+      api_base_url: 'https://graph.facebook.com/v21.0',
+      is_active: false,
+    },
+    {
+      platform: 'youtube',
+      account_id: process.env.YOUTUBE_CHANNEL_ID || null,
+      access_token: null,
+      api_base_url: 'https://www.googleapis.com/youtube/v3',
+      is_active: false,
+    },
+    {
+      platform: 'tiktok',
+      account_id: null,
+      access_token: null,
+      api_base_url: 'https://open.tiktokapis.com/v2',
+      is_active: false,
+    },
+    {
+      platform: 'linkedin',
+      account_id: process.env.LINKEDIN_ORGANIZATION_ID || null,
+      access_token: null,
+      api_base_url: 'https://api.linkedin.com',
+      is_active: false,
+    },
+  ]
+
+  for (const seed of seeds) {
+    try {
+      await adminClient
+        .from('marketing_social_media_config')
+        .upsert(seed, { onConflict: 'platform' })
+    } catch (err) {
+      console.error(`[fetch] Failed to seed config for ${seed.platform}:`, err)
+    }
+  }
+  console.log('[fetch] Auto-seeded platform configs from env vars')
+}
+
 export async function POST(request: NextRequest) {
   // Verify authentication
   if (!verifyAuth(request)) {
@@ -136,7 +189,7 @@ export async function POST(request: NextRequest) {
     const results: Array<{ platform: string; status: string; error?: string }> = []
 
     // Get all active platform configs
-    const { data: configs, error: configError } = await adminClient
+    let { data: configs, error: configError } = await adminClient
       .from('marketing_social_media_config')
       .select('*')
       .eq('is_active', true)
@@ -144,6 +197,19 @@ export async function POST(request: NextRequest) {
     if (configError) {
       console.error('Config fetch error:', configError)
       return NextResponse.json({ error: 'Failed to fetch platform configs' }, { status: 500 })
+    }
+
+    // Auto-seed platform configs from env vars if table is empty
+    if (!configs || configs.length === 0) {
+      console.log('[fetch] No active configs found, attempting auto-seed from env vars...')
+      await autoSeedConfigsFromEnv(adminClient)
+
+      // Re-fetch after seeding
+      const { data: seededConfigs } = await adminClient
+        .from('marketing_social_media_config')
+        .select('*')
+        .eq('is_active', true)
+      configs = seededConfigs || []
     }
 
     // Fetch data from each platform in parallel
