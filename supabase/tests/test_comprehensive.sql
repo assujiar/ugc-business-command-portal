@@ -461,7 +461,7 @@ BEGIN
     COUNT(*) FILTER (WHERE p.prosecdef AND p.provolatile = 's') || '/3. ' ||
     COALESCE('Issues: ' || string_agg(
       CASE WHEN NOT p.prosecdef OR p.provolatile != 's'
-        THEN e.fn || '(secdef=' || p.prosecdef || ',volatile=' || p.provolatile || ')'
+        THEN e.fn || '(secdef=' || p.prosecdef::TEXT || ',volatile=' || p.provolatile::TEXT || ')'
       END, ', '), 'All correct')
   FROM (VALUES ('is_admin'),('is_sales'),('get_user_role')) AS e(fn)
   LEFT JOIN pg_proc p ON p.proname = e.fn AND p.pronamespace = 'public'::regnamespace;
