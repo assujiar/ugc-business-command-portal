@@ -134,7 +134,7 @@ BEGIN
     'Tickets key columns: ' || COUNT(*) FILTER (WHERE c.column_name IS NOT NULL) || '/10. ' ||
     COALESCE('Missing: ' || string_agg(CASE WHEN c.column_name IS NULL THEN e.col END, ', '), 'All present')
   FROM (VALUES ('id'),('ticket_code'),('account_id'),('status'),('priority'),
-    ('type'),('department'),('assigned_to'),('created_by'),('created_at')) AS e(col)
+    ('ticket_type'),('department'),('assigned_to'),('created_by'),('created_at')) AS e(col)
   LEFT JOIN information_schema.columns c
     ON c.table_schema='public' AND c.table_name='tickets' AND c.column_name = e.col;
 
